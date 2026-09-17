@@ -130,7 +130,7 @@ export interface BillingProposal {
 
 export interface TecEntry {
   ID:                  number
-  DATE_VOUCHER:        string | null
+  BOOKING_DATE:        string | null
   EMPLOYEE_SHORT_NAME: string | null
   POSTING_DESCRIPTION: string | null
   HOURLY_RATE_TOTAL:              number | null

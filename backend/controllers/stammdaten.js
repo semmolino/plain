@@ -687,7 +687,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     let movedTecCount = 0, movedToName = "";
     const firstCreated = Array.isArray(createdRows) && createdRows.length ? createdRows[0] : null;
     if (firstCreated) {
-      const { data: movedTecRows, error: moveErr } = await supabase.from("TEC").update({ STRUCTURE_ID: firstCreated.ID }).eq("STRUCTURE_ID", fatherId).select("ID");
+      const { data: movedTecRows, error: moveErr } = await supabase.from("BOOKING").update({ STRUCTURE_ID: firstCreated.ID }).eq("STRUCTURE_ID", fatherId).select("ID");
       if (moveErr) return res.status(500).json({ error: moveErr.message });
       movedTecCount = Array.isArray(movedTecRows) ? movedTecRows.length : 0;
       if (movedTecCount > 0) {

@@ -49,18 +49,18 @@ async function generate({ supabase, md, timeline, cfg, log, apply }) {
     const dates = stichtage(tl.start, winEnd, cfg.progress.snapshotEveryDays);
     const totalDays = Math.max(1, cal.diffDays(tl.start, tl.end));
 
-    // Für BT2: alle TEC des Projekts einmal laden und pro Blatt/Datum kumulieren.
+    // Für BT2: alle BOOKING des Projekts einmal laden und pro Blatt/Datum kumulieren.
     let tecByLeaf = new Map();
     const hasBt2 = p.leaves.some((l) => Number(l.BILLING_TYPE_ID) === 2);
     if (hasBt2 && apply) {
       const { data: tecRows } = await supabase
-        .from("TEC")
-        .select("STRUCTURE_ID, HOURLY_RATE_TOTAL, DATE_VOUCHER")
+        .from("BOOKING")
+        .select("STRUCTURE_ID, HOURLY_RATE_TOTAL, BOOKING_DATE")
         .eq("PROJECT_ID", p.ID);
       for (const r of tecRows || []) {
         const k = String(r.STRUCTURE_ID);
         if (!tecByLeaf.has(k)) tecByLeaf.set(k, []);
-        tecByLeaf.get(k).push({ d: r.DATE_VOUCHER, v: Number(r.HOURLY_RATE_TOTAL) || 0 });
+        tecByLeaf.get(k).push({ d: r.BOOKING_DATE, v: Number(r.HOURLY_RATE_TOTAL) || 0 });
       }
     }
 

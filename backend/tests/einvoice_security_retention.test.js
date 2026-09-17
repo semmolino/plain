@@ -41,7 +41,7 @@ const stammdaten = {
   EMPLOYEE: [{ ID: 20, TENANT_ID: TENANT, FIRST_NAME: "Simon", LAST_NAME: "Messina" }],
   COUNTRY: [{ ID: 1, NAME_SHORT: "DE" }],
   CONTRACT: [{ ID: 30, TENANT_ID: TENANT, SE_LEGAL_REFERENCE: "§ 17 VOB/B" }],
-  TEC: [],
+  BOOKING: [],
 };
 
 const belegFelder = {

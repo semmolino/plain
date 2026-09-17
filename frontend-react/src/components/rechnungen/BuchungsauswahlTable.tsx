@@ -62,7 +62,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
       if (hideZero && (t.HOURLY_RATE_TOTAL ?? 0) === 0) return false
       if (empFilter.size > 0 && !(t.EMPLOYEE_SHORT_NAME && empFilter.has(t.EMPLOYEE_SHORT_NAME))) return false
       if (dateFrom || dateTo) {
-        const d = t.DATE_VOUCHER ? t.DATE_VOUCHER.slice(0, 10) : ''
+        const d = t.BOOKING_DATE ? t.BOOKING_DATE.slice(0, 10) : ''
         if (!d) return false
         if (dateFrom && d < dateFrom) return false
         if (dateTo   && d > dateTo)   return false
@@ -183,7 +183,7 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
                   {filtered.map(t => (
                     <tr key={t.ID}>
                       <td><input type="checkbox" checked={selected.has(t.ID)} onChange={() => toggleTec(t.ID)} /></td>
-                      <td>{fmtDate(t.DATE_VOUCHER)}</td>
+                      <td>{fmtDate(t.BOOKING_DATE)}</td>
                       <td>{t.EMPLOYEE_SHORT_NAME ?? '—'}</td>
                       <td>{t.POSTING_DESCRIPTION}</td>
                       <td className="num">{money(t.HOURLY_RATE_TOTAL)}</td>

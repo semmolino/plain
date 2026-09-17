@@ -19,7 +19,7 @@ module.exports = {
   // Welche Bewegungsdaten-Bereiche laufen sollen (per CLI --only / --skip
   // überschreibbar). Reihenfolge = Abhängigkeitsreihenfolge.
   domains: {
-    bookings: true, // Zeit & Buchungen (TEC) — Grundlage für alles Weitere
+    bookings: true, // Zeit & Buchungen (BOOKING) — Grundlage für alles Weitere
     progress: true, // Leistung & Fortschritt (PROJECT_PROGRESS)
     invoicing: true, // Abschlags-/Schlussrechnungen + Zahlungen
     hr: true, // Abwesenheiten/Urlaub

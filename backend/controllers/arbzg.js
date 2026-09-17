@@ -46,7 +46,7 @@ async function preflight(req, res, supabase) {
     const r = await svc.validateBookingArbZG(supabase, {
       tenantId:    req.tenantId,
       employeeId:  Number(b.employee_id),
-      dateVoucher: b.date_voucher,
+      dateVoucher: b.booking_date,
       timeStart:   b.time_start || null,
       timeFinish:  b.time_finish || null,
       quantityInt: Number(b.quantity_int || 0),
@@ -71,13 +71,13 @@ async function listAudit(req, res, supabase) {
   try {
     let q = supabase
       .from('ARBZG_AUDIT')
-      .select('ID, EMPLOYEE_ID, DATE_VOUCHER, EVENT_TYPE, SEVERITY, DETAILS, TEC_ID, CREATED_AT')
+      .select('ID, EMPLOYEE_ID, BOOKING_DATE, EVENT_TYPE, SEVERITY, DETAILS, BOOKING_ID, CREATED_AT')
       .eq('TENANT_ID', req.tenantId)
       .order('CREATED_AT', { ascending: false })
       .limit(1000);
     if (employee_id) q = q.eq('EMPLOYEE_ID', Number(employee_id));
-    if (date_from)   q = q.gte('DATE_VOUCHER', date_from);
-    if (date_to)     q = q.lte('DATE_VOUCHER', date_to);
+    if (date_from)   q = q.gte('BOOKING_DATE', date_from);
+    if (date_to)     q = q.lte('BOOKING_DATE', date_to);
     if (event_type)  q = q.eq('EVENT_TYPE', event_type);
     if (severity)    q = q.eq('SEVERITY', severity);
     const { data, error } = await q;
@@ -99,13 +99,13 @@ async function exportAudit(req, res, supabase) {
   try {
     let q = supabase
       .from('ARBZG_AUDIT')
-      .select('ID, EMPLOYEE_ID, DATE_VOUCHER, EVENT_TYPE, SEVERITY, DETAILS, TEC_ID, CREATED_AT')
+      .select('ID, EMPLOYEE_ID, BOOKING_DATE, EVENT_TYPE, SEVERITY, DETAILS, BOOKING_ID, CREATED_AT')
       .eq('TENANT_ID', req.tenantId)
       .order('CREATED_AT', { ascending: true })
       .limit(50000);
     if (employee_id) q = q.eq('EMPLOYEE_ID', Number(employee_id));
-    if (date_from)   q = q.gte('DATE_VOUCHER', date_from);
-    if (date_to)     q = q.lte('DATE_VOUCHER', date_to);
+    if (date_from)   q = q.gte('BOOKING_DATE', date_from);
+    if (date_to)     q = q.lte('BOOKING_DATE', date_to);
     const { data, error } = await q;
     if (error) throw { status: 500, message: error.message };
 
@@ -118,7 +118,7 @@ async function exportAudit(req, res, supabase) {
     const empMap = Object.fromEntries((emps || []).map(e => [e.ID, e]));
 
     // CSV bauen (RFC4180, ; als Trenner, UTF-8 BOM für Excel)
-    const header = ['ID','Kürzel','Vorname','Nachname','Datum','Event','Schwere','TEC_ID','Erfasst_am','Details'];
+    const header = ['ID','Kürzel','Vorname','Nachname','Datum','Event','Schwere','BOOKING_ID','Erfasst_am','Details'];
     const escape = (v) => {
       if (v == null) return '';
       const s = String(v).replace(/"/g, '""');
@@ -129,7 +129,7 @@ async function exportAudit(req, res, supabase) {
       const e = empMap[r.EMPLOYEE_ID] || {};
       lines.push([
         r.ID, e.ABBR || '', e.FIRST_NAME || '', e.LAST_NAME || '',
-        r.DATE_VOUCHER, r.EVENT_TYPE, r.SEVERITY, r.TEC_ID ?? '',
+        r.BOOKING_DATE, r.EVENT_TYPE, r.SEVERITY, r.BOOKING_ID ?? '',
         r.CREATED_AT, JSON.stringify(r.DETAILS || {}),
       ].map(escape).join(';'));
     }

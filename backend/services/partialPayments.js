@@ -114,7 +114,7 @@ async function sumTecForStructures(supabase, { structureIds, partialPaymentId })
   }
 
   const { data: tecRows, error: tecErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("ID, HOURLY_RATE_TOTAL, ADVANCE_INVOICE_ID, INVOICE_ID, STRUCTURE_ID")
     .in("STRUCTURE_ID", structureIds)
     .neq("STATUS", "DRAFT");
@@ -391,7 +391,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
   if (bt2Ids.length === 0) return { bookings_sum: 0, bt2Ids: [] };
 
   const { data: tecRows, error: tecErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
     .eq("ADVANCE_INVOICE_ID", partialPaymentId)
     .in("STRUCTURE_ID", bt2Ids)
@@ -713,7 +713,7 @@ async function deletePartialPayment(supabase, { id, tenantId }) {
   if (ppErr || !pp) throw { status: 404, message: "ADVANCE_INVOICE nicht gefunden" };
   if (String(pp.STATUS_ID) === "2") throw { status: 400, message: "Gebuchte Abschlagsrechnungen können nicht gelöscht werden" };
 
-  const { error: tecErr } = await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: null }).eq("ADVANCE_INVOICE_ID", id);
+  const { error: tecErr } = await supabase.from("BOOKING").update({ ADVANCE_INVOICE_ID: null }).eq("ADVANCE_INVOICE_ID", id);
   if (tecErr) throw new Error(tecErr.message);
 
   const { error: ppsErr } = await execWithPpsTableFallback(supabase, (sb, table) =>
@@ -1048,8 +1048,8 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   const cancelPp = { ...cancelRow, ID: newId };
   await bookPartialPayment(supabase, { id: newId, pp: cancelPp });
 
-  // Unlink TEC bookings so they can be re-invoiced
-  await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: null }).eq("ADVANCE_INVOICE_ID", id);
+  // Unlink BOOKING bookings so they can be re-invoiced
+  await supabase.from("BOOKING").update({ ADVANCE_INVOICE_ID: null }).eq("ADVANCE_INVOICE_ID", id);
 
   return { id: newId };
 }

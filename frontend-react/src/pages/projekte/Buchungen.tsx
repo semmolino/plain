@@ -68,7 +68,7 @@ function todayIso() { return new Date().toISOString().slice(0, 10) }
 interface BuchungForm {
   EMPLOYEE_ID:         string
   STRUCTURE_ID:        string
-  DATE_VOUCHER:        string
+  BOOKING_DATE:        string
   TIME_START:          string
   TIME_FINISH:         string
   QUANTITY_INT:        string
@@ -80,7 +80,7 @@ interface BuchungForm {
 
 function emptyForm(): BuchungForm {
   return {
-    EMPLOYEE_ID: String(useAuthStore.getState().employeeId ?? ''), STRUCTURE_ID: '', DATE_VOUCHER: todayIso(),
+    EMPLOYEE_ID: String(useAuthStore.getState().employeeId ?? ''), STRUCTURE_ID: '', BOOKING_DATE: todayIso(),
     TIME_START: '', TIME_FINISH: '',
     QUANTITY_INT: '', COST_RATE: '', QUANTITY_EXT: '', HOURLY_RATE: '',
     POSTING_DESCRIPTION: '',
@@ -91,7 +91,7 @@ function buchungToForm(b: Buchung): BuchungForm {
   return {
     EMPLOYEE_ID:         String(b.EMPLOYEE_ID),
     STRUCTURE_ID:        b.STRUCTURE_ID != null ? String(b.STRUCTURE_ID) : '',
-    DATE_VOUCHER:        fmtDate(b.DATE_VOUCHER),
+    BOOKING_DATE:        fmtDate(b.BOOKING_DATE),
     TIME_START:          b.TIME_START ?? '',
     TIME_FINISH:         b.TIME_FINISH ?? '',
     QUANTITY_INT:        String(b.QUANTITY_INT),
@@ -188,12 +188,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   // nicht und der von emptyForm() geleerte Wert würde als 0 gespeichert.
   useEffect(() => {
     if (!showForm) return
-    if (!empId || !form.DATE_VOUCHER) { setForm(f => ({ ...f, COST_RATE: '' })); setCpRateFound(null); return }
-    fetchEmployeeCpRateForDate(empId, form.DATE_VOUCHER)
+    if (!empId || !form.BOOKING_DATE) { setForm(f => ({ ...f, COST_RATE: '' })); setCpRateFound(null); return }
+    fetchEmployeeCpRateForDate(empId, form.BOOKING_DATE)
       .then(res => { setForm(f => ({ ...f, COST_RATE: String(res.data.rate) })); setCpRateFound(res.data.found) })
       .catch(() => {})
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empId, form.DATE_VOUCHER, showForm])
+  }, [empId, form.BOOKING_DATE, showForm])
 
   useEffect(() => { setFilterStruct(''); setSearch(''); setDateFrom(''); setDateTo('') }, [pid])
 
@@ -271,13 +271,13 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     if (filterKind.size)   rows = rows.filter(b => filterKind.has(bookingTypeLabel(b)))
     if (filterStatus.size) rows = rows.filter(b => filterStatus.has(isBilled(b) ? 'Abgerechnet' : 'Offen'))
     if (hideZeroExt)       rows = rows.filter(hasBillable)
-    if (dateFrom)          rows = rows.filter(b => fmtDate(b.DATE_VOUCHER) >= dateFrom)
-    if (dateTo)            rows = rows.filter(b => fmtDate(b.DATE_VOUCHER) <= dateTo)
+    if (dateFrom)          rows = rows.filter(b => fmtDate(b.BOOKING_DATE) >= dateFrom)
+    if (dateTo)            rows = rows.filter(b => fmtDate(b.BOOKING_DATE) <= dateTo)
 
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       rows = rows.filter(b =>
-        fmtDate(b.DATE_VOUCHER).includes(q) ||
+        fmtDate(b.BOOKING_DATE).includes(q) ||
         (b.EMPLOYEE?.ABBR ?? '').toLowerCase().includes(q) ||
         (b.POSTING_DESCRIPTION ?? '').toLowerCase().includes(q) ||
         (b.STRUCTURE_ID != null ? (pathCache.get(b.STRUCTURE_ID) ?? '').toLowerCase().includes(q) : false)
@@ -287,7 +287,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     rows = [...rows].sort((a, b) => {
       let cmp = 0
       switch (sortCol) {
-        case 'date':        cmp = (a.DATE_VOUCHER ?? '').localeCompare(b.DATE_VOUCHER ?? ''); break
+        case 'date':        cmp = (a.BOOKING_DATE ?? '').localeCompare(b.BOOKING_DATE ?? ''); break
         case 'employee':    cmp = (a.EMPLOYEE?.ABBR ?? '').localeCompare(b.EMPLOYEE?.ABBR ?? '', 'de'); break
         case 'path':        cmp = (a.STRUCTURE_ID != null ? pathCache.get(a.STRUCTURE_ID) ?? '' : '').localeCompare(b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '' : '', 'de', { numeric: true }); break
         case 'description': cmp = (a.POSTING_DESCRIPTION ?? '').localeCompare(b.POSTING_DESCRIPTION ?? '', 'de'); break
@@ -374,7 +374,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   function submitForm(e: React.FormEvent) {
     e.preventDefault()
     setMsg(null)
-    if (!pid || !form.EMPLOYEE_ID || !form.STRUCTURE_ID || !form.DATE_VOUCHER || !form.QUANTITY_INT || !form.QUANTITY_EXT || form.HOURLY_RATE === '' || !form.POSTING_DESCRIPTION) {
+    if (!pid || !form.EMPLOYEE_ID || !form.STRUCTURE_ID || !form.BOOKING_DATE || !form.QUANTITY_INT || !form.QUANTITY_EXT || form.HOURLY_RATE === '' || !form.POSTING_DESCRIPTION) {
       setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     // Recents: zuletzt gebuchte Strukturelemente pro Projekt mitschreiben
@@ -387,7 +387,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
       PROJECT_ID:          pid,
       STRUCTURE_ID:        form.STRUCTURE_ID  ? Number(form.STRUCTURE_ID) : undefined,
       EMPLOYEE_ID:         Number(form.EMPLOYEE_ID),
-      DATE_VOUCHER:        form.DATE_VOUCHER,
+      BOOKING_DATE:        form.BOOKING_DATE,
       TIME_START:          form.TIME_START  || undefined,
       TIME_FINISH:         form.TIME_FINISH || undefined,
       QUANTITY_INT:        Number(form.QUANTITY_INT),
@@ -402,7 +402,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     e.preventDefault()
     if (!editRow) return
     setEditMsg(null)
-    if (!editForm.EMPLOYEE_ID || !editForm.STRUCTURE_ID || !editForm.DATE_VOUCHER || !editForm.QUANTITY_INT || editForm.COST_RATE === '' || !editForm.QUANTITY_EXT || editForm.HOURLY_RATE === '' || !editForm.POSTING_DESCRIPTION) {
+    if (!editForm.EMPLOYEE_ID || !editForm.STRUCTURE_ID || !editForm.BOOKING_DATE || !editForm.QUANTITY_INT || editForm.COST_RATE === '' || !editForm.QUANTITY_EXT || editForm.HOURLY_RATE === '' || !editForm.POSTING_DESCRIPTION) {
       setEditMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
     }
     patchMut.mutate({
@@ -410,7 +410,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
       body: {
         EMPLOYEE_ID:         Number(editForm.EMPLOYEE_ID),
         STRUCTURE_ID:        editForm.STRUCTURE_ID ? Number(editForm.STRUCTURE_ID) : null,
-        DATE_VOUCHER:        editForm.DATE_VOUCHER,
+        BOOKING_DATE:        editForm.BOOKING_DATE,
         TIME_START:          editForm.TIME_START  || undefined,
         TIME_FINISH:         editForm.TIME_FINISH || undefined,
         QUANTITY_INT:        Number(editForm.QUANTITY_INT),
@@ -445,7 +445,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   function confirmDelete(b: Buchung) {
     setConfirmState({
       title: 'Buchung löschen',
-      message: `Buchung vom ${fmtDate(b.DATE_VOUCHER)} löschen?`,
+      message: `Buchung vom ${fmtDate(b.BOOKING_DATE)} löschen?`,
       onConfirm: () => { setMsg(null); deleteMut.mutate(b.ID) },
     })
   }
@@ -579,7 +579,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                     />
                   </div>
                   <div className="form-row">
-                    <FormField label="Datum*"      id="bda" type="date"   value={form.DATE_VOUCHER}  onChange={setF('DATE_VOUCHER')} required />
+                    <FormField label="Datum*"      id="bda" type="date"   value={form.BOOKING_DATE}  onChange={setF('BOOKING_DATE')} required />
                     <FormField label="Von"         id="bts" type="time"   value={form.TIME_START}    onChange={setF('TIME_START')} />
                     <FormField label="Bis"         id="btf" type="time"   value={form.TIME_FINISH}   onChange={setF('TIME_FINISH')} />
                   </div>
@@ -682,12 +682,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                                 type="checkbox"
                                 checked={selected.has(b.ID)}
                                 onChange={() => toggleRowSelected(b.ID)}
-                                aria-label={`Buchung vom ${fmtDate(b.DATE_VOUCHER)} auswählen`}
+                                aria-label={`Buchung vom ${fmtDate(b.BOOKING_DATE)} auswählen`}
                               />
                             )}
                           </td>
                         )}
-                        <td>{fmtDate(b.DATE_VOUCHER)}</td>
+                        <td>{fmtDate(b.BOOKING_DATE)}</td>
                         <td>{b.EMPLOYEE?.ABBR}</td>
                         <td style={{ fontSize: 13, color: 'var(--text-3)' }}>
                           {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
@@ -776,7 +776,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
             </select>
           </div>
           <div className="form-row">
-            <FormField label="Datum*"      id="eda" type="date"   value={editForm.DATE_VOUCHER}  onChange={setEF('DATE_VOUCHER')} required />
+            <FormField label="Datum*"      id="eda" type="date"   value={editForm.BOOKING_DATE}  onChange={setEF('BOOKING_DATE')} required />
             <FormField label="Von"         id="ets" type="time"   value={editForm.TIME_START}    onChange={setEF('TIME_START')} />
             <FormField label="Bis"         id="etf" type="time"   value={editForm.TIME_FINISH}   onChange={setEF('TIME_FINISH')} />
           </div>
@@ -902,7 +902,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
   const isEdit = existing != null
   const [bookingTypeId, setBookingTypeId] = useState<string>(existing?.BOOKING_TYPE_ID != null ? String(existing.BOOKING_TYPE_ID) : '')
   const [structureId,   setStructureId]   = useState<string>(existing?.STRUCTURE_ID != null ? String(existing.STRUCTURE_ID) : '')
-  const [date,          setDate]          = useState<string>(existing ? fmtDate(existing.DATE_VOUCHER) : todayIso())
+  const [date,          setDate]          = useState<string>(existing ? fmtDate(existing.BOOKING_DATE) : todayIso())
   const [description,   setDescription]   = useState<string>(existing?.POSTING_DESCRIPTION ?? '')
   const [quantity,      setQuantity]      = useState<string>(existing && kind === 'UNIT' ? String(existing.QUANTITY_EXT ?? '') : '')
   const [unitLabel,     setUnitLabel]     = useState<string>(existing?.UNIT_LABEL ?? '')
@@ -952,7 +952,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
         BOOKING_KIND:        kind,
         PROJECT_ID:          projectId,
         STRUCTURE_ID:        structureId ? Number(structureId) : undefined,
-        DATE_VOUCHER:        date,
+        BOOKING_DATE:        date,
         BOOKING_TYPE_ID:     bookingTypeId ? Number(bookingTypeId) : undefined,
         POSTING_DESCRIPTION: description,
         ...(isUnit
@@ -1077,7 +1077,7 @@ interface PauseBookingModalProps {
 function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }: PauseBookingModalProps) {
   const isEdit = existing != null
   const [employeeId,  setEmployeeId]  = useState<string>(existing ? String(existing.EMPLOYEE_ID) : String(useAuthStore.getState().employeeId ?? ''))
-  const [date,        setDate]        = useState<string>(existing ? fmtDate(existing.DATE_VOUCHER) : todayIso())
+  const [date,        setDate]        = useState<string>(existing ? fmtDate(existing.BOOKING_DATE) : todayIso())
   const [timeStart,   setTimeStart]   = useState<string>(existing?.TIME_START?.slice(0, 5) ?? '')
   const [timeFinish,  setTimeFinish]  = useState<string>(existing?.TIME_FINISH?.slice(0, 5) ?? '')
   const [hours,       setHours]       = useState<string>(existing ? String(existing.QUANTITY_INT ?? '') : '')
@@ -1103,7 +1103,7 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
       if (isEdit) {
         await updateBuchung(existing!.ID, {
           EMPLOYEE_ID:         Number(employeeId),
-          DATE_VOUCHER:        date,
+          BOOKING_DATE:        date,
           TIME_START:          ts,
           TIME_FINISH:         tf,
           QUANTITY_INT:        qty,
@@ -1114,7 +1114,7 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
       await createBuchung({
         PROJECT_ID:          projectId,
         EMPLOYEE_ID:         Number(employeeId),
-        DATE_VOUCHER:        date,
+        BOOKING_DATE:        date,
         TIME_START:          ts,
         TIME_FINISH:         tf,
         QUANTITY_INT:        qty,

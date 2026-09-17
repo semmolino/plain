@@ -1668,7 +1668,7 @@ async function commitOpenItemRows(rows, { supabase, tenantId, batchId, employeeI
 }
 
 // ── Domäne: Kosten-Anfangsbestände (Kostenblöcke) ────────────────────────────
-// Für (v. a. Stunden-/TEC-)Projekte: aggregierte, bereits angefallene Kosten je
+// Für (v. a. Stunden-/BOOKING-)Projekte: aggregierte, bereits angefallene Kosten je
 // Projekt als EINE LUMP_COST-Buchung — KEINE Einzelbuchungen. Speist
 // Deckungsbeitrag/Wirtschaftlichkeit ab Tag 1.
 const OPENING_COST_FIELDS = [
@@ -1681,7 +1681,7 @@ async function loadOpeningCostContext(supabase, tenantId) {
   const [projRes, structRes, tecRes] = await Promise.all([
     supabase.from("PROJECT").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("TEC").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("BOOKING_KIND", "LUMP_COST").not("IMPORT_BATCH_ID", "is", null).limit(100000),
+    supabase.from("BOOKING").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("BOOKING_KIND", "LUMP_COST").not("IMPORT_BATCH_ID", "is", null).limit(100000),
   ]);
 
   // Blatt-Knoten je Projekt ermitteln (kein anderer Knoten hat ihn als FATHER); BT2 bevorzugt.
@@ -1745,12 +1745,12 @@ async function commitOpeningCostRows(rows, { supabase, tenantId, batchId, employ
       // LUMP_COST: QUANTITY_INT=0 (keine Stunden), Betrag in COST_RATE/COST_TOTAL (Kosten).
       const insertRow = {
         TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_COST",
-        BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, DATE_VOUCHER: today,
+        BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, BOOKING_DATE: today,
         QUANTITY_INT: 0, COST_RATE: e.cost, COST_TOTAL: fmt2(e.cost), QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
         POSTING_DESCRIPTION: e.description, PROJECT_ID: e.projectId, STRUCTURE_ID: e.structureId,
         IMPORT_BATCH_ID: batchId,
       };
-      const { error } = await supabase.from("TEC").insert([insertRow]);
+      const { error } = await supabase.from("BOOKING").insert([insertRow]);
       if (error) throw { status: 500, message: error.message };
       if (e.structureId) await recomputeStructure(supabase, e.structureId);
       done++;
@@ -1762,10 +1762,10 @@ async function commitOpeningCostRows(rows, { supabase, tenantId, batchId, employ
 }
 
 async function rollbackOpeningCost({ supabase, tenantId, batchId }) {
-  const { data: tec } = await supabase.from("TEC").select("ID, STRUCTURE_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  const { data: tec } = await supabase.from("BOOKING").select("ID, STRUCTURE_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
   const rows = tec || [];
   const structureIds = [...new Set(rows.map((r) => r.STRUCTURE_ID).filter((x) => x != null))];
-  await supabase.from("TEC").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from("BOOKING").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
   for (const sid of structureIds) { try { await recomputeStructure(supabase, sid); } catch (_) { /* COSTS-Recompute soft-fail */ } }
   return { deleted: rows.length };
 }
@@ -1778,7 +1778,7 @@ async function structureBatchBlockers({ supabase, tenantId, batchId }) {
   const projectIds = [...new Set((structs || []).map((r) => r.PROJECT_ID).filter(Boolean))];
   if (!projectIds.length) return [];
   const blockers = [];
-  for (const dep of [{ table: "INVOICE", label: "Rechnung(en)" }, { table: "TEC", label: "Buchung(en)" }, { table: "ADVANCE_INVOICE", label: "Abschlagszahlung(en)" }]) {
+  for (const dep of [{ table: "INVOICE", label: "Rechnung(en)" }, { table: "BOOKING", label: "Buchung(en)" }, { table: "ADVANCE_INVOICE", label: "Abschlagszahlung(en)" }]) {
     const { count, error } = await supabase
       .from(dep.table).select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
     if (error) {
@@ -1814,7 +1814,7 @@ const DOMAINS = {
     fields: EMPLOYEE_FIELDS,
     dependents: [
       { table: "PROJECT",          column: "PROJECT_MANAGER_ID", label: "Projekt(e) als Projektleiter" },
-      { table: "TEC",              column: "EMPLOYEE_ID", label: "Buchung(en)" },
+      { table: "BOOKING",              column: "EMPLOYEE_ID", label: "Buchung(en)" },
       { table: "EMPLOYEE2PROJECT", column: "EMPLOYEE_ID", label: "Projektzuordnung(en)" },
       { table: "ABSENCE",          column: "EMPLOYEE_ID", label: "Abwesenheit(en)" },
     ],
@@ -1850,7 +1850,7 @@ const DOMAINS = {
       { table: "EMPLOYEE2PROJECT",  column: "PROJECT_ID", label: "Mitarbeiterzuordnung(en)" },
       { table: "CONTRACT",          column: "PROJECT_ID", label: "Vertrag/Verträge" },
       { table: "INVOICE",           column: "PROJECT_ID", label: "Rechnung(en)" },
-      { table: "TEC",               column: "PROJECT_ID", label: "Buchung(en)" },
+      { table: "BOOKING",               column: "PROJECT_ID", label: "Buchung(en)" },
       { table: "OFFER",             column: "PROJECT_ID", label: "verknüpfte(s) Angebot(e)" },
     ],
     loadContext: loadProjectContext,
@@ -1921,7 +1921,7 @@ const DOMAINS = {
   opening_cost: {
     key: "opening_cost",
     label: "Kosten-Anfangsbestände",
-    table: "TEC",
+    table: "BOOKING",
     matchLabel: "Projektnummer",
     fields: OPENING_COST_FIELDS,
     loadContext: loadOpeningCostContext,

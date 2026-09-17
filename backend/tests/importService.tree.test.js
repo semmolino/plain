@@ -325,7 +325,7 @@ describe("Rollback", () => {
   it("blockiert, sobald am Projekt gebucht wurde", async () => {
     const supabase = seed();
     const { batchId } = await runCommit(await baum(), supabase);
-    supabase._tables.TEC = [{ ID: 1, TENANT_ID: TENANT, PROJECT_ID: 1 }];
+    supabase._tables.BOOKING = [{ ID: 1, TENANT_ID: TENANT, PROJECT_ID: 1 }];
 
     await expect(rollback({ batchId, supabase, tenantId: TENANT }))
       .rejects.toMatchObject({ status: 409 });

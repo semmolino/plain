@@ -9,7 +9,7 @@
  * Für jedes Projekt werden über die Laufzeit im Rhythmus `partialEveryDays`
  * Abschlagsrechnungen gestellt — exakt über die echten Services, in derselben
  * Reihenfolge wie der Wizard (controllers/partialPayments.js):
- *   init → (BT2) TEC zuordnen → applyPerformanceAmount (BT1) → updateBt2FromTec →
+ *   init → (BT2) BOOKING zuordnen → applyPerformanceAmount (BT1) → updateBt2FromTec →
  *   recomputePartialPaymentTotals → Datumsfelder → bookPartialPayment(skipDocuments).
  *
  * BT1 (Pauschal) wird nach geplantem Leistungsstand abgerechnet (gleiche ease-Kurve
@@ -162,16 +162,16 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
     // 2) BT2 — noch nicht fakturierte Buchungen bis zum Stichtag zuordnen
     if (bt2Ids.length > 0) {
       const { data: cand } = await supabase
-        .from("TEC")
+        .from("BOOKING")
         .select("ID, ADVANCE_INVOICE_ID, INVOICE_ID")
         .in("STRUCTURE_ID", bt2Ids)
-        .lte("DATE_VOUCHER", dateISO)
+        .lte("BOOKING_DATE", dateISO)
         .neq("STATUS", "DRAFT");
       const assignable = (cand || [])
         .filter((t) => pp.isNullOrZero(t.ADVANCE_INVOICE_ID) && pp.isUninvoiced(t.INVOICE_ID))
         .map((t) => t.ID);
       if (assignable.length > 0) {
-        await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: id }).in("ID", assignable);
+        await supabase.from("BOOKING").update({ ADVANCE_INVOICE_ID: id }).in("ID", assignable);
       }
     }
 
@@ -203,7 +203,7 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
       }
     }
 
-    // 4) BT2-Summen aus zugeordneten TEC in die AR schreiben
+    // 4) BT2-Summen aus zugeordneten BOOKING in die AR schreiben
     if (bt2Ids.length > 0) {
       await pp.updateBt2FromTec(supabase, { partialPaymentId: id, contractId, projectId: project.ID, tenantId: md.tenantId });
     }

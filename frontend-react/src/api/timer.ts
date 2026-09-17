@@ -8,7 +8,7 @@ export interface DraftEntry {
   PROJECT_ID:          number | null
   STRUCTURE_ID:        number | null
   EMPLOYEE_ID:         number
-  DATE_VOUCHER:        string
+  BOOKING_DATE:        string
   TIME_START:          string | null
   TIME_FINISH:         string | null
   QUANTITY_INT:        number
@@ -28,7 +28,7 @@ export interface CreateDraftPayload {
   EMPLOYEE_ID:         number
   PROJECT_ID:          number | null
   STRUCTURE_ID:        number | null
-  DATE_VOUCHER:        string
+  BOOKING_DATE:        string
   TIME_START:          string
   TIME_FINISH:         string
   QUANTITY_INT:        number

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Generator: Zeit & Buchungen (TEC).
+ * Generator: Zeit & Buchungen (BOOKING).
  *
  * Mitarbeiter-zentrisch: für jeden Mitarbeiter wird pro Arbeitstag ein
  * Stundenbudget über die an dem Tag aktiven Projekte verteilt und auf
@@ -161,7 +161,7 @@ async function generate({ supabase, md, timeline, cfg, rng, log, apply }) {
 
         const body = {
           EMPLOYEE_ID: Number(emp.ID),
-          DATE_VOUCHER: day,
+          BOOKING_DATE: day,
           TIME_START: null,
           TIME_FINISH: null,
           QUANTITY_INT: hours,

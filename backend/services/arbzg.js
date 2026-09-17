@@ -179,11 +179,11 @@ async function isPublicHoliday(supabase, dateStr, countryCode, stateCode) {
 // ── Day aggregates ───────────────────────────────────────────────────────────
 async function sumDayWorkHours(supabase, tenantId, employeeId, dateStr, excludeTecId = null) {
   let q = supabase
-    .from('TEC')
+    .from('BOOKING')
     .select('ID, QUANTITY_INT, ENTRY_KIND')
     .eq('TENANT_ID', tenantId)
     .eq('EMPLOYEE_ID', employeeId)
-    .eq('DATE_VOUCHER', dateStr);
+    .eq('BOOKING_DATE', dateStr);
   if (excludeTecId != null) q = q.neq('ID', excludeTecId);
   const { data } = await q;
   // ENTRY_KIND-Filter im Code, weil bestehende Zeilen vor Migration 0051
@@ -195,11 +195,11 @@ async function sumDayWorkHours(supabase, tenantId, employeeId, dateStr, excludeT
 
 async function sumDayBreakMinutes(supabase, tenantId, employeeId, dateStr, excludeTecId = null) {
   let q = supabase
-    .from('TEC')
+    .from('BOOKING')
     .select('ID, QUANTITY_INT, ENTRY_KIND, PAUSE_AUTO_DEDUCTED_MIN')
     .eq('TENANT_ID', tenantId)
     .eq('EMPLOYEE_ID', employeeId)
-    .eq('DATE_VOUCHER', dateStr);
+    .eq('BOOKING_DATE', dateStr);
   if (excludeTecId != null) q = q.neq('ID', excludeTecId);
   const { data } = await q;
   // Pause-Blöcke (ENTRY_KIND='BREAK') werden in Minuten gerechnet.
@@ -222,19 +222,19 @@ async function lastShiftEnd(supabase, tenantId, employeeId, beforeDateStr, befor
   const prevStr = prev.toISOString().slice(0, 10);
 
   const { data } = await supabase
-    .from('TEC')
-    .select('DATE_VOUCHER, TIME_FINISH, ENTRY_KIND')
+    .from('BOOKING')
+    .select('BOOKING_DATE, TIME_FINISH, ENTRY_KIND')
     .eq('TENANT_ID', tenantId)
     .eq('EMPLOYEE_ID', employeeId)
-    .in('DATE_VOUCHER', [prevStr, beforeDateStr])
+    .in('BOOKING_DATE', [prevStr, beforeDateStr])
     .not('TIME_FINISH', 'is', null)
-    .order('DATE_VOUCHER', { ascending: false })
+    .order('BOOKING_DATE', { ascending: false })
     .order('TIME_FINISH', { ascending: false });
 
   for (const r of data || []) {
     if ((r.ENTRY_KIND ?? 'WORK') !== 'WORK') continue;
-    if (r.DATE_VOUCHER === beforeDateStr && beforeTimeStr && r.TIME_FINISH >= beforeTimeStr) continue;
-    return { date: r.DATE_VOUCHER, time: r.TIME_FINISH };
+    if (r.BOOKING_DATE === beforeDateStr && beforeTimeStr && r.TIME_FINISH >= beforeTimeStr) continue;
+    return { date: r.BOOKING_DATE, time: r.TIME_FINISH };
   }
   return null;
 }
@@ -366,11 +366,11 @@ async function writeAuditEvents(supabase, tenantId, events) {
   const rows = events.map(e => ({
     TENANT_ID:    tenantId,
     EMPLOYEE_ID:  e.employeeId,
-    DATE_VOUCHER: e.dateVoucher,
+    BOOKING_DATE: e.dateVoucher,
     EVENT_TYPE:   e.eventType,
     SEVERITY:     e.severity || 'INFO',
     DETAILS:      e.details || {},
-    TEC_ID:       e.tecId ?? null,
+    BOOKING_ID:       e.tecId ?? null,
   }));
   const { error } = await supabase.from('ARBZG_AUDIT').insert(rows);
   if (error) {

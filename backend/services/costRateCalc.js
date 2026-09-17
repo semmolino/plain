@@ -305,14 +305,14 @@ async function importCostRates(supabase, tenantId, rates, validFrom, recalcBooki
 
   if (!recalcBookings) return;
 
-  // Recalculate COST_RATE + COST_TOTAL on TEC bookings dated >= validFrom
+  // Recalculate COST_RATE + COST_TOTAL on BOOKING bookings dated >= validFrom
   for (const r of rates) {
     const { data: tecRows, error: fetchErr } = await supabase
-      .from('TEC')
+      .from('BOOKING')
       .select('ID, QUANTITY_INT')
       .eq('TENANT_ID', tenantId)
       .eq('EMPLOYEE_ID', r.employee_id)
-      .gte('DATE_VOUCHER', validFrom);
+      .gte('BOOKING_DATE', validFrom);
     if (fetchErr) throw { status: 500, message: fetchErr.message };
     if (!tecRows || !tecRows.length) continue;
 
@@ -327,7 +327,7 @@ async function importCostRates(supabase, tenantId, rates, validFrom, recalcBooki
       COST_TOTAL:    Math.round(Number(row.QUANTITY_INT) * r.rate * 100) / 100,
     }));
     const { error: updErr } = await supabase
-      .from('TEC')
+      .from('BOOKING')
       .upsert(updates, { onConflict: 'ID' });
     if (updErr) throw { status: 500, message: updErr.message };
   }

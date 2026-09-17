@@ -52,7 +52,7 @@ export interface ArbzgIssue {
 
 export interface PreflightPayload {
   employee_id:    number
-  date_voucher:   string
+  booking_date:   string
   time_start?:    string | null
   time_finish?:   string | null
   quantity_int:   number
@@ -77,11 +77,11 @@ export interface ArbzgLimits {
 export interface AuditEntry {
   ID:           number
   EMPLOYEE_ID:  number
-  DATE_VOUCHER: string
+  BOOKING_DATE: string
   EVENT_TYPE:   string
   SEVERITY:     ArbzgSeverity
   DETAILS:      Record<string, unknown>
-  TEC_ID:       number | null
+  BOOKING_ID:       number | null
   CREATED_AT:   string
 }
 

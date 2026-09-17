@@ -50,7 +50,7 @@ const assertProjectInTenant   = (supabase, id, tenantId) => assertInTenant(supab
 const assertStructureInTenant = (supabase, id, tenantId) => assertInTenant(supabase, "PROJECT_STRUCTURE", id, tenantId);
 const assertContractInTenant  = (supabase, id, tenantId) => assertInTenant(supabase, "CONTRACT", id, tenantId);
 const assertEmployeeInTenant  = (supabase, id, tenantId) => assertInTenant(supabase, "EMPLOYEE", id, tenantId);
-const assertTecInTenant       = (supabase, id, tenantId) => assertInTenant(supabase, "TEC", id, tenantId);
+const assertTecInTenant       = (supabase, id, tenantId) => assertInTenant(supabase, "BOOKING", id, tenantId);
 const assertCompanyInTenant   = (supabase, id, tenantId) => assertInTenant(supabase, "COMPANY", id, tenantId);
 const assertInvoiceInTenant   = (supabase, id, tenantId) => assertInTenant(supabase, "INVOICE", id, tenantId);
 

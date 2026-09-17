@@ -58,12 +58,12 @@ const CHECKERS = {
   },
 
   bookings_100: async (supabase, { tenantId, employeeId }) => {
-    const c = await safeCount(supabase, "TEC", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId });
+    const c = await safeCount(supabase, "BOOKING", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId });
     return { unlocked: c >= 100, meta: { count: c } };
   },
 
   bookings_1000: async (supabase, { tenantId, employeeId }) => {
-    const c = await safeCount(supabase, "TEC", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId });
+    const c = await safeCount(supabase, "BOOKING", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId });
     return { unlocked: c >= 1000, meta: { count: c } };
   },
 
@@ -141,7 +141,7 @@ const CHECKERS = {
 
   // Erste eigene Buchung
   first_booking: async (supabase, { tenantId, employeeId }) => {
-    const c = await safeCount(supabase, "TEC", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId });
+    const c = await safeCount(supabase, "BOOKING", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId });
     return { unlocked: c >= 1, meta: { count: c } };
   },
 
@@ -211,23 +211,23 @@ const CHECKERS = {
       const sinceStr = since.toISOString().slice(0, 10);
 
       const { data, error } = await supabase
-        .from("TEC")
-        .select("DATE_VOUCHER")
+        .from("BOOKING")
+        .select("BOOKING_DATE")
         .eq("TENANT_ID",   tenantId)
         .eq("EMPLOYEE_ID", employeeId)
-        .gte("DATE_VOUCHER", sinceStr);
+        .gte("BOOKING_DATE", sinceStr);
       if (error) return { unlocked: false };
 
       // Pro Woche distinkte Mo-Fr Tage zaehlen
       const weekMap = new Map(); // "YYYY-WW" -> Set<day-string>
       for (const r of data || []) {
-        if (!r.DATE_VOUCHER) continue;
-        const d = new Date(r.DATE_VOUCHER + "T00:00:00Z");
+        if (!r.BOOKING_DATE) continue;
+        const d = new Date(r.BOOKING_DATE + "T00:00:00Z");
         const dow = d.getUTCDay();
         if (dow === 0 || dow === 6) continue;     // nur Mo-Fr
         const wKey = isoWeekKey(d);
         if (!weekMap.has(wKey)) weekMap.set(wKey, new Set());
-        weekMap.get(wKey).add(r.DATE_VOUCHER);
+        weekMap.get(wKey).add(r.BOOKING_DATE);
       }
       const ok = [...weekMap.values()].some(s => s.size >= 5);
       return { unlocked: ok };

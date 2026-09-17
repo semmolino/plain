@@ -138,12 +138,12 @@ module.exports = (supabase) => {
       .order("created_at", { ascending: true });
 
     let tecQ = supabase
-      .from("TEC")
-      .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, HOURLY_RATE_TOTAL")
+      .from("BOOKING")
+      .select("STRUCTURE_ID, BOOKING_DATE, COST_TOTAL, HOURLY_RATE_TOTAL")
       .eq("TENANT_ID", tenantId)
       .in("STRUCTURE_ID", leafIds)
-      .order("DATE_VOUCHER", { ascending: true });
-    if (dateTo) tecQ = tecQ.lte("DATE_VOUCHER", dateTo);
+      .order("BOOKING_DATE", { ascending: true });
+    if (dateTo) tecQ = tecQ.lte("BOOKING_DATE", dateTo);
     const { data: tecRows } = await tecQ;
 
     let ppQ = supabase
@@ -181,7 +181,7 @@ module.exports = (supabase) => {
 
     const dateSet = new Set();
     (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
-    (tecRows      || []).forEach(r => { if (r.DATE_VOUCHER) dateSet.add(r.DATE_VOUCHER); });
+    (tecRows      || []).forEach(r => { if (r.BOOKING_DATE) dateSet.add(r.BOOKING_DATE); });
     (ppRows       || []).forEach(r => { if (r.ADVANCE_INVOICE_DATE) dateSet.add(r.ADVANCE_INVOICE_DATE); });
     invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
     (payRows      || []).forEach(r => { if (r.PAYMENT_DATE) dateSet.add(r.PAYMENT_DATE); });
@@ -207,7 +207,7 @@ module.exports = (supabase) => {
           r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
         );
         const leafTec = (tecRows || []).filter(r =>
-          r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date
+          r.STRUCTURE_ID === leaf.ID && r.BOOKING_DATE <= date
         );
 
         if (leaf.BILLING_TYPE_ID === 2) {
@@ -235,7 +235,7 @@ module.exports = (supabase) => {
       }
 
       const kosten = (tecRows || [])
-        .filter(r => r.DATE_VOUCHER <= date)
+        .filter(r => r.BOOKING_DATE <= date)
         .reduce((s, r) => s + +(r.COST_TOTAL || 0), 0);
 
       const abgerechnet =
@@ -815,14 +815,14 @@ module.exports = (supabase) => {
         .in("STRUCTURE_ID", leafIds)
         .order("created_at", { ascending: true });
 
-      // 3. TEC rows (fetch up to dateTo for efficiency; full history needed for cumulative)
+      // 3. BOOKING rows (fetch up to dateTo for efficiency; full history needed for cumulative)
       let tecQ = supabase
-        .from("TEC")
-        .select("STRUCTURE_ID, DATE_VOUCHER, COST_TOTAL, HOURLY_RATE_TOTAL")
+        .from("BOOKING")
+        .select("STRUCTURE_ID, BOOKING_DATE, COST_TOTAL, HOURLY_RATE_TOTAL")
         .eq("TENANT_ID", tenantId)
         .in("STRUCTURE_ID", leafIds)
-        .order("DATE_VOUCHER", { ascending: true });
-      if (dateTo) tecQ = tecQ.lte("DATE_VOUCHER", dateTo);
+        .order("BOOKING_DATE", { ascending: true });
+      if (dateTo) tecQ = tecQ.lte("BOOKING_DATE", dateTo);
       const { data: tecRows } = await tecQ;
 
       // 4. Partial payments
@@ -864,7 +864,7 @@ module.exports = (supabase) => {
       // 7. Collect distinct event dates, apply date range filter for X axis
       const dateSet = new Set();
       (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
-      (tecRows      || []).forEach(r => { if (r.DATE_VOUCHER) dateSet.add(r.DATE_VOUCHER); });
+      (tecRows      || []).forEach(r => { if (r.BOOKING_DATE) dateSet.add(r.BOOKING_DATE); });
       (ppRows       || []).forEach(r => { if (r.ADVANCE_INVOICE_DATE) dateSet.add(r.ADVANCE_INVOICE_DATE); });
       invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
       (payRows      || []).forEach(r => { if (r.PAYMENT_DATE) dateSet.add(r.PAYMENT_DATE); });
@@ -892,7 +892,7 @@ module.exports = (supabase) => {
             r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
           );
           const leafTec = (tecRows || []).filter(r =>
-            r.STRUCTURE_ID === leaf.ID && r.DATE_VOUCHER <= date
+            r.STRUCTURE_ID === leaf.ID && r.BOOKING_DATE <= date
           );
 
           if (leaf.BILLING_TYPE_ID === 2) {
@@ -924,7 +924,7 @@ module.exports = (supabase) => {
         }
 
         const kosten = (tecRows || [])
-          .filter(r => r.DATE_VOUCHER <= date)
+          .filter(r => r.BOOKING_DATE <= date)
           .reduce((s, r) => s + +(r.COST_TOTAL || 0), 0);
 
         const abgerechnet =
@@ -1040,7 +1040,7 @@ module.exports = (supabase) => {
     res.json({ data: rows });
   });
 
-  // Hours + costs per month — date-filtered by querying TEC directly when params present
+  // Hours + costs per month — date-filtered by querying BOOKING directly when params present
   router.get("/dashboard/monthly", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
@@ -1050,16 +1050,16 @@ module.exports = (supabase) => {
 
     if (dateFrom && dateTo) {
       const { data, error } = await supabase
-        .from("TEC")
-        .select("DATE_VOUCHER, QUANTITY_INT, COST_TOTAL")
+        .from("BOOKING")
+        .select("BOOKING_DATE, QUANTITY_INT, COST_TOTAL")
         .eq("TENANT_ID", tenantId)
-        .gte("DATE_VOUCHER", dateFrom)
-        .lte("DATE_VOUCHER", dateTo);
+        .gte("BOOKING_DATE", dateFrom)
+        .lte("BOOKING_DATE", dateTo);
       if (error) return res.status(500).json({ error: error.message });
 
       const byMonth = {};
       for (const row of (data || [])) {
-        const m = String(row.DATE_VOUCHER).substring(0, 7);
+        const m = String(row.BOOKING_DATE).substring(0, 7);
         if (!byMonth[m]) byMonth[m] = { MONTH: m, HOURS_TOTAL: 0, COST_TOTAL: 0 };
         byMonth[m].HOURS_TOTAL = Math.round((byMonth[m].HOURS_TOTAL + Number(row.QUANTITY_INT || 0)) * 100) / 100;
         byMonth[m].COST_TOTAL  = Math.round((byMonth[m].COST_TOTAL  + Number(row.COST_TOTAL || 0)) * 100) / 100;
@@ -1300,7 +1300,7 @@ module.exports = (supabase) => {
         .from("ARBZG_AUDIT")
         .select("EVENT_TYPE, SEVERITY")
         .eq("TENANT_ID", tenantId)
-        .gte("DATE_VOUCHER", weekStart);
+        .gte("BOOKING_DATE", weekStart);
       if (wErr && /relation .*ARBZG_AUDIT/i.test(wErr.message)) {
         return res.json({ data: { warnWeek: 0, blockWeek: 0, over8hWeek: 0,
                                    warn30: 0, block30: 0, breakMissing30: 0,
@@ -1316,7 +1316,7 @@ module.exports = (supabase) => {
         .from("ARBZG_AUDIT")
         .select("EVENT_TYPE, SEVERITY")
         .eq("TENANT_ID", tenantId)
-        .gte("DATE_VOUCHER", m30Start);
+        .gte("BOOKING_DATE", m30Start);
 
       const warn30         = (m30Rows || []).filter(r => r.SEVERITY === 'WARN').length;
       const block30        = (m30Rows || []).filter(r => r.SEVERITY === 'BLOCK').length;
@@ -1360,12 +1360,12 @@ module.exports = (supabase) => {
       const all = structs || [];
       const parentIds = new Set(all.filter((s) => s.FATHER_ID != null).map((s) => String(s.FATHER_ID)));
       const internalLeaves = all.filter((s) => s.IS_INTERNAL && !parentIds.has(String(s.ID)));
-      // BT=2-Blätter: Erlös = Σ TEC.HOURLY_RATE_TOTAL; BT=1-Blätter: REVENUE_COMPLETION + EXTRAS_COMPLETION.
+      // BT=2-Blätter: Erlös = Σ BOOKING.HOURLY_RATE_TOTAL; BT=1-Blätter: REVENUE_COMPLETION + EXTRAS_COMPLETION.
       const bt2Ids = internalLeaves.filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
       const spBySid = new Map();
       if (bt2Ids.length) {
         const { data: tec } = await supabase
-          .from("TEC").select("STRUCTURE_ID, HOURLY_RATE_TOTAL").in("STRUCTURE_ID", bt2Ids).neq("STATUS", "DRAFT");
+          .from("BOOKING").select("STRUCTURE_ID, HOURLY_RATE_TOTAL").in("STRUCTURE_ID", bt2Ids).neq("STATUS", "DRAFT");
         for (const t of tec || []) {
           const k = String(t.STRUCTURE_ID);
           spBySid.set(k, (spBySid.get(k) || 0) + Number(t.HOURLY_RATE_TOTAL || 0));
@@ -1488,8 +1488,8 @@ module.exports = (supabase) => {
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .gte("ADVANCE_INVOICE_DATE", from).lte("ADVANCE_INVOICE_DATE", to)
           .is("CANCELS_ADVANCE_INVOICE_ID", null),
-        supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT, COST_TOTAL")
-          .eq("TENANT_ID", tenantId).gte("DATE_VOUCHER", from).lte("DATE_VOUCHER", to),
+        supabase.from("BOOKING").select("EMPLOYEE_ID, QUANTITY_INT, COST_TOTAL")
+          .eq("TENANT_ID", tenantId).gte("BOOKING_DATE", from).lte("BOOKING_DATE", to),
         supabase.from("EMPLOYEE").select("ID")
           .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
         supabase.from("VW_REPORT_PROJECT_LIST_ROOT").select("BUDGET_TOTAL_NET, BILLED_NET_TOTAL")
@@ -1548,7 +1548,7 @@ module.exports = (supabase) => {
     }
   });
 
-  // Team hours: TEC confirmed hours per employee per month (date-range aware)
+  // Team hours: BOOKING confirmed hours per employee per month (date-range aware)
   router.get("/dashboard/team-hours", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
@@ -1565,9 +1565,9 @@ module.exports = (supabase) => {
     }
 
     const [{ data: tec }, { data: employees }] = await Promise.all([
-      supabase.from("TEC").select("EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT")
+      supabase.from("BOOKING").select("EMPLOYEE_ID, BOOKING_DATE, QUANTITY_INT")
         .eq("TENANT_ID", tenantId).eq("STATUS", "CONFIRMED")
-        .gte("DATE_VOUCHER", fromStr).lte("DATE_VOUCHER", toStr),
+        .gte("BOOKING_DATE", fromStr).lte("BOOKING_DATE", toStr),
       supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME")
         .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
     ]);
@@ -1584,8 +1584,8 @@ module.exports = (supabase) => {
 
     const byEmpMonth = {};
     for (const row of (tec || [])) {
-      if (!row.DATE_VOUCHER) continue;
-      const month = row.DATE_VOUCHER.substring(0, 7);
+      if (!row.BOOKING_DATE) continue;
+      const month = row.BOOKING_DATE.substring(0, 7);
       if (!months.includes(month)) continue;
       const key = `${row.EMPLOYEE_ID}__${month}`;
       byEmpMonth[key] = (byEmpMonth[key] || 0) + Number(row.QUANTITY_INT || 0);
@@ -1624,9 +1624,9 @@ module.exports = (supabase) => {
     const toStr   = today.toISOString().slice(0, 10);
 
     const [{ data: tec }, { data: employees }] = await Promise.all([
-      supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT")
+      supabase.from("BOOKING").select("EMPLOYEE_ID, QUANTITY_INT")
         .eq("TENANT_ID", tenantId).eq("STATUS", "CONFIRMED")
-        .gte("DATE_VOUCHER", fromStr).lte("DATE_VOUCHER", toStr),
+        .gte("BOOKING_DATE", fromStr).lte("BOOKING_DATE", toStr),
       supabase.from("EMPLOYEE").select("ID, ABBR")
         .eq("TENANT_ID", tenantId).or("ACTIVE.is.null,ACTIVE.neq.2"),
     ]);
@@ -1698,12 +1698,12 @@ module.exports = (supabase) => {
           .lte("ADVANCE_INVOICE_DATE", periodEnd)
           .is("CANCELS_ADVANCE_INVOICE_ID", null),
 
-        // TEC: all entries in year (employee_id, hours, costs)
-        supabase.from("TEC")
+        // BOOKING: all entries in year (employee_id, hours, costs)
+        supabase.from("BOOKING")
           .select("EMPLOYEE_ID, QUANTITY_INT, COST_TOTAL")
           .eq("TENANT_ID", tenantId)
-          .gte("DATE_VOUCHER", periodStart)
-          .lte("DATE_VOUCHER", periodEnd),
+          .gte("BOOKING_DATE", periodStart)
+          .lte("BOOKING_DATE", periodEnd),
 
         // Active employees
         supabase.from("EMPLOYEE")
@@ -1726,7 +1726,7 @@ module.exports = (supabase) => {
       const ppRevenue      = (ppRes.data || []).reduce((s, r) => s + Number(r.AMOUNT_NET || 0) + Number(r.AMOUNT_EXTRAS_NET || 0), 0);
       const revenue        = Math.round((invoiceRevenue + ppRevenue) * 100) / 100;
 
-      // TEC metrics
+      // BOOKING metrics
       const tecRows      = tecRes.data || [];
       const totalHours   = Math.round(tecRows.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0) * 100) / 100;
       const directCosts  = Math.round(tecRows.reduce((s, r) => s + Number(r.COST_TOTAL || 0), 0) * 100) / 100;
@@ -1852,11 +1852,11 @@ module.exports = (supabase) => {
 
       // Fetch all data in parallel; some need all-time data for running totals
       const [tecRes, invRes, ppRes, payRes, projectsRes, allInvRes, allPpRes] = await Promise.all([
-        supabase.from("TEC")
-          .select("DATE_VOUCHER, QUANTITY_INT, COST_TOTAL")
+        supabase.from("BOOKING")
+          .select("BOOKING_DATE, QUANTITY_INT, COST_TOTAL")
           .eq("TENANT_ID", tenantId)
-          .gte("DATE_VOUCHER", dateFrom)
-          .lte("DATE_VOUCHER", overallEnd),
+          .gte("BOOKING_DATE", dateFrom)
+          .lte("BOOKING_DATE", overallEnd),
         supabase.from("INVOICE")
           .select("INVOICE_DATE, TOTAL_AMOUNT_NET")
           .eq("TENANT_ID", tenantId)
@@ -1906,7 +1906,7 @@ module.exports = (supabase) => {
       const allPp    = allPpRes.data    || [];
 
       const result = periods.map(p => {
-        const periodTec = tec.filter(r => r.DATE_VOUCHER >= p.start && r.DATE_VOUCHER <= p.end);
+        const periodTec = tec.filter(r => r.BOOKING_DATE >= p.start && r.BOOKING_DATE <= p.end);
         const stunden   = round2(periodTec.reduce((s, r) => s + Number(r.QUANTITY_INT || 0), 0));
         const kosten    = round2(periodTec.reduce((s, r) => s + Number(r.COST_TOTAL || 0), 0));
 
