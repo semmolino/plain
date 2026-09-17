@@ -140,7 +140,7 @@ Bausteine, Architektur, priorisierte Coverage-Map und Wording-Regeln: `docs/HELP
 
 | Convention | Example |
 |---|---|
-| Table + column names | `UPPER_CASE` (`OFFER`, `NAME_LONG`) |
+| Table + column names | `UPPER_CASE` (`OFFER`, `NAME`, `ABBR`) |
 | API request body fields | `snake_case` (`name_long`, `offer_status_id`) |
 | Currency rounding | Always `fmt2(n)` = `Math.round(n * 100) / 100` |
 | Hierarchy | `FATHER_ID` column; insert all rows with `FATHER_ID=null` first, then update — the **2-pass pattern** |
@@ -194,24 +194,57 @@ pauschal alles aus `MODULE IN (…, "reports", …)`. Eine neue Permission in ei
 dieser Module fällt also automatisch an den Projektleiter — wenn das nicht
 gewollt ist, in `nichtFuerProjektleiter` eintragen.
 
-**Key tables**: `TENANT`, `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `PARTIAL_PAYMENT`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`, `WIP_CLOSING`/`WIP_CLOSING_LINE`.
+**Key tables**: `TENANT`, `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `ADVANCE_INVOICE`, `BOOKING`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`, `WIP_CLOSING`/`WIP_CLOSING_LINE`.
 
-**BILLING_TYPE_ID**: `1` = fixed-fee (Pauschal), `2` = hourly (Stunden/TEC).
+**BILLING_TYPE_ID**: `1` = fixed-fee (Pauschal), `2` = hourly (Stunden, nach Aufwand).
+
+**Namensumstellung 2026-09 — alte Namen in aelteren Texten.** Tabellen und
+Spalten wurden systemweit umbenannt (acht Bloecke, Migrationen 0140–0159).
+Aeltere Migrationen, Dokumente und Kommentare nennen noch die alten Namen; das
+ist Historie und bleibt so. Die Zuordnung:
+
+| alt | neu |
+|---|---|
+| `TEC` / `TEC_REBOOKING` | `BOOKING` / `BOOKING_REBOOKING` |
+| `PARTIAL_PAYMENT` / `_STRUCTURE` | `ADVANCE_INVOICE` / `_STRUCTURE` |
+| `EMPLOYEE_CP_RATE`, `PROJECT_SP_RATES` | `EMPLOYEE_COST_RATE`, `PROJECT_HOURLY_RATES` |
+| `NAME_SHORT`, `SHORT_NAME` | `ABBR` |
+| `NAME_LONG` | `NAME` |
+| `SP_RATE`, `SP_TOT` | `HOURLY_RATE`, `HOURLY_RATE_TOTAL` |
+| `CP_RATE`, `CP_TOT` | `COST_RATE`, `COST_TOTAL` |
+| `DATE_VOUCHER`, `TEC_ID` | `BOOKING_DATE`, `BOOKING_ID` |
+| `ROLE_NAME_SHORT`, `ROLE_NAME_LONG` | `ROLE_ABBR`, `ROLE_NAME` |
+
+**Bei einer weiteren Umbenennung**: `backend/scripts/rename/` benutzen, nicht
+von Hand ersetzen. Ablauf und Fallstricke stehen in `docs/RENAME_BEFUNDE.md`.
+Der CI-Job `rename-guard` faengt einen Altnamen, der zurueckkommt.
+
+Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
+- **Derselbe String kann ein WERT sein.** `PARTIAL_PAYMENT` stand als
+  `doc_type` in `document_number_range` — ein unbekannter Wert laesst
+  `next_document_number()` bei 1 anfangen, also doppelte Rechnungsnummern.
+  Vor jeder Umbenennung die Datenbank nach gespeicherten Vorkommen absuchen.
+- **`CREATE OR REPLACE FUNCTION` kann Ausgabespalten nicht umbenennen.** Wo die
+  `RETURNS TABLE`-Signatur betroffen ist, muss die Funktion fallen und neu
+  entstehen.
+- **Der Codemod ersetzt an Wortgrenzen.** `PDF_PARTIAL_PAYMENT` und
+  `DEFAULT_CP_RATE` bleiben deshalb stehen — das eine war ein Fehler, das
+  andere richtig.
 
 ---
 
 ## Key business domain patterns
 
 - **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0.
-- **Invoice wizard**: draft invoice → assign performance amount + TEC bookings → generate line items → finalize.
+- **Invoice wizard**: draft invoice → assign performance amount + bookings → generate line items → finalize.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
 - **Umbuchen von Buchungen** (`rebookBuchungen` in `services/buchungen.js`,
   `POST /buchungen/umbuchen[/vorschau]`, Recht `projects.bookings.rebook` aus
-  Migration `0139`): verschiebt TEC-Zeilen auf ein anderes Projektelement, auch
+  Migration `0139`): verschiebt Buchungen auf ein anderes Projektelement, auch
   über Projektgrenzen. Zwei Regeln sind bindend: eine Buchung mit `INVOICE_ID`
-  oder `PARTIAL_PAYMENT_ID` ist **gesperrt** (ein gestellter Beleg darf seine
+  oder `ADVANCE_INVOICE_ID` ist **gesperrt** (ein gestellter Beleg darf seine
   Grundlage nicht verlieren — Korrektur läuft über Storno/Gutschrift), und
   `COSTS`/`REVENUE` werden bei **Quelle und Ziel** neu gerechnet, auch wenn ein
   Schreibvorgang mitten in der Auswahl abbricht. Der Stundensatz kommt nach dem

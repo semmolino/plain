@@ -1,0 +1,1770 @@
+-- Spalteninventar, erzeugt 2026-09-17
+-- Quelle: laufende Scalingo-Datenbank ueber den Tunnel.
+-- Kein pg_dump: lokal nicht verfuegbar. Deckt Tabellen und Spalten beider Schemas ab.
+
+
+-- public.ABSENCE
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  ABSENCE_TYPE_ID  integer
+  DATE_FROM  date
+  DATE_TO  date
+  HALF_DAY  boolean
+  STATUS  text
+  NOTE  text
+  REQUESTED_BY  integer
+  REQUESTED_AT  timestamp with time zone
+  DECIDED_BY  integer
+  DECIDED_AT  timestamp with time zone
+  DECISION_NOTE  text
+  CLARIFICATION_LOG  jsonb
+
+-- public.ABSENCE_TYPE
+  ID  integer
+  TENANT_ID  integer
+  NAME  text
+  COLOR  text
+  COUNTS_AS_WORKED  boolean
+  REDUCES_VACATION  boolean
+  REQUIRES_APPROVAL  boolean
+  IS_PAID  boolean
+  ACTIVE  integer
+  SORT_ORDER  integer
+
+-- public.ACHIEVEMENT
+  ID  integer
+  KEY  character varying
+  TITLE  character varying
+  DESCRIPTION  text
+  CATEGORY  character varying
+  POSITION  integer
+  ACTIVE  boolean
+
+-- public.ADDRESS
+  ID  bigint
+  created_at  timestamp with time zone
+  ADDRESS_NAME_1  character varying
+  ADDRESS_NAME_2  character varying
+  STREET  character varying
+  POST_CODE  character varying
+  CITY  character varying
+  POST_OFFICE_BOX  character varying
+  COUNTRY_ID  bigint
+  CUSTOMER_NUMBER  character varying
+  TAX-ID  character varying
+  BUYER_REFERENCE  character varying
+  DEBITOR_NUMBER  character varying
+  TENANT_ID  bigint
+  PEPPOL_ENDPOINT_ID  text
+  PEPPOL_SCHEME_ID  character varying
+  IMPORT_BATCH_ID  integer
+  ADDRESS_TYPE  smallint
+  TAX_NUMBER  text
+  PHONE  text
+  EMAIL  text
+  WEBSITE  text
+  NOTES  text
+
+-- public.ADVANCE_INVOICE
+  ID  bigint
+  created_at  timestamp with time zone
+  ADVANCE_INVOICE_NUMBER  character varying
+  ADVANCE_INVOICE_DATE  date
+  CURRENCY_ID  bigint
+  DUE_DATE  date
+  STATUS_ID  bigint
+  BUYER_REFERENCE  character varying
+  CONTRACT_ID  bigint
+  PROJECT_ID  bigint
+  COMMENT  character varying
+  BILLING_PERIOD_START  date
+  BILLING_PERIOD_FINISH  date
+  COMPANY_ID  bigint
+  EMPLOYEE_ID  bigint
+  ADVANCE_INVOICE_ADDRESS_ID  bigint
+  ADVANCE_INVOICE_CONTACT_ID  bigint
+  AMOUNT_NET  numeric
+  TOTAL_AMOUNT_NET  numeric
+  TAX_AMOUNT_NET  numeric
+  TOTAL_AMOUNT_GROSS  numeric
+  PAYMENT_MEANS_ID  bigint
+  CASH_DISCOUNT_PERCENT  numeric
+  TOTAL_DISCOUNTS  numeric
+  PAYED_AMOUNT_NET  numeric
+  PURPOSE_OF_PAYMENT  numeric
+  DISCOUNT_1_REASON  character varying
+  DISCOUNT_1_PERCENT  numeric
+  DISCOUNT_1  numeric
+  DISCOUNT_2_REASON  character varying
+  DISCOUNT_2_PERCENT  numeric
+  DISCOUNT_2  numeric
+  COMPANY_NAME_1  character varying
+  COMPANY_NAME_2  character varying
+  COMPANY_STREET  character varying
+  COMPANY_POST_CODE  character varying
+  COMPANY_CITY  character varying
+  COMPANY_COUNTRY  character varying
+  COMPANY_POST_OFFICE_BOX  character varying
+  COMPANY_BIC  character varying
+  COMPANY_TAX-ID  character varying
+  COMPANY_TAX_NUMBER  character varying
+  EMPLOYEE  character varying
+  EMPLOYEE_SALUTATION  character varying
+  EMPLOYEE_MAIL  character varying
+  EMPLOYEE_PHONE  character varying
+  ADDRESS_NAME_1  character varying
+  ADDRESS_NAME_2  character varying
+  ADDRESS_STREET  character varying
+  ADDRESS_CITY  character varying
+  ADDRESS_COUNTRY  character varying
+  ADDRESS_POST_OFFICE_BOX  character varying
+  ADDRESS_DEBITOR_NUMBER  character varying
+  CONTACT  character varying
+  CONTACT_SALUTATION  character varying
+  CONTACT_MAIL  character varying
+  CONTACT_PHONE  character varying
+  ADDRESS_REFERENCE_NUMBER  character varying
+  ADDRESS_CREDITOR-ID  character varying
+  COMPANY_IBAN  character varying
+  AMOUNT_EXTRAS_NET  numeric
+  ADDRESS_POST_CODE  character varying
+  COMPANY_CREDITOR-ID  character varying
+  VAT_PERCENT  numeric
+  VAT_ID  bigint
+  document_template_id  bigint
+  document_layout_key_snapshot  text
+  document_theme_snapshot_json  jsonb
+  document_logo_asset_id_snapshot  bigint
+  document_pdf_asset_id  bigint
+  document_rendered_at  timestamp with time zone
+  DOCUMENT_TEMPLATE_ID  bigint
+  DOCUMENT_LAYOUT_KEY_SNAPSHOT  text
+  DOCUMENT_THEME_SNAPSHOT_JSON  jsonb
+  DOCUMENT_LOGO_ASSET_ID_SNAPSHOT  bigint
+  DOCUMENT_PDF_ASSET_ID  bigint
+  DOCUMENT_RENDERED_AT  timestamp with time zone
+  DOCUMENT_XML_ASSET_ID  bigint
+  DOCUMENT_XML_PROFILE  text
+  DOCUMENT_XML_RENDERED_AT  timestamp with time zone
+  TEXT_1  text
+  TEXT_2  text
+  TENANT_ID  bigint
+  INVOICE_ID  bigint
+  CANCELS_ADVANCE_INVOICE_ID  integer
+  CANCELLATION_DATE  date
+  CASH_DISCOUNT_DAYS  numeric
+  CASH_DISCOUNT  numeric
+  SE_PERCENT  numeric
+  SE_BASIS  text
+  SE_BASIS_AMT  numeric
+  SE_AMOUNT  numeric
+  SE_RELEASED_BY_INVOICE_ID  integer
+  BUYER_ORDER_REFERENCE  text
+  BUYER_ACCOUNTING_REFERENCE  text
+  REMITTANCE_INFORMATION  text
+  VAT_CATEGORY  character varying
+  VAT_EXEMPTION_REASON_CODE  text
+  VAT_EXEMPTION_REASON_TEXT  text
+  IMPORT_BATCH_ID  integer
+  DOCUMENT_XML_CII_ASSET_ID  integer
+  DOCUMENT_XML_CII_PROFILE  text
+  DOCUMENT_XML_CII_RENDERED_AT  timestamp with time zone
+
+-- public.ADVANCE_INVOICE_STRUCTURE
+  ID  bigint
+  created_at  timestamp with time zone
+  ADVANCE_INVOICE_ID  bigint
+  AMOUNT_NET  numeric
+  AMOUNT_EXTRAS_NET  numeric
+  STRUCTURE_ID  bigint
+  TENANT_ID  bigint
+  INVOICE_ID  bigint
+  IMPORT_BATCH_ID  integer
+
+-- public.ARBZG_AUDIT
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  BOOKING_DATE  date
+  EVENT_TYPE  text
+  SEVERITY  text
+  DETAILS  jsonb
+  BOOKING_ID  integer
+  CREATED_AT  timestamp with time zone
+
+-- public.ASSET
+  ID  bigint
+  COMPANY_ID  bigint
+  ASSET_TYPE  text
+  FILE_NAME  text
+  MIME_TYPE  text
+  FILE_SIZE  bigint
+  STORAGE_KEY  text
+  SHA256  text
+  CREATED_AT  timestamp with time zone
+  TENANT_ID  bigint
+
+-- public.BILLING_TYPE
+  ID  bigint
+  created_at  timestamp with time zone
+  BILLING_TYPE  character varying
+
+-- public.BOOKING
+  ID  bigint
+  created_at  timestamp with time zone
+  EMPLOYEE_ID  bigint
+  BOOKING_DATE  date
+  TIME_START  time without time zone
+  TIME_FINISH  time without time zone
+  QUANTITY_INT  numeric
+  COST_RATE  numeric
+  COST_TOTAL  numeric
+  QUANTITY_EXT  numeric
+  HOURLY_RATE  numeric
+  HOURLY_RATE_TOTAL  numeric
+  POSTING_DESCRIPTION  character varying
+  PROJECT_ID  bigint
+  STRUCTURE_ID  bigint
+  ADVANCE_INVOICE_ID  bigint
+  INVOICE_ID  bigint
+  ROLE_ID  bigint
+  ROLE_ABBR  character varying
+  ROLE_NAME  character varying
+  TENANT_ID  bigint
+  STATUS  text
+  ENTRY_KIND  text
+  IS_SUNDAY  boolean
+  IS_HOLIDAY  boolean
+  EXCEEDS_8H  boolean
+  PAUSE_AUTO_DEDUCTED_MIN  integer
+  CONFIRMED_BY_EMPLOYEE_AT  timestamp with time zone
+  BOOKING_KIND  text
+  UNIT_LABEL  text
+  BOOKING_TYPE_ID  integer
+  IMPORT_BATCH_ID  integer
+
+-- public.BOOKING_REBOOKING
+  ID  bigint
+  TENANT_ID  bigint
+  BOOKING_ID  bigint
+  BOOKING_DATE  date
+  BOOKING_EMPLOYEE_ID  bigint
+  QUANTITY_INT  numeric
+  COST_TOTAL  numeric
+  FROM_PROJECT_ID  bigint
+  FROM_PROJECT_NAME  text
+  FROM_STRUCTURE_ID  bigint
+  FROM_STRUCTURE_NAME  text
+  TO_PROJECT_ID  bigint
+  TO_PROJECT_NAME  text
+  TO_STRUCTURE_ID  bigint
+  TO_STRUCTURE_NAME  text
+  HOURLY_RATE_BEFORE  numeric
+  HOURLY_RATE_AFTER  numeric
+  HOURLY_RATE_TOTAL_BEFORE  numeric
+  HOURLY_RATE_TOTAL_AFTER  numeric
+  REASON  text
+  CREATED_BY_EMPLOYEE_ID  bigint
+  created_at  timestamp with time zone
+
+-- public.BOOKING_TEXT_SNIPPET
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  LABEL  text
+  TEXT  text
+  SORT_ORDER  integer
+  SCOPE  text
+  KIND  text
+  BOOKING_TYPE_ID  integer
+
+-- public.BOOKING_TYPE
+  ID  integer
+  TENANT_ID  integer
+  KIND  text
+  ABBR  text
+  NAME  text
+  UNIT_LABEL  text
+  UNIT_CODE  text
+  DEFAULT_SP_RATE  numeric
+  DEFAULT_CP_RATE  numeric
+  SCOPE  text
+  PROJECT_ID  integer
+  ACTIVE  integer
+  SORT_ORDER  integer
+
+-- public.BREAK_RULE
+  ID  integer
+  TENANT_ID  integer
+  NAME  text
+  T1_HOURS  numeric
+  T1_BREAK_MIN  integer
+  T2_HOURS  numeric
+  T2_BREAK_MIN  integer
+  MIN_BLOCK_MIN  integer
+  CREATED_AT  timestamp with time zone
+
+-- public.BUDGET_WARNING_FIRED
+  ID  integer
+  RULE_ID  integer
+  FIRED_AT  timestamp with time zone
+  BUDGET_EUR  numeric
+  ACTUAL_EUR  numeric
+  TRIGGER_TEC_ID  integer
+  RESET_AT  timestamp with time zone
+
+-- public.BUDGET_WARNING_RULE
+  ID  integer
+  TENANT_ID  integer
+  PROJECT_ID  integer
+  STRUCTURE_ID  integer
+  THRESHOLD_PCT  numeric
+  NOTIFY_PM  boolean
+  NOTIFY_BOOKER  boolean
+  NOTIFY_CC  ARRAY
+  MUTED  boolean
+  CREATED_AT  timestamp with time zone
+  CREATED_BY  integer
+
+-- public.CAPABILITY_PERMISSION
+  CAPABILITY_KEY  character varying
+  PERMISSION_KEY  character varying
+
+-- public.COMPANY
+  ID  bigint
+  created_at  timestamp with time zone
+  COMPANY_NAME_1  character varying
+  COMPANY_NAME_2  character varying
+  STREET  character varying
+  POST_CODE  character varying
+  CITY  character varying
+  POST_OFFICE_BOX  character varying
+  COUNTRY_ID  bigint
+  TAX-ID  character varying
+  TAX_NUMBER  character varying
+  BIC  character varying
+  IBAN  character varying
+  CREDITOR-ID  character varying
+  TENANT_ID  bigint
+  PEPPOL_ENDPOINT_ID  text
+  PEPPOL_SCHEME_ID  character varying
+
+-- public.CONTACTS
+  ID  bigint
+  created_at  timestamp with time zone
+  TITLE  character varying
+  FIRST_NAME  character varying
+  LAST_NAME  character varying
+  EMAIL  character varying
+  MOBILE  character varying
+  SALUTATION_ID  bigint
+  GENDER_ID  bigint
+  ADDRESS_ID  bigint
+  TENANT_ID  bigint
+  IMPORT_BATCH_ID  integer
+  POSITION  text
+  DEPARTMENT  text
+  PHONE  text
+  IS_PRIMARY  smallint
+  NOTES  text
+
+-- public.CONTRACT
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+  PROJECT_ID  bigint
+  INVOICE_ADDRESS_ID  bigint
+  INVOICE_CONTACT_ID  bigint
+  CURRENCY_ID  bigint
+  TENANT_ID  bigint
+  VAT_ID  bigint
+  CASH_DISCOUNT_PERCENT  numeric
+  CASH_DISCOUNT_DAYS  numeric
+  SE_ENABLED  boolean
+  SE_PERCENT  numeric
+  SE_BASIS  text
+  SE_LEGAL_REFERENCE  text
+  VAT_CATEGORY  character varying
+  VAT_EXEMPTION_REASON_CODE  text
+  VAT_EXEMPTION_REASON_TEXT  text
+  IMPORT_BATCH_ID  integer
+
+-- public.COST_RATE_CONFIG
+  ID  integer
+  TENANT_ID  integer
+  YEAR  integer
+  CATEGORY  text
+  ITEM_NAME  text
+  AMOUNT  numeric
+
+-- public.COST_RATE_EMP_PARAMS
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  YEAR  integer
+  ANNUAL_SALARY  numeric
+  WEEKLY_HOURS  numeric
+  VACATION_DAYS  numeric
+  SICK_DAYS_EST  numeric
+  TRAINING_DAYS  numeric
+  SOCIAL_CONTRIB_PCT  numeric
+  PRODUCTIVITY_PCT  numeric
+
+-- public.COUNTRY
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+
+-- public.CURRENCY
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+
+-- public.DEPARTMENT
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+  TENANT_ID  bigint
+
+-- public.DIN276_COST_ESTIMATE
+  ID  integer
+  TENANT_ID  integer
+  PROJECT_ID  integer
+  OFFER_ID  integer
+  ABBR  character varying
+  NAME  character varying
+  STAGE  text
+  DIN_VERSION  text
+  STATUS  text
+  MITVERARBEITETE_BAUSUBSTANZ  numeric
+  created_at  timestamp with time zone
+
+-- public.DIN276_COST_GROUP
+  ID  integer
+  TENANT_ID  integer
+  ESTIMATE_ID  integer
+  KG_CODE  character varying
+  LABEL  character varying
+  AMOUNT  numeric
+  IS_PLANNED_SELF  boolean
+  SORT_ORDER  integer
+  created_at  timestamp with time zone
+
+-- public.DOCUMENT_TEMPLATE
+  ID  bigint
+  COMPANY_ID  bigint
+  NAME  text
+  DOC_TYPE  text
+  LAYOUT_KEY  text
+  THEME_JSON  jsonb
+  LOGO_ASSET_ID  bigint
+  IS_DEFAULT  boolean
+  IS_ACTIVE  boolean
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+  STATUS  text
+  VERSION  integer
+  FAMILY_ID  bigint
+  PUBLISHED_AT  timestamp with time zone
+  ARCHIVED_AT  timestamp with time zone
+  BUILDER_LAYOUT_JSON  jsonb
+  TENANT_ID  bigint
+
+-- public.EMAIL_TEMPLATE
+  ID  integer
+  TENANT_ID  integer
+  TEMPLATE_KEY  text
+  SUBJECT  text
+  BODY  text
+  UPDATED_AT  timestamp with time zone
+
+-- public.EMPLOYEE
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  TITLE  character varying
+  FIRST_NAME  character varying
+  LAST_NAME  character varying
+  PASSWORD  character varying
+  MAIL  character varying
+  MOBILE  character varying
+  PERSONNEL_NUMBER  character varying
+  SALUTATION_ID  bigint
+  GENDER_ID  bigint
+  PHONE  character varying
+  ACTIVE  bigint
+  TENANT_ID  bigint
+  DEPARTMENT_ID  integer
+  DASHBOARD_ROLE  text
+  AVATAR_ASSET_ID  integer
+  AVATAR_DATA_URI  text
+  ENTRY_DATE  date
+  EXIT_DATE  date
+  IMPORT_BATCH_ID  integer
+  SESSION_EPOCH  timestamp with time zone
+
+-- public.EMPLOYEE2PROJECT
+  ID  bigint
+  created_at  timestamp with time zone
+  PROJECT_ID  bigint
+  EMPLOYEE_ID  bigint
+  ROLE_ID  bigint
+  HOURLY_RATE  numeric
+  ROLE_ABBR  character varying
+  ROLE_NAME  character varying
+  TENANT_ID  bigint
+
+-- public.EMPLOYEE_COST_RATE
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  COST_RATE  numeric
+  VALID_FROM  date
+
+-- public.EMPLOYEE_MONTH_CLOSE
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  YEAR  integer
+  MONTH  integer
+  CLOSED_AT  timestamp with time zone
+  CLOSED_BY  integer
+
+-- public.EMPLOYEE_ROLE
+  EMPLOYEE_ID  integer
+  ROLE_ID  integer
+  ASSIGNED_AT  timestamp with time zone
+  ASSIGNED_BY  integer
+
+-- public.EMPLOYEE_WORK_MODEL
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  MODEL_ID  integer
+  VALID_FROM  date
+
+-- public.FEE_CALCULATION_BL
+  ID  integer
+  TENANT_ID  integer
+  FEE_CALC_MASTER_ID  integer
+  NAME  text
+  LPH_REF  text
+  AMOUNT  numeric
+  SORT_ORDER  integer
+  CREATED_AT  timestamp with time zone
+  ABBR  text
+  LPH_PHASE_ID  integer
+  AMOUNT_TYPE  text
+  PERCENT  numeric
+  KX_REF  text
+
+-- public.FEE_CALCULATION_MASTER
+  ID  bigint
+  created_at  timestamp with time zone
+  FEE_MASTER_ID  bigint
+  ABBR  character varying
+  NAME  character varying
+  PROJECT_ID  bigint
+  ZONE_ID  bigint
+  ZONE_PERCENT  numeric
+  REVENUE_K0  numeric
+  REVENUE_K1  numeric
+  REVENUE_K2  numeric
+  REVENUE_K3  numeric
+  REVENUE_K4  numeric
+  CONSTRUCTION_COSTS_K0  numeric
+  CONSTRUCTION_COSTS_K1  numeric
+  CONSTRUCTION_COSTS_K2  numeric
+  CONSTRUCTION_COSTS_K3  numeric
+  CONSTRUCTION_COSTS_K4  numeric
+  TENANT_ID  bigint
+  OFFER_ID  integer
+  ATTACH_TO_OFFER_STRUCTURE_ID  integer
+  DIN276_ESTIMATE_ID  integer
+  DIN276_LEISTUNGSBILD  text
+
+-- public.FEE_CALCULATION_PHASE
+  ID  bigint
+  created_at  timestamp with time zone
+  FEE_MASTER_ID  bigint
+  FEE_PHASE_ID  bigint
+  FEE_PERCENT_BASE  numeric
+  KX  character varying
+  REVENUE_BASE  numeric
+  FEE_PERCENT  numeric
+  PHASE_REVENUE  numeric
+  TENANT_ID  bigint
+
+-- public.FEE_CALCULATION_SURCHARGES
+  ID  integer
+  TENANT_ID  integer
+  FEE_CALC_MASTER_ID  integer
+  FEE_SURCHARGE_ID  integer
+  ABBR  character varying
+  NAME  character varying
+  PERCENT  numeric
+  BASE_AMOUNT  numeric
+  AMOUNT  numeric
+  SORT_ORDER  integer
+  created_at  timestamp with time zone
+  LPH_FILTER  text
+  CALC_MODE  text
+  INCLUDE_BL  boolean
+  BL_FILTER  text
+
+-- public.FEE_CALC_ZONE_SPLIT
+  ID  integer
+  TENANT_ID  integer
+  FEE_CALC_MASTER_ID  integer
+  ZONE_ID  integer
+  ZONE_PERCENT  numeric
+  AMOUNT  numeric
+  SORT_ORDER  integer
+  created_at  timestamp with time zone
+
+-- public.FEE_GROUPS
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+
+-- public.FEE_MASTERS
+  ID  bigint
+  created_at  timestamp with time zone
+  FEE_GROUP_ID  bigint
+  ABBR  character varying
+  NAME  character varying
+  MIN  numeric
+  MAX  numeric
+  BASE_TYPE  text
+  SUPPORTS_ZONE_SPLIT  boolean
+
+-- public.FEE_PHASE
+  ID  bigint
+  created_at  timestamp with time zone
+  FEE_MASTER_ID  bigint
+  ABBR  character varying
+  NAME  character varying
+  FEE_PERCENT  numeric
+  SORT_ORDER  integer
+
+-- public.FEE_SURCHARGES
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+  SURCHARGE_TYPE  character varying
+  DEFAULT_PERCENT  numeric
+  MAX_PERCENT  numeric
+  LEGAL_REF  character varying
+
+-- public.FEE_SURCHARGES2MASTER
+  ID  bigint
+  created_at  timestamp with time zone
+  FEE_MASTER_ID  bigint
+  FEE_SURCHARGE_ID  bigint
+
+-- public.FEE_TABLES
+  ID  bigint
+  created_at  timestamp with time zone
+  FEE_MASTER_ID  bigint
+  BASE  numeric
+  ZONE_1  numeric
+  ZONE_2  numeric
+  ZONE_3  numeric
+  ZONE_4  numeric
+  ZONE_5  numeric
+  ZONE_TOP  numeric
+
+-- public.FEE_ZONES
+  ID  bigint
+  created_at  timestamp with time zone
+  FEE_MASTER_ID  bigint
+  ABBR  character varying
+  NAME  character varying
+
+-- public.FEE_ZONE_CRITERION
+  ID  integer
+  FEE_MASTER_ID  integer
+  SORT_ORDER  integer
+  TEXT  text
+  MAX_POINTS  integer
+  LEVEL_HINT  text
+  LEGAL_REF  character varying
+  created_at  timestamp with time zone
+
+-- public.FEE_ZONE_LOOKUP
+  ID  integer
+  FEE_MASTER_ID  integer
+  CATEGORY  character varying
+  DESCRIPTION  text
+  ZONE_ID  integer
+  SORT_ORDER  integer
+  created_at  timestamp with time zone
+
+-- public.FEE_ZONE_THRESHOLD
+  ID  integer
+  FEE_MASTER_ID  integer
+  ZONE_ID  integer
+  POINTS_FROM  integer
+  POINTS_TO  integer
+  created_at  timestamp with time zone
+
+-- public.GENDER
+  ID  bigint
+  created_at  timestamp with time zone
+  GENDER  character varying
+
+-- public.IMPORT_BATCH
+  ID  integer
+  TENANT_ID  integer
+  DOMAIN  text
+  STATUS  text
+  SOURCE_FILENAME  text
+  MAPPING_JSON  jsonb
+  ROW_TOTAL  integer
+  ROW_OK  integer
+  ROW_SKIPPED  integer
+  ROW_ERROR  integer
+  SUMMARY_JSON  jsonb
+  CREATED_BY  integer
+  CREATED_AT  timestamp with time zone
+  ROLLED_BACK_AT  timestamp with time zone
+
+-- public.INVOICE
+  ID  bigint
+  created_at  timestamp with time zone
+  INVOICE_NUMBER  character varying
+  INVOICE_DATE  date
+  CURRENCY_ID  bigint
+  DUE_DATE  date
+  STATUS_ID  bigint
+  BUYER_REFERENCE  character varying
+  CONTRACT_ID  bigint
+  PROJECT_ID  bigint
+  COMMENT  character varying
+  BILLING_PERIOD_START  date
+  BILLING_PERIOD_FINISH  date
+  COMPANY_ID  bigint
+  EMPLOYEE_ID  bigint
+  INVOICE_ADDRESS_ID  bigint
+  INVOICE_CONTACT_ID  bigint
+  AMOUNT_NET  numeric
+  TOTAL_AMOUNT_NET  numeric
+  TAX_AMOUNT_NET  numeric
+  TOTAL_AMOUNT_GROSS  numeric
+  COMPANY_IBAN  character varying
+  PAYMENT_MEANS_ID  bigint
+  CASH_DISCOUNT_PERCENT  numeric
+  TOTAL_DISCOUNTS  numeric
+  PAYED_AMOUNT_NET  numeric
+  PURPOSE_OF_PAYMENT  numeric
+  DISCOUNT_1_REASON  character varying
+  DISCOUNT_1_PERCENT  numeric
+  DISCOUNT_1  numeric
+  DISCOUNT_2_REASON  character varying
+  DISCOUNT_2_PERCENT  numeric
+  DISCOUNT_2  numeric
+  COMPANY_NAME_1  character varying
+  COMPANY_NAME_2  character varying
+  COMPANY_STREET  character varying
+  COMPANY_POST_CODE  character varying
+  COMPANY_CITY  character varying
+  COMPANY_COUNTRY  character varying
+  COMPANY_POST_OFFICE_BOX  character varying
+  COMPANY_BIC  character varying
+  COMPANY_TAX-ID  character varying
+  COMPANY_TAX_NUMBER  character varying
+  EMPLOYEE  character varying
+  EMPLOYEE_SALUTATION  character varying
+  EMPLOYEE_MAIL  character varying
+  EMPLOYEE_PHONE  character varying
+  ADDRESS_NAME_1  character varying
+  ADDRESS_NAME_2  character varying
+  ADDRESS_STREET  character varying
+  ADDRESS_CITY  character varying
+  ADDRESS_COUNTRY  character varying
+  ADDRESS_POST_OFFICE_BOX  character varying
+  ADDRESS_DEBITOR_NUMBER  character varying
+  CONTACT  character varying
+  CONTACT_SALUTATION  character varying
+  CONTACT_MAIL  character varying
+  CONTACT_PHONE  character varying
+  ADDRESS_REFERENCE_NUMBER  character varying
+  ADDRESS_CREDITOR-ID  character varying
+  ADDRESS_IBAN  character varying
+  VAT_ID  bigint
+  VAT_PERCENT  numeric
+  AMOUNT_EXTRAS_NET  numeric
+  ADDRESS_POST_CODE  character varying
+  COMPANY_CREDITOR-ID  character varying
+  document_template_id  bigint
+  document_layout_key_snapshot  text
+  document_theme_snapshot_json  jsonb
+  document_logo_asset_id_snapshot  bigint
+  document_pdf_asset_id  bigint
+  document_rendered_at  timestamp with time zone
+  DOCUMENT_TEMPLATE_ID  bigint
+  DOCUMENT_LAYOUT_KEY_SNAPSHOT  text
+  DOCUMENT_THEME_SNAPSHOT_JSON  jsonb
+  DOCUMENT_LOGO_ASSET_ID_SNAPSHOT  bigint
+  DOCUMENT_PDF_ASSET_ID  bigint
+  DOCUMENT_RENDERED_AT  timestamp with time zone
+  DOCUMENT_XML_ASSET_ID  integer
+  DOCUMENT_XML_PROFILE  text
+  DOCUMENT_XML_RENDERED_AT  timestamp with time zone
+  TEXT_1  text
+  TEXT_2  text
+  TENANT_ID  bigint
+  INVOICE_TYPE  character varying
+  CANCELS_INVOICE_ID  integer
+  CANCELLATION_DATE  date
+  CASH_DISCOUNT_DAYS  numeric
+  CASH_DISCOUNT  numeric
+  SE_PERCENT  numeric
+  SE_BASIS  text
+  SE_BASIS_AMT  numeric
+  SE_AMOUNT  numeric
+  SE_RELEASE_TOTAL  numeric
+  BUYER_ORDER_REFERENCE  text
+  BUYER_ACCOUNTING_REFERENCE  text
+  REMITTANCE_INFORMATION  text
+  VAT_CATEGORY  character varying
+  VAT_EXEMPTION_REASON_CODE  text
+  VAT_EXEMPTION_REASON_TEXT  text
+  IMPORT_BATCH_ID  integer
+  DOCUMENT_XML_CII_ASSET_ID  integer
+  DOCUMENT_XML_CII_PROFILE  text
+  DOCUMENT_XML_CII_RENDERED_AT  timestamp with time zone
+
+-- public.INVOICE_ATTACHMENT
+  ID  integer
+  TENANT_ID  integer
+  INVOICE_ID  integer
+  PP_ID  integer
+  ASSET_ID  integer
+  DESCRIPTION  text
+  ATTACHMENT_TYPE_CODE  character varying
+  DOCUMENT_REFERENCE  text
+  POSITION  integer
+  CREATED_AT  timestamp with time zone
+
+-- public.INVOICE_DEDUCTION
+  ID  integer
+  TENANT_ID  integer
+  INVOICE_ID  integer
+  ADVANCE_INVOICE_ID  integer
+  DEDUCTION_AMOUNT_NET  numeric
+
+-- public.INVOICE_STRUCTURE
+  ID  bigint
+  created_at  timestamp with time zone
+  INVOICE_ID  bigint
+  STRUCTURE_ID  bigint
+  AMOUNT_NET  numeric
+  AMOUNT_EXTRAS_NET  numeric
+  TENANT_ID  bigint
+  IMPORT_BATCH_ID  integer
+
+-- public.LANDING_EVENT
+  ID  bigint
+  SESSION_KEY  text
+  EVENT_TYPE  text
+  EVENT_LABEL  text
+  PATH  text
+  REFERRER_HOST  text
+  SCROLL_DEPTH  smallint
+  ENGAGED_MS  integer
+  DEVICE_TYPE  text
+  VIEWPORT_W  smallint
+  LANGUAGE  text
+  UTM_SOURCE  text
+  UTM_MEDIUM  text
+  UTM_CAMPAIGN  text
+  COUNTRY  text
+  CREATED_AT  timestamp with time zone
+
+-- public.LICENSE_CAPABILITY
+  KEY  character varying
+  MODULE_KEY  character varying
+  LABEL_DE  text
+  TYPE  character varying
+  UNIT  character varying
+  POSITION  integer
+
+-- public.LICENSE_CHANGE_LOG
+  ID  integer
+  ACTOR  text
+  ENTITY  text
+  ENTITY_REF  text
+  ACTION  text
+  BEFORE  jsonb
+  AFTER  jsonb
+  AT  timestamp with time zone
+  CONTEXT  jsonb
+  IP  text
+  USER_AGENT  text
+
+-- public.LICENSE_MODULE
+  KEY  character varying
+  LABEL_DE  text
+  POSITION  integer
+
+-- public.LICENSE_PLAN
+  ID  integer
+  KEY  character varying
+  NAME_DE  text
+  DESCRIPTION_DE  text
+  POSITION  integer
+  IS_ACTIVE  boolean
+  PRICE_MONTHLY  numeric
+  PRICE_YEARLY  numeric
+  VERSION  integer
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+  IS_DEFAULT  boolean
+
+-- public.LPH_BLOCK
+  ID  integer
+  TENANT_ID  integer
+  FEE_MASTER_ID  integer
+  ABBR  character varying
+  SORT_ORDER  integer
+  created_at  timestamp with time zone
+
+-- public.LPH_BLOCK_PHASE
+  ID  integer
+  TENANT_ID  integer
+  BLOCK_ID  integer
+  FEE_PHASE_ID  integer
+  created_at  timestamp with time zone
+
+-- public.MAHNUNG
+  ID  integer
+  TENANT_ID  integer
+  INVOICE_ID  integer
+  PP_ID  integer
+  MAHNSTUFE  integer
+  LAST_MAHNUNG_DATE  date
+  NEXT_MAHNUNG_DATE  date
+  RESPONSIBLE_EMPLOYEE_ID  integer
+  IS_CLOSED  boolean
+  CLOSE_REASON  text
+  IN_KLAERUNG  boolean
+  NOTES  text
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+
+-- public.MAHNUNG_HISTORY
+  ID  integer
+  TENANT_ID  integer
+  MAHNUNG_ID  integer
+  MAHNSTUFE  integer
+  DATE_ACTION  timestamp with time zone
+  EMPLOYEE_ID  integer
+  EMAIL_TO  text
+  EMAIL_SUBJECT  text
+  EMAIL_SENT  boolean
+  FEE_AMOUNT  numeric
+  NOTES  text
+
+-- public.MAHNUNG_SETTINGS
+  ID  integer
+  TENANT_ID  integer
+  MAHNSTUFE  integer
+  LABEL  text
+  DAYS_AFTER_DUE  integer
+  DAYS_AFTER_PREV  integer
+  FEE  numeric
+  HEADER_TEXT  text
+  FOOTER_TEXT  text
+
+-- public.NACHTRAG
+  ID  bigint
+  TENANT_ID  bigint
+  PROJECT_ID  bigint
+  CONTRACT_ID  bigint
+  OFFER_ID  bigint
+  ABBR  text
+  NAME  text
+  NACHTRAG_TYPE  text
+  NACHTRAG_STATUS_ID  bigint
+  CATEGORY  text
+  CLAIM_BASIS  text
+  REASON  text
+  IS_GRANTED_BASIS  boolean
+  EMPLOYEE_ID  bigint
+  ADDRESS_ID  bigint
+  CONTACT_ID  bigint
+  COMPANY_ID  bigint
+  VAT_ID  bigint
+  ANNOUNCED_DATE  date
+  SUBMITTED_DATE  date
+  REVIEW_DUE_DATE  date
+  DECISION_DATE  date
+  AMOUNT_CLAIMED_NET  numeric
+  AMOUNT_APPROVED_NET  numeric
+  SURCHARGE_1_LABEL  text
+  SURCHARGE_1_PCT  numeric
+  SURCHARGE_1_EUR  numeric
+  SURCHARGE_1_CUMUL  boolean
+  SURCHARGE_2_LABEL  text
+  SURCHARGE_2_PCT  numeric
+  SURCHARGE_2_EUR  numeric
+  SURCHARGE_2_CUMUL  boolean
+  SURCHARGE_3_LABEL  text
+  SURCHARGE_3_PCT  numeric
+  SURCHARGE_3_EUR  numeric
+  SURCHARGE_3_CUMUL  boolean
+  SURCHARGES_TOTAL  numeric
+  CREATED_AT  timestamp with time zone
+  REVIEW_FORMAL  boolean
+  REVIEW_CONTENT  boolean
+  REVIEW_CALCULATION  boolean
+  REVIEW_NOTE  text
+  REVIEW_RECOMMENDATION  text
+  REVIEWED_AT  timestamp with time zone
+  REVIEWED_BY  bigint
+
+-- public.NACHTRAG_AUDIT
+  ID  bigint
+  TENANT_ID  bigint
+  NACHTRAG_ID  bigint
+  EVENT_TYPE  text
+  ACTOR_ID  bigint
+  DETAILS  jsonb
+  CREATED_AT  timestamp with time zone
+
+-- public.NACHTRAG_RELEASE
+  ID  bigint
+  TENANT_ID  bigint
+  NACHTRAG_ID  bigint
+  RELEASE_NO  integer
+  RELEASE_KIND  text
+  RELEASE_BASIS  text
+  AMOUNT_NET  numeric
+  RELEASED_BY  bigint
+  RELEASED_AT  timestamp with time zone
+  NOTE  text
+
+-- public.NACHTRAG_STATUS
+  ID  bigint
+  CODE  text
+  ABBR  text
+  SORT_ORDER  integer
+  IS_TERMINAL  boolean
+  ALLOWS_RELEASE  boolean
+
+-- public.NACHTRAG_STRUCTURE
+  ID  bigint
+  ABBR  text
+  NAME  text
+  NACHTRAG_ID  bigint
+  FATHER_ID  bigint
+  TENANT_ID  bigint
+  SORT_ORDER  integer
+  BILLING_TYPE_ID  bigint
+  REVENUE_BASIS  numeric
+  REVENUE  numeric
+  EXTRAS_PERCENT  numeric
+  EXTRAS  numeric
+  QUANTITY  numeric
+  HOURLY_RATE  numeric
+  ROLE_ABBR  text
+  ROLE_NAME  text
+  ROLE_ID  bigint
+  SURCHARGE_1_LABEL  text
+  SURCHARGE_1_PCT  numeric
+  SURCHARGE_1_EUR  numeric
+  SURCHARGE_1_CUMUL  boolean
+  SURCHARGE_2_LABEL  text
+  SURCHARGE_2_PCT  numeric
+  SURCHARGE_2_EUR  numeric
+  SURCHARGE_2_CUMUL  boolean
+  SURCHARGE_3_LABEL  text
+  SURCHARGE_3_PCT  numeric
+  SURCHARGE_3_EUR  numeric
+  SURCHARGE_3_CUMUL  boolean
+  SURCHARGES_TOTAL  numeric
+  APPROVAL_STATE  text
+  APPROVED_AMOUNT_NET  numeric
+  RELEASED_STRUCTURE_ID  bigint
+
+-- public.NOTIFICATION
+  ID  bigint
+  TENANT_ID  integer
+  USER_ID  text
+  TYPE  text
+  TITLE  text
+  BODY  text
+  LINK  text
+  METADATA  jsonb
+  READ_AT  timestamp with time zone
+  CREATED_AT  timestamp with time zone
+
+-- public.NOTIFICATION_SCHEDULE_CONFIG
+  ID  integer
+  TENANT_ID  integer
+  TYPE_KEY  text
+  ENABLED  boolean
+  SCHEDULE_DAYS  ARRAY
+  SCHEDULE_LAST_DAY  boolean
+  NOTIFY_PROJECT_PM  boolean
+  PROJECT_STATUS_IDS  ARRAY
+  AUDIENCE_ROLES  ARRAY
+  AUDIENCE_DEPARTMENTS  ARRAY
+  AUDIENCE_EMPLOYEES  ARRAY
+  LAST_FIRED_DATE  date
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+  UPDATED_BY  integer
+  SCHEDULE_TIME_OF_DAY  time without time zone
+  PM_NOTIFY_MODE  text
+
+-- public.NOTIFICATION_TYPE
+  TYPE_KEY  text
+  CATEGORY  text
+  TITLE_DE  text
+  DESCRIPTION_DE  text
+  DEFAULT_ENABLED  boolean
+  DEFAULT_AUDIENCE_KIND  text
+  SUPPORTS_AUDIENCE_OVERRIDE  boolean
+  SORT_ORDER  integer
+
+-- public.NOTIFICATION_TYPE_CONFIG
+  ID  integer
+  TENANT_ID  integer
+  TYPE_KEY  text
+  ENABLED  boolean
+  AUDIENCE_USE_DEFAULT  boolean
+  AUDIENCE_ALL_TENANT  boolean
+  AUDIENCE_ROLES  ARRAY
+  AUDIENCE_DEPARTMENTS  ARRAY
+  AUDIENCE_EMPLOYEES  ARRAY
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+  UPDATED_BY  integer
+
+-- public.NUMBER_RANGE_TEMPLATE
+  ID  integer
+  TENANT_ID  integer
+  COMPANY_ID  bigint
+  DOC_TYPE  character varying
+  TEMPLATE  text
+  UPDATED_AT  timestamp with time zone
+  UPDATED_BY  integer
+
+-- public.OFFER
+  ID  bigint
+  ABBR  text
+  NAME  text
+  EMPLOYEE_ID  bigint
+  PROBABILITY  numeric
+  OFFER_TEXT_1  text
+  OFFER_TEXT_2  text
+  ADDRESS_ID  bigint
+  CONTACT_ID  bigint
+  OFFER_STATUS_ID  bigint
+  COMPANY_ID  bigint
+  TENANT_ID  bigint
+  CREATED_AT  timestamp with time zone
+  OFFER_DATE  date
+  VALID_UNTIL  date
+  PROJECT_ID  bigint
+  ORDER_DATE  date
+  REFUSAL_DATE  date
+  VAT_ID  bigint
+  SURCHARGE_1_LABEL  text
+  SURCHARGE_1_PCT  numeric
+  SURCHARGE_1_EUR  numeric
+  SURCHARGE_1_CUMUL  boolean
+  SURCHARGE_2_LABEL  text
+  SURCHARGE_2_PCT  numeric
+  SURCHARGE_2_EUR  numeric
+  SURCHARGE_2_CUMUL  boolean
+  SURCHARGE_3_LABEL  text
+  SURCHARGE_3_PCT  numeric
+  SURCHARGE_3_EUR  numeric
+  SURCHARGE_3_CUMUL  boolean
+  SURCHARGES_TOTAL  numeric
+
+-- public.OFFER_STATUS
+  ID  bigint
+  ABBR  text
+
+-- public.OFFER_STRUCTURE
+  ID  bigint
+  ABBR  text
+  NAME  text
+  OFFER_ID  bigint
+  REVENUE  numeric
+  EXTRAS_PERCENT  numeric
+  EXTRAS  numeric
+  BILLING_TYPE_ID  bigint
+  FATHER_ID  bigint
+  TENANT_ID  bigint
+  SORT_ORDER  integer
+  QUANTITY  numeric
+  HOURLY_RATE  numeric
+  ROLE_ABBR  text
+  ROLE_NAME  text
+  ROLE_ID  bigint
+  REVENUE_BASIS  numeric
+  SURCHARGE_1_LABEL  text
+  SURCHARGE_1_PCT  numeric
+  SURCHARGE_1_EUR  numeric
+  SURCHARGE_1_CUMUL  boolean
+  SURCHARGE_2_LABEL  text
+  SURCHARGE_2_PCT  numeric
+  SURCHARGE_2_EUR  numeric
+  SURCHARGE_2_CUMUL  boolean
+  SURCHARGE_3_LABEL  text
+  SURCHARGE_3_PCT  numeric
+  SURCHARGE_3_EUR  numeric
+  SURCHARGE_3_CUMUL  boolean
+  SURCHARGES_TOTAL  numeric
+
+-- public.PAYMENT
+  ID  bigint
+  created_at  timestamp with time zone
+  ADVANCE_INVOICE_ID  bigint
+  INVOICE_ID  bigint
+  AMOUNT_PAYED_NET  numeric
+  AMOUNT_PAYED_EXTRAS_NET  numeric
+  AMOUNT_PAYED_GROSS  numeric
+  PAYMENT_DATE  date
+  PROJECT_ID  bigint
+  CONTRACT_ID  bigint
+  COMMENT  character varying
+  PURPOSE_OF_PAYMENT  character varying
+  AMOUNT_PAYED_VAT  numeric
+  TENANT_ID  bigint
+  IMPORT_BATCH_ID  integer
+
+-- public.PAYMENT_MEANS
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+  TENANT_ID  bigint
+
+-- public.PAYMENT_STRUCTURE
+  ID  bigint
+  created_at  timestamp with time zone
+  ADVANCE_INVOICE_ID  bigint
+  INVOICE_ID  bigint
+  AMOUNT_PAYED_NET  numeric
+  AMOUNT_PAYED_EXTRAS_NET  numeric
+  PAYMENT_ID  bigint
+  TENANT_ID  bigint
+  STRUCTURE_ID  bigint
+  IMPORT_BATCH_ID  integer
+
+-- public.PERMISSION
+  ID  integer
+  KEY  character varying
+  MODULE  character varying
+  ACTION  character varying
+  LABEL_DE  text
+  DESCRIPTION_DE  text
+  CATEGORY  character varying
+  POSITION  integer
+
+-- public.PLAN_CAPABILITY
+  PLAN_ID  integer
+  CAPABILITY_KEY  character varying
+  NUMERIC_LIMIT  integer
+
+-- public.PLATFORM_ADMIN
+  ID  integer
+  EMAIL  character varying
+  PASSWORD_HASH  text
+  TOTP_SECRET  text
+  IS_ACTIVE  boolean
+  LAST_LOGIN_AT  timestamp with time zone
+  CREATED_AT  timestamp with time zone
+  SESSION_EPOCH  timestamp with time zone
+  TOTP_PENDING_SECRET  text
+
+-- public.PLATFORM_EMAIL_SETTINGS
+  ID  integer
+  SMTP_HOST  text
+  SMTP_PORT  integer
+  SMTP_SECURE  boolean
+  SMTP_USER  text
+  SMTP_PASS_ENC  text
+  SMTP_FROM  text
+  FROM_NAME  text
+  UPDATED_AT  timestamp with time zone
+
+-- public.PORTAL_CONSENT
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  DOC_VERSION  text
+  ACCEPTED_AT  timestamp with time zone
+
+-- public.PROJECT
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+  created_by  uuid
+  PROJECT_MANAGER_ID  bigint
+  PROJECT_STATUS_ID  bigint
+  PROJECT_TYPE_ID  bigint
+  ADVANCE_INVOICED  numeric
+  INVOICED  numeric
+  PAYED  numeric
+  ADDRESS_ID  bigint
+  COMPANY_ID  bigint
+  DEPARTMENT_ID  bigint
+  CONTACT_ID  bigint
+  TENANT_ID  bigint
+  OFFER_ID  bigint
+  IS_INTERNAL  boolean
+  SURCHARGE_1_LABEL  text
+  SURCHARGE_1_PCT  numeric
+  SURCHARGE_1_EUR  numeric
+  SURCHARGE_1_CUMUL  boolean
+  SURCHARGE_2_LABEL  text
+  SURCHARGE_2_PCT  numeric
+  SURCHARGE_2_EUR  numeric
+  SURCHARGE_2_CUMUL  boolean
+  SURCHARGE_3_LABEL  text
+  SURCHARGE_3_PCT  numeric
+  SURCHARGE_3_EUR  numeric
+  SURCHARGE_3_CUMUL  boolean
+  SURCHARGES_TOTAL  numeric
+  BUDGET_WARNINGS_MUTED  boolean
+  IMPORT_BATCH_ID  integer
+
+-- public.PROJECT_BOOKING_PRICE
+  ID  integer
+  TENANT_ID  integer
+  PROJECT_ID  integer
+  BOOKING_TYPE_ID  integer
+  HOURLY_RATE  numeric
+  COST_RATE  numeric
+
+-- public.PROJECT_HOURLY_RATES
+  ID  bigint
+  created_at  timestamp with time zone
+  PROJECT_ID  bigint
+  ROLE_ID  bigint
+  HOURLY_RATE  numeric
+  TENANT_ID  bigint
+
+-- public.PROJECT_PROGRESS
+  ID  bigint
+  created_at  timestamp with time zone
+  REVENUE  numeric
+  EXTRAS  numeric
+  REVENUE_COMPLETION_PERCENT  numeric
+  EXTRAS_COMPLETION_PERCENT  numeric
+  REVENUE_COMPLETION  numeric
+  EXTRAS_COMPLETION  numeric
+  STRUCTURE_ID  bigint
+  EXTRAS_PERCENT  numeric
+  TENANT_ID  bigint
+  ADVANCE_INVOICED  numeric
+  INVOICED  numeric
+  PAYED  numeric
+  IMPORT_BATCH_ID  integer
+
+-- public.PROJECT_STATUS
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+
+-- public.PROJECT_STRUCTURE
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+  REVENUE  numeric
+  EXTRAS  numeric
+  REVENUE_COMPLETION_PERCENT  numeric
+  EXTRAS_COMPLETION_PERCENT  numeric
+  REVENUE_COMPLETION  numeric
+  EXTRAS_COMPLETION  numeric
+  COSTS  numeric
+  PROJECT_ID  bigint
+  FATHER_ID  bigint
+  ADVANCE_INVOICED  numeric
+  INVOICED  numeric
+  PAYED  numeric
+  EXTRAS_PERCENT  numeric
+  BILLING_TYPE_ID  bigint
+  TENANT_ID  bigint
+  CLOSED_BY_INVOICE_ID  bigint
+  SORT_ORDER  integer
+  CONTRACT_ID  bigint
+  FEE_CALC_MASTER_ID  integer
+  FEE_CALC_PHASE_ID  integer
+  FEE_CALC_BL_ID  integer
+  IS_INTERNAL  boolean
+  SURCHARGE_1_LABEL  text
+  SURCHARGE_1_PCT  numeric
+  SURCHARGE_1_EUR  numeric
+  SURCHARGE_1_CUMUL  boolean
+  SURCHARGE_2_LABEL  text
+  SURCHARGE_2_PCT  numeric
+  SURCHARGE_2_EUR  numeric
+  SURCHARGE_2_CUMUL  boolean
+  SURCHARGE_3_LABEL  text
+  SURCHARGE_3_PCT  numeric
+  SURCHARGE_3_EUR  numeric
+  SURCHARGE_3_CUMUL  boolean
+  SURCHARGES_TOTAL  numeric
+  REVENUE_BASIS  numeric
+  IMPORT_BATCH_ID  integer
+  NACHTRAG_ID  bigint
+
+-- public.PROJECT_TYPE
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  TENANT_ID  bigint
+
+-- public.PUBLIC_HOLIDAY
+  ID  integer
+  COUNTRY_CODE  text
+  STATE_CODE  text
+  NAME  text
+  HOLIDAY_DATE  date
+
+-- public.PUSH_SUBSCRIPTION
+  ID  bigint
+  TENANT_ID  integer
+  USER_ID  text
+  ENDPOINT  text
+  P256DH  text
+  AUTH  text
+  USER_AGENT  text
+  CREATED_AT  timestamp with time zone
+  LAST_USED_AT  timestamp with time zone
+
+-- public.PUSH_TOKEN
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  PLATFORM  text
+  TOKEN  text
+  DEVICE_NAME  text
+  CREATED_AT  timestamp with time zone
+  LAST_SEEN_AT  timestamp with time zone
+
+-- public.RECENT_VIEW
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  ENTITY_TYPE  character varying
+  ENTITY_ID  integer
+  LABEL  character varying
+  LAST_SEEN  timestamp with time zone
+  VIEW_COUNT  integer
+  META  jsonb
+
+-- public.ROLE
+  ID  bigint
+  created_at  timestamp with time zone
+  ABBR  character varying
+  NAME  character varying
+  ACTIVE  bigint
+  TENANT_ID  bigint
+  HOURLY_RATE  numeric
+
+-- public.ROLE_PERMISSION
+  ROLE_ID  integer
+  PERMISSION_ID  integer
+
+-- public.SALUTATION
+  ID  bigint
+  created_at  timestamp with time zone
+  SALUTATION  character varying
+
+-- public.SERVICE_REQUEST
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  KIND  text
+  CATEGORY  text
+  SUBJECT  text
+  BODY  text
+  CONTACT_NAME  text
+  CONTACT_EMAIL  text
+  WANTS_REPLY  boolean
+  URGENCY  text
+  STATUS  text
+  JIRA_ISSUE_KEY  text
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+
+-- public.SERVICE_REQUEST_ATTACHMENT
+  ID  integer
+  REQUEST_ID  integer
+  TENANT_ID  integer
+  STORAGE_KEY  text
+  FILENAME  text
+  MIME_TYPE  text
+  SIZE_BYTES  integer
+  CREATED_BY  integer
+  CREATED_AT  timestamp with time zone
+
+-- public.SERVICE_REQUEST_MESSAGE
+  ID  integer
+  REQUEST_ID  integer
+  AUTHOR_KIND  text
+  EMPLOYEE_ID  integer
+  BODY  text
+  CREATED_AT  timestamp with time zone
+
+-- public.SE_RELEASE
+  ID  integer
+  TENANT_ID  integer
+  ADVANCE_INVOICE_ID  integer
+  INVOICE_ID  integer
+  SE_AMOUNT_RELEASED  numeric
+  RELEASED_AT  timestamp with time zone
+  CREATED_AT  timestamp with time zone
+
+-- public.SUGGESTION
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  TITLE  text
+  BODY  text
+  PUBLIC_TITLE  text
+  PUBLIC_BODY  text
+  CATEGORY  text
+  PRIORITY_HINT  text
+  MODERATION_STATE  text
+  LIFECYCLE_STATUS  text
+  MERGED_INTO_ID  integer
+  VOTE_COUNT  integer
+  JIRA_ISSUE_KEY  text
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+  PUBLISHED_AT  timestamp with time zone
+  ORG_STATE  text
+  ORG_RELEASED_AT  timestamp with time zone
+  ORG_RELEASED_BY  integer
+  ORG_DECIDE_REASON  text
+
+-- public.SUGGESTION_ATTACHMENT
+  ID  integer
+  SUGGESTION_ID  integer
+  TENANT_ID  integer
+  STORAGE_KEY  text
+  FILENAME  text
+  MIME_TYPE  text
+  SIZE_BYTES  integer
+  CREATED_BY  integer
+  CREATED_AT  timestamp with time zone
+
+-- public.SUGGESTION_COMMENT
+  ID  integer
+  SUGGESTION_ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  BODY  text
+  AUTHOR_KIND  text
+  VISIBILITY  text
+  MODERATION_STATE  text
+  CREATED_AT  timestamp with time zone
+
+-- public.SUGGESTION_VOTE
+  ID  integer
+  SUGGESTION_ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  CREATED_AT  timestamp with time zone
+
+-- public.TENANTS
+  ID  bigint
+  created_at  timestamp with time zone
+  TENANT  character varying
+  SLUG  character varying
+  SIGNUP_STATE  character varying
+  EMAIL_CONFIRMED_AT  timestamp with time zone
+  APPROVED_AT  timestamp with time zone
+  APPROVED_BY  character varying
+
+-- public.TENANT_EMAIL_SETTINGS
+  ID  integer
+  TENANT_ID  integer
+  ENABLED  boolean
+  SMTP_FROM  text
+  FROM_NAME  text
+  REPLY_TO  text
+  UPDATED_AT  timestamp with time zone
+  CREATED_AT  timestamp with time zone
+  BCC_TO  text
+  RESEND_DOMAIN_ID  text
+  RESEND_DOMAIN_NAME  text
+  RESEND_DOMAIN_STATUS  text
+  RESEND_DOMAIN_RECORDS  jsonb
+
+-- public.TENANT_ENTITLEMENT_OVERRIDE
+  ID  integer
+  TENANT_ID  integer
+  CAPABILITY_KEY  character varying
+  MODE  character varying
+  NUMERIC_LIMIT  integer
+  REASON  text
+  EXPIRES_AT  timestamp with time zone
+  CREATED_AT  timestamp with time zone
+  CREATED_BY  text
+
+-- public.TENANT_LICENSE
+  TENANT_ID  integer
+  PLAN_ID  integer
+  PLAN_VERSION  integer
+  STATE  character varying
+  STARTS_AT  timestamp with time zone
+  VALID_UNTIL  timestamp with time zone
+  TRIAL_UNTIL  timestamp with time zone
+  GRACE_UNTIL  timestamp with time zone
+  EXTERNAL_REF  text
+  UPDATED_AT  timestamp with time zone
+
+-- public.TENANT_SETTINGS
+  TENANT_ID  integer
+  KEY  text
+  VALUE  text
+  UPDATED_AT  timestamp with time zone
+
+-- public.TEXT_TEMPLATE
+  ID  integer
+  TENANT_ID  integer
+  DOCUMENT_TYPE  text
+  HEADER_TEXT  text
+  FOOTER_TEXT  text
+
+-- public.USER_ACHIEVEMENT
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  ACHIEVEMENT_KEY  character varying
+  EARNED_AT  timestamp with time zone
+  META  jsonb
+
+-- public.USER_ROLE
+  ID  integer
+  TENANT_ID  integer
+  ABBR  character varying
+  NAME  text
+  COLOR  character varying
+  IS_SYSTEM  boolean
+  IS_DEFAULT  boolean
+  CREATED_AT  timestamp with time zone
+  UPDATED_AT  timestamp with time zone
+
+-- public.VACATION_ENTITLEMENT
+  ID  integer
+  TENANT_ID  integer
+  EMPLOYEE_ID  integer
+  YEAR  integer
+  DAYS_ENTITLED  numeric
+  CARRYOVER_OVERRIDE  numeric
+  NOTE  text
+
+-- public.VAT
+  ID  bigint
+  created_at  timestamp with time zone
+  VAT  character varying
+  VAT_PERCENT  numeric
+
+-- public.WIP_CLOSING
+  ID  bigint
+  TENANT_ID  bigint
+  AS_OF_DATE  date
+  METHOD  text
+  COST_FACTOR_PERCENT  numeric
+  COMPARE_TO_DATE  date
+  LABEL  text
+  TOTAL_WIP_HK  numeric
+  TOTAL_WIP_REVENUE  numeric
+  TOTAL_PREPAYMENTS  numeric
+  TOTAL_LOSS_RISK  numeric
+  PROJECT_COUNT  integer
+  MISSING_SNAPSHOT_COUNT  integer
+  CREATED_BY_EMPLOYEE_ID  bigint
+  CREATED_BY_NAME  text
+  created_at  timestamp with time zone
+  TAX_COST_FACTOR_PERCENT  numeric
+  TOTAL_WIP_TAX  numeric
+
+-- public.WIP_CLOSING_LINE
+  ID  bigint
+  TENANT_ID  bigint
+  CLOSING_ID  bigint
+  PROJECT_ID  bigint
+  ABBR  text
+  NAME  text
+  PROJECT_STATUS_NAME  text
+  PROJECT_MANAGER  text
+  ORDER_VALUE_NET  numeric
+  PERFORMANCE_NET  numeric
+  PERFORMANCE_PERCENT  numeric
+  BILLED_NET  numeric
+  COST_NET  numeric
+  HOURS_TOTAL  numeric
+  UNBILLED_NET  numeric
+  COST_UNBILLED_NET  numeric
+  WIP_HK_NET  numeric
+  WIP_REVENUE_NET  numeric
+  PREPAYMENT_NET  numeric
+  LOSS_RISK_NET  numeric
+  UNREALIZED_GAIN_NET  numeric
+  SNAPSHOT_DATE  date
+  FLAGS  text
+  created_at  timestamp with time zone
+  COST_UNBILLED_TAX_NET  numeric
+  WIP_TAX_NET  numeric
+
+-- public.WORKING_TIME_MODEL
+  ID  integer
+  TENANT_ID  integer
+  NAME  text
+  COUNTRY_CODE  text
+  STATE_CODE  text
+  MON  numeric
+  TUE  numeric
+  WED  numeric
+  THU  numeric
+  FRI  numeric
+  SAT  numeric
+  SUN  numeric
+  MODEL_TYPE  text
+  BREAK_RULE_ID  integer
+  MAX_DAILY_HOURS  numeric
+  MIN_REST_HOURS  numeric
+  IS_MINOR_PROFILE  boolean
+
+-- public._migrations
+  id  integer
+  filename  text
+  applied_at  timestamp with time zone
+  source  text
+
+-- public._migrations_repeatable
+  filename  text
+  sha256  text
+  applied_at  timestamp with time zone
+
+-- public.document_number_range
+  id  bigint
+  company_id  bigint
+  doc_type  text
+  year  integer
+  next_counter  integer
+  updated_at  timestamp with time zone
+  TENANT_ID  bigint
+  COMPANY_ID  bigint

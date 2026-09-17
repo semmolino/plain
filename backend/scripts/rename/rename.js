@@ -10,7 +10,7 @@
  *   node backend/scripts/rename/rename.js sql       [--block ID]
  *   node backend/scripts/rename/rename.js functions [--block ID]
  *   node backend/scripts/rename/rename.js apply   [--block ID] [--write]
- *   node backend/scripts/rename/rename.js guard   [--block ID]
+ *   node backend/scripts/rename/rename.js guard   [--block ID] [--include-done]
  *   node backend/scripts/rename/rename.js verify  [--block ID]
  *
  * check   - introspects the live DB across ALL application schemas, not just
@@ -29,6 +29,8 @@
  * apply   - the codemod. Dry-run unless --write is passed; --write without
  *           --block is refused, because blocks are meant to land one at a time.
  * guard   - fails if any old identifier is still present in the code.
+ *           --include-done nimmt abgeschlossene Bloecke mit: als CI-Waechter
+ *           gegen einen Altnamen, der ueber einen spaeteren Branch zurueckkommt.
  * verify  - asserts the live DB matches the map (new there, old gone) AND that
  *           no function or view body still carries an old name.
  *
@@ -73,6 +75,12 @@ const SKIP_DIRS = new Set([
 const args = process.argv.slice(2);
 const CMD = args[0];
 const WRITE = args.includes("--write");
+/**
+ * Erledigte Bloecke mitnehmen. Fuer CI: ein Altname, der ueber einen spaeteren
+ * Branch zurueckkommt, ist genau der Fall, den man fangen will - und "done"
+ * wuerde ihn sonst durchwinken.
+ */
+const INCLUDE_DONE = args.includes("--include-done");
 const BLOCK_FILTER = (() => {
   const i = args.indexOf("--block");
   return i !== -1 ? args[i + 1] : null;
@@ -89,13 +97,14 @@ function loadBlocks() {
   const raw = JSON.parse(fs.readFileSync(MAP_FILE, "utf8"));
   EXTRA_DYNAMIC_WATCH = raw.dynamicWatch || [];
   ALWAYS_REVIEW = raw.alwaysReview || [];
-  let blocks = (raw.blocks || []).filter((b) => b.status === "planned");
-  if (BLOCK_FILTER) blocks = blocks.filter((b) => b.id === BLOCK_FILTER);
+  const erlaubt = INCLUDE_DONE ? ["planned", "done"] : ["planned"];
+  let blocks = (raw.blocks || []).filter((b) => erlaubt.includes(b.status));
+  if (BLOCK_FILTER) blocks = (raw.blocks || []).filter((b) => b.id === BLOCK_FILTER);
   if (blocks.length === 0) {
     console.error(
       BLOCK_FILTER
-        ? `No block "${BLOCK_FILTER}" with status "planned" in rename-map.json.`
-        : 'No block with status "planned" in rename-map.json.'
+        ? `No block "${BLOCK_FILTER}" in rename-map.json.`
+        : `No block with status ${erlaubt.map((x) => `"${x}"`).join(" or ")} in rename-map.json.`
     );
     process.exit(1);
   }

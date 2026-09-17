@@ -979,8 +979,8 @@
     },
     {
       "id": "08-name",
-      "status": "planned",
-      "note": "NAME_LONG -> NAME auf allen Traegern.",
+      "status": "done",
+      "note": "NAME_LONG -> NAME auf allen Traegern. ERLEDIGT 2026-09-17: Migrationen 0157/0158/0159, verify gruen, Rauchtest sauber.",
       "tables": [
         {
           "from": "BOOKING_TYPE",

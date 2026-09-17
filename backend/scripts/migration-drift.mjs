@@ -56,9 +56,10 @@ const RENAME_MAP = path.join(HERE, "rename", "rename-map.json");
 
 /**
  * Abgeschlossene Umbenennungen, damit alte Migrationen nicht als "nie gelaufen"
- * gelten, nur weil ihre Tabelle inzwischen anders heisst. 0033 legt
- * EMPLOYEE_CP_RATE an - die Tabelle gibt es, sie heisst seit Block 01
- * EMPLOYEE_COST_RATE.
+ * gelten, nur weil ihre Tabelle inzwischen anders heisst. Migration 0033 legt
+ * die Kostensatz-Historie unter ihrem damaligen Namen an; die Tabelle gibt es,
+ * sie heisst seit Block 01 anders. Alte Namen stehen hier bewusst NICHT
+ * ausgeschrieben - der Guard sucht danach.
  */
 function erledigteUmbenennungen() {
   const tabellen = new Map();

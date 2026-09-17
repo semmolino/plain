@@ -43,6 +43,31 @@ jobs:
         env:
           JWT_SECRET: test-secret-ci
 
+  rename-guard:
+    name: Umbenennung (Altnamen-Waechter)
+    runs-on: ubuntu-latest
+
+    # Die systemweite Umbenennung ist abgeschlossen. Dieser Job haelt sie
+    # fest: kommt ein alter Bezeichner ueber einen spaeteren Branch zurueck,
+    # faellt es hier auf statt erst zur Laufzeit. --include-done ist noetig,
+    # weil abgeschlossene Bloecke sonst uebersprungen werden.
+    #
+    # Braucht keine Datenbank: der Guard liest nur den Quelltext.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --prefix backend
+
+      - name: Guard
+        run: node backend/scripts/rename/rename.js guard --include-done
+
   security:
     name: Sicherheitsscan
     runs-on: ubuntu-latest
