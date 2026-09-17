@@ -22,7 +22,35 @@ function ilikeRegex(muster) {
   return new RegExp(`^${re}$`, "i");
 }
 
-function makeFakeSupabase(initial = {}) {
+/**
+ * @param {object} initial  Startdaten je Tabelle.
+ * @param {{strictSchema?: boolean}} [opts]
+ *   strictSchema: schreibende Aufrufe gegen db/schema/inventar_*.txt pruefen und
+ *   bei unbekannter Spalte denselben Fehler liefern wie PostgREST. Ohne das
+ *   schluckt das Fake jeden Spaltennamen - bequem, aber es laesst genau die
+ *   Fehler durch, die im Betrieb ein 500er sind. Wer einen Service testet, der
+ *   schreibt, sollte es einschalten.
+ */
+function makeFakeSupabase(initial = {}, opts = {}) {
+  const strictSchema = !!opts.strictSchema;
+  const { unbekannteSpalten } = require("./schemaInventory");
+
+  /** Liefert einen PostgREST-aehnlichen Fehler oder null. */
+  function schemaFehler(tabelle, zeilen) {
+    if (!strictSchema) return null;
+    for (const z of (Array.isArray(zeilen) ? zeilen : [zeilen])) {
+      if (!z || typeof z !== "object") continue;
+      const fehlend = unbekannteSpalten(tabelle, z);
+      if (fehlend.length) {
+        return {
+          code: "PGRST204",
+          message: `Could not find the '${fehlend[0]}' column of '${tabelle}' in the schema cache`,
+        };
+      }
+    }
+    return null;
+  }
+
   const tables = {};
   for (const [k, v] of Object.entries(initial)) tables[k] = v.map(r => ({ ...r }));
   let autoId = 1000;
@@ -58,11 +86,15 @@ function makeFakeSupabase(initial = {}) {
     const run = () => {
       const rows = tables[table];
       if (mode === "insert") {
+        const fehler = schemaFehler(table, payload);
+        if (fehler) return { data: null, error: fehler };
         const added = (Array.isArray(payload) ? payload : [payload]).map(r => ({ ID: r.ID ?? ++autoId, ...r }));
         tables[table].push(...added);
         return { data: added, error: null };
       }
       if (mode === "upsert") {
+        const fehlerX = schemaFehler(table, payload);
+        if (fehlerX) return { data: null, error: fehlerX };
         const cols = (onConflict || "").split(",").map(s => s.trim()).filter(Boolean);
         const out = [];
         for (const r of (Array.isArray(payload) ? payload : [payload])) {
@@ -73,6 +105,8 @@ function makeFakeSupabase(initial = {}) {
         return { data: out, error: null };
       }
       if (mode === "update") {
+        const fehlerU = schemaFehler(table, payload);
+        if (fehlerU) return { data: null, error: fehlerU };
         const matched = applyFilters(rows);
         for (const m of matched) Object.assign(m, payload);
         return { data: matched.map(r => ({ ...r })), error: null };

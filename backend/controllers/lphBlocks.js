@@ -2,10 +2,10 @@
 
 // Leistungsphasen-Blöcke — konfigurierbar je Leistungsbild (FEE_MASTERS).
 // Ein Block gruppiert FEE_PHASE-Einträge (Phasen-Katalog) desselben
-// Leistungsbilds. Zuordnung liegt auf FEE_PHASE.BLOCK_ID.
+// Leistungsbilds. Zuordnung liegt in LPH_BLOCK_PHASE (je Mandant).
 //
 // Alle Endpunkte sind soft-fail: fehlt die Migration 0097 (Tabelle LPH_BLOCK
-// bzw. Spalte FEE_PHASE.BLOCK_ID), liefert GET { available:false } statt 500.
+// bzw. Tabelle LPH_BLOCK_PHASE), liefert GET { available:false } statt 500.
 
 function missingSchema(err) {
   const m = String(err?.message || err || "");
@@ -77,7 +77,7 @@ async function getBlocks(req, res, supabase) {
 //   assignments: { [feePhaseId]: blockKey | null }
 // }
 // Blöcke die nicht mehr in `blocks` vorkommen werden gelöscht
-// (FEE_PHASE.BLOCK_ID wird per ON DELETE SET NULL geleert).
+// (die Zuordnungen in LPH_BLOCK_PHASE gehen per ON DELETE CASCADE mit).
 async function saveBlocks(req, res, supabase) {
   const tenantId = req.tenantId;
   const feeMasterId = parseInt(req.body?.fee_master_id, 10);
@@ -190,7 +190,12 @@ async function seedDefault(req, res, supabase) {
   ];
   try {
     const { data: phases, error: phErr } = await supabase
-      .from("FEE_PHASE").select("ID, ABBR, BLOCK_ID").eq("FEE_MASTER_ID", feeMasterId);
+      // Kein BLOCK_ID: die Spalte lag frueher auf FEE_PHASE und wurde von
+      // Migration 0097 entfernt - FEE_PHASE ist mandantenuebergreifende
+      // Referenzdaten, eine Blockzuordnung darauf galt fuer alle Mandanten
+      // zugleich. Sie liegt jetzt in LPH_BLOCK_PHASE. Hier wurde der Wert
+      // ohnehin nie gelesen, die Abfrage scheiterte nur daran.
+      .from("FEE_PHASE").select("ID, ABBR").eq("FEE_MASTER_ID", feeMasterId);
     if (phErr) throw phErr;
     if (!phases || phases.length === 0) {
       return res.status(400).json({ error: "Dieses Leistungsbild hat keine Phasen." });
