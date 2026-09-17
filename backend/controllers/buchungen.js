@@ -89,7 +89,7 @@ async function listBuchungenByProject(req, res, supabase) {
 
     res.json({ data: filtered });
   } catch (err) {
-    res.status(500).json({ error: err.message || err });
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
 }
 
@@ -115,7 +115,7 @@ async function listDraftsByEmployee(req, res, supabase) {
     const data = await svc.listDraftsByEmployee(supabase, { employeeId: employee_id, date, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
-    res.status(500).json({ error: err.message || err });
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
 }
 
@@ -244,7 +244,7 @@ async function getWorkstartStatus(req, res, supabase) {
 
     res.json({ data: { autoshowEnabled, hasBookingsToday, today } });
   } catch (e) {
-    res.status(500).json({ error: e?.message || String(e) });
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
   }
 }
 
