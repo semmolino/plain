@@ -482,8 +482,8 @@
     },
     {
       "id": "06-booking",
-      "status": "planned",
-      "note": "TEC -> BOOKING. Die Oberflaechentexte sind bereits vorab umformuliert (Commit 67e1abc). ARBZG_AUDIT hat Schutz-Trigger gegen Aenderungen - pruefen, ob sie einem ALTER im Weg stehen.",
+      "status": "done",
+      "note": "TEC -> BOOKING. Die Oberflaechentexte sind bereits vorab umformuliert (Commit 67e1abc). ARBZG_AUDIT hat Schutz-Trigger gegen Aenderungen - pruefen, ob sie einem ALTER im Weg stehen. ERLEDIGT 2026-09-17: Migrationen 0152/0153, verify gruen, Rauchtest sauber, ARBZG-Schutzfunktion und beide Trigger intakt.",
       "tables": [
         {
           "from": "ARBZG_AUDIT",
