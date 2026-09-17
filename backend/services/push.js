@@ -17,6 +17,7 @@
 
 let _webpush = null;
 let _configured = null; // null = noch nicht geprüft
+let _stummGemeldet = false;   // Warnung bei fehlender Konfiguration nur einmal
 
 function getConfig() {
   return {
@@ -48,6 +49,17 @@ function isConfigured() {
 // Öffentlicher VAPID-Schlüssel für das Frontend (applicationServerKey).
 function getPublicKey() {
   return getConfig().publicKey || null;
+}
+
+// Der sub-Claim des VAPID-Tokens. Für die Selbstauskunft: Apple lehnt Tokens
+// mit unbrauchbarem Subject ab, und der eingebaute Standardwert zeigt auf eine
+// Domain, die nicht zwingend uns gehört — das soll man sehen können, ohne die
+// Umgebungsvariablen des Servers aufzurufen.
+function getSubject() {
+  return {
+    wert:      getConfig().subject,
+    ausStandard: !process.env.VAPID_SUBJECT,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -105,10 +117,29 @@ async function hasSubscription(supabase, { tenantId, userId, endpoint }) {
   return Array.isArray(data) && data.length > 0;
 }
 
+// Welcher Push-Dienst steht hinter diesem Endpoint? Der Host ist die einzige
+// Angabe aus dem Endpoint, die man protokollieren darf: der Pfad dahinter IST
+// das Zustellgeheimnis. Für die Fehlersuche ist er aber entscheidend — Apple,
+// Google und Mozilla lehnen aus unterschiedlichen Gründen ab.
+function dienstVon(endpoint) {
+  try {
+    return new URL(String(endpoint)).host;
+  } catch {
+    return "unbekannt";
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Einen einzelnen Push senden. Räumt tote Endpoints (404/410) automatisch weg.
+//
+// GIBT DAS ERGEBNIS ZURÜCK, statt es zu schlucken. Vorher endete jeder Fehler
+// ausser 404/410 in einer console.warn — mit der Folge, dass der Test-Knopf im
+// Profil „verschickt" meldete, obwohl der Push-Dienst die Zustellung abgelehnt
+// hatte. Das einzige Werkzeug, das die Wahrheit sagen sollte, beschönigte
+// damit genau den Fall, für den es gebaut wurde.
 // ---------------------------------------------------------------------------
 async function sendOne(supabase, sub, payloadStr) {
+  const dienst = dienstVon(sub.ENDPOINT);
   try {
     await _webpush.sendNotification(
       { endpoint: sub.ENDPOINT, keys: { p256dh: sub.P256DH, auth: sub.AUTH } },
@@ -119,15 +150,26 @@ async function sendOne(supabase, sub, payloadStr) {
       .from("PUSH_SUBSCRIPTION")
       .update({ LAST_USED_AT: new Date().toISOString() })
       .eq("ID", sub.ID);
+    return { ok: true, dienst };
   } catch (err) {
-    const code = err?.statusCode;
+    const code = err?.statusCode || null;
     if (code === 404 || code === 410) {
-      // Endpoint existiert nicht mehr (App deinstalliert / Abo abgelaufen)
+      // Endpoint existiert nicht mehr (Abo abgelaufen, Browserdaten geloescht).
+      // Kein Fehler im eigentlichen Sinn: das Geraet ist weg, die Zeile auch.
       await supabase.from("PUSH_SUBSCRIPTION").delete().eq("ID", sub.ID);
-    } else {
-      console.warn(`[PUSH] Versand fehlgeschlagen (${code || "?"}): ${err?.message || err}`);
+      return { ok: false, dienst, code, entfernt: true, meldung: "Registrierung abgelaufen" };
     }
+    const meldung = kurzeMeldung(err);
+    console.warn(`[PUSH] Versand abgelehnt von ${dienst} (${code || "?"}): ${meldung}`);
+    return { ok: false, dienst, code, entfernt: false, meldung };
   }
+}
+
+// Die Antwort der Push-Dienste ist oft ein mehrzeiliger Body samt Headern. Für
+// die Oberfläche zählt die erste Zeile — dort steht der Grund.
+function kurzeMeldung(err) {
+  const roh = err?.body || err?.message || String(err);
+  return String(roh).split("\n")[0].trim().slice(0, 200);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +182,22 @@ async function sendOne(supabase, sub, payloadStr) {
 // den Push-Versand warten oder daran scheitern.
 // ---------------------------------------------------------------------------
 async function sendPushForNotification(supabase, { tenantId, userId = null, title, body = null, link = null }) {
-  if (!isConfigured()) return;
+  if (!isConfigured()) {
+    // Frueher stand hier ein wortloses return. Damit war ein nicht
+    // konfigurierter Server von einem funktionierenden nicht zu unterscheiden:
+    // die NOTIFICATION-Zeile entstand, in der App war alles zu sehen, auf dem
+    // Geraet kam nichts an — und im Protokoll stand kein Wort. Genau diese
+    // Klasse stiller Ausfaelle hat die Fehlersuche gekostet.
+    if (!_stummGemeldet) {
+      _stummGemeldet = true;
+      console.warn(
+        "[PUSH] Benachrichtigung wollte auf ein Geraet — aber VAPID ist nicht " +
+        "konfiguriert. Alle Geraete-Pushes entfallen (still), bis " +
+        "VAPID_PUBLIC_KEY und VAPID_PRIVATE_KEY gesetzt sind."
+      );
+    }
+    return;
+  }
   if (!tenantId || !title) return;
 
   let q = supabase
@@ -159,7 +216,36 @@ async function sendPushForNotification(supabase, { tenantId, userId = null, titl
     console.warn("[PUSH] Subscriptions laden fehlgeschlagen:", error.message);
     return;
   }
-  if (!Array.isArray(subs) || subs.length === 0) return;
+
+  // Auch dieser Rueckfall war wortlos — und er ist der wahrscheinlichste, wenn
+  // der Test-Knopf ankommt, die geplante Erinnerung aber nicht: der Test sucht
+  // im Request nach dem angemeldeten Konto, der Checker sucht im Systemkontext
+  // nach der USER_ID, die in der Benachrichtigung steht. Passen die beiden
+  // nicht zusammen, findet die zweite Abfrage nichts.
+  //
+  // Die Gegenprobe im selben Atemzug beantwortet genau diese Frage: sind im
+  // Mandanten ueberhaupt Geraete registriert? Steht dort eine Zahl > 0 und
+  // hier 0, liegt es an der USER_ID und nicht am Kanal. Die zusaetzliche
+  // Abfrage kostet nur im Fehlerfall etwas.
+  if (!Array.isArray(subs) || subs.length === 0) {
+    let imMandanten = "?";
+    try {
+      const { data: alle } = await supabase
+        .from("PUSH_SUBSCRIPTION")
+        .select("USER_ID")
+        .eq("TENANT_ID", tenantId);
+      imMandanten = Array.isArray(alle) ? String(alle.length) : "?";
+    } catch { /* Gegenprobe ist Beiwerk, nie der Grund fuer einen Abbruch */ }
+
+    console.warn(
+      `[PUSH] "${title}": kein registriertes Geraet gefunden. Gesucht wurde ` +
+      (userId === null || userId === undefined
+        ? `mandantenweit (Mandant ${tenantId})`
+        : `USER_ID=${String(userId)} in Mandant ${tenantId}`) +
+      ` — im Mandanten registriert: ${imMandanten}.`
+    );
+    return;
+  }
 
   const payloadStr = JSON.stringify({
     title,
@@ -167,7 +253,36 @@ async function sendPushForNotification(supabase, { tenantId, userId = null, titl
     link: link || "/",
   });
 
-  await Promise.allSettled(subs.map(sub => sendOne(supabase, sub, payloadStr)));
+  const ergebnisse = await Promise.all(subs.map(sub => sendOne(supabase, sub, payloadStr)));
+
+  // Eine Zeile je Benachrichtigung, aber nur wenn etwas schiefging. Ohne sie
+  // steht im Protokoll zwar jede einzelne Ablehnung (aus sendOne), aber nicht,
+  // ob damit ALLE Geraete eines Empfaengers leer ausgingen — und genau das ist
+  // der Unterschied zwischen „ein altes Handy zickt" und „es kommt nichts an".
+  const gescheitert = ergebnisse.filter(r => !r.ok && !r.entfernt);
+  const zugestellt  = ergebnisse.filter(r => r.ok).length;
+
+  // Auch der Erfolg wird protokolliert — eine Zeile je Benachrichtigung.
+  //
+  // Ohne sie bleibt die eine Frage offen, an der die Fehlersuche haengt: ging
+  // der Push hinaus und kam nicht an, oder ging er nie hinaus? Beides sah im
+  // Protokoll gleich aus, naemlich nach gar nichts. Das ist keine Schwatzhaftigkeit:
+  // es gibt wenige Benachrichtigungen am Tag, und diese Zeile ist die einzige
+  // Spur eines Vorgangs, der sonst ausserhalb jeder Sichtweite stattfindet.
+  if (zugestellt > 0) {
+    console.log(
+      `[PUSH] "${title}": an ${zugestellt} von ${ergebnisse.length} Geraeten ` +
+      `uebergeben (${ergebnisse.filter(r => r.ok).map(r => r.dienst).join(", ")}).`
+    );
+  }
+
+  if (gescheitert.length > 0) {
+    console.warn(
+      `[PUSH] "${title}": ${zugestellt} von ${ergebnisse.length} ` +
+      `Geraeten zugestellt. Abgelehnt: ` +
+      gescheitert.map(r => `${r.dienst} ${r.code || "?"}`).join(", ")
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -205,23 +320,39 @@ async function sendTestPush(supabase, { tenantId, userId }) {
     tag:   "plain-push-test",
   });
 
-  await Promise.allSettled(subs.map(sub => sendOne(supabase, sub, payloadStr)));
+  const ergebnisse = await Promise.all(subs.map(sub => sendOne(supabase, sub, payloadStr)));
 
-  // sendOne raeumt tote Endpoints selbst weg. Was danach noch steht, hat den
-  // Push angenommen — die Zahl ist damit die ehrlichste Rueckmeldung, die
-  // sich ohne Zustellbestaetigung des Push-Dienstes geben laesst.
-  const { data: rest } = await supabase
-    .from("PUSH_SUBSCRIPTION")
-    .select("ID")
-    .eq("TENANT_ID", tenantId)
-    .eq("USER_ID", String(userId));
+  // Frueher stand hier eine Zaehlung der uebrig gebliebenen Zeilen. Die war
+  // irrefuehrend: sendOne entfernt nur bei 404/410: eine Ablehnung mit 400 oder
+  // 403 liess die Zeile stehen, und der Test meldete „an 1 Geraet verschickt",
+  // obwohl nichts ankam. Genau dieser Fall — Schluessel gesetzt, Geraet
+  // registriert, trotzdem keine Zustellung — ist der, den man sucht.
+  //
+  // Gemeldet wird deshalb, was die Push-Dienste geantwortet haben. Mehr ist
+  // ehrlicherweise nicht zu holen: ob die Meldung auf dem Bildschirm erscheint,
+  // bestaetigt kein Dienst zurueck.
+  const zugestellt   = ergebnisse.filter(r => r.ok).length;
+  const abgelaufen   = ergebnisse.filter(r => r.entfernt).length;
+  const fehlerListe  = ergebnisse
+    .filter(r => !r.ok && !r.entfernt)
+    .map(r => ({ dienst: r.dienst, code: r.code, meldung: r.meldung }));
 
-  return { devices: Array.isArray(rest) ? rest.length : subs.length };
+  return {
+    devices: subs.length,
+    zugestellt,
+    abgelaufen,
+    fehler: fehlerListe,
+    // Das Subject steht im signierten Token und ist der Grund, aus dem Apple
+    // am haeufigsten ablehnt. Es hier mitzugeben kostet nichts und spart die
+    // Rueckfrage „was steht denn in VAPID_SUBJECT?".
+    subject: getConfig().subject,
+  };
 }
 
 module.exports = {
   isConfigured,
   getPublicKey,
+  getSubject,
   saveSubscription,
   deleteSubscription,
   hasSubscription,

@@ -159,6 +159,7 @@ const { startMahnungChecker } = require("./services/mahnungChecker");
 const { startLeistungsstandReminderChecker } = require("./services/leistungsstandReminderChecker");
 const { startHoursBookingReminderChecker }   = require("./services/hoursBookingReminderChecker");
 const { startNachtragFristenChecker }        = require("./services/nachtragFristenChecker");
+const pushService = require("./services/push");
 
 // RBAC: permissionsMiddleware laeuft global nach authMiddleware und legt
 // req.permissions + req.hasPermission ab. Soft-fail wenn Migration 0062 fehlt
@@ -280,6 +281,32 @@ app.get(/^(?!\/api\/).*/, (req, res) => {
 
 app.listen(port, () => {
   console.log(`✅ Backend läuft auf Port ${port}`);
+
+  // Web-Push meldet sich beim Start, weil sein Ausfall sonst lautlos ist:
+  // ohne VAPID-Schluessel ist sendPushForNotification ein No-Op, und eine
+  // ausbleibende Benachrichtigung sieht genauso aus wie eine, die nie geplant
+  // war. Eine Zeile im Startprotokoll beantwortet die Frage in Sekunden.
+  if (pushService.isConfigured()) {
+    console.log("🔔 Web-Push aktiv (VAPID-Schluessel vorhanden)");
+    // Die Absenderkennung steht im signierten Token. Greift der eingebaute
+    // Standardwert, zeigt sie auf eine Domain, die uns nicht gehoeren muss —
+    // und Apple lehnt Tokens mit unbrauchbarem Subject ab. Das ist der
+    // haeufigste Grund fuer "Schluessel sind gesetzt, kommt trotzdem nichts an".
+    const subject = pushService.getSubject();
+    if (subject.ausStandard) {
+      console.warn(
+        `⚠️  VAPID_SUBJECT ist nicht gesetzt — es gilt der Standardwert ${subject.wert}. ` +
+        "Apple lehnt Tokens mit unbrauchbarer Absenderkennung ab; eine eigene " +
+        "mailto:-Adresse eintragen."
+      );
+    }
+  } else {
+    console.warn(
+      "🔕 Web-Push INAKTIV — VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY fehlen. " +
+      "Benachrichtigungen erscheinen nur in der App, nicht auf dem Geraet. " +
+      "Schluessel erzeugen: npx web-push generate-vapid-keys"
+    );
+  }
 
   // Die periodischen Checker verschicken E-Mails (Mahnungen, Faelligkeits- und
   // Leistungsstand-Erinnerungen) an echte Empfaenger. Zeigen ZWEI Instanzen auf

@@ -60,11 +60,14 @@ async function status(req, res, supabase) {
 // Schickt eine Test-Benachrichtigung an alle Geräte des angemeldeten Kontos.
 async function test(req, res, supabase) {
   try {
-    const { devices } = await svc.sendTestPush(supabase, {
+    // Vollstaendig durchreichen: was die Push-Dienste geantwortet haben, ist
+    // die eigentliche Auskunft. Ein blosses { ok: true } hat die Fehlersuche
+    // bisher in die Irre gefuehrt.
+    const ergebnis = await svc.sendTestPush(supabase, {
       tenantId: req.tenantId,
       userId:   req.userId,
     });
-    return res.json({ ok: true, devices });
+    return res.json({ ok: ergebnis.zugestellt > 0, ...ergebnis });
   } catch (e) {
     return res.status(e?.status ?? 500).json({ error: e?.message || String(e) });
   }

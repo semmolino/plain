@@ -61,7 +61,11 @@ const FAMILIES = [
 
 const TABLE_RENAMES = {
   "01-cost-rate":       { EMPLOYEE_CP_RATE: "EMPLOYEE_COST_RATE" },
-  "02-hourly-rate":     { PROJECT_SP_RATES: "PROJECT_HOURLY_RATES" },
+  // 02-hourly-rate hatte PROJECT_SP_RATES -> PROJECT_HOURLY_RATES. Die Tabelle
+  // war bereits tot, als sie umbenannt wurde, und ist mit Migration 0161
+  // entfallen. Der Eintrag muss deshalb raus: verify wuerde sonst dauerhaft
+  // "new table PROJECT_HOURLY_RATES missing" melden - ein Befund, der keiner
+  // ist und die echten zudeckt.
   "05-advance-invoice": { PARTIAL_PAYMENT: "ADVANCE_INVOICE", PARTIAL_PAYMENT_STRUCTURE: "ADVANCE_INVOICE_STRUCTURE" },
   "06-booking":         { TEC: "BOOKING", TEC_REBOOKING: "BOOKING_REBOOKING" },
 };

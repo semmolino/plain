@@ -67,6 +67,7 @@ async function diagnose(supabase, { tenantId, userId }) {
 
   // ── Eigene Push-Geräte ──
   let geraete = 0;
+  let jeZugestellt = 0;
   let geraeteFehler = null;
   try {
     const { data, error } = await supabase
@@ -76,6 +77,10 @@ async function diagnose(supabase, { tenantId, userId }) {
       .eq("USER_ID", String(userId));
     if (error) throw new Error(error.message);
     geraete = (data || []).length;
+    // Ein Geraet, das seit der Registrierung nie einen Push angenommen hat,
+    // unterscheidet den Fall "kommt nicht an" von "kam frueher an, jetzt nicht
+    // mehr". Ohne diese Zahl sehen beide gleich aus.
+    jeZugestellt = (data || []).filter(r => r.LAST_USED_AT).length;
   } catch (e) {
     geraeteFehler = e?.message || String(e);
   }
@@ -103,6 +108,14 @@ async function diagnose(supabase, { tenantId, userId }) {
     push: {
       serverKonfiguriert: push.isConfigured(),
       eigeneGeraete:      geraete,
+      // Wie viele davon schon einmal einen Push angenommen haben. 0 bei
+      // vorhandenen Geraeten heisst: es kam noch NIE etwas durch — dann liegt
+      // es am Kanal, nicht am Zeitplan.
+      jeZugestellt,
+      // Der sub-Claim im VAPID-Token. Steht hier der Standardwert, zeigt die
+      // Absenderkennung auf eine Domain, die uns nicht gehoeren muss — Apple
+      // lehnt solche Tokens ab.
+      absenderkennung:    push.getSubject(),
       fehler:             geraeteFehler,
     },
     zeitplaene: schedules.map(cfg => ({

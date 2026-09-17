@@ -197,16 +197,48 @@ function PushNotificationsCard() {
   // Diagnose: geht den echten Versandweg (Server -> Push-Dienst -> Gerät).
   // Kommt der Test an, eine geplante Erinnerung aber nicht, liegt es am
   // Zeitplan und nicht am Kanal.
+  //
+  // Die Meldung nennt jetzt, was die Push-Dienste geantwortet haben. Vorher
+  // stand hier „Test verschickt", sobald ein Gerät registriert war — auch wenn
+  // jede Zustellung abgelehnt wurde. Damit war der Knopf in genau dem Fall
+  // stumm, für den es ihn gibt.
   const runTest = async () => {
     setTestState('busy')
     setTestMsg(null)
     try {
-      const { devices } = await sendTestPush()
-      setTestState('sent')
+      const r = await sendTestPush()
+
+      if (r.zugestellt > 0) {
+        setTestState('sent')
+        setTestMsg(
+          r.zugestellt === 1 && r.devices === 1
+            ? 'Test verschickt — sie sollte gleich auf diesem Gerät erscheinen. '
+              + 'Bleibt sie aus, hat das Betriebssystem sie unterdrückt (Fokus/Nicht stören).'
+            : `An ${r.zugestellt} von ${r.devices} Geräten zugestellt.`,
+        )
+        return
+      }
+
+      // Kein einziges Gerät hat angenommen — hier steht der eigentliche Grund.
+      setTestState('failed')
+      if (r.abgelaufen > 0 && r.fehler.length === 0) {
+        setTestMsg(
+          'Die Registrierung dieses Geräts war abgelaufen und wurde entfernt. '
+          + 'Bitte den Schalter aus- und wieder einschalten.',
+        )
+        return
+      }
+      const grund = r.fehler
+        .map(f => `${f.dienst} antwortete ${f.code ?? '?'}: ${f.meldung}`)
+        .join(' · ')
       setTestMsg(
-        devices === 1
-          ? 'Test verschickt — sie sollte gleich auf diesem Gerät erscheinen.'
-          : `Test an ${devices} registrierte Geräte verschickt.`,
+        `Kein Gerät hat den Push angenommen. ${grund}`
+        + (r.fehler.some(f => f.code === 403)
+          ? ` — Status 403 heißt fast immer: der Push-Dienst lehnt das VAPID-Token ab.`
+            + ` Absenderkennung ist „${r.subject}"; sie muss eine gültige mailto:- oder`
+            + ` https:-Adresse sein, und die Schlüssel müssen zu den bereits`
+            + ` registrierten Geräten passen.`
+          : ''),
       )
     } catch (e) {
       setTestState('failed')

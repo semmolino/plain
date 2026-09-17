@@ -161,18 +161,6 @@
           ]
         },
         {
-          "from": "PROJECT_SP_RATES",
-          "to": "PROJECT_HOURLY_RATES",
-          "columns": [
-            {
-              "from": "SP_RATE",
-              "to": "HOURLY_RATE",
-              "scope": "global",
-              "api": true
-            }
-          ]
-        },
-        {
           "from": "ROLE",
           "to": null,
           "columns": [

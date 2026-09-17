@@ -362,7 +362,13 @@ beziehen sich auf diesen früheren Stand.
    Dateien liegen in `backend/migrations/`, nummeriert `0001_…`; Status ansehen mit
    `node backend/scripts/migrate.js --status`.
 3. Umgebungsvariablen über `scalingo --app planandsimple env-set …` bzw. das Dashboard:
-   `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `SMTP_*`, `FRONTEND_URL`
+   `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, `SMTP_*`, `FRONTEND_URL`,
+   `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT`. **Ohne die VAPID-Schlüssel
+   gibt es keinen Geräte-Push** — die Benachrichtigung landet nur in der App, und zwar
+   ohne Fehlermeldung. Seit 09/2026 sagt das Startprotokoll, woran man ist
+   (`🔔 Web-Push aktiv` / `🔕 Web-Push INAKTIV`); erzeugt werden sie mit
+   `npx web-push generate-vapid-keys`. Ein Tausch entwertet alle bestehenden
+   Geräte-Freigaben.
 4. Runbook: `docs/SCALINGO_DEPLOY_RUNBOOK.md`
 
 **`DISABLE_BACKGROUND_JOBS` gehört NICHT auf die produktive Instanz.** Das Flag
@@ -386,6 +392,14 @@ Einstellungen → Benachrichtigungen → „Zustellung prüfen".
 - bcrypt-Passworthashes (Altkonten mit Klartext sind weiterhin möglich — Rückfall in `routes/auth.js`)
 - JWT auf allen Routen außer `/auth`, `/webhooks`, `/track`, `/branding`; Reset-Token werden als Sitzung abgelehnt (`middleware/auth.js` → `verifySessionToken`)
 - **Mandantentrennung zweilinig**: Anwendungsfilter *und* RLS in der Datenbank (`FORCE ROW LEVEL SECURITY`, fail-closed ohne Claim — `db.js`, `backend/scripts/migration/05_rls_scalingo.sql`)
+  Vier Kindtabellen tragen den Mandanten nur ueber einen Fremdschluessel und
+  waren deshalb nicht erfasst — `ROLE_PERMISSION`, `EMPLOYEE_ROLE`,
+  `BUDGET_WARNING_FIRED`, `SERVICE_REQUEST_MESSAGE`. Seit Migration `0160`
+  haengen sie ueber eine Policy am Elternsatz drin (Muster wie `ASSET`). Alle
+  uebrigen Tabellen ohne `TENANT_ID` sind geteilte Kataloge — dort gibt es
+  nichts zu trennen. **Eine neue Tabelle erbt die zweite Linie nicht**: die
+  Schleife in `05_rls_scalingo.sql` war ein Einmal-Lauf, jede neue Migration
+  setzt RLS selbst (Vorbild: `0137`, `0139`).
 - Startabbruch bei fehlendem/unsicherem `JWT_SECRET`, fehlender Dateiablage oder fehlendem Datenbankweg (`server.js`)
 - CORS-Allowlist (`CORS_ORIGINS`/`FRONTEND_URL`), nur auf `/api`; helmet; `trust proxy`
 - Rate-Limiter auf allen fünf Auth-Wegen; Reset-Links sind One-Time (Passwort-Fingerabdruck)

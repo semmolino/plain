@@ -133,6 +133,10 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // scripts/migration-drift.mjs — bis dahin waren SESSION_EPOCH (Sitzungs-
     // ruecknahme) und SIGNUP_STATE (Registrierungssperre) still wirkungslos.
     // Sie stehen jetzt ausserhalb der Baseline, damit der Deploy sie einspielt.
+    //
+    // 0160 zieht die zweite Linie (RLS) auf die vier Kindtabellen nach, die
+    // den Mandanten nur ueber einen Fremdschluessel tragen; 0161 entfernt
+    // PROJECT_HOURLY_RATES, die seit langem von niemandem mehr gelesen wird, 0162 PUSH_TOKEN (nativer Push, nie begonnen).
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -161,6 +165,9 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0157_08_name.sql",
       "0158_08_name_sql_objects.sql",
       "0159_08_name_values.sql",
+      "0160_rls_kindtabellen.sql",
+      "0161_drop_project_hourly_rates.sql",
+      "0162_drop_push_token.sql",
     ]);
   });
 

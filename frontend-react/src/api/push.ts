@@ -16,7 +16,30 @@ export const subscribePush = (subscription: PushSubscriptionJSON) =>
 export const unsubscribePush = (endpoint: string) =>
   apiClient.post<{ ok: boolean }>('/push/unsubscribe', { endpoint })
 
-/** Test-Benachrichtigung an alle eigenen Geräte. `devices` = wie viele
- *  Registrierungen den Push angenommen haben. */
+/** Antwort eines Push-Dienstes, der die Zustellung abgelehnt hat. */
+export interface PushZustellFehler {
+  /** Host des Push-Dienstes, z. B. `web.push.apple.com` — nie der volle Endpoint. */
+  dienst: string
+  /** HTTP-Status der Ablehnung (403 = Token abgelehnt, 400 = Anfrage fehlerhaft). */
+  code: number | null
+  meldung: string
+}
+
+export interface PushTestErgebnis {
+  /** true, sobald mindestens ein Gerät den Push angenommen hat. */
+  ok: boolean
+  /** Registrierte Geräte dieses Kontos. */
+  devices: number
+  /** Davon vom Push-Dienst angenommen. */
+  zugestellt: number
+  /** Registrierungen, die abgelaufen waren — serverseitig bereits entfernt. */
+  abgelaufen: number
+  fehler: PushZustellFehler[]
+  /** Der `sub`-Claim aus dem VAPID-Token (VAPID_SUBJECT). */
+  subject: string
+}
+
+/** Test-Benachrichtigung an alle eigenen Geräte. Meldet, was die Push-Dienste
+ *  geantwortet haben — nicht nur, dass verschickt wurde. */
 export const sendTestPush = () =>
-  apiClient.post<{ ok: boolean; devices: number }>('/push/test', {})
+  apiClient.post<PushTestErgebnis>('/push/test', {})

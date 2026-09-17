@@ -137,10 +137,18 @@ scalingo --app planandsimple env-set \
 ```bash
 scalingo --app planandsimple env-set \
   NODE_ENV="production" \
-  DISABLE_BACKGROUND_JOBS="true" \
   PLAYWRIGHT_BROWSERS_PATH="0" \
   PLAYWRIGHT_HOST_PLATFORM_OVERRIDE="ubuntu24.04-x64"
 ```
+
+> **`DISABLE_BACKGROUND_JOBS` stand hier frueher mit drin** — richtig, solange
+> Scalingo und Railway gleichzeitig auf dieselbe Datenbank zeigten, denn sonst
+> lief jeder Versand doppelt. Laeuft nur noch eine Instanz, **muss das Flag weg**:
+> mit ihm startet kein einziger Hintergrund-Checker, es entsteht keine geplante
+> Benachrichtigung — weder per E-Mail noch als Push, und ohne Fehlermeldung.
+> Pruefen: `scalingo --app planandsimple env | grep DISABLE_BACKGROUND_JOBS`
+> oder in der Oberflaeche unter Einstellungen → Benachrichtigungen →
+> „Zustellung prüfen".
 
 `NODE_ENV=production` schaltet die Stacktrace-Ausgabe ab und deaktiviert die
 localhost-Ausnahme in der CORS-Allowlist (Pentest-Befund).
@@ -170,6 +178,31 @@ scalingo --app planandsimple env-set \
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Mailversand über Eusend (SMTP) |
 | `SMTP_*` | Mailversand über SMTP |
 | `LICENSE_STATE_ENFORCEMENT` | Lizenzdurchsetzung |
+
+**Push-Benachrichtigungen auf Handy und Desktop — `VAPID_*`:**
+
+Ohne diese Schlüssel gibt es Benachrichtigungen **nur in der App**. Der
+Geräte-Push fällt aus, ohne dass irgendwo ein Fehler entsteht: die
+NOTIFICATION-Zeile wird geschrieben, `sendPushForNotification` kehrt sofort
+zurück. Seit 09/2026 sagt das Startprotokoll, woran man ist
+(`🔔 Web-Push aktiv` / `🔕 Web-Push INAKTIV`).
+
+```bash
+# Schlüsselpaar einmalig erzeugen (lokal, Ausgabe: Public + Private Key)
+npx web-push generate-vapid-keys
+
+scalingo --app planandsimple env-set \
+  VAPID_PUBLIC_KEY="<Public Key>" \
+  VAPID_PRIVATE_KEY="<Private Key>" \
+  VAPID_SUBJECT="mailto:info@planandsimple.de"
+```
+
+Das Paar ist **dauerhaft**: wird es getauscht, werden alle bestehenden
+Subscriptions ungültig und jedes Gerät muss erneut freigeben. Der Public Key
+geht über `GET /api/v1/push/public-key` ans Frontend und ist nicht geheim —
+der Private Key bleibt es. `VAPID_SUBJECT` ist eine Kontaktadresse für den
+Push-Dienst des Browserherstellers; ohne sie greift ein Standardwert, der auf
+eine Domain zeigt, die uns nicht gehört.
 
 **Nicht setzen:** `PORT` (setzt Scalingo selbst), `RAILWAY_*` (gilt nur für Railway).
 
