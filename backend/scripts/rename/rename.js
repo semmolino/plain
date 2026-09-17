@@ -368,7 +368,9 @@ async function affectedSqlObjects(client, blocks) {
   for (const ident of idents) {
     const { rows } = await client.query(
       `SELECT n.nspname AS schema, p.proname AS name, p.oid,
-              pg_get_functiondef(p.oid) AS def
+              pg_get_functiondef(p.oid) AS def,
+              pg_get_function_result(p.oid) AS result,
+              pg_get_function_identity_arguments(p.oid) AS args
          FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
         WHERE ${APP_SCHEMAS} AND p.prokind = 'f'
           AND (p.prosrc ILIKE '%' || $1 || '%' OR pg_get_function_result(p.oid) ILIKE '%' || $1 || '%')`,
@@ -422,6 +424,10 @@ async function cmdFunctions(blocks) {
       `--     now wrong. Check each one.`,
       `--   * CREATE VIEW loses an explicit column list, if the original had one.`,
       `--   * apply this AFTER the ALTER migration, in the same deploy.`,
+      ``,
+      `-- Funktionen koennen einander aufrufen. Ohne das hier haengt es an der`,
+      `-- Reihenfolge, in der sie hier stehen.`,
+      `SET check_function_bodies = false;`,
       ``
     );
 
@@ -436,10 +442,33 @@ async function cmdFunctions(blocks) {
     }
 
     if (fns.length) {
-      out.push(`-- Functions. CREATE OR REPLACE keeps the OID, so grants survive.`);
+      // CREATE OR REPLACE kann den Rumpf aendern, aber KEINE Ausgabespalte
+      // umbenennen - Postgres wertet das als geaenderten Rueckgabetyp und
+      // bricht ab ("cannot change return type of existing function"). Wo die
+      // Signatur betroffen ist, muss die Funktion also fallen und neu
+      // entstehen; wo nur der Rumpf betroffen ist, bleibt CREATE OR REPLACE,
+      // damit die Funktion ihre OID und damit ihre Rechte behaelt.
+      const signaturBetroffen = (f) => f.result && rewrite(f.result) !== f.result;
+      const zuDroppen = fns.filter(signaturBetroffen);
+
+      if (zuDroppen.length) {
+        out.push(`-- Diese Funktionen aendern ihre Ausgabespalten - CREATE OR REPLACE`);
+        out.push(`-- kann das nicht, sie muessen fallen und neu entstehen.`);
+        for (const f of zuDroppen) {
+          out.push(`DROP FUNCTION IF EXISTS ${qname(f)}(${f.args || ""});`);
+        }
+        out.push(``);
+      }
+
+      out.push(`-- Funktionen. Wo die Signatur gleich bleibt, haelt CREATE OR REPLACE`);
+      out.push(`-- die OID und damit die Rechte.`);
       for (const f of fns.sort((a, b) => a.name.localeCompare(b.name))) {
-        out.push(rewrite(f.def).trimEnd().replace(/;?$/, ";"), ``);
-        touched.push(`function ${f.schema}.${f.name}`);
+        // Nach einem DROP waere "OR REPLACE" harmlos, aber irrefuehrend.
+        const def = signaturBetroffen(f)
+          ? rewrite(f.def).replace(/^CREATE OR REPLACE FUNCTION/, "CREATE FUNCTION")
+          : rewrite(f.def);
+        out.push(def.trimEnd().replace(/;?$/, ";"), ``);
+        touched.push(`function ${f.schema}.${f.name}${signaturBetroffen(f) ? " (neu angelegt)" : ""}`);
       }
     }
 

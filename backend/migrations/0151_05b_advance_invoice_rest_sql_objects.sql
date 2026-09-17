@@ -11,14 +11,25 @@
 --   * CREATE VIEW loses an explicit column list, if the original had one.
 --   * apply this AFTER the ALTER migration, in the same deploy.
 
+-- Funktionen koennen einander aufrufen. Ohne das hier haengt es an der
+-- Reihenfolge, in der sie hier stehen.
+SET check_function_bodies = false;
+
 -- Views, most dependent first. They come down so their output column
 -- names can change - CREATE OR REPLACE VIEW cannot rename a column.
 DROP VIEW IF EXISTS "public"."VW_REPORT_PROJECT_LIST_ROOT";
 DROP VIEW IF EXISTS "public"."VW_REPORT_PROJECT_DETAIL";
 DROP VIEW IF EXISTS "REPORTING"."VW_PROJECT_BILLING_AGG";
 
--- Functions. CREATE OR REPLACE keeps the OID, so grants survive.
-CREATE OR REPLACE FUNCTION public.fn_project_report_header(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone DEFAULT NULL::timestamp with time zone, p_date_from date DEFAULT NULL::date, p_date_to date DEFAULT NULL::date)
+-- Diese Funktionen aendern ihre Ausgabespalten - CREATE OR REPLACE
+-- kann das nicht, sie muessen fallen und neu entstehen.
+DROP FUNCTION IF EXISTS "public"."FN_REPORT_PROJECT_DETAIL"(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone, p_date_from date, p_date_to date);
+DROP FUNCTION IF EXISTS "REPORTING"."FN_REPORT_PROJECT_DETAIL"(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone, p_date_from date, p_date_to date);
+DROP FUNCTION IF EXISTS "public"."fn_project_report_header"(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone, p_date_from date, p_date_to date);
+
+-- Funktionen. Wo die Signatur gleich bleibt, haelt CREATE OR REPLACE
+-- die OID und damit die Rechte.
+CREATE FUNCTION public.fn_project_report_header(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone DEFAULT NULL::timestamp with time zone, p_date_from date DEFAULT NULL::date, p_date_to date DEFAULT NULL::date)
  RETURNS TABLE("TENANT_ID" bigint, "PROJECT_ID" bigint, "NAME_SHORT" text, "NAME_LONG" text, "PROJECT_STATUS_NAME_SHORT" text, "PROJECT_MANAGER_DISPLAY" text, "COMPANY_NAME" text, "BUDGET_TOTAL_NET" numeric, "LEISTUNGSSTAND_PERCENT" numeric, "LEISTUNGSSTAND_VALUE" numeric, "HOURS_TOTAL" numeric, "COST_TOTAL" numeric, "EARNED_VALUE_NET" numeric, "COST_RATIO" numeric, "REMAINING_BUDGET_NET" numeric, "ADVANCE_INVOICE_NET_TOTAL" numeric, "INVOICE_NET_TOTAL" numeric, "BILLED_NET_TOTAL" numeric, "OPEN_NET_TOTAL" numeric, "PAYED_NET_TOTAL" numeric, "SALES_TOTAL" numeric, "QTY_EXT_TOTAL" numeric)
  LANGUAGE sql
  STABLE
@@ -261,7 +272,7 @@ AS $function$
     AND proj."ID"        = p_project_id
 $function$;
 
-CREATE OR REPLACE FUNCTION public."FN_REPORT_PROJECT_DETAIL"(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone DEFAULT NULL::timestamp with time zone, p_date_from date DEFAULT NULL::date, p_date_to date DEFAULT NULL::date)
+CREATE FUNCTION public."FN_REPORT_PROJECT_DETAIL"(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone DEFAULT NULL::timestamp with time zone, p_date_from date DEFAULT NULL::date, p_date_to date DEFAULT NULL::date)
  RETURNS TABLE("TENANT_ID" bigint, "PROJECT_ID" bigint, "NAME_SHORT" text, "NAME_LONG" text, "PROJECT_STATUS_ID" bigint, "PROJECT_STATUS_NAME_SHORT" text, "PROJECT_TYPE_ID" bigint, "PROJECT_TYPE_NAME_SHORT" text, "PROJECT_MANAGER_ID" bigint, "PROJECT_MANAGER_DISPLAY" text, "ADDRESS_ID" bigint, "ADDRESS_NAME" text, "COMPANY_ID" bigint, "COMPANY_NAME" text, "DEPARTMENT_ID" bigint, "DEPARTMENT_NAME" text, "CONTACT_ID" bigint, "CONTACT_NAME" text, "BUDGET_TOTAL_NET" numeric, "LEISTUNGSSTAND_PERCENT" numeric, "LEISTUNGSSTAND_VALUE" numeric, "HOURS_TOTAL" numeric, "COST_TOTAL" numeric, "DECKUNGSBEITRAG" numeric, "PROGNOSE_KOSTEN" numeric, "PROGNOSE_DECKUNGSBEITRAG" numeric, "ADVANCE_INVOICE_NET_TOTAL" numeric, "INVOICE_NET_TOTAL" numeric, "PAYED_NET_TOTAL" numeric, "BILLED_NET_TOTAL" numeric, "OPEN_NET_TOTAL" numeric, "ABRECHENBAR_NET" numeric)
  LANGUAGE sql
  STABLE
@@ -276,7 +287,7 @@ AS $function$
   );
 $function$;
 
-CREATE OR REPLACE FUNCTION "REPORTING"."FN_REPORT_PROJECT_DETAIL"(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone, p_date_from date, p_date_to date)
+CREATE FUNCTION "REPORTING"."FN_REPORT_PROJECT_DETAIL"(p_tenant_id bigint, p_project_id bigint, p_as_of timestamp with time zone, p_date_from date, p_date_to date)
  RETURNS TABLE("TENANT_ID" bigint, "PROJECT_ID" bigint, "NAME_SHORT" text, "NAME_LONG" text, "PROJECT_STATUS_ID" bigint, "PROJECT_STATUS_NAME_SHORT" text, "PROJECT_TYPE_ID" bigint, "PROJECT_TYPE_NAME_SHORT" text, "PROJECT_MANAGER_ID" bigint, "PROJECT_MANAGER_DISPLAY" text, "ADDRESS_ID" bigint, "ADDRESS_NAME" text, "COMPANY_ID" bigint, "COMPANY_NAME" text, "DEPARTMENT_ID" bigint, "DEPARTMENT_NAME" text, "CONTACT_ID" bigint, "CONTACT_NAME" text, "BUDGET_TOTAL_NET" numeric, "LEISTUNGSSTAND_PERCENT" numeric, "LEISTUNGSSTAND_VALUE" numeric, "HOURS_TOTAL" numeric, "COST_TOTAL" numeric, "DECKUNGSBEITRAG" numeric, "PROGNOSE_KOSTEN" numeric, "PROGNOSE_DECKUNGSBEITRAG" numeric, "ADVANCE_INVOICE_NET_TOTAL" numeric, "INVOICE_NET_TOTAL" numeric, "PAYED_NET_TOTAL" numeric, "BILLED_NET_TOTAL" numeric, "OPEN_NET_TOTAL" numeric, "ABRECHENBAR_NET" numeric)
  LANGUAGE sql
  STABLE
