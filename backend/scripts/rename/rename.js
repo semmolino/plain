@@ -113,6 +113,33 @@ function loadBlocks() {
 }
 
 /**
+ * Table renames from the WHOLE map, including blocks this invocation did not
+ * load.
+ *
+ * Why it is needed: a block records the carrier table under the name it had
+ * when that block ran. If a later block renames the table itself, verify would
+ * look for the new columns under a name that no longer exists - twelve FAILs
+ * with a database that is entirely correct. Blocks 01-05 name TEC, block 06
+ * turned it into BOOKING.
+ */
+function tableRenameChain() {
+  const raw = JSON.parse(fs.readFileSync(MAP_FILE, "utf8"));
+  const chain = new Map();
+  for (const b of raw.blocks || []) {
+    for (const t of b.tables || []) if (t.to && t.to !== t.from) chain.set(t.from, t.to);
+  }
+  return chain;
+}
+
+/** Today's name of a table, across any number of renames. */
+function currentTableName(name, chain) {
+  const seen = new Set();
+  let n = name;
+  while (chain.has(n) && !seen.has(n)) { seen.add(n); n = chain.get(n); }
+  return n;
+}
+
+/**
  * Lowercase words that also occur as ordinary identifiers throughout the code.
  * Deriving the request-field twin from them automatically would be reckless, so
  * the author has to spell it out after looking at the call sites.
@@ -937,9 +964,10 @@ function cmdGuard(blocks) {
 async function cmdVerify(blocks) {
   await withDb(async (client) => {
     let bad = 0;
+    const chain = tableRenameChain();
     for (const b of blocks) {
       for (const t of b.tables || []) {
-        const live = t.to || t.from;
+        const live = t.to || currentTableName(t.from, chain);
         if (t.to) {
           if (await tableExists(client, t.from)) { console.log(`  FAIL  old table "${t.from}" still exists`); bad++; }
           if (!(await tableExists(client, t.to))) { console.log(`  FAIL  new table "${t.to}" missing`); bad++; }
