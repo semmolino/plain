@@ -39,7 +39,7 @@ async function listMahnungen(supabase, { tenantId }) {
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
       .lt("DUE_DATE", today)
-      .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+      .is("CANCELS_ADVANCE_INVOICE_ID", null),
 
     supabase
       .from("MAHNUNG")
@@ -195,7 +195,7 @@ async function getMahnungStats(supabase, { tenantId }) {
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
       .lt("DUE_DATE", today)
-      .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+      .is("CANCELS_ADVANCE_INVOICE_ID", null),
 
     supabase
       .from("MAHNUNG")

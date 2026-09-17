@@ -430,7 +430,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
 // ---------------------------------------------------------------------------
 
 async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
-  const BASE_COLS = "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID";
+  const BASE_COLS = "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_ADVANCE_INVOICE_ID";
   const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASED_BY_INVOICE_ID";
   const buildQuery = (cols) => {
     let q1 = supabase
@@ -512,7 +512,7 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
     CASH_DISCOUNT_DAYS: r.CASH_DISCOUNT_DAYS ?? null,
     CASH_DISCOUNT: r.CASH_DISCOUNT ?? null,
     STATUS_ID: r.STATUS_ID ?? null,
-    CANCELS_PARTIAL_PAYMENT_ID: r.CANCELS_PARTIAL_PAYMENT_ID ?? null,
+    CANCELS_ADVANCE_INVOICE_ID: r.CANCELS_ADVANCE_INVOICE_ID ?? null,
     PROJECT_ID: r.PROJECT_ID ?? null,
     CONTRACT_ID: r.CONTRACT_ID ?? null,
     VAT_PERCENT: r.VAT_PERCENT ?? null,
@@ -908,8 +908,8 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
   }
 
   // If this is a Storno-AR, mark the original partial payment as cancelled
-  if (pp.CANCELS_PARTIAL_PAYMENT_ID) {
-    await supabase.from("ADVANCE_INVOICE").update({ STATUS_ID: 3 }).eq("ID", pp.CANCELS_PARTIAL_PAYMENT_ID);
+  if (pp.CANCELS_ADVANCE_INVOICE_ID) {
+    await supabase.from("ADVANCE_INVOICE").update({ STATUS_ID: 3 }).eq("ID", pp.CANCELS_ADVANCE_INVOICE_ID);
   }
 
   return { success: true, pdf_asset_id: pdfAsset?.ID ?? null, xml_asset_id: xmlAsset?.ID ?? null };
@@ -926,7 +926,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
 
   // Prevent duplicate
   const { data: existing } = await supabase
-    .from("ADVANCE_INVOICE").select("ID, STATUS_ID").eq("CANCELS_PARTIAL_PAYMENT_ID", id).maybeSingle();
+    .from("ADVANCE_INVOICE").select("ID, STATUS_ID").eq("CANCELS_ADVANCE_INVOICE_ID", id).maybeSingle();
   if (existing) {
     const label = String(existing.STATUS_ID) === "2" ? "gebucht" : "als Entwurf angelegt";
     throw { status: 409, message: `Es existiert bereits eine Storno-Abschlagsrechnung (${label}) für diesen Eintrag` };
@@ -1000,7 +1000,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   const cancelRow = {
     ...rest,
     ADVANCE_INVOICE_NUMBER: `S-${orig.ADVANCE_INVOICE_NUMBER || ""}`,
-    CANCELS_PARTIAL_PAYMENT_ID: parseInt(id, 10),
+    CANCELS_ADVANCE_INVOICE_ID: parseInt(id, 10),
     STATUS_ID:          1,
     AMOUNT_NET:        -round2(toNum(orig.AMOUNT_NET)),
     AMOUNT_EXTRAS_NET: -round2(toNum(orig.AMOUNT_EXTRAS_NET)),

@@ -606,13 +606,13 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
       try {
         const { data: contractPps } = await supabase
           .from('ADVANCE_INVOICE')
-          .select('ID, AMOUNT_NET, STATUS_ID, CANCELS_PARTIAL_PAYMENT_ID, ADVANCE_INVOICE_DATE')
+          .select('ID, AMOUNT_NET, STATUS_ID, CANCELS_ADVANCE_INVOICE_ID, ADVANCE_INVOICE_DATE')
           .eq('CONTRACT_ID', rawDoc.CONTRACT_ID);
         const all = (contractPps || []).filter(p =>
           // exclude this very PP from "prior"
           parseInt(p.ID, 10) !== parseInt(rawDoc.ID, 10) &&
-          // exclude storno rows (CANCELS_PARTIAL_PAYMENT_ID is set on the reversal entry)
-          p.CANCELS_PARTIAL_PAYMENT_ID == null &&
+          // exclude storno rows (CANCELS_ADVANCE_INVOICE_ID is set on the reversal entry)
+          p.CANCELS_ADVANCE_INVOICE_ID == null &&
           // include only booked or open (status != 3 = stornoed/cancelled, depending on schema)
           String(p.STATUS_ID) !== '3' &&
           // only PPs dated up to this one's date so older are summed
@@ -622,7 +622,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
         // also exclude PPs that are storno'd by another PP
         const cancelledIds = new Set(
           (contractPps || [])
-            .map(p => p.CANCELS_PARTIAL_PAYMENT_ID)
+            .map(p => p.CANCELS_ADVANCE_INVOICE_ID)
             .filter(Boolean)
             .map(x => parseInt(x, 10))
         );
@@ -976,7 +976,7 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
   if (vm.inv.invoiceType === 'stornorechnung') {
     // rawDoc is not in scope here — re-read the reference from the booked document
     const isInvoiceDoc = docType === 'INVOICE';
-    const refCol       = isInvoiceDoc ? 'CANCELS_INVOICE_ID' : 'CANCELS_PARTIAL_PAYMENT_ID';
+    const refCol       = isInvoiceDoc ? 'CANCELS_INVOICE_ID' : 'CANCELS_ADVANCE_INVOICE_ID';
     vm.stornoTitle     = isInvoiceDoc ? 'Stornorechnung' : 'Storno-Abschlagsrechnung';
     const { data: cancelsDoc } = await supabase
       .from(isInvoiceDoc ? 'INVOICE' : 'ADVANCE_INVOICE')

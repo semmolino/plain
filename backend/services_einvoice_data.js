@@ -98,7 +98,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   // ── 1. Document type & TypeCodes ──────────────────────────────────────────
 
   const isInvoice  = docType === 'INVOICE';
-  const isStornoPP = docType === 'ADVANCE_INVOICE' && !!doc.CANCELS_PARTIAL_PAYMENT_ID;
+  const isStornoPP = docType === 'ADVANCE_INVOICE' && !!doc.CANCELS_ADVANCE_INVOICE_ID;
   const invoiceType = isInvoice
     ? (doc.INVOICE_TYPE || 'rechnung')
     : (isStornoPP ? 'stornorechnung' : 'partial_payment');
@@ -274,8 +274,8 @@ ${basis}`;
     canceledDocNumber = orig?.INVOICE_NUMBER ?? String(doc.CANCELS_INVOICE_ID);
     canceledDocDate   = asIsoDate(orig?.INVOICE_DATE);
   } else if (isStornoPP) {
-    const orig = await one(supabase, 'ADVANCE_INVOICE', doc.CANCELS_PARTIAL_PAYMENT_ID, tenantId);
-    canceledDocNumber = orig?.ADVANCE_INVOICE_NUMBER ?? String(doc.CANCELS_PARTIAL_PAYMENT_ID);
+    const orig = await one(supabase, 'ADVANCE_INVOICE', doc.CANCELS_ADVANCE_INVOICE_ID, tenantId);
+    canceledDocNumber = orig?.ADVANCE_INVOICE_NUMBER ?? String(doc.CANCELS_ADVANCE_INVOICE_ID);
     canceledDocDate   = asIsoDate(orig?.ADVANCE_INVOICE_DATE);
   }
 

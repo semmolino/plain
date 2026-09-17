@@ -162,6 +162,9 @@ function validateApi(block, what, entry) {
 }
 
 function validateBlock(block) {
+  for (const d of block.derived || []) {
+    if (!d.from || !d.to) fail(`Block ${block.id}: ein "derived"-Eintrag hat kein from/to.`);
+  }
   const seen = new Map();
   for (const t of block.tables || []) {
     if (!t.from) fail(`Block ${block.id}: a table entry has no "from".`);
@@ -199,6 +202,15 @@ function globalReplacements(blocks) {
     map.set(from, { to, what, api });
   };
   for (const b of blocks) {
+    // Abgeleitete Namen: Ausgabespalten von Views und RETURNS TABLE, die es als
+    // Tabellenspalte nirgends gibt. PARTIAL_PAYMENT_NET_TOTAL etwa entsteht in
+    // fn_project_report_header als Summe und geht von dort in die API. ALTER
+    // fasst so etwas nicht an - "functions" schreibt es mit um, und guard und
+    // verify achten darauf, dass der Altname verschwindet. In "check" und "sql"
+    // haben sie nichts zu suchen: es gibt keine Tabelle, die man altern koennte.
+    for (const d of b.derived || []) {
+      add(d.from, d.to, `derived ${d.from}`);
+    }
     for (const t of b.tables || []) {
       if (t.to) add(t.from, t.to, `table ${t.from}`);
       const tTwin = apiTwin(t);
@@ -567,7 +579,13 @@ async function dbObjectsReferencing(client, identifier) {
   const { rows } = await client.query(
     `SELECT n.nspname AS schema, p.proname AS name, 'function' AS kind
        FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-      WHERE ${APP_SCHEMAS} AND p.prosrc ~ ('\\m' || $1 || '\\M')
+      WHERE ${APP_SCHEMAS}
+        -- Auch die RETURNS-TABLE-Signatur: die oeffentliche
+        -- FN_REPORT_PROJECT_DETAIL reicht nur durch, deklariert die
+        -- Ausgabespalten aber selbst. Nur den Rumpf zu pruefen haette sie
+        -- uebersehen und verify waere gruen geblieben.
+        AND (p.prosrc ~ ('\\m' || $1 || '\\M')
+          OR pg_get_function_result(p.oid) ~ ('\\m' || $1 || '\\M'))
       UNION ALL
      SELECT n.nspname AS schema, c.relname AS name,
             CASE c.relkind WHEN 'v' THEN 'view' ELSE 'matview' END AS kind
@@ -590,6 +608,11 @@ async function cmdCheck(blocks) {
 
     for (const b of blocks) {
       console.log(`\n=== block ${b.id} ===`);
+      for (const d of b.derived || []) {
+        // Kein Katalogeintrag zu pruefen - nur benennen, damit klar ist, dass
+        // dieser Name bewusst ohne ALTER auskommt.
+        console.log(`  ok  ${d.from} -> ${d.to} (abgeleitet, nur in Views/Funktionen)`);
+      }
       for (const t of b.tables || []) {
         if (!(await tableExists(client, t.from))) {
           console.log(`  MISSING  table "${t.from}" does not exist in the DB`);

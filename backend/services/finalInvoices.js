@@ -349,15 +349,15 @@ async function getDeductions(supabase, { id, tenantId }) {
   if (invErr || !inv) throw { status: 404, message: "INVOICE nicht gefunden" };
 
   // STATUS_ID=2 = gebucht + nicht (mehr) storniert (Original wechselt bei
-  // Storno auf STATUS=3). Storno-ARs (CANCELS_PARTIAL_PAYMENT_ID gesetzt)
+  // Storno auf STATUS=3). Storno-ARs (CANCELS_ADVANCE_INVOICE_ID gesetzt)
   // haben zwar auch STATUS=2, sollen aber NICHT als Abzug auftauchen — sie
   // gehören zum Storno-Paar mit dem Original und beide saldieren netto auf 0.
   const { data: ppRows, error: ppErr } = await supabase
     .from("ADVANCE_INVOICE")
-    .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_NET, CANCELS_PARTIAL_PAYMENT_ID")
+    .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_NET, CANCELS_ADVANCE_INVOICE_ID")
     .eq("PROJECT_ID", inv.PROJECT_ID)
     .eq("STATUS_ID", 2)
-    .is("CANCELS_PARTIAL_PAYMENT_ID", null)
+    .is("CANCELS_ADVANCE_INVOICE_ID", null)
     .eq("TENANT_ID", tenantId)
     .order("ADVANCE_INVOICE_DATE", { ascending: true });
   if (ppErr) throw new Error(ppErr.message);

@@ -1328,6 +1328,32 @@
           ]
         }
       ]
+    },
+    {
+      "id": "05b-advance-invoice-rest",
+      "status": "planned",
+      "note": "Nachzuegler zu Block 05: die Storno-Selbstreferenz und das Report-Ausgabefeld, die in der urspruenglichen Liste fehlten. Schreibweise ADVANCE_ (ohne D), wie Tabelle und uebrige Spalten.",
+      "derived": [
+        {
+          "from": "PARTIAL_PAYMENT_NET_TOTAL",
+          "to": "ADVANCE_INVOICE_NET_TOTAL",
+          "note": "Ausgabespalte von fn_project_report_header und drei Views - keine Tabellenspalte, kommt im Anwendungscode nicht vor."
+        }
+      ],
+      "tables": [
+        {
+          "from": "ADVANCE_INVOICE",
+          "to": null,
+          "columns": [
+            {
+              "from": "CANCELS_PARTIAL_PAYMENT_ID",
+              "to": "CANCELS_ADVANCE_INVOICE_ID",
+              "scope": "global",
+              "api": true
+            }
+          ]
+        }
+      ]
     }
   ]
 }

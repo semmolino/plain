@@ -172,7 +172,7 @@ function fromInvoice(inv: Invoice): UnifiedRow {
 
 function fromPp(pp: PartialPayment): UnifiedRow {
   const isOrigCancelled = pp.STATUS_ID === 3
-  const isStornoRow     = pp.CANCELS_PARTIAL_PAYMENT_ID != null
+  const isStornoRow     = pp.CANCELS_ADVANCE_INVOICE_ID != null
 
   let statusLabel: string
   let statusClass: string
@@ -762,7 +762,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       return inv.STATUS_ID === 2 && inv.INVOICE_TYPE !== 'stornorechnung'
     }
     const pp = row.raw as PartialPayment
-    return pp.STATUS_ID === 2 && !pp.CANCELS_PARTIAL_PAYMENT_ID
+    return pp.STATUS_ID === 2 && !pp.CANCELS_ADVANCE_INVOICE_ID
   }
 
   function canCancel(row: UnifiedRow) { return canPay(row) }
