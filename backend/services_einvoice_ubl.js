@@ -14,20 +14,12 @@
  *   384 = Storno / Rechnungskorrektur
  */
 
-const XRECHNUNG_CUSTOMIZATION_ID =
-  'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
-
-// Branch 11: Peppol BIS Billing 3.0 (PEPPOL BIS 3.0)
-const PEPPOL_CUSTOMIZATION_ID =
-  'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0';
-
-// S6: Die ProfileID ist fuer beide Varianten dieselbe -- die XRechnung
-// verwendet das Peppol-Billing-Profil bewusst mit. Vorher standen hier zwei
-// Konstanten mit identischem Wert und eine Fallunterscheidung, die nichts
-// unterschied: sie las sich wie ein Unterschied, den es nicht gibt.
-// Muessen die Werte je auseinanderlaufen, gehoert die Weiche zurueck.
-const BILLING_PROFILE_ID =
-  'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
+// Kennungen und Codelisten liegen seit 09/2026 in `einvoice/` — dieselbe
+// Quelle, aus der `docs/EINVOICE_BT_MAPPING.md` die Formattabelle zieht.
+// S6 (Audit 25.08.2026): XRechnung und Peppol teilen sich bewusst dieselbe
+// ProfileID; die Begruendung steht bei der Konstante in profiles.js.
+const codelists = require('./einvoice/codelists');
+const { ublFlavor } = require('./einvoice/profiles');
 
 // ── XML helpers ───────────────────────────────────────────────────────────────
 
@@ -139,7 +131,7 @@ function buildSecurityRetentionNote(data) {
   // BT-21 wird in UBL als #CODE#-Praefix vor dem Notentext ausgedrueckt.
   // PMT (Payment Information) aus UNCL 4451 ist der Code, den die
   // XRechnung-FAQ fuer Sicherheitseinbehalte vorsieht.
-  return `<cbc:Note>${x('#PMT#' + lines.join(' '))}</cbc:Note>`;
+  return `<cbc:Note>${x(`#${codelists.NOTE_SUBJECT_PAYMENT_INFORMATION}#` + lines.join(' '))}</cbc:Note>`;
 }
 
 function buildAllowanceCharges(data) {
@@ -232,8 +224,7 @@ function generateUblXml(data, opts = {}) {
   const b   = data.buyer;
   const t   = data.totals;
 
-  const customization = flavor === 'PEPPOL' ? PEPPOL_CUSTOMIZATION_ID : XRECHNUNG_CUSTOMIZATION_ID;
-  const profile       = BILLING_PROFILE_ID;
+  const { customizationId: customization, profileId: profile } = ublFlavor(flavor);
   const typeCode  = data.typeCodeUbl ?? data.typeCode ?? '380';
   const lineItems = data.lines.map((l, i) => buildLineItem(l, cur, i)).join('\n');
 
@@ -341,7 +332,7 @@ ${buildAttachmentsUbl(data)}
 
   ${s.iban ? `
   <cac:PaymentMeans>
-    <cbc:PaymentMeansCode>58</cbc:PaymentMeansCode>
+    <cbc:PaymentMeansCode>${codelists.PAYMENT_MEANS_SEPA_CREDIT_TRANSFER}</cbc:PaymentMeansCode>
     ${data.remittanceInformation ? `<cbc:PaymentID>${x(data.remittanceInformation)}</cbc:PaymentID>` : ''}
     <cac:PayeeFinancialAccount>
       <cbc:ID>${x(s.iban)}</cbc:ID>

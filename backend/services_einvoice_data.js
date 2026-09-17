@@ -7,6 +7,8 @@
  * consumed by both the CII (ZUGFeRD/Factur-X) and UBL (XRechnung) renderers.
  */
 
+const codelists = require('./einvoice/codelists');
+
 class InvoiceDataError extends Error {
   constructor(msg) { super(msg); this.name = 'InvoiceDataError'; this.status = 422; }
 }
@@ -105,29 +107,20 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   const isFinal  = invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung';
   const isStorno = invoiceType === 'stornorechnung';
-  const isGutschrift = invoiceType === 'gutschrift';
 
   const number  = isInvoice ? doc.INVOICE_NUMBER        : doc.ADVANCE_INVOICE_NUMBER;
   const docDate = isInvoice ? doc.INVOICE_DATE          : doc.ADVANCE_INVOICE_DATE;
   const addressIdField = isInvoice ? 'INVOICE_ADDRESS_ID'      : 'ADVANCE_INVOICE_ADDRESS_ID';
 
-  // CII type codes: EXTENDED allows 875/876/877; all profiles allow 380/381/384
-  const typeCodeCii =
-    docType === 'ADVANCE_INVOICE'
-      ? (isStornoPP    ? '384' : '875')
-    : invoiceType === 'schlussrechnung'     ? '877'
-    : invoiceType === 'teilschlussrechnung' ? '876'
-    : isStorno                              ? '384'
-    : isGutschrift                          ? '381'
-    : '380';
-
-  // UBL type codes: 326=Abschlag, 380=Invoice/Schluss, 381=Gutschrift, 384=Storno
-  const typeCodeUbl =
-    docType === 'ADVANCE_INVOICE'
-      ? (isStornoPP ? '384' : '326')
-    : isStorno    ? '384'
-    : isGutschrift ? '381'
-    : '380';
+  // BT-3. Die Belegart ist eine fachliche Entscheidung, der Codeunterschied
+  // zwischen den Syntaxen eine Eigenschaft der Norm. Beides stand hier bis
+  // 09/2026 als ZWEI Ternaer-Kaskaden nebeneinander -- wer eine Belegart
+  // ergaenzte, musste an beide denken, und niemand konnte sehen, welcher Code
+  // welche Bedeutung hat. Jetzt: eine Funktion, eine Codeliste (UNTDID 1001,
+  // siehe einvoice/codelists.js und docs/EINVOICE_BT_MAPPING.md).
+  const typeCodeArgs = { docType, invoiceType, isCancellation: isStorno || isStornoPP };
+  const typeCodeCii = codelists.documentTypeCode({ ...typeCodeArgs, syntax: 'CII' });
+  const typeCodeUbl = codelists.documentTypeCode({ ...typeCodeArgs, syntax: 'UBL' });
 
   // ── 2. Seller (COMPANY) ───────────────────────────────────────────────────
 
@@ -195,28 +188,23 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   // ── 6. VAT ────────────────────────────────────────────────────────────────
 
   const vatPercent = toNum(doc.VAT_PERCENT ?? 0);
-  // VAT-Category aus DB (Branch 2). Fallback wenn Spalte nicht da:
-  //   vatPercent > 0  -> 'S' (Standard)
-  //   vatPercent = 0  -> 'Z' (Zero rated)
-  // Bei Reverse-Charge/Steuerbefreit/Kleinunternehmer setzt der User
-  // bewusst auf 'AE'/'E'/'O'/'G'/'K'.
-  const vatCategoryRaw  = String(doc.VAT_CATEGORY ?? '').trim().toUpperCase();
-  const vatCategoryAllowed = ['S','AE','E','Z','O','G','K'];
-  const vatCategory     = vatCategoryAllowed.includes(vatCategoryRaw)
-    ? vatCategoryRaw
-    : (vatPercent > 0 ? 'S' : 'Z');
-  // BT-121 Exemption-Reason-Code (von User gepflegt) bzw. KoSIT-Standardtexte
-  // BT-120/123 Exemption-Reason-Text mit Auto-Defaults bei AE
+  // BT-118 — VAT-Category aus der DB (Branch 2). Ist die Spalte leer oder
+  // unbekannt, entscheidet der Steuersatz: > 0 -> 'S', sonst 'Z'. Bei
+  // Reverse-Charge, Steuerbefreiung oder Kleinunternehmerregelung setzt der
+  // Nutzer bewusst 'AE'/'E'/'O'/'G'/'K'.
+  //
+  // Zulaessige Werte und Standardtexte kommen aus der Codeliste
+  // UNTDID 5305 (einvoice/codelists.js) -- dieselbe Quelle, aus der auch der
+  // Validator seine Regeln je Kategorie zieht. Vorher lag die Liste hier, die
+  // Standardtexte ebenfalls hier und die Regeln im Validator: drei Orte fuer
+  // eine Aussage, und die Kategorien G und K waren in einem davon vergessen
+  // worden (Befund R7).
+  const vatCategory = codelists.normalizeVatCategory(doc.VAT_CATEGORY, vatPercent);
+  // BT-121 Befreiungsgrund-Code (vom Nutzer gepflegt), BT-120 der Text dazu.
   const vatExemptionReasonCode = String(doc.VAT_EXEMPTION_REASON_CODE ?? '').trim() || null;
-  let   vatExemptionReasonText = String(doc.VAT_EXEMPTION_REASON_TEXT ?? '').trim() || null;
-  if (!vatExemptionReasonText) {
-    if (vatCategory === 'AE') vatExemptionReasonText = 'Steuerschuldnerschaft des Leistungsempfängers gem. §13b UStG';
-    else if (vatCategory === 'O') vatExemptionReasonText = 'Kein Ausweis von Umsatzsteuer gem. §19 UStG (Kleinunternehmer)';
-    else if (vatCategory === 'E') vatExemptionReasonText = 'Steuerbefreite Leistung';
-    else if (vatCategory === 'K') vatExemptionReasonText = 'Innergemeinschaftliche Lieferung — steuerfrei nach §6a UStG';
-    else if (vatCategory === 'G') vatExemptionReasonText = 'Ausfuhrlieferung — steuerfrei nach §6 UStG';
-  }
-  // Bei Nicht-Standard-Categories ist der gesetzliche VAT-Satz 0
+  const vatExemptionReasonText = String(doc.VAT_EXEMPTION_REASON_TEXT ?? '').trim()
+    || codelists.defaultExemptionReason(vatCategory);
+  // Bei jeder Kategorie ausser S ist der gesetzliche Steuersatz 0.
   const effectiveVatPercent = (vatCategory === 'S') ? vatPercent : 0;
 
   // ── 7. Document-level allowances (Skonto-unabhängige Nachlässe) ───────────
@@ -334,7 +322,7 @@ ${basis}`;
         const desc = [ps.ABBR, ps.NAME].filter(Boolean).join(' – ') || `Position ${idx + 1}`;
 
         // Default Pauschal-Line
-        let unitCode  = 'LS';
+        let unitCode  = codelists.UNIT_LUMP_SUM;
         let quantity  = 1;
         let unitPrice = lineTotal;
         let note      = amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '';
@@ -343,7 +331,7 @@ ${basis}`;
         const tecAgg = tecAggByStructure.get(row.STRUCTURE_ID);
         if (Number(ps.BILLING_TYPE_ID) === 2 && tecAgg && tecAgg.hours > 0 && !tecAgg.hasSpecial) {
           const hours = fmt2(tecAgg.hours);
-          unitCode  = 'HUR';
+          unitCode  = codelists.UNIT_HOUR;
           quantity  = hours;
           unitPrice = fmt2(amountNet / hours);
           const rateText = tecAgg.distinctRates.size === 1
@@ -380,7 +368,7 @@ ${basis}`;
     // Branch 3 — Stundenrechnungen: wenn BOOKING-Stunden mit diesem Dokument
     // verknuepft sind und deren HOURLY_RATE_TOTAL-Summe (== Stunden-Anteil am Net)
     // dem amountNet entspricht, dann Unit=HUR statt LS.
-    let unitCode  = 'LS';
+    let unitCode  = codelists.UNIT_LUMP_SUM;
     let quantity  = 1;
     let unitPrice = lineTotal;
     let note      = amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '';
@@ -405,7 +393,7 @@ ${basis}`;
         // Akzeptanz: reine Stunden (keine Pauschalen/Stück) und BOOKING-Summe deckt amountNet.
         if (hours > 0 && !hasSpecial && Math.abs(fmt2(totalNetTec) - amountNet) <= 0.01) {
           const h = fmt2(hours);
-          unitCode  = 'HUR';
+          unitCode  = codelists.UNIT_HOUR;
           quantity  = h;
           unitPrice = fmt2(amountNet / h);
           const rateText = distinctRates.size === 1
