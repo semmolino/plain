@@ -2,6 +2,7 @@
 
 const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/partialPayments");
+const { assertPaymentMeans } = require("../services/paymentMeans");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 const { generateUblXml, generatePeppolXml } = require("../services_einvoice_ubl");
@@ -396,9 +397,11 @@ async function patchPartialPayment(req, res, supabase) {
   }
 
   if (b.payment_means_id !== undefined) {
-    const pm = b.payment_means_id;
-    if (!pm) return res.status(400).json({ error: "Zahlungsart ist erforderlich" });
-    payload.PAYMENT_MEANS_ID = pm;
+    try {
+      payload.PAYMENT_MEANS_ID = await assertPaymentMeans(supabase, b.payment_means_id);
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
   }
 
   // E-Rechnung Branch 1 — Quick-Win-BT-Felder (BT-10/13/19/83)

@@ -226,6 +226,15 @@ export const fetchCurrencies = () =>
 export const fetchVatList = () =>
   apiClient.get<{ data: VatRate[] }>('/stammdaten/vat')
 
+/**
+ * Zahlungsarten nach UNTDID 4461 — ein globaler Katalog, den kein Mandant
+ * bearbeitet (Migration 0163). Drei Zeilen, deshalb eine Liste statt einer Suche.
+ */
+export interface PaymentMeansItem { ID: number; ABBR: string; NAME: string }
+
+export const fetchPaymentMeans = () =>
+  apiClient.get<{ data: PaymentMeansItem[] }>('/stammdaten/payment-means')
+
 export const fetchDefaults = () =>
   apiClient.get<{ data: Record<string, string | null> }>('/stammdaten/defaults')
 

@@ -162,6 +162,8 @@ function referenceInvoiceData() {
     orderNumber: "BEST-4711",
     buyerAccountingRef: "KST-8100",
     remittanceInformation: "RG-2026-0042",
+    paymentMeansCode: "58",
+    paymentMeansName: "SEPA-Überweisung",
 
     attachments: [{
       id: 7,

@@ -22,7 +22,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useToast }  from '@/store/toastStore'
 import {
   fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
-  createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchDefaults, putDefault,
+  createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchPaymentMeans, fetchDefaults, putDefault,
   fetchDepartments, deleteDepartment, updateDepartment,
   fetchTypen, deleteTyp, updateTyp,
   fetchRollen, deleteRolle, updateRolle,
@@ -1085,6 +1085,7 @@ function VorbelegungenSection() {
   const [wipTargetRatio, setWipTargetRatio] = useState('')
   const [cpiWatch,      setCpiWatch]      = useState('')
   const [cpiCritical,   setCpiCritical]   = useState('')
+  const [paymentMeansId, setPaymentMeansId] = useState('')
 
   const { data: currData } = useQuery({ queryKey: ['currencies'],   queryFn: fetchCurrencies })
   const { data: vatData  } = useQuery({ queryKey: ['vat-list'],     queryFn: fetchVatList })
@@ -1092,6 +1093,7 @@ function VorbelegungenSection() {
   const { data: compData    } = useQuery({ queryKey: ['companies'],        queryFn: fetchCompanies })
   const { data: psData      } = useQuery({ queryKey: ['project-statuses'], queryFn: fetchProjectStatuses })
   const { data: osData      } = useQuery({ queryKey: ['offer-statuses'],   queryFn: fetchOfferStatuses })
+  const { data: pmData      } = useQuery({ queryKey: ['payment-means'],    queryFn: fetchPaymentMeans })
   const { data: defData, isLoading } = useQuery({ queryKey: ['defaults'], queryFn: fetchDefaults })
 
   const currencies = currData?.data ?? []
@@ -1099,6 +1101,7 @@ function VorbelegungenSection() {
   const countries  = countryData?.data ?? []
   const companies  = compData?.data    ?? []
   const projStatuses  = psData?.data ?? []
+  const paymentMeans  = pmData?.data ?? []
   const offerStatuses = osData?.data ?? []
 
   useEffect(() => {
@@ -1117,6 +1120,7 @@ function VorbelegungenSection() {
     setSeBasis(defData.data.default_se_basis === 'NETTO' ? 'NETTO' : 'BRUTTO')
     setSeLegalRef(defData.data.default_se_legal_reference ?? '')
     setPaymentTermDays(defData.data.default_payment_term_days ?? '')
+    setPaymentMeansId(defData.data.default_payment_means_id ?? '')
     // timer_enabled: fehlt = aktiv (Default)
     setTimerEnabled(defData.data.timer_enabled !== 'false')
     // Budget-Warnungen: Defaults wenn nicht persistiert
@@ -1151,6 +1155,7 @@ function VorbelegungenSection() {
       await putDefault('default_project_status_id',     projStatusId   || null)
       await putDefault('default_offer_status_id',       offerStatusId  || null)
       await putDefault('default_payment_term_days',     paymentTermDays || null)
+      await putDefault('default_payment_means_id',      paymentMeansId  || null)
       // Sicherheitseinbehalt: nur den eingeschalteten Zustand persistieren.
       await putDefault('default_se_enabled',            seEnabled ? 'true' : null)
       await putDefault('default_se_percent',            seEnabled ? (sePct || null) : null)
@@ -1362,6 +1367,20 @@ function VorbelegungenSection() {
             <p className="admin-section-hint">
               Belegt das Fälligkeitsdatum in Abschlags-, Einzel-, Teilschluss-/Schluss- und
               Gutschrift-Assistenten vor: Rechnungsdatum plus diese Anzahl Kalendertage.
+            </p>
+            <div className="form-group">
+              <label htmlFor="def-paymeans" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Zahlungsart <HelpHint id="invoice.payment_means" />
+              </label>
+              <select id="def-paymeans" value={paymentMeansId} onChange={e => setPaymentMeansId(e.target.value)}>
+                <option value="">— keine Vorbelegung —</option>
+                {paymentMeans.map(p => <option key={p.ID} value={p.ID}>{p.NAME}</option>)}
+              </select>
+            </div>
+            <p className="admin-section-hint">
+              Wird in neue Rechnungen und Abschlagsrechnungen übernommen und geht als
+              BT-81 in die E-Rechnung. Der Katalog folgt der Codeliste UNTDID 4461 und
+              ist nicht bearbeitbar.
             </p>
           </div>
           <div className="admin-block">

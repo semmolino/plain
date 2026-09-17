@@ -8,6 +8,7 @@
  */
 
 const codelists = require('./einvoice/codelists');
+const { paymentMeansForEinvoice } = require('./services/paymentMeans');
 
 class InvoiceDataError extends Error {
   constructor(msg) { super(msg); this.name = 'InvoiceDataError'; this.status = 422; }
@@ -136,6 +137,11 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const sellerVatId = normalizeVatId(doc['COMPANY_TAX-ID'] ?? '', sellerCountry);
   // COMPANY_TAX_NUMBER = Steuernummer (FC scheme, e.g. 78910/12345)
   const sellerTaxId = String(doc.COMPANY_TAX_NUMBER ?? '').trim();
+
+  // BT-81/82: bis 09/2026 war der Code fest verdrahtet. Jetzt kommt er aus
+  // PAYMENT_MEANS — mit demselben Wert als Rueckfall, damit Belege ohne
+  // Zuordnung unveraendert bleiben.
+  const paymentMeans = await paymentMeansForEinvoice(supabase, doc.PAYMENT_MEANS_ID);
 
   const sellerIban        = firstNonEmpty(doc.COMPANY_IBAN, company?.IBAN);
   const sellerBic         = firstNonEmpty(doc.COMPANY_BIC, company?.BIC);
@@ -696,6 +702,8 @@ ${basis}`;
     orderNumber:           String(doc.BUYER_ORDER_REFERENCE      ?? '').trim(), // BT-13
     buyerAccountingRef:    String(doc.BUYER_ACCOUNTING_REFERENCE ?? '').trim(), // BT-19
     remittanceInformation: String(doc.REMITTANCE_INFORMATION     ?? '').trim(), // BT-83
+    paymentMeansCode: paymentMeans.code,                    // BT-81
+    paymentMeansName: paymentMeans.name,                    // BT-82
     attachments,                                            // Branch 9: BG-24
   };
 }

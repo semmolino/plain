@@ -24,7 +24,8 @@ import {
 import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
-import { useDueDatePreset } from '@/hooks/useTenantDefaults'
+import { useDueDatePreset, useDefaultString } from '@/hooks/useTenantDefaults'
+import { fetchPaymentMeans } from '@/api/stammdaten'
 import { API_BASE }     from '@/api/client'
 import { fmtEur, money } from '@/utils/money'
 
@@ -67,6 +68,14 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
   const [comment,  setComment]  = useState('')
   // E-Rechnungs-Felder
   const [showEinvoice,  setShowEinvoice]  = useState(false)
+  // Zahlungsart (BT-81). Der Entwurf traegt die Vorbelegung schon aus dem
+  // Backend; hier wird sie nur angezeigt, damit die Auswahl nicht leer
+  // aussieht und ein Absenden sie nicht ueberschreibt.
+  const pmDefault = useDefaultString('default_payment_means_id')
+  const [pmGewaehlt, setPmGewaehlt] = useState<string | null>(null)
+  const paymentMeansId = pmGewaehlt ?? pmDefault
+  const { data: pmData } = useQuery({ queryKey: ['payment-means'], queryFn: fetchPaymentMeans })
+  const paymentMeansList = pmData?.data ?? []
   const [buyerRef,      setBuyerRef]      = useState('')
   const [orderRef,      setOrderRef]      = useState('')
   const [accountingRef, setAccountingRef] = useState('')
@@ -412,6 +421,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
       buyer_order_reference:       orderRef.trim()      || null,
       buyer_accounting_reference:  accountingRef.trim() || null,
       remittance_information:      remittance.trim()    || null,
+      ...(paymentMeansId ? { payment_means_id: Number(paymentMeansId) } : {}),
       vat_category:                vatCategory,
       vat_exemption_reason_code:   vatExemptCode.trim() || null,
       vat_exemption_reason_text:   vatExemptText.trim() || null,
@@ -618,6 +628,14 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                   value={orderRef} onChange={e => setOrderRef(e.target.value)} />
                 <FormField label="Kostenstelle" id="sr-acc-ref"
                   value={accountingRef} onChange={e => setAccountingRef(e.target.value)} />
+                <div className="form-group">
+                  <label htmlFor="sr-paymeans">Zahlungsart</label>
+                  <select id="sr-paymeans" value={paymentMeansId} onChange={e => setPmGewaehlt(e.target.value)}
+                    style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', width: '100%' }}>
+                    <option value="">— keine Angabe —</option>
+                    {paymentMeansList.map(pm => <option key={pm.ID} value={pm.ID}>{pm.NAME}</option>)}
+                  </select>
+                </div>
                 <FormField label="Verwendungszweck" id="sr-remit"
                   value={remittance} onChange={e => setRemittance(e.target.value)} />
 

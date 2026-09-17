@@ -102,8 +102,6 @@ function runRegistryCheck() {
   }
 
   // ── 2./3. Abdeckung gegen die Musterbelege ────────────────────────────────
-  const { ciiPaths, ublPaths, perDocument } = renderReferencePaths();
-
   const claimedCii = new Set();
   const claimedUbl = new Set();
   for (const e of entries) {
@@ -113,6 +111,8 @@ function runRegistryCheck() {
   for (const s of registry.structuralPaths()) {
     (s.path.startsWith(registry.CII_ROOT) ? claimedCii : claimedUbl).add(s.path);
   }
+
+  const { ciiPaths, ublPaths, perDocument } = renderReferencePaths();
 
   // vorwärts
   for (const e of registry.emitted()) {
@@ -174,8 +174,22 @@ function runRegistryCheck() {
   };
 }
 
-/** Musterbelege rendern und ihre Blattpfade einsammeln. */
+/**
+ * Musterbelege rendern und ihre Blattpfade einsammeln.
+ *
+ * Attributpfade (…/@name) kommen nur mit, wenn die Registry sie nennt — die
+ * Menge leitet sich hier selbst ab, damit kein Aufrufer sie vergessen kann.
+ * Alle Attribute einzusammeln wuerde die Rueckwaertsrichtung fluten:
+ * currencyID, schemeID, unitCode und listID stehen an Dutzenden Elementen und
+ * tragen dort keine eigene BT-Nummer. Die Pruefung bleibt echt: aufgenommen
+ * wird nur, was im erzeugten XML auch wirklich steht.
+ */
 function renderReferencePaths() {
+  const beanspruchteAttribute = new Set(
+    registry.all()
+      .flatMap((e) => [e.cii, e.ubl])
+      .filter((p) => p && p.includes("/@"))
+  );
   // Lazy, damit ein Ladefehler in den Buildern hier als Fehler sichtbar wird
   // und nicht schon beim Import dieser Datei.
   const { generateCiiXml } = require("../services_einvoice_cii");
@@ -188,12 +202,20 @@ function renderReferencePaths() {
   for (const doc of referenceDocuments()) {
     const cii = generateCiiXml(doc.data, "EXTENDED");
     const ubl = generateUblXml(doc.data);
-    for (const l of leafPaths(cii)) ciiPaths.add(l.path);
-    for (const l of leafPaths(ubl)) ublPaths.add(l.path);
+    for (const l of leafPaths(cii)) sammle(ciiPaths, l);
+    for (const l of leafPaths(ubl)) sammle(ublPaths, l);
     perDocument.push({ name: doc.name, cii, ubl });
   }
 
   return { ciiPaths, ublPaths, perDocument };
+
+  function sammle(menge, blatt) {
+    menge.add(blatt.path);
+    for (const name of Object.keys(blatt.attrs || {})) {
+      const pfad = `${blatt.path}/@${name}`;
+      if (beanspruchteAttribute.has(pfad)) menge.add(pfad);
+    }
+  }
 }
 
 function readSource(name) {

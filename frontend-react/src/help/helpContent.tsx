@@ -448,6 +448,24 @@ export const HELP = {
       </>
     ),
   },
+  'invoice.payment_means': {
+    title: 'Zahlungsart',
+    body: (
+      <>
+        Wie der Rechnungsbetrag beglichen werden soll. Der Wert landet in der
+        <strong> E-Rechnung als Feld BT-81</strong> und muss deshalb aus der
+        Codeliste UNTDID 4461 stammen — er ist fest vorgegeben und lässt sich
+        nicht selbst ergänzen.<br /><br />
+        Die Zahlungsangaben hängen an der <strong>IBAN der Firma</strong>: ohne
+        sie enthält die Rechnung gar keinen Zahlungsblock und wird vom
+        Empfänger abgewiesen.<br /><br />
+        <strong>SEPA-Lastschrift</strong> lässt sich zwar auswählen, aber noch
+        nicht als E-Rechnung ausgeben: dafür verlangt die Norm Mandatsreferenz
+        und belastetes Konto, die plan&amp;simple nicht erfasst. Die Vorprüfung
+        meldet das, bevor der Beleg herausgeht.
+      </>
+    ),
+  },
   'invoice.sicherheitseinbehalt': {
     title: 'Sicherheitseinbehalt',
     body: (

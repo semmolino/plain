@@ -333,8 +333,7 @@ function validateEInvoiceData(data, opts = {}) {
 
   // ── BR-DE-1: Zahlungsinformationen (BG-16) ─────────────────────────
   // Beide Builder haengen den KOMPLETTEN Zahlungsblock an die IBAN
-  // (cii.js buildPaymentMeans, ubl.js cac:PaymentMeans) und kennen als
-  // Zahlungsart nur die SEPA-Ueberweisung (TypeCode 58). Ohne IBAN entsteht
+  // (cii.js buildPaymentMeans, ubl.js cac:PaymentMeans). Ohne IBAN entsteht
   // deshalb kein BG-16 — nicht etwa ein unvollstaendiges, sondern gar keins.
   // Beim Empfaenger ist das eine harte Abweisung, hier war es bisher nicht
   // einmal eine Warnung: geprueft wurde nur das Format einer vorhandenen IBAN.
@@ -345,6 +344,22 @@ function validateEInvoiceData(data, opts = {}) {
       + 'und wird abgewiesen. In den Firmenstammdaten hinterlegen.'));
   } else if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) {
     warnings.push(mkWarning('BR-DE-IBAN', 'BT-84', `IBAN-Format wirkt ungultig: "${iban}"`));
+  }
+
+  // ── BR-DE-PM: nur eine Zahlungsart, die auch vollstaendig ausgebbar ist ──
+  // Seit die Zahlungsart aus PAYMENT_MEANS kommt (Migration 0163), kann ein
+  // Beleg auf SEPA-Lastschrift (59) zeigen. Dafuer verlangt die Norm BG-19 mit
+  // Mandatsreferenz (BT-89) und belastetem Konto (BT-91) — beides erfasst
+  // plan&simple nicht. Der Builder gaebe 59 aus und liesse den
+  // Lastschriftblock weg: ein XML, das jeder Pruefdienst zurueckweist. Hier
+  // abfangen, solange der Nutzer es noch aendern kann.
+  const pmCode = String(data.paymentMeansCode ?? '');
+  if (pmCode && !codelists.PAYMENT_MEANS_SUPPORTED.has(pmCode)) {
+    const bez = codelists.UNTDID_4461[pmCode]?.labelDe ?? pmCode;
+    errors.push(mkError('BR-DE-PM', 'BT-81',
+      `Zahlungsart "${bez}" kann noch nicht als E-Rechnung ausgegeben werden — `
+      + 'dafuer fehlen Mandatsreferenz und belastetes Konto (BG-19). '
+      + 'Auf Ueberweisung oder SEPA-Ueberweisung umstellen.'));
   }
 
   // ── BR-DE-15: BuyerReference (Leitweg-ID) — NUR Warnung ──────────────────────

@@ -169,8 +169,24 @@ const UNTDID_4461 = {
   "58": { code: "58", labelDe: "SEPA-Überweisung" },
   "59": { code: "59", labelDe: "SEPA-Lastschrift" },
 };
-/** Einzige Zahlungsart, die plan&simple erzeugt — der Block hängt an der IBAN. */
+/** Rückfall, wenn ein Beleg keine Zahlungsart trägt — so war es bis 09/2026 fest verdrahtet. */
 const PAYMENT_MEANS_SEPA_CREDIT_TRANSFER = "58";
+
+/**
+ * Codes, für die plan&simple einen vollständigen BG-16-Block erzeugen kann.
+ *
+ * 59 (SEPA-Lastschrift) fehlt hier mit Absicht: die Norm verlangt dafür BG-19
+ * mit Mandatsreferenz (BT-89) und belastetem Konto (BT-91). Beides erfasst
+ * plan&simple nicht. Ein Beleg mit 59 würde ein XML erzeugen, das jeder
+ * Prüfdienst zurückweist — deshalb bricht die Erzeugung lieber vorher ab.
+ */
+const PAYMENT_MEANS_SUPPORTED = new Set(["30", "58"]);
+
+/** Gültiger UNTDID-4461-Code oder null. */
+function normalizePaymentMeansCode(code) {
+  const c = String(code ?? "").trim();
+  return Object.prototype.hasOwnProperty.call(UNTDID_4461, c) ? c : null;
+}
 
 // ── UNTDID 4451 — Notenzweck (BT-21) ─────────────────────────────────────────
 const UNTDID_4451 = {
@@ -204,7 +220,7 @@ const isIso3166 = (v) => /^[A-Z]{2}$/.test(String(v ?? "").trim());
 module.exports = {
   UNTDID_1001, documentTypeCode, isValidDocumentTypeCode,
   UNTDID_5305, VAT_CATEGORY_CODES, isValidVatCategory, normalizeVatCategory, defaultExemptionReason,
-  UNTDID_4461, PAYMENT_MEANS_SEPA_CREDIT_TRANSFER,
+  UNTDID_4461, PAYMENT_MEANS_SEPA_CREDIT_TRANSFER, PAYMENT_MEANS_SUPPORTED, normalizePaymentMeansCode,
   UNTDID_4451, NOTE_SUBJECT_SELLER_REGISTRATION, NOTE_SUBJECT_PAYMENT_INFORMATION,
   UNECE_REC20, UNIT_HOUR, UNIT_LUMP_SUM, UNIT_PIECE, isValidUnitCode,
   isIso4217, isIso3166,

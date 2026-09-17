@@ -332,7 +332,9 @@ ${buildAttachmentsUbl(data)}
 
   ${s.iban ? `
   <cac:PaymentMeans>
-    <cbc:PaymentMeansCode>${codelists.PAYMENT_MEANS_SEPA_CREDIT_TRANSFER}</cbc:PaymentMeansCode>
+    <cbc:PaymentMeansCode${data.paymentMeansName ? ` name="${x(data.paymentMeansName)}"` : ''}>${
+      codelists.normalizePaymentMeansCode(data.paymentMeansCode) ?? codelists.PAYMENT_MEANS_SEPA_CREDIT_TRANSFER
+    }</cbc:PaymentMeansCode>
     ${data.remittanceInformation ? `<cbc:PaymentID>${x(data.remittanceInformation)}</cbc:PaymentID>` : ''}
     <cac:PayeeFinancialAccount>
       <cbc:ID>${x(s.iban)}</cbc:ID>

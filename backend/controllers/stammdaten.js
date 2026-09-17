@@ -1231,6 +1231,19 @@ async function searchVat(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/stammdaten/payment-means
+//
+// Globaler Katalog nach UNTDID 4461 (Migration 0163) — drei Zeilen, deshalb
+// eine Liste und keine Suche. Die Suche darunter bleibt für Autocomplete-
+// Aufrufer bestehen.
+// ---------------------------------------------------------------------------
+async function getPaymentMeans(req, res, supabase) {
+  const { data, error } = await supabase.from("PAYMENT_MEANS").select("ID, ABBR, NAME").order("ABBR", { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ data: data || [] });
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/stammdaten/payment-means/search
 // ---------------------------------------------------------------------------
 async function searchPaymentMeans(req, res, supabase) {
@@ -2183,7 +2196,7 @@ module.exports = {
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, postFeeCalcAddToOfferStructure, syncFeeCalcToStructure,
   getCompanies, postCompany, putCompany, postAddress, postRollen,
   getSalutations, getGenders, searchAddresses, listAddresses, patchAddress, getAddressDetail,
-  searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, searchPaymentMeans, postContact,
+  searchContacts, listContacts, getContactsByAddress, patchContact, searchVat, getPaymentMeans, searchPaymentMeans, postContact,
   getCurrencies, getVat, getDefaults, putDefault,
   getDepartments, deleteDepartment, patchDepartment,
   getTypen, deleteTyp, patchTyp,

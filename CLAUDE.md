@@ -198,6 +198,22 @@ gewollt ist, in `nichtFuerProjektleiter` eintragen.
 
 **BILLING_TYPE_ID**: `1` = fixed-fee (Pauschal), `2` = hourly (Stunden, nach Aufwand).
 
+**Globale Kataloge tragen keinen Mandanten**: `CURRENCY`, `VAT`, `COUNTRY`,
+`PROJECT_STATUS`, `OFFER_STATUS`, `PAYMENT_MEANS`. Sie werden **ohne**
+`.eq("TENANT_ID", …)` gelesen — ein Filter darauf liefert nicht etwa alles,
+sondern einen PostgREST-Fehler, und wer ihn wegfängt, bekommt stillschweigend
+eine leere Liste. Genau so stand monatelang ein `vat: null` im Demo-Seed
+(`demo/seed/lib/masterData.js`).
+
+`PAYMENT_MEANS` ist seit Migration `0163` zusätzlich **schreibgeschützt**: die
+Werte sind die Codeliste UNTDID 4461 (`einvoice/codelists.js`), `ABBR` trägt
+den Code. Die Policy lässt Lesen für alle zu, Schreiben nur mit `sys`-Claim —
+also nur aus einer Migration. Der Mandant wählt daraus eine Vorbelegung
+(`default_payment_means_id`), mehr nicht. Das ist die Form für jeden weiteren
+Katalog, den der Betreiber und nicht das Büro definiert; **ohne `FORCE` wäre
+der Schutz wirkungslos**, weil PostgREST sich als Tabelleneigentümer verbindet
+und an jeder Policy vorbeigeht.
+
 **Namensumstellung 2026-09 — alte Namen in aelteren Texten.** Tabellen und
 Spalten wurden systemweit umbenannt (acht Bloecke, Migrationen 0140–0159).
 Aeltere Migrationen, Dokumente und Kommentare nennen noch die alten Namen; das

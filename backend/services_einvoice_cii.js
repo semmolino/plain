@@ -146,9 +146,12 @@ function buildDelivery(data) {
 function buildPaymentMeans(data) {
   const s = data.seller;
   if (!s.iban) return '';
+  const code = codelists.normalizePaymentMeansCode(data.paymentMeansCode)
+    ?? codelists.PAYMENT_MEANS_SEPA_CREDIT_TRANSFER;
   return `
       <ram:SpecifiedTradeSettlementPaymentMeans>
-        <ram:TypeCode>${codelists.PAYMENT_MEANS_SEPA_CREDIT_TRANSFER}</ram:TypeCode>
+        <ram:TypeCode>${code}</ram:TypeCode>
+        ${data.paymentMeansName ? `<ram:Information>${x(data.paymentMeansName)}</ram:Information>` : ''}
         <ram:PayeePartyCreditorFinancialAccount>
           <ram:IBANID>${x(s.iban)}</ram:IBANID>
         </ram:PayeePartyCreditorFinancialAccount>

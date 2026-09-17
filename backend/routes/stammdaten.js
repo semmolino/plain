@@ -102,6 +102,7 @@ module.exports = (supabase) => {
   router.get("/currencies",                                          (req, res) => ctrl.getCurrencies(req, res, supabase));
   router.get("/defaults",                                            (req, res) => ctrl.getDefaults(req, res, supabase));
   router.put("/defaults",                                            requirePermission("settings.defaults.edit"), (req, res) => ctrl.putDefault(req, res, supabase));
+  router.get("/payment-means",                                       (req, res) => ctrl.getPaymentMeans(req, res, supabase));
   router.get("/payment-means/search",                                (req, res) => ctrl.searchPaymentMeans(req, res, supabase));
 
   // Setup-Progress (Aggregat fuer Dashboard-Checkliste)

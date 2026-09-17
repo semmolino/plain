@@ -7,6 +7,7 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
+const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -711,6 +712,9 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
     VAT_CATEGORY:              contractRow.VAT_CATEGORY              ?? 'S',
     VAT_EXEMPTION_REASON_CODE: contractRow.VAT_EXEMPTION_REASON_CODE ?? null,
     VAT_EXEMPTION_REASON_TEXT: contractRow.VAT_EXEMPTION_REASON_TEXT ?? null,
+    // Zahlungsart aus den Vorbelegungen; ungepflegt bleibt leer (siehe
+    // services/paymentMeans.js).
+    PAYMENT_MEANS_ID: await defaultPaymentMeansId(supabase, tenantId),
   };
 
   const { data: created, error: insertErr } = await supabase
@@ -783,9 +787,7 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   }
 
   if (body.payment_means_id !== undefined) {
-    const pm = body.payment_means_id;
-    if (!pm) throw { status: 400, message: "Zahlungsart ist erforderlich" };
-    payload.PAYMENT_MEANS_ID = pm;
+    payload.PAYMENT_MEANS_ID = await assertPaymentMeans(supabase, body.payment_means_id);
   }
 
   // E-Rechnung Branch 1 — Quick-Win-BT-Felder (BT-10/13/19/83)

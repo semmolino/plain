@@ -14,9 +14,9 @@ XML vorkommen) **und** rückwärts (jedes XML-Element muss eine Zeile haben).
 
 | Zustand | Felder |
 |---|---:|
-| ✅ ausgegeben | 82 |
+| ✅ ausgegeben | 83 |
 | ⚠️ geladen, aber von keinem Builder ausgegeben | 3 |
-| — bewusst nicht unterstützt | 61 |
+| — bewusst nicht unterstützt | 60 |
 | **katalogisiert insgesamt** | **146** |
 
 ## Erzeugte Formate
@@ -213,11 +213,11 @@ führende `Invoice/`. Die vollständigen Pfade stehen in der Registry.
 
 | BT | Bezeichnung | Kard. | Herkunft (DB) | CII | UBL | Status |
 |---|---|---|---|---|---|---|
-| BT-81 | Code für die Zahlungsart | 0..1 | fest: 58 (SEPA-Überweisung) | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode` | `cac:PaymentMeans/cbc:PaymentMeansCode` | ✅ ausgegeben |
-| BT-82 | Bezeichnung der Zahlungsart | 0..1 | — | — | — | — nicht unterstützt |
+| BT-81 | Code für die Zahlungsart | 0..1 | PAYMENT_MEANS.ABBR | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode` | `cac:PaymentMeans/cbc:PaymentMeansCode` | ✅ ausgegeben |
+| BT-82 | Bezeichnung der Zahlungsart | 0..1 | PAYMENT_MEANS.NAME | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementPaymentMeans/ram:Information` | `cac:PaymentMeans/cbc:PaymentMeansCode/@name` | ✅ ausgegeben |
 | BT-83 | Verwendungszweck | 0..1 | INVOICE.REMITTANCE_INFORMATION | `…/ram:ApplicableHeaderTradeSettlement/ram:PaymentReference` | `cac:PaymentMeans/cbc:PaymentID` | ✅ ausgegeben |
 
-- **BT-81** — Codeliste UNTDID 4461. plan&simple kennt genau eine Zahlungsart; der ganze Block hängt an der IBAN (Befund N6).
+- **BT-81** — Codeliste UNTDID 4461, seit Migration 0163 aus dem globalen Katalog PAYMENT_MEANS. Ausgebbar sind 30 und 58; 59 verlangt BG-19 (Mandat) und wird vom Validator abgewiesen (BR-DE-PM). Der ganze Block hängt weiterhin an der IBAN (Befund N6).
 
 ### BG-17 — Überweisung
 

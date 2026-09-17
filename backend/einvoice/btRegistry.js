@@ -407,13 +407,15 @@ const ENTRIES = [
 
   // ═══ BG-16 Zahlungsanweisungen ════════════════════════════════════════════
   { id: "BT-81", group: "BG-16", labelDe: "Code für die Zahlungsart", cardinality: "0..1",
-    source: "fest: 58 (SEPA-Überweisung)", data: null,
+    source: "PAYMENT_MEANS.ABBR", data: "paymentMeansCode",
     cii: `${STL}/ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode`,
     ubl: `${UBL_ROOT}/cac:PaymentMeans/cbc:PaymentMeansCode`,
-    note: "Codeliste UNTDID 4461. plan&simple kennt genau eine Zahlungsart; der ganze Block hängt an der IBAN (Befund N6)." },
+    note: "Codeliste UNTDID 4461, seit Migration 0163 aus dem globalen Katalog PAYMENT_MEANS. Ausgebbar sind 30 und 58; 59 verlangt BG-19 (Mandat) und wird vom Validator abgewiesen (BR-DE-PM). Der ganze Block hängt weiterhin an der IBAN (Befund N6)." },
 
   { id: "BT-82", group: "BG-16", labelDe: "Bezeichnung der Zahlungsart", cardinality: "0..1",
-    source: null, data: null, cii: null, ubl: null, status: "unsupported" },
+    source: "PAYMENT_MEANS.NAME", data: "paymentMeansName",
+    cii: `${STL}/ram:SpecifiedTradeSettlementPaymentMeans/ram:Information`,
+    ubl: `${UBL_ROOT}/cac:PaymentMeans/cbc:PaymentMeansCode/@name` },
 
   { id: "BT-83", group: "BG-16", labelDe: "Verwendungszweck", cardinality: "0..1",
     source: "INVOICE.REMITTANCE_INFORMATION", data: "remittanceInformation",

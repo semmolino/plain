@@ -7,6 +7,7 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
+const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -683,6 +684,9 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     CONTACT_MAIL: invoiceContact.EMAIL ?? null,
     CONTACT_PHONE: invoiceContact.MOBILE ?? null,
     TENANT_ID: tenantId,
+    // Zahlungsart aus den Vorbelegungen; ungepflegt bleibt leer (siehe
+    // services/paymentMeans.js).
+    PAYMENT_MEANS_ID: await defaultPaymentMeansId(supabase, tenantId),
   };
 
   const { data: created, error: insertErr } = await supabase.from("ADVANCE_INVOICE").insert([insertRow]).select("ID").single();

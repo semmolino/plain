@@ -23,6 +23,18 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+/*
+ * Pfad relativ zum Projekt, mit Schraegstrichen — die Form, in der die
+ * Ausnahmelisten unten geschrieben sind.
+ *
+ * Unter Windows liefert join() Backslashes, die Dateiliste aber
+ * Schraegstriche. Ein blosses replace(ROOT + '/') griff dort nie: jeder Pfad
+ * blieb absolut, keine Ausnahme passte, und die Pruefung meldete sechs
+ * Befunde, die in CI (Linux) gar nicht auftreten. Eine Pruefung, die auf dem
+ * Entwicklungsrechner immer rot ist, sieht sich niemand mehr an.
+ */
+const relPfad = (f) => f.replace(/\\/g, '/').replace(ROOT.replace(/\\/g, '/') + '/', '')
 const CSS_PATH = join(ROOT, 'src/styles/globals.css')
 const css = readFileSync(CSS_PATH, 'utf8')
 const verbose = process.argv.includes('-v')
@@ -270,7 +282,7 @@ const COLOR_EXEMPT = new Map([
   ['src/pages/admin/AbwesenheitsartenSection.tsx', 'Vorgabefarbe einer Abwesenheitsart, wird gespeichert'],
 ])
 for (const f of sources) {
-  const rel = f.replace(ROOT + '/', '').replace(/\\/g, '/')
+  const rel = relPfad(f).replace(/\\/g, '/')
   if (COLOR_EXEMPT.has(rel)) continue
   const text = stripComments(readFileSync(f, 'utf8'))
   const hits = [...new Set([...text.matchAll(/#[0-9a-fA-F]{6}\b/g)].map(m => m[0]))]
@@ -290,7 +302,7 @@ for (const f of sources) {
  */
 const MONEY_MODULE = 'src/utils/money.tsx'
 for (const f of sources) {
-  const rel = f.replace(ROOT + '/', '').replace(/\\/g, '/')
+  const rel = relPfad(f).replace(/\\/g, '/')
   if (rel === MONEY_MODULE) continue
   const text = stripComments(readFileSync(f, 'utf8'))
   if (/new Intl\.NumberFormat\([^)]*currency/s.test(text)
@@ -335,7 +347,7 @@ function stripInlineStyles(text) {
 }
 const CANVAS_RE = new RegExp(String.raw`\b(${CANVAS_KEYS.join('|')})\s*:[^,\n}]*var\(--`, 'g')
 for (const f of sources) {
-  const rel = f.replace(ROOT + '/', '').replace(/\\/g, '/')
+  const rel = relPfad(f).replace(/\\/g, '/')
   const raw = readFileSync(f, 'utf8')
   if (!/from ['"](react-chartjs-2|chart\.js)['"]/.test(raw)) continue
   const text = stripInlineStyles(stripComments(raw))

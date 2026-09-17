@@ -43,10 +43,13 @@ async function loadMasterData(supabase, tenantId) {
   const cpRates = (await fetchAll(supabase, "EMPLOYEE_COST_RATE", tenantId)).rows;
   const bookingTypes = (await fetchAll(supabase, "BOOKING_TYPE", tenantId)).rows;
 
-  // Referenzdaten (teils global, teils tenant): tolerant laden.
-  const vats = (await fetchAll(supabase, "VAT", tenantId)).rows;
+  // Referenzdaten. VAT und PAYMENT_MEANS sind globale Kataloge ohne
+  // TENANT_ID — ein .eq("TENANT_ID", ...) darauf liefert nicht etwa alles,
+  // sondern einen Fehler, und fetchAll schluckt den zu einer leeren Liste.
+  // Genau so stand hier monatelang ein vat: null im Ergebnis.
+  const vats = (await supabase.from("VAT").select("*")).data || [];
   const currencies = (await supabase.from("CURRENCY").select("*")).data || [];
-  const paymentMeans = (await fetchAll(supabase, "PAYMENT_MEANS", tenantId)).rows;
+  const paymentMeans = (await supabase.from("PAYMENT_MEANS").select("*")).data || [];
   const projectStatus = (await supabase.from("PROJECT_STATUS").select("*")).data || [];
 
   // Kostensatz-Historie je Mitarbeiter
