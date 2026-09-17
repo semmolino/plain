@@ -83,8 +83,8 @@ describe("errorSanitizer", () => {
 
     it("laesst die Originalmeldung durch, wenn NODE_ENV ausdruecklich development ist", () => {
       process.env.NODE_ENV = "development";
-      const raus = durchleiten(500, { error: 'relation "TEC" does not exist' });
-      expect(raus.error).toContain("TEC");
+      const raus = durchleiten(500, { error: 'relation "BOOKING" does not exist' });
+      expect(raus.error).toContain("BOOKING");
       expect(raus.dev).toBe(true);
       expect(raus.ref).toMatch(/^[0-9a-f]{6}$/);
     });
@@ -96,7 +96,7 @@ describe("errorSanitizer", () => {
         // oder fehlendes NODE_ENV wuerde den Schutz still abschalten.
         if (wert === undefined) delete process.env.NODE_ENV;
         else process.env.NODE_ENV = wert;
-        expect(durchleiten(500, { error: 'relation "TEC" does not exist' }).error).toBe(GENERISCHE_MELDUNG);
+        expect(durchleiten(500, { error: 'relation "BOOKING" does not exist' }).error).toBe(GENERISCHE_MELDUNG);
       }
     );
   });

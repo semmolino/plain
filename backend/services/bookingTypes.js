@@ -201,7 +201,7 @@ async function deleteProjectBookingType(supabase, { tenantId, id }) {
 }
 
 async function deleteBookingType(supabase, { tenantId, id }) {
-  // Bereits gebuchte TEC-Zeilen verweisen per BOOKING_TYPE_ID, behalten aber
+  // Bereits gebuchte BOOKING-Zeilen verweisen per BOOKING_TYPE_ID, behalten aber
   // ihre Werte (Snapshot in QUANTITY/RATE). Löschen des Katalog-Eintrags ist
   // daher unkritisch — die Buchung bleibt unverändert bestehen.
   const { error } = await supabase.from("BOOKING_TYPE").delete().eq("ID", id).eq("TENANT_ID", tenantId);

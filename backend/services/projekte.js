@@ -558,7 +558,7 @@ async function getProjectStructure(supabase, { projectId, tenantId }) {
 
   if (billingType2Ids.length > 0) {
     const { data: tecRows, error: tecError } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", billingType2Ids);
     if (tecError) throw tecError;
@@ -759,7 +759,7 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
   const tecSums = {};
   if (bt2Ids.length) {
     const { data: tecRows, error: tecErr } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", bt2Ids);
     if (tecErr) throw tecErr;
@@ -837,7 +837,7 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
 async function getTecSum(supabase, { structureId, tenantId }) {
   structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { data: tecRows, error } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("HOURLY_RATE_TOTAL")
     .eq("STRUCTURE_ID", structureId);
   if (error) throw error;
@@ -874,9 +874,9 @@ async function checkParentForChild(supabase, { parentId, tenantId }) {
     return { status: "blocked", reason: "Das übergeordnete Element enthält Rechnungs- oder Zahlungsdaten. Neue Unterelemente können daher nicht erstellt werden." };
   }
 
-  // Leaf element with values/TEC: transfer them to the first child being created.
+  // Leaf element with values/BOOKING: transfer them to the first child being created.
   const hasValues = num(parent.REVENUE) !== 0 || num(parent.EXTRAS) !== 0 || num(parent.REVENUE_COMPLETION) !== 0 || num(parent.EXTRAS_COMPLETION) !== 0 || num(parent.COSTS) !== 0;
-  const { data: tecRows } = await supabase.from("TEC").select("ID").eq("STRUCTURE_ID", parentId).limit(1);
+  const { data: tecRows } = await supabase.from("BOOKING").select("ID").eq("STRUCTURE_ID", parentId).limit(1);
   const hasTec = Array.isArray(tecRows) && tecRows.length > 0;
 
   if (hasValues || hasTec) {
@@ -1032,8 +1032,8 @@ async function createStructureNode(supabase, { projectId, node, transferParentVa
         EXTRAS_COMPLETION: parentData.EXTRAS_COMPLETION ?? 0,
         COSTS: parentData.COSTS ?? 0,
       }).eq("ID", created.ID);
-      // 2. Move ALL TEC from parent to child
-      await supabase.from("TEC").update({ STRUCTURE_ID: created.ID }).eq("STRUCTURE_ID", fatherIdParsed);
+      // 2. Move ALL BOOKING from parent to child
+      await supabase.from("BOOKING").update({ STRUCTURE_ID: created.ID }).eq("STRUCTURE_ID", fatherIdParsed);
       // 3. Zero parent values
       await supabase.from("PROJECT_STRUCTURE").update({
         REVENUE: 0, EXTRAS: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0, COSTS: 0,
@@ -1103,7 +1103,7 @@ async function patchStructure(supabase, { structureId, update, tenantId }) {
       ? Number(update.EXTRAS_PERCENT)
       : Number(current.EXTRAS_PERCENT ?? 0);
 
-  // REVENUE sent from frontend = the user's entered base (REVENUE_BASIS); BT=2 overrides from TEC
+  // REVENUE sent from frontend = the user's entered base (REVENUE_BASIS); BT=2 overrides from BOOKING
   let revenueBasis =
     update.REVENUE !== undefined && update.REVENUE !== null && String(update.REVENUE) !== ""
       ? Number(update.REVENUE)
@@ -1111,7 +1111,7 @@ async function patchStructure(supabase, { structureId, update, tenantId }) {
 
   if (Number(billingTypeId) === 2) {
     const { data: tecRows, error: tecError } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("HOURLY_RATE_TOTAL")
       .eq("STRUCTURE_ID", structureId);
     if (tecError) throw tecError;
@@ -1258,7 +1258,7 @@ async function inheritStructure(supabase, { structureId, inheritBt, inheritExtra
   const tecSumByStructure = new Map();
   for (const part of chunk(bt2Ids, 100)) {
     const { data: tecRows, error: tecErr } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", part);
     if (tecErr) throw tecErr;
@@ -1584,7 +1584,7 @@ async function saveLeistungsstand(supabase, { projectId, updates, tenantId }) {
   const tecSums = {};
   if (bt2Ids.length) {
     const { data: tecRows, error: tecErr } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
       .in("STRUCTURE_ID", bt2Ids);
     if (tecErr) throw tecErr;
@@ -1700,7 +1700,7 @@ async function deleteStructure(supabase, { structureId, cascade, tenantId }) {
     }
   };
 
-  const tecRef = await hasRefs("TEC", "STRUCTURE_ID");
+  const tecRef = await hasRefs("BOOKING", "STRUCTURE_ID");
   const ppsRef = await hasRefs("ADVANCE_INVOICE_STRUCTURE", "STRUCTURE_ID");
   const invsRef = await hasRefs("INVOICE_STRUCTURE", "STRUCTURE_ID");
 
@@ -1717,7 +1717,7 @@ async function deleteStructure(supabase, { structureId, cascade, tenantId }) {
   return toDelete;
 }
 
-// Transfer father's values/TEC to an existing child (used before drag-drop reparenting)
+// Transfer father's values/BOOKING to an existing child (used before drag-drop reparenting)
 async function transferFatherToChild(supabase, { fatherId, childId }) {
   const n = (v) => Number(v ?? 0);
 
@@ -1759,8 +1759,8 @@ async function transferFatherToChild(supabase, { fatherId, childId }) {
   }).eq("ID", childId);
   if (uErr) throw uErr;
 
-  // Move TEC bookings from father to child
-  await supabase.from("TEC").update({ STRUCTURE_ID: childId }).eq("STRUCTURE_ID", fatherId);
+  // Move BOOKING bookings from father to child
+  await supabase.from("BOOKING").update({ STRUCTURE_ID: childId }).eq("STRUCTURE_ID", fatherId);
 
   // Zero out father
   const { error: zErr } = await supabase.from("PROJECT_STRUCTURE").update({

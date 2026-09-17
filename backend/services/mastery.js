@@ -68,7 +68,7 @@ const MODULES = [
       experte:             null,
     },
     counter: async (supabase, { tenantId, employeeId }) =>
-      count(supabase, "TEC", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId }),
+      count(supabase, "BOOKING", { TENANT_ID: tenantId, EMPLOYEE_ID: employeeId }),
   },
   {
     id: "angebote",

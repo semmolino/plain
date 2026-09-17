@@ -302,7 +302,7 @@ export interface Buchung {
   PROJECT_ID:          number
   STRUCTURE_ID:        number | null
   EMPLOYEE_ID:         number
-  DATE_VOUCHER:        string
+  BOOKING_DATE:        string
   TIME_START:          string | null
   TIME_FINISH:         string | null
   QUANTITY_INT:        number
@@ -325,7 +325,7 @@ export interface CreateBuchungPayload {
   PROJECT_ID:          number
   STRUCTURE_ID?:       number
   EMPLOYEE_ID:         number
-  DATE_VOUCHER:        string
+  BOOKING_DATE:        string
   TIME_START?:         string
   TIME_FINISH?:        string
   QUANTITY_INT:        number
@@ -344,7 +344,7 @@ export interface UpdateBuchungPayload {
   EMPLOYEE_ID?:         number
   PROJECT_ID?:          number | null
   STRUCTURE_ID?:        number | null
-  DATE_VOUCHER?:        string
+  BOOKING_DATE?:        string
   TIME_START?:          string
   TIME_FINISH?:         string
   QUANTITY_INT?:        number
@@ -373,7 +373,7 @@ export type RebookSkipReason = 'not_found' | 'billed' | 'draft' | 'break' | 'unc
 
 export interface RebookMoved {
   ID:                  number
-  DATE_VOUCHER:        string | null
+  BOOKING_DATE:        string | null
   QUANTITY_INT:        number
   POSTING_DESCRIPTION: string
   FROM_PROJECT_ID:     number | null
@@ -394,7 +394,7 @@ export interface RebookSkipped {
   ID:                   number
   reason:               RebookSkipReason
   message:              string
-  DATE_VOUCHER?:        string | null
+  BOOKING_DATE?:        string | null
   POSTING_DESCRIPTION?: string
   FROM_STRUCTURE_NAME?: string | null
 }

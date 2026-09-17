@@ -292,7 +292,7 @@ async function recomputeStructureAggregates(supabase, structureId) {
   if (structureErr) throw new Error(structureErr.message);
   if (!structureRow) return;
 
-  const { data: tecRows, error: tecErr } = await supabase.from("TEC").select("QUANTITY_INT, COST_RATE, COST_TOTAL, HOURLY_RATE_TOTAL, BOOKING_KIND").eq("STRUCTURE_ID", structureId);
+  const { data: tecRows, error: tecErr } = await supabase.from("BOOKING").select("QUANTITY_INT, COST_RATE, COST_TOTAL, HOURLY_RATE_TOTAL, BOOKING_KIND").eq("STRUCTURE_ID", structureId);
   if (tecErr) throw new Error(tecErr.message);
 
   // Spezialarten (Pauschalen/Stückleistungen) tragen ihren COST_TOTAL direkt

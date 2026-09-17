@@ -299,7 +299,7 @@ ${basis}`;
 
       const nameMap = Object.fromEntries((projStructures ?? []).map(r => [r.ID, r]));
 
-      // Branch 3 — Stundenrechnungen: TEC-Zeilen je BT2-Struktur
+      // Branch 3 — Stundenrechnungen: BOOKING-Zeilen je BT2-Struktur
       // aggregieren (Summe Stunden). Daraus kann eine Rechnungszeile mit
       // unitCode='HUR' und reellem Stundensatz gebildet werden.
       const bt2StructIds = (projStructures || [])
@@ -308,7 +308,7 @@ ${basis}`;
       const tecAggByStructure = new Map();
       if (bt2StructIds.length > 0) {
         const { data: tecRows } = await supabase
-          .from('TEC')
+          .from('BOOKING')
           .select('STRUCTURE_ID, QUANTITY_INT, HOURLY_RATE, HOURLY_RATE_TOTAL, BOOKING_KIND')
           .eq('INVOICE_ID', docId)
           .in('STRUCTURE_ID', bt2StructIds);
@@ -377,7 +377,7 @@ ${basis}`;
     const lineTotal    = fmt2(amountNet + amountExtras);
     const label = docType === 'ADVANCE_INVOICE' ? 'Abschlagsrechnung' : 'Rechnung';
 
-    // Branch 3 — Stundenrechnungen: wenn TEC-Stunden mit diesem Dokument
+    // Branch 3 — Stundenrechnungen: wenn BOOKING-Stunden mit diesem Dokument
     // verknuepft sind und deren HOURLY_RATE_TOTAL-Summe (== Stunden-Anteil am Net)
     // dem amountNet entspricht, dann Unit=HUR statt LS.
     let unitCode  = 'LS';
@@ -390,7 +390,7 @@ ${basis}`;
         ? { col: 'ADVANCE_INVOICE_ID', val: docId }
         : { col: 'INVOICE_ID',          val: docId };
       const { data: tecRows } = await supabase
-        .from('TEC')
+        .from('BOOKING')
         .select('QUANTITY_INT, HOURLY_RATE, HOURLY_RATE_TOTAL, BOOKING_KIND')
         .eq(tecFilter.col, tecFilter.val);
       if (tecRows && tecRows.length > 0) {
@@ -402,7 +402,7 @@ ${basis}`;
           if (t.HOURLY_RATE != null) distinctRates.add(Number(t.HOURLY_RATE));
           if (EINVOICE_SPECIAL_KINDS.has(t.BOOKING_KIND)) hasSpecial = true;
         }
-        // Akzeptanz: reine Stunden (keine Pauschalen/Stück) und TEC-Summe deckt amountNet.
+        // Akzeptanz: reine Stunden (keine Pauschalen/Stück) und BOOKING-Summe deckt amountNet.
         if (hours > 0 && !hasSpecial && Math.abs(fmt2(totalNetTec) - amountNet) <= 0.01) {
           const h = fmt2(hours);
           unitCode  = 'HUR';
@@ -416,7 +416,7 @@ ${basis}`;
             : `${h} Std. (${rateText})`;
         }
       }
-    } catch (_) { /* TEC fehlt -> Pauschal-Fallback */ }
+    } catch (_) { /* BOOKING fehlt -> Pauschal-Fallback */ }
 
     lines.push({
       id: 1, description: label,

@@ -472,12 +472,12 @@ async function loadTecRows({ supabase, docType, docId }) {
   try {
     const field = docType === 'INVOICE' ? 'INVOICE_ID' : 'ADVANCE_INVOICE_ID';
     const { data, error } = await supabase
-      .from('TEC')
-      .select('ID, DATE_VOUCHER, EMPLOYEE_ID, STRUCTURE_ID, QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL, POSTING_DESCRIPTION, BOOKING_KIND')
+      .from('BOOKING')
+      .select('ID, BOOKING_DATE, EMPLOYEE_ID, STRUCTURE_ID, QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL, POSTING_DESCRIPTION, BOOKING_KIND')
       .eq(field, docId);
 
     if (error) {
-      if (isTableMissingErr(error, 'tec')) return { rows: [], groups: [], sumQty: 0, sumTot: 0 };
+      if (isTableMissingErr(error, 'booking')) return { rows: [], groups: [], sumQty: 0, sumTot: 0 };
       throw new Error(error.message);
     }
 
@@ -504,7 +504,7 @@ async function loadTecRows({ supabase, docType, docId }) {
       );
     }
 
-    rows.sort((a, b) => String(a.DATE_VOUCHER || '').localeCompare(String(b.DATE_VOUCHER || '')));
+    rows.sort((a, b) => String(a.BOOKING_DATE || '').localeCompare(String(b.BOOKING_DATE || '')));
 
     const round2 = n => Math.round(n * 100) / 100;
     let sumQty = 0, sumTot = 0;
@@ -518,7 +518,7 @@ async function loadTecRows({ supabase, docType, docId }) {
       sumQty += dispQty; sumTot += tot;
       return {
         structureId:        r.STRUCTURE_ID != null ? Number(r.STRUCTURE_ID) : null,
-        dateVoucher:        r.DATE_VOUCHER || '',
+        dateVoucher:        r.BOOKING_DATE || '',
         employeeName:       empMap.get(String(r.EMPLOYEE_ID)) || '',
         quantityExt:        dispQty,
         spRate:             Number(r.HOURLY_RATE || 0),

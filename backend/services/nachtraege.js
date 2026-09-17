@@ -7,7 +7,7 @@
 // Freigabe werden anerkannte Positionen — analog convertOfferToProject —
 // inkrementell in PROJECT_STRUCTURE übernommen (Option A: ein „Nachträge"-
 // Wurzelknoten je Projekt, darunter je Nachtrag ein Gruppenknoten). Danach
-// greifen Buchungen (TEC) und Abrechnung (INVOICE) ohne Sonderpfad.
+// greifen Buchungen (BOOKING) und Abrechnung (INVOICE) ohne Sonderpfad.
 //
 // Konzept: docs/NACHTRAG_CONCEPT.md · Migrationen: 0105 (Schema) / 0106 (RBAC)
 // ─────────────────────────────────────────────────────────────────────────────

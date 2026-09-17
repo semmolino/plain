@@ -215,7 +215,7 @@ export function UmbuchenModal({ bookings, sourceProjectId, onClose, onDone }: Pr
                   <tbody>
                     {preview.moved.map(m => (
                       <tr key={m.ID}>
-                        <td>{fmtDate(m.DATE_VOUCHER)}</td>
+                        <td>{fmtDate(m.BOOKING_DATE)}</td>
                         <td>{m.POSTING_DESCRIPTION}</td>
                         <td style={{ color: 'var(--text-3)' }}>
                           {m.FROM_PROJECT_NAME ?? '—'}
@@ -240,7 +240,7 @@ export function UmbuchenModal({ bookings, sourceProjectId, onClose, onDone }: Pr
               <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, color: 'var(--text-3)' }}>
                 {preview.skipped.map(s => (
                   <li key={s.ID}>
-                    {fmtDate(s.DATE_VOUCHER)}
+                    {fmtDate(s.BOOKING_DATE)}
                     {s.POSTING_DESCRIPTION ? ` · ${s.POSTING_DESCRIPTION}` : ''} — bleibt liegen: {s.message}
                   </li>
                 ))}

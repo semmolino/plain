@@ -100,7 +100,7 @@ function fixture(overrides = {}) {
     ],
     INVOICE_DEDUCTION: [],
     ADVANCE_INVOICE: [],
-    TEC: [],
+    BOOKING: [],
   });
 }
 

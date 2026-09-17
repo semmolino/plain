@@ -53,7 +53,7 @@ function findActiveModel(assignments, dateStr) {
   return active;
 }
 
-// Returns actual hours booked on a specific day from TEC (CONFIRMED only).
+// Returns actual hours booked on a specific day from BOOKING (CONFIRMED only).
 // tecByDate: Map<dateStr, number> pre-built for the range.
 function getActualHours(tecByDate, dateStr) {
   return tecByDate.get(dateStr) || 0;
@@ -86,9 +86,9 @@ const isExcludedFromHours = (row) => isNonHoursKind(row.BOOKING_KIND) || isBreak
 
 async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
   const { data, error } = await supabase
-    .from('TEC')
+    .from('BOOKING')
     .select(`
-      ID, DATE_VOUCHER, TIME_START, TIME_FINISH, QUANTITY_INT, POSTING_DESCRIPTION,
+      ID, BOOKING_DATE, TIME_START, TIME_FINISH, QUANTITY_INT, POSTING_DESCRIPTION,
       PROJECT_ID, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND,
       PROJECT:PROJECT_ID(NAME_SHORT),
       STRUCTURE:STRUCTURE_ID(NAME_SHORT)
@@ -96,9 +96,9 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
     .eq('TENANT_ID', tenantId)
     .eq('EMPLOYEE_ID', employeeId)
     .eq('STATUS', 'CONFIRMED')
-    .gte('DATE_VOUCHER', dateFrom)
-    .lte('DATE_VOUCHER', dateTo)
-    .order('DATE_VOUCHER', { ascending: true });
+    .gte('BOOKING_DATE', dateFrom)
+    .lte('BOOKING_DATE', dateTo)
+    .order('BOOKING_DATE', { ascending: true });
 
   if (error) throw { status: 500, message: error.message };
 
@@ -107,7 +107,7 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
 
   for (const row of data || []) {
     if (isExcludedFromHours(row)) continue;
-    const d = row.DATE_VOUCHER;
+    const d = row.BOOKING_DATE;
     const h = Number(row.QUANTITY_INT || 0);
     sumMap.set(d, (sumMap.get(d) || 0) + h);
     if (!bookingsMap.has(d)) bookingsMap.set(d, []);
@@ -337,13 +337,13 @@ async function buildRunningBalances(supabase, tenantId, empIds, upToDate) {
   const globalStart = assigns[0].VALID_FROM; // earliest across all employees (sorted asc)
 
   const { data: tecRows } = await supabase
-    .from('TEC')
-    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, BOOKING_KIND, ENTRY_KIND')
+    .from('BOOKING')
+    .select('EMPLOYEE_ID, BOOKING_DATE, QUANTITY_INT, BOOKING_KIND, ENTRY_KIND')
     .eq('TENANT_ID', tenantId)
     .in('EMPLOYEE_ID', empIds)
     .eq('STATUS', 'CONFIRMED')
-    .gte('DATE_VOUCHER', globalStart)
-    .lte('DATE_VOUCHER', upToDate);
+    .gte('BOOKING_DATE', globalStart)
+    .lte('BOOKING_DATE', upToDate);
 
   const actualByEmp = new Map();
   for (const row of tecRows || []) {
@@ -454,15 +454,15 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
     .select('ID, NAME_SHORT').eq('TENANT_ID', tenantId);
   const deptMap = new Map((depts || []).map(d => [d.ID, d.NAME_SHORT]));
 
-  // Bulk TEC (CONFIRMED only)
+  // Bulk BOOKING (CONFIRMED only)
   const { data: tecRows, error: tecErr } = await supabase
-    .from('TEC')
-    .select('EMPLOYEE_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, COST_TOTAL, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND')
+    .from('BOOKING')
+    .select('EMPLOYEE_ID, BOOKING_DATE, QUANTITY_INT, QUANTITY_EXT, COST_TOTAL, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND')
     .eq('TENANT_ID', tenantId)
     .in('EMPLOYEE_ID', empIds)
     .eq('STATUS', 'CONFIRMED')
-    .gte('DATE_VOUCHER', allFrom)
-    .lte('DATE_VOUCHER', allTo);
+    .gte('BOOKING_DATE', allFrom)
+    .lte('BOOKING_DATE', allTo);
   if (tecErr) throw { status: 500, message: tecErr.message };
 
   // Pauschalen/Stückleistungen und Pausen sind keine Arbeitszeit → aus der
@@ -501,8 +501,8 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
 
   const tecIdx = new Map();
   for (const row of tecRowsHours) {
-    const y = parseInt(row.DATE_VOUCHER.slice(0, 4), 10);
-    const m = parseInt(row.DATE_VOUCHER.slice(5, 7), 10);
+    const y = parseInt(row.BOOKING_DATE.slice(0, 4), 10);
+    const m = parseInt(row.BOOKING_DATE.slice(5, 7), 10);
     const k = `${row.EMPLOYEE_ID}-${y}-${m}`;
     const a = tecIdx.get(k) || { hoursInt: 0, hoursExt: 0, cost: 0, hoursExtNonInternal: 0 };
     a.hoursInt += Number(row.QUANTITY_INT) || 0;

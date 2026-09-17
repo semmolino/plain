@@ -158,8 +158,8 @@ async function checkEmployee(supabase, { tenantId, id }) {
     : `#${id}`;
   const entityLabel = `Mitarbeiter:in „${name}"`;
 
-  // Buchungen (TEC) — Eltern-Projekte fuer Kontext aufloesen
-  const tec = await safeReferences(supabase, "TEC", "ID, PROJECT_ID", { EMPLOYEE_ID: id, TENANT_ID: tenantId });
+  // Buchungen (BOOKING) — Eltern-Projekte fuer Kontext aufloesen
+  const tec = await safeReferences(supabase, "BOOKING", "ID, PROJECT_ID", { EMPLOYEE_ID: id, TENANT_ID: tenantId });
   let tecProjectSamples = [];
   let tecProjectsCount  = 0;
   if (tec.length > 0) {
@@ -240,7 +240,7 @@ async function checkProject(supabase, { tenantId, id }) {
   const entityLabel = `Projekt „${name}"`;
 
   const [tec, invoices, partials, structure, e2p] = await Promise.all([
-    safeReferences(supabase, "TEC",                    "ID", { PROJECT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "BOOKING",                    "ID", { PROJECT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",                "ID, INVOICE_NUMBER", { PROJECT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "ADVANCE_INVOICE",        "ID, ADVANCE_INVOICE_NUMBER", { PROJECT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "PROJECT_STRUCTURE",      "ID", { PROJECT_ID: id, TENANT_ID: tenantId }),
@@ -532,16 +532,16 @@ async function checkWorkingTimeModel(supabase, { tenantId, id }) {
   };
 }
 
-// ── TEC (Buchung) ─────────────────────────────────────────────────────────
+// ── BOOKING (Buchung) ─────────────────────────────────────────────────────────
 
 async function checkTec(supabase, { tenantId, id }) {
   const { data: tec } = await supabase
-    .from("TEC")
-    .select("DATE_VOUCHER, QUANTITY_INT, INVOICE_ID, ADVANCE_INVOICE_ID, EMPLOYEE_ID")
+    .from("BOOKING")
+    .select("BOOKING_DATE, QUANTITY_INT, INVOICE_ID, ADVANCE_INVOICE_ID, EMPLOYEE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const dateStr = tec?.DATE_VOUCHER || "";
+  const dateStr = tec?.BOOKING_DATE || "";
   const qty = tec?.QUANTITY_INT;
   const entityLabel = `Buchung vom ${dateStr || "—"}${qty != null ? ` (${qty} h)` : ""}`;
 
@@ -573,7 +573,7 @@ async function checkProjectStructure(supabase, { tenantId, id }) {
   const entityLabel = `Projektelement „${s?.NAME_SHORT || `#${id}`}"`;
 
   const [tec, children] = await Promise.all([
-    safeReferences(supabase, "TEC",               "ID", { STRUCTURE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "BOOKING",               "ID", { STRUCTURE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "PROJECT_STRUCTURE", "ID, NAME_SHORT", { FATHER_ID: id, TENANT_ID: tenantId }),
   ]);
 

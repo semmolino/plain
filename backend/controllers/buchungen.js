@@ -204,7 +204,7 @@ const rebook        = (req, res, supabase) => rebookHandler(req, res, supabase, 
 //   autoshowEnabled   tenant-weiter Schalter (NOTIFICATION_TYPE_CONFIG
 //                      fuer 'workstart_autoshow').
 //   hasBookingsToday  hat der eingeloggte Mitarbeiter heute schon eine
-//                      TEC-Zeile (Draft oder Confirmed)?
+//                      BOOKING-Zeile (Draft oder Confirmed)?
 // Wenn beides erfuellt ist: Pop-up automatisch oeffnen.
 async function getWorkstartStatus(req, res, supabase) {
   try {
@@ -234,11 +234,11 @@ async function getWorkstartStatus(req, res, supabase) {
     } catch (_) { /* Migration 0057 noch nicht da -> autoshowEnabled bleibt false */ }
 
     const { data: tecRows } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("ID")
       .eq("TENANT_ID", tenantId)
       .eq("EMPLOYEE_ID", employeeId)
-      .eq("DATE_VOUCHER", today)
+      .eq("BOOKING_DATE", today)
       .limit(1);
     const hasBookingsToday = Array.isArray(tecRows) && tecRows.length > 0;
 

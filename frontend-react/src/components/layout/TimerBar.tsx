@@ -208,7 +208,7 @@ function NextTaskModal({ onClose }: { onClose: () => void }) {
         EMPLOYEE_ID:         session.employeeId,
         PROJECT_ID:          session.projectId,
         STRUCTURE_ID:        session.structureId,
-        DATE_VOUCHER:        nowDateIso(),
+        BOOKING_DATE:        nowDateIso(),
         TIME_START:          new Date(session.blockStartIso).toTimeString().slice(0, 8),
         TIME_FINISH:         finishTime,
         QUANTITY_INT:        quantityFromSeconds(elapsed),
@@ -297,7 +297,7 @@ function FinishModal({ onClose }: { onClose: () => void }) {
         EMPLOYEE_ID:         session.employeeId,
         PROJECT_ID:          session.projectId,
         STRUCTURE_ID:        session.structureId,
-        DATE_VOUCHER:        nowDateIso(),
+        BOOKING_DATE:        nowDateIso(),
         TIME_START:          new Date(session.blockStartIso).toTimeString().slice(0, 8),
         TIME_FINISH:         finishTime,
         QUANTITY_INT:        quantityFromSeconds(elapsed),
@@ -747,7 +747,7 @@ export function TimerBar() {
   })
 
   // Workstart-Auto-Popup: nur wenn keine Session aktiv ist (Start-Button
-  // sichtbar). Wir holen Tenant-Schalter + ob heute schon TEC existiert in
+  // sichtbar). Wir holen Tenant-Schalter + ob heute schon BOOKING existiert in
   // einem Aufruf — pro eingeloggtem Mitarbeiter (employeeId im QueryKey,
   // damit Login-Wechsel auf demselben Browser nicht den Cache erbt).
   const currentEmployeeId = useAuthStore(s => s.employeeId)
@@ -792,7 +792,7 @@ export function TimerBar() {
         EMPLOYEE_ID:         session.employeeId,
         PROJECT_ID:          null,
         STRUCTURE_ID:        null,
-        DATE_VOUCHER:        today,
+        BOOKING_DATE:        today,
         TIME_START:          startStr,
         TIME_FINISH:         finStr,
         QUANTITY_INT:        qty,

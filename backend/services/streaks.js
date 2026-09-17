@@ -4,7 +4,7 @@
  * Buchungs-Streak Berechnung
  *
  * Definition: aufeinanderfolgende ARBEITSTAGE (Mo-Fr) mit mindestens
- * 1 TEC-Eintrag fuer den Mitarbeiter. Wochenenden brechen die Streak nicht.
+ * 1 BOOKING-Eintrag fuer den Mitarbeiter. Wochenenden brechen die Streak nicht.
  *
  * Aktuelle Streak endet entweder am heutigen Tag (falls heute schon eine
  * Buchung existiert) oder am letzten Arbeitstag davor mit Buchung. Wenn der
@@ -30,7 +30,7 @@ function isWeekend(d) {
 }
 
 /**
- * Liest alle TEC-Datums-Marker des Mitarbeiters in den letzten N Tagen
+ * Liest alle BOOKING-Datums-Marker des Mitarbeiters in den letzten N Tagen
  * und liefert ein Set mit "YYYY-MM-DD"-Strings.
  */
 async function fetchBookedDays(supabase, { tenantId, employeeId, lookbackDays }) {
@@ -39,18 +39,18 @@ async function fetchBookedDays(supabase, { tenantId, employeeId, lookbackDays })
   since.setUTCHours(0, 0, 0, 0);
 
   const { data, error } = await supabase
-    .from("TEC")
-    .select("DATE_VOUCHER")
+    .from("BOOKING")
+    .select("BOOKING_DATE")
     .eq("TENANT_ID",   tenantId)
     .eq("EMPLOYEE_ID", employeeId)
-    .gte("DATE_VOUCHER", since.toISOString().slice(0, 10));
+    .gte("BOOKING_DATE", since.toISOString().slice(0, 10));
   if (error) {
     if (/relation .* does not exist/i.test(error.message)) return new Set();
     throw { status: 500, message: error.message };
   }
   const set = new Set();
   for (const r of data || []) {
-    if (r.DATE_VOUCHER) set.add(String(r.DATE_VOUCHER).slice(0, 10));
+    if (r.BOOKING_DATE) set.add(String(r.BOOKING_DATE).slice(0, 10));
   }
   return set;
 }

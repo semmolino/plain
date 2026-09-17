@@ -284,7 +284,7 @@ describe("commit + rollback (project_fee)", () => {
   it("rollback blockiert, wenn am Projekt schon gebucht wurde", async () => {
     const supabase = seed();
     const { batchId } = await run("project_fee", await file(), supabase, { structureMode: "hoai" });
-    supabase._tables.TEC = [{ ID: 1, TENANT_ID: TENANT, PROJECT_ID: 1 }];
+    supabase._tables.BOOKING = [{ ID: 1, TENANT_ID: TENANT, PROJECT_ID: 1 }];
 
     await expect(rollback({ batchId, supabase, tenantId: TENANT }))
       .rejects.toMatchObject({ status: 409, message: expect.stringContaining("Buchung(en)") });
@@ -350,7 +350,7 @@ describe("commit + rollback (opening_cost)", () => {
     const res = await run("opening_cost", await file(), supabase);
 
     expect(res.inserted).toBe(1);
-    const tec = supabase._tables.TEC;
+    const tec = supabase._tables.BOOKING;
     expect(tec).toHaveLength(1);
     expect(tec[0]).toMatchObject({
       BOOKING_KIND: "LUMP_COST", STATUS: "CONFIRMED", STRUCTURE_ID: 41,
@@ -367,7 +367,7 @@ describe("commit + rollback (opening_cost)", () => {
     const res = await rollback({ batchId, supabase, tenantId: TENANT });
 
     expect(res).toMatchObject({ rolledBack: true, deleted: 1 });
-    expect(supabase._tables.TEC).toHaveLength(0);
+    expect(supabase._tables.BOOKING).toHaveLength(0);
     expect(supabase._tables.PROJECT_STRUCTURE[0].COSTS).toBe(0);
   });
 });

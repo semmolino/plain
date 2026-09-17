@@ -373,7 +373,7 @@ async function updateBt2FromTec(supabase, { invoiceId, contractId, projectId, te
   }
 
   const { data: tecRows, error: tecErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("ID, STRUCTURE_ID, HOURLY_RATE_TOTAL, ADVANCE_INVOICE_ID, INVOICE_ID")
     .in("STRUCTURE_ID", bt2Ids)
     .eq("INVOICE_ID", invoiceId)
@@ -409,7 +409,7 @@ async function findTecIdsToAutoAssign(supabase, { invoiceId, structureIds }) {
   if (ids.length === 0) return { toAssignIds: [] };
 
   const { data: tecRows, error } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("ID, ADVANCE_INVOICE_ID, INVOICE_ID")
     .in("STRUCTURE_ID", ids)
     .neq("STATUS", "DRAFT");
@@ -858,7 +858,7 @@ async function deleteInvoice(supabase, { id, tenantId }) {
   if (String(inv.STATUS_ID) === "2") throw { status: 400, message: "Gebuchte Rechnungen können nicht gelöscht werden" };
 
   {
-    const { error: tecErr } = await supabase.from("TEC").update({ INVOICE_ID: null }).eq("INVOICE_ID", id);
+    const { error: tecErr } = await supabase.from("BOOKING").update({ INVOICE_ID: null }).eq("INVOICE_ID", id);
     if (tecErr) {
       const msg = String(tecErr.message || "").toLowerCase();
       if (!msg.includes("does not exist") && !msg.includes("column")) throw new Error(tecErr.message);
@@ -1311,8 +1311,8 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
       .eq("INVOICE_ID", id);
   }
 
-  // Unlink TEC bookings so they can be re-invoiced
-  await supabase.from("TEC").update({ INVOICE_ID: null }).eq("INVOICE_ID", id);
+  // Unlink BOOKING bookings so they can be re-invoiced
+  await supabase.from("BOOKING").update({ INVOICE_ID: null }).eq("INVOICE_ID", id);
 
   return { id: newId };
 }

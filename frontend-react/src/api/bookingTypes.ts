@@ -82,7 +82,7 @@ export interface CreateSpecialBuchungPayload {
   BOOKING_KIND:        BookingKind
   PROJECT_ID:          number
   STRUCTURE_ID?:       number
-  DATE_VOUCHER:        string
+  BOOKING_DATE:        string
   BOOKING_TYPE_ID?:    number
   POSTING_DESCRIPTION: string
   // UNIT

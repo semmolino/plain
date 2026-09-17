@@ -604,7 +604,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
               ? 'Das Zielelement enthält bereits Werte und/oder Buchungen. Diese werden auf das verschobene Element übertragen. Möchten Sie fortfahren?'
               : 'Das Zielelement enthält bereits Werte. Diese werden auf das verschobene Element übertragen. Möchten Sie fortfahren?'
             if (!(await confirm({ title: 'Werte übertragen', message: confirmMsg, confirmLabel: 'Fortfahren', confirmClass: 'btn-primary' }))) return
-            // Transfer father's values/TEC to the first element being moved
+            // Transfer father's values/BOOKING to the first element being moved
             await transferFatherToChild(fatherId, ordered[0])
           }
         } catch (e) {

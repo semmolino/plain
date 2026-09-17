@@ -42,15 +42,15 @@ function welt(extraTec = []) {
     ],
     INVOICE: [{ ID: 500, TENANT_ID: TENANT, INVOICE_NUMBER: "R-2026-0042" }],
     ADVANCE_INVOICE: [],
-    TEC_REBOOKING: [],
-    TEC: [
+    BOOKING_REBOOKING: [],
+    BOOKING: [
       // offen, Mitarbeiter 5, 10 h zu 80 € Kostensatz und 90 € Stundensatz
-      { ID: 100, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-03",
+      { ID: 100, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, BOOKING_DATE: "2026-08-03",
         QUANTITY_INT: 10, QUANTITY_EXT: 10, COST_RATE: 80, COST_TOTAL: 800, HOURLY_RATE: 90, HOURLY_RATE_TOTAL: 900,
         POSTING_DESCRIPTION: "Grundrisse", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, ADVANCE_INVOICE_ID: null },
       // dieselbe Struktur, aber abgerechnet
-      { ID: 101, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-04",
+      { ID: 101, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, BOOKING_DATE: "2026-08-04",
         QUANTITY_INT: 4, QUANTITY_EXT: 4, COST_RATE: 80, COST_TOTAL: 320, HOURLY_RATE: 90, HOURLY_RATE_TOTAL: 360,
         POSTING_DESCRIPTION: "Details", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: 500, ADVANCE_INVOICE_ID: null },
@@ -70,7 +70,7 @@ describe("rebookBuchungen", () => {
     const res = await svc.rebookBuchungen(db, args({ reason: "Falsches Projekt gewählt" }));
 
     expect(res.rebooked).toBe(1);
-    const tec = db._tables.TEC.find(r => r.ID === 100);
+    const tec = db._tables.BOOKING.find(r => r.ID === 100);
     expect(tec.PROJECT_ID).toBe(2);
     expect(tec.STRUCTURE_ID).toBe(20);
     // 10 h × 110 € aus EMPLOYEE2PROJECT des Zielprojekts
@@ -81,7 +81,7 @@ describe("rebookBuchungen", () => {
     expect(tec.COST_RATE).toBe(80);
     // Menge, Datum, Person, Beschreibung bleiben unberuehrt.
     expect(tec.QUANTITY_INT).toBe(10);
-    expect(tec.DATE_VOUCHER).toBe("2026-08-03");
+    expect(tec.BOOKING_DATE).toBe("2026-08-03");
     expect(tec.POSTING_DESCRIPTION).toBe("Grundrisse");
   });
 
@@ -108,7 +108,7 @@ describe("rebookBuchungen", () => {
     expect(gesperrt.reason).toBe("billed");
     expect(gesperrt.message).toContain("R-2026-0042");
     // Die abgerechnete Zeile liegt unveraendert im alten Projekt.
-    const tec = db._tables.TEC.find(r => r.ID === 101);
+    const tec = db._tables.BOOKING.find(r => r.ID === 101);
     expect(tec.PROJECT_ID).toBe(1);
     expect(tec.STRUCTURE_ID).toBe(10);
   });
@@ -117,10 +117,10 @@ describe("rebookBuchungen", () => {
     const db = welt();
     await svc.rebookBuchungen(db, args({ ids: [100, 101], reason: "Fehlbuchung" }));
 
-    const log = db._tables.TEC_REBOOKING;
+    const log = db._tables.BOOKING_REBOOKING;
     expect(log).toHaveLength(1);
     expect(log[0]).toMatchObject({
-      TENANT_ID: TENANT, TEC_ID: 100,
+      TENANT_ID: TENANT, BOOKING_ID: 100,
       FROM_PROJECT_ID: 1, FROM_PROJECT_NAME: "P-26-001",
       FROM_STRUCTURE_ID: 10, FROM_STRUCTURE_NAME: "LP5: Ausführungsplanung",
       TO_PROJECT_ID: 2, TO_STRUCTURE_ID: 20,
@@ -135,8 +135,8 @@ describe("rebookBuchungen", () => {
 
     expect(vorschau.movedCount).toBe(1);
     expect(vorschau.rebooked).toBeUndefined();
-    expect(dbVorschau._tables.TEC.find(r => r.ID === 100).PROJECT_ID).toBe(1);
-    expect(dbVorschau._tables.TEC_REBOOKING).toHaveLength(0);
+    expect(dbVorschau._tables.BOOKING.find(r => r.ID === 100).PROJECT_ID).toBe(1);
+    expect(dbVorschau._tables.BOOKING_REBOOKING).toHaveLength(0);
 
     const dbLauf = welt();
     const lauf = await svc.rebookBuchungen(dbLauf, args({ ids: [100, 101] }));
@@ -147,7 +147,7 @@ describe("rebookBuchungen", () => {
 
   it("warnt, wenn sich der Stundensatz ändert oder im Ziel keiner hinterlegt ist", async () => {
     const db = welt([
-      { ID: 102, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, DATE_VOUCHER: "2026-08-05",
+      { ID: 102, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, BOOKING_DATE: "2026-08-05",
         QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, HOURLY_RATE: 85, HOURLY_RATE_TOTAL: 170,
         POSTING_DESCRIPTION: "Abstimmung", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, ADVANCE_INVOICE_ID: null },
@@ -158,7 +158,7 @@ describe("rebookBuchungen", () => {
     expect(codes).toContain("rate_changed");
     expect(codes).toContain("no_assignment");
     // Mitarbeiter 6 hat im Zielprojekt keinen Satz — der alte bleibt stehen.
-    const ohne = db._tables.TEC.find(r => r.ID === 102);
+    const ohne = db._tables.BOOKING.find(r => r.ID === 102);
     expect(ohne.HOURLY_RATE).toBe(85);
     expect(ohne.HOURLY_RATE_TOTAL).toBe(170);
     expect(ohne.STRUCTURE_ID).toBe(20);
@@ -166,15 +166,15 @@ describe("rebookBuchungen", () => {
 
   it("lässt Pauschalen ihren Preis und Entwürfe/Pausen liegen", async () => {
     const db = welt([
-      { ID: 103, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-06",
+      { ID: 103, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, BOOKING_DATE: "2026-08-06",
         QUANTITY_INT: 0, QUANTITY_EXT: 1, COST_RATE: 0, COST_TOTAL: 0, HOURLY_RATE: 2500, HOURLY_RATE_TOTAL: 2500,
         POSTING_DESCRIPTION: "Gutachten", STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_REVENUE", ENTRY_KIND: "WORK",
         INVOICE_ID: null, ADVANCE_INVOICE_ID: null },
-      { ID: 104, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-07",
+      { ID: 104, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 5, BOOKING_DATE: "2026-08-07",
         QUANTITY_INT: 3, QUANTITY_EXT: 3, COST_RATE: 80, COST_TOTAL: 240, HOURLY_RATE: 90, HOURLY_RATE_TOTAL: 270,
         POSTING_DESCRIPTION: "Entwurf", STATUS: "DRAFT", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, ADVANCE_INVOICE_ID: null },
-      { ID: 105, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: null, EMPLOYEE_ID: 5, DATE_VOUCHER: "2026-08-07",
+      { ID: 105, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: null, EMPLOYEE_ID: 5, BOOKING_DATE: "2026-08-07",
         QUANTITY_INT: 1, QUANTITY_EXT: 0, COST_RATE: 0, COST_TOTAL: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
         POSTING_DESCRIPTION: "Pause", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "BREAK",
         INVOICE_ID: null, ADVANCE_INVOICE_ID: null },
@@ -183,7 +183,7 @@ describe("rebookBuchungen", () => {
 
     expect(res.rebooked).toBe(1);
     // Pauschale: verschoben, Preis unveraendert (kein Stundensatz aus der Zuordnung).
-    const pauschale = db._tables.TEC.find(r => r.ID === 103);
+    const pauschale = db._tables.BOOKING.find(r => r.ID === 103);
     expect(pauschale.STRUCTURE_ID).toBe(20);
     expect(pauschale.HOURLY_RATE).toBe(2500);
     expect(pauschale.HOURLY_RATE_TOTAL).toBe(2500);
@@ -217,7 +217,7 @@ describe("rebookBuchungen", () => {
     // schlaegt fehl. Was schon verschoben ist, muss trotzdem in den Summen und
     // im Protokoll stehen — sonst zeigt die Struktur still den alten Stand.
     const db = welt([
-      { ID: 106, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, DATE_VOUCHER: "2026-08-08",
+      { ID: 106, TENANT_ID: TENANT, PROJECT_ID: 1, STRUCTURE_ID: 10, EMPLOYEE_ID: 6, BOOKING_DATE: "2026-08-08",
         QUANTITY_INT: 2, QUANTITY_EXT: 2, COST_RATE: 70, COST_TOTAL: 140, HOURLY_RATE: 85, HOURLY_RATE_TOTAL: 170,
         POSTING_DESCRIPTION: "Abstimmung", STATUS: "CONFIRMED", BOOKING_KIND: "WORK", ENTRY_KIND: "WORK",
         INVOICE_ID: null, ADVANCE_INVOICE_ID: null },
@@ -226,7 +226,7 @@ describe("rebookBuchungen", () => {
     let tecUpdates = 0;
     db.from = (table) => {
       const b = echtesFrom(table);
-      if (table !== "TEC") return b;
+      if (table !== "BOOKING") return b;
       const echtesUpdate = b.update;
       b.update = (payload) => {
         echtesUpdate(payload);
@@ -243,7 +243,7 @@ describe("rebookBuchungen", () => {
       .rejects.toMatchObject({ status: 500, message: expect.stringContaining("1 von 2") });
 
     // Die erste Zeile ist verschoben, protokolliert und in den Summen drin.
-    expect(db._tables.TEC_REBOOKING).toHaveLength(1);
+    expect(db._tables.BOOKING_REBOOKING).toHaveLength(1);
     expect(db._tables.PROJECT_STRUCTURE.find(s => s.ID === 20).COSTS).toBe(800);
     expect(db._tables.PROJECT_STRUCTURE.find(s => s.ID === 10).COSTS).toBe(460);
   });
@@ -253,6 +253,6 @@ describe("rebookBuchungen", () => {
     const res = await svc.rebookBuchungen(db, args({ targetProjectId: 1, targetStructureId: 10 }));
     expect(res.skipped[0].reason).toBe("unchanged");
     expect(res.rebooked).toBe(0);
-    expect(db._tables.TEC_REBOOKING).toHaveLength(0);
+    expect(db._tables.BOOKING_REBOOKING).toHaveLength(0);
   });
 });

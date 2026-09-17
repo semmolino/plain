@@ -13,7 +13,7 @@ const fmt2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 // Buchungsarten ohne Stundencharakter (Pauschalen/Stückleistungen).
 const SPECIAL_KINDS = new Set(["UNIT", "LUMP_COST", "LUMP_REVENUE"]);
 
-// Kostenbeitrag einer TEC-Zeile zur Struktur: Stunden = Menge × Satz (unverändert,
+// Kostenbeitrag einer BOOKING-Zeile zur Struktur: Stunden = Menge × Satz (unverändert,
 // auch korrekt bei ArbZG-Pausenabzug); Spezialarten tragen ihren COST_TOTAL direkt
 // (QUANTITY_INT ist dort bewusst 0, damit keine Stundensumme verfälscht wird).
 const tecCostContribution = (r) =>
@@ -53,7 +53,7 @@ async function recomputeStructure(supabase, structureId) {
   if (!structureId) return;
 
   const { data: tecRows, error: tecErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("QUANTITY_INT, COST_RATE, COST_TOTAL, HOURLY_RATE_TOTAL, BOOKING_KIND")
     .eq("STRUCTURE_ID", structureId)
     .neq("STATUS", "DRAFT");
@@ -110,12 +110,12 @@ async function createTimerDraft(supabase, { body, tenantId }) {
   const entryKind = b.ENTRY_KIND === 'BREAK' ? 'BREAK' : 'WORK';
 
   // STRUCTURE/PROJECT-Pflicht entfällt für Pausen-Blöcke
-  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER ||
+  if (!b.EMPLOYEE_ID || !b.BOOKING_DATE ||
       (entryKind === 'WORK' && (!b.STRUCTURE_ID || !b.PROJECT_ID))) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
 
-  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
+  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.BOOKING_DATE);
 
   // Das Projekt muss dem Mandanten des Aufrufers gehoeren. Frueher wurde die
   // TENANT_ID aus dem MITGESCHICKTEN Projekt abgeleitet — damit liess sich
@@ -135,7 +135,7 @@ async function createTimerDraft(supabase, { body, tenantId }) {
   let cpRate = 0;
   let spRate = 0;
   if (entryKind === 'WORK') {
-    const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
+    const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.BOOKING_DATE);
     cpRate = lookedUpRate !== null ? lookedUpRate : 0;
     spRate = preset?.HOURLY_RATE != null ? Number(preset.HOURLY_RATE) : 0;
   }
@@ -146,7 +146,7 @@ async function createTimerDraft(supabase, { body, tenantId }) {
     const r = await arbzg.validateBookingArbZG(supabase, {
       tenantId:    resolvedTenantId,
       employeeId:  Number(b.EMPLOYEE_ID),
-      dateVoucher: b.DATE_VOUCHER,
+      dateVoucher: b.BOOKING_DATE,
       timeStart:   b.TIME_START || null,
       timeFinish:  b.TIME_FINISH || null,
       quantityInt,
@@ -163,12 +163,12 @@ async function createTimerDraft(supabase, { body, tenantId }) {
     // Andere ArbZG-Fehler nicht block — Buchung darf trotzdem rein
   }
 
-  const { data: inserted, error: insErr } = await supabase.from("TEC").insert([{
+  const { data: inserted, error: insErr } = await supabase.from("BOOKING").insert([{
     TENANT_ID: resolvedTenantId,
     STATUS: "DRAFT",
     ENTRY_KIND: entryKind,
     EMPLOYEE_ID: b.EMPLOYEE_ID,
-    DATE_VOUCHER: b.DATE_VOUCHER,
+    BOOKING_DATE: b.BOOKING_DATE,
     TIME_START: b.TIME_START || null,
     TIME_FINISH: b.TIME_FINISH || null,
     QUANTITY_INT: quantityInt,
@@ -189,9 +189,9 @@ async function createTimerDraft(supabase, { body, tenantId }) {
     // Fallback: wenn ENTRY_KIND-Spalte (Migration 0051) noch nicht existiert,
     // retry ohne sie. Pausen sind dann nicht buchbar — aber WORK funktioniert.
     if (/ENTRY_KIND/i.test(insErr.message) && entryKind === 'WORK') {
-      const { data: retry, error: retryErr } = await supabase.from("TEC").insert([{
+      const { data: retry, error: retryErr } = await supabase.from("BOOKING").insert([{
         TENANT_ID: resolvedTenantId, STATUS: "DRAFT", EMPLOYEE_ID: b.EMPLOYEE_ID,
-        DATE_VOUCHER: b.DATE_VOUCHER, TIME_START: b.TIME_START || null,
+        BOOKING_DATE: b.BOOKING_DATE, TIME_START: b.TIME_START || null,
         TIME_FINISH: b.TIME_FINISH || null, QUANTITY_INT: quantityInt,
         COST_RATE: cpRate, COST_TOTAL: quantityInt * cpRate, QUANTITY_EXT: quantityExt,
         ROLE_ID: preset?.ROLE_ID ?? null, ROLE_ABBR: preset?.ROLE_ABBR ?? null,
@@ -211,10 +211,10 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
   if (!employeeId || !date) throw { status: 400, message: "employee_id und date sind erforderlich" };
 
   const { data, error } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select(`
       ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID,
-      DATE_VOUCHER, TIME_START, TIME_FINISH,
+      BOOKING_DATE, TIME_START, TIME_FINISH,
       QUANTITY_INT, COST_RATE, COST_TOTAL,
       QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION, STATUS,
@@ -222,7 +222,7 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
       STRUCTURE:STRUCTURE_ID(NAME_SHORT, NAME_LONG)
     `)
     .eq("EMPLOYEE_ID", employeeId)
-    .eq("DATE_VOUCHER", date)
+    .eq("BOOKING_DATE", date)
     .eq("STATUS", "DRAFT")
     .eq("TENANT_ID", tenantId)
     .order("TIME_START", { ascending: true });
@@ -242,8 +242,8 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
     throw new Error("confirmDrafts: tenantId ist erforderlich");
   }
   const { data: rows, error: fetchErr } = await supabase
-    .from("TEC")
-    .select("ID, TENANT_ID, EMPLOYEE_ID, DATE_VOUCHER, STRUCTURE_ID, STATUS, QUANTITY_INT, ENTRY_KIND")
+    .from("BOOKING")
+    .select("ID, TENANT_ID, EMPLOYEE_ID, BOOKING_DATE, STRUCTURE_ID, STATUS, QUANTITY_INT, ENTRY_KIND")
     .in("ID", ids)
     .eq("TENANT_ID", tenantId);
   if (fetchErr) throw fetchErr;
@@ -261,7 +261,7 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
   // Gruppiere Drafts pro (employee, date)
   const groups = new Map();
   for (const r of drafts) {
-    const key = `${r.EMPLOYEE_ID}|${r.DATE_VOUCHER}`;
+    const key = `${r.EMPLOYEE_ID}|${r.BOOKING_DATE}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(r);
   }
@@ -305,7 +305,7 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
             if (target) {
               const reducedH = Math.max(0, Number(target.QUANTITY_INT || 0) - missingMin / 60);
               const { error: autoErr } = await supabase
-                .from("TEC")
+                .from("BOOKING")
                 .update({
                   QUANTITY_INT:            reducedH,
                   PAUSE_AUTO_DEDUCTED_MIN: missingMin,
@@ -314,7 +314,7 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
                 .eq("ID", target.ID);
               // Spalten-Fallback: falls Migration 0051 noch nicht gelaufen
               if (autoErr && /PAUSE_AUTO_DEDUCTED_MIN|CONFIRMED_BY_EMPLOYEE_AT/i.test(autoErr.message)) {
-                await supabase.from("TEC").update({ QUANTITY_INT: reducedH }).eq("ID", target.ID);
+                await supabase.from("BOOKING").update({ QUANTITY_INT: reducedH }).eq("ID", target.ID);
               }
               auditEvents.push({
                 employeeId, dateVoucher, tecId: target.ID,
@@ -325,9 +325,9 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
           } else if (conf?.kind === 'BREAK_TAKEN_UNRECORDED') {
             // Mitarbeiter trägt zusätzliche Pause ein.
             const addMin = Number(conf.minutes || missingMin);
-            const { error: brErr } = await supabase.from("TEC").insert([{
+            const { error: brErr } = await supabase.from("BOOKING").insert([{
               TENANT_ID: resolvedTenant, STATUS: "CONFIRMED", ENTRY_KIND: 'BREAK',
-              EMPLOYEE_ID: employeeId, DATE_VOUCHER: dateVoucher,
+              EMPLOYEE_ID: employeeId, BOOKING_DATE: dateVoucher,
               TIME_START: null, TIME_FINISH: null,
               QUANTITY_INT: Math.round(addMin / 60 * 100) / 100,
               COST_RATE: 0, COST_TOTAL: 0, QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
@@ -359,14 +359,14 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
 
   // Tatsächlich bestätigen (inkl. evtl. reduzierter Stunden)
   const { error: updErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .update({ STATUS: "CONFIRMED", CONFIRMED_BY_EMPLOYEE_AT: new Date().toISOString() })
     .in("ID", draftIds);
   if (updErr) {
     // Fallback ohne CONFIRMED_BY_EMPLOYEE_AT
     if (/CONFIRMED_BY_EMPLOYEE_AT/i.test(updErr.message)) {
       const { error: retry } = await supabase
-        .from("TEC").update({ STATUS: "CONFIRMED" }).in("ID", draftIds);
+        .from("BOOKING").update({ STATUS: "CONFIRMED" }).in("ID", draftIds);
       if (retry) throw { status: 500, message: "Fehler beim Freigeben: " + retry.message };
     } else {
       throw { status: 500, message: "Fehler beim Freigeben: " + updErr.message };
@@ -376,7 +376,7 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
   // Audit-Events schreiben (BOOKING_CONFIRMED + alle vorher gesammelten)
   for (const r of drafts) {
     auditEvents.push({
-      employeeId: r.EMPLOYEE_ID, dateVoucher: r.DATE_VOUCHER, tecId: r.ID,
+      employeeId: r.EMPLOYEE_ID, dateVoucher: r.BOOKING_DATE, tecId: r.ID,
       eventType: 'BOOKING_CONFIRMED', severity: 'INFO',
       details: { entryKind: r.ENTRY_KIND ?? 'WORK', quantityInt: Number(r.QUANTITY_INT || 0) },
     });
@@ -416,11 +416,11 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
 }
 
 // Mandant UND Besitzer pruefen. Frueher filterte diese Funktion allein nach
-// der TEC-ID: jede gueltige Sitzung konnte damit Entwuerfe fremder Mandanten
+// der BOOKING-ID: jede gueltige Sitzung konnte damit Entwuerfe fremder Mandanten
 // und fremder Kollegen loeschen (Pentest 2026-08-06).
 async function deleteDraft(supabase, { id, tenantId, employeeId }) {
   const { data: row, error: fetchErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("ID, STATUS, EMPLOYEE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
@@ -433,14 +433,14 @@ async function deleteDraft(supabase, { id, tenantId, employeeId }) {
   }
 
   const { error } = await supabase
-    .from("TEC").delete().eq("ID", id).eq("TENANT_ID", tenantId);
+    .from("BOOKING").delete().eq("ID", id).eq("TENANT_ID", tenantId);
   if (error) throw error;
 }
 
 // Mandant UND Besitzer pruefen — siehe deleteDraft.
 async function patchDraftDescription(supabase, { id, description, time_start, time_finish, quantity_int, tenantId, employeeId }) {
   const { data: row, error: fetchErr } = await supabase
-    .from("TEC").select("ID, STATUS, EMPLOYEE_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+    .from("BOOKING").select("ID, STATUS, EMPLOYEE_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (fetchErr) throw fetchErr;
   if (!row) throw { status: 404, message: "Eintrag nicht gefunden" };
   if (row.STATUS !== "DRAFT") throw { status: 400, message: "Nur Entwürfe können bearbeitet werden" };
@@ -457,24 +457,24 @@ async function patchDraftDescription(supabase, { id, description, time_start, ti
   if (!Object.keys(updates).length) return;
 
   const { error } = await supabase
-    .from("TEC").update(updates).eq("ID", id).eq("TENANT_ID", tenantId);
+    .from("BOOKING").update(updates).eq("ID", id).eq("TENANT_ID", tenantId);
   if (error) throw error;
 }
 
-// Manuelle Pause-Buchung: kostenneutrale TEC-Zeile (ENTRY_KIND='BREAK'), nicht
+// Manuelle Pause-Buchung: kostenneutrale BOOKING-Zeile (ENTRY_KIND='BREAK'), nicht
 // projektbezogen im fachlichen Sinn — sie wird aber am aktuellen Projekt gehängt,
 // damit sie in der Projekt-Buchungsliste sichtbar/löschbar bleibt (PROJECT_ID
 // dient nur als Anzeige-Container, STRUCTURE_ID bleibt leer → keine Kosten).
 // Zählt für die ArbZG-Pausenpflicht (§ 4), NICHT als Arbeitszeit im Zeitkonto.
 async function createBreakBuchung(supabase, { body, tenantId }) {
   const b = body;
-  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || b.QUANTITY_INT == null) {
+  if (!b.EMPLOYEE_ID || !b.BOOKING_DATE || b.QUANTITY_INT == null) {
     throw { status: 400, message: "Mitarbeiter, Datum und Dauer sind erforderlich." };
   }
   const quantityInt = Number(b.QUANTITY_INT || 0);
   if (!(quantityInt > 0)) throw { status: 400, message: "Die Pausendauer muss größer als 0 sein." };
 
-  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
+  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.BOOKING_DATE);
 
   // Das Projekt muss dem Mandanten des Aufrufers gehoeren. Frueher wurde die
   // TENANT_ID aus dem MITGESCHICKTEN Projekt abgeleitet — damit liess sich
@@ -490,7 +490,7 @@ async function createBreakBuchung(supabase, { body, tenantId }) {
     STATUS:              "CONFIRMED",
     ENTRY_KIND:          "BREAK",
     EMPLOYEE_ID:         b.EMPLOYEE_ID,
-    DATE_VOUCHER:        b.DATE_VOUCHER,
+    BOOKING_DATE:        b.BOOKING_DATE,
     TIME_START:          b.TIME_START  || null,
     TIME_FINISH:         b.TIME_FINISH || null,
     QUANTITY_INT:        quantityInt,
@@ -500,7 +500,7 @@ async function createBreakBuchung(supabase, { body, tenantId }) {
     STRUCTURE_ID:        null,
   };
 
-  const { error: insErr } = await supabase.from("TEC").insert([insertRow]);
+  const { error: insErr } = await supabase.from("BOOKING").insert([insertRow]);
   if (insErr) {
     if (/ENTRY_KIND/i.test(insErr.message)) {
       throw { status: 400, message: "Pausen-Buchung nicht möglich: Migration 0051 (ENTRY_KIND) fehlt in dieser Umgebung." };
@@ -517,12 +517,12 @@ async function createBuchung(supabase, { body, tenantId }) {
     return createBreakBuchung(supabase, { body: b, tenantId });
   }
 
-  if (!b.EMPLOYEE_ID || !b.DATE_VOUCHER || b.QUANTITY_INT == null ||
+  if (!b.EMPLOYEE_ID || !b.BOOKING_DATE || b.QUANTITY_INT == null ||
       b.QUANTITY_EXT == null || b.HOURLY_RATE == null || !b.POSTING_DESCRIPTION || !b.PROJECT_ID) {
     throw { status: 400, message: "Pflichtfelder fehlen" };
   }
 
-  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.DATE_VOUCHER);
+  await checkMonthNotClosed(supabase, tenantId, b.EMPLOYEE_ID, b.BOOKING_DATE);
 
   if (b.STRUCTURE_ID) {
     const { data: childCheck } = await supabase
@@ -555,7 +555,7 @@ async function createBuchung(supabase, { body, tenantId }) {
   const roleNameLong = preset ? (preset.ROLE_NAME ?? null) : null;
 
   // Look up time-based CP rate; fall back to 0 if none defined yet
-  const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.DATE_VOUCHER);
+  const lookedUpRate = await lookupCpRate(supabase, resolvedTenantId, Number(b.EMPLOYEE_ID), b.BOOKING_DATE);
   const effectiveCpRate = lookedUpRate !== null ? lookedUpRate : 0;
 
   // ── ArbZG-Vorabprüfung (nur BLOCK hindert Insert) ──────────────────────
@@ -563,7 +563,7 @@ async function createBuchung(supabase, { body, tenantId }) {
     const r = await arbzg.validateBookingArbZG(supabase, {
       tenantId:    resolvedTenantId,
       employeeId:  Number(b.EMPLOYEE_ID),
-      dateVoucher: b.DATE_VOUCHER,
+      dateVoucher: b.BOOKING_DATE,
       timeStart:   b.TIME_START || null,
       timeFinish:  b.TIME_FINISH || null,
       quantityInt: Number(b.QUANTITY_INT || 0),
@@ -578,10 +578,10 @@ async function createBuchung(supabase, { body, tenantId }) {
     if (e?.details?.code === 'ARBZG_BLOCK') throw e;
   }
 
-  const { error: insertError } = await supabase.from("TEC").insert([{
+  const { error: insertError } = await supabase.from("BOOKING").insert([{
     TENANT_ID: resolvedTenantId,
     EMPLOYEE_ID: b.EMPLOYEE_ID,
-    DATE_VOUCHER: b.DATE_VOUCHER,
+    BOOKING_DATE: b.BOOKING_DATE,
     TIME_START: b.TIME_START || null,
     TIME_FINISH: b.TIME_FINISH || null,
     QUANTITY_INT: b.QUANTITY_INT,
@@ -598,7 +598,7 @@ async function createBuchung(supabase, { body, tenantId }) {
     STRUCTURE_ID: b.STRUCTURE_ID || null,
   }]);
 
-  if (insertError) throw { status: 500, message: "Fehler beim Speichern in TEC: " + insertError.message };
+  if (insertError) throw { status: 500, message: "Fehler beim Speichern in BOOKING: " + insertError.message };
 
   if (!b.STRUCTURE_ID) return;
 
@@ -616,10 +616,10 @@ async function createBuchung(supabase, { body, tenantId }) {
 
   if (Number(currentProjectElement.BILLING_TYPE_ID) === 2) {
     const { data: tecRows, error: tecError } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("HOURLY_RATE_TOTAL")
       .eq("STRUCTURE_ID", b.STRUCTURE_ID);
-    if (tecError) throw { status: 500, message: "Fehler beim Laden der TEC-Summe: " + tecError.message };
+    if (tecError) throw { status: 500, message: "Fehler beim Laden der BOOKING-Summe: " + tecError.message };
 
     const revenue = (tecRows || []).reduce((sum, r) => sum + (Number(r.HOURLY_RATE_TOTAL) || 0), 0);
     const extrasPercent = Number(currentProjectElement.EXTRAS_PERCENT) || 0;
@@ -644,8 +644,8 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   const b = body || {};
 
   const { data: existing, error: exErr } = await supabase
-    .from("TEC")
-    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, DATE_VOUCHER, QUANTITY_INT, QUANTITY_EXT, COST_RATE, HOURLY_RATE, BOOKING_KIND, ENTRY_KIND")
+    .from("BOOKING")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, BOOKING_DATE, QUANTITY_INT, QUANTITY_EXT, COST_RATE, HOURLY_RATE, BOOKING_KIND, ENTRY_KIND")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .single();
@@ -690,7 +690,7 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   // Effektivwerte für Berechnung (Total-Spalten) aus den existierenden Werten
   // zusammensetzen, wenn das jeweilige Feld nicht geliefert wurde.
   const updateTec = { TENANT_ID: resolvedTenantId };
-  if (b.DATE_VOUCHER       !== undefined) updateTec.DATE_VOUCHER       = b.DATE_VOUCHER || null;
+  if (b.BOOKING_DATE       !== undefined) updateTec.BOOKING_DATE       = b.BOOKING_DATE || null;
   if (b.TIME_START         !== undefined) updateTec.TIME_START         = toNullIfEmpty(b.TIME_START);
   if (b.TIME_FINISH        !== undefined) updateTec.TIME_FINISH        = toNullIfEmpty(b.TIME_FINISH);
   if (b.POSTING_DESCRIPTION !== undefined) updateTec.POSTING_DESCRIPTION = b.POSTING_DESCRIPTION ?? "";
@@ -739,7 +739,7 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   }
 
   const { data: updatedTec, error: updErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .update(updateTec)
     .eq("ID", id)
     .select("*")
@@ -775,13 +775,13 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 }
 
 // Mandantengebunden loeschen. Frueher filterte diese Funktion allein nach der
-// TEC-ID. Der vorgeschaltete dependencyCheck im Controller IST tenant-gescopt
+// BOOKING-ID. Der vorgeschaltete dependencyCheck im Controller IST tenant-gescopt
 // und fand fremde Zeilen deshalb gar nicht — er meldete "nicht blockiert",
 // und anschliessend loeschte diese Funktion die fremde Buchung und schrieb
 // COSTS/REVENUE des fremden Strukturknotens neu (Pentest 2026-08-06).
 async function deleteBuchung(supabase, { id, tenantId }) {
   const { data: existing, error: exErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
@@ -794,16 +794,16 @@ async function deleteBuchung(supabase, { id, tenantId }) {
   const structureId = existing.STRUCTURE_ID;
 
   const { error: delErr } = await supabase
-    .from("TEC").delete().eq("ID", id).eq("TENANT_ID", tenantId);
+    .from("BOOKING").delete().eq("ID", id).eq("TENANT_ID", tenantId);
   if (delErr) throw { status: 500, message: "Fehler beim Löschen: " + delErr.message };
 
   if (!structureId) return;
 
   const { data: tecRows, error: tecErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("QUANTITY_INT, COST_RATE, COST_TOTAL, HOURLY_RATE_TOTAL, BOOKING_KIND")
     .eq("STRUCTURE_ID", structureId);
-  if (tecErr) throw { status: 500, message: "Fehler beim Laden der TEC-Daten: " + tecErr.message };
+  if (tecErr) throw { status: 500, message: "Fehler beim Laden der BOOKING-Daten: " + tecErr.message };
 
   const newCosts = (tecRows || []).reduce((acc, r) => acc + tecCostContribution(r), 0);
   const revenueSum = (tecRows || []).reduce((acc, r) => acc + Number(r.HOURLY_RATE_TOTAL ?? 0), 0);
@@ -856,7 +856,7 @@ async function deleteBuchung(supabase, { id, tenantId }) {
 // wird in den Stundenauswertungen über BOOKING_KIND herausgefiltert.
 // ---------------------------------------------------------------------------
 
-// Berechnet die TEC-Felder einer Spezial-Buchung aus dem Request-Body.
+// Berechnet die BOOKING-Felder einer Spezial-Buchung aus dem Request-Body.
 // WICHTIG: QUANTITY_INT bleibt 0 — Spezial-Buchungen sind keine Stunden und
 // dürfen in keiner Stunden-/Reportsumme (HOURS_TOTAL = SUM(QUANTITY_INT))
 // mitgezählt werden. Geld steckt in COST_TOTAL/HOURLY_RATE_TOTAL (so leiten alle Reports
@@ -910,7 +910,7 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
   const b = body || {};
   const kind = String(b.BOOKING_KIND || "").trim();
   if (!SPECIAL_KINDS.has(kind)) throw { status: 400, message: "Ungültige Buchungsart." };
-  if (!b.PROJECT_ID || !b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
+  if (!b.PROJECT_ID || !b.BOOKING_DATE || !b.POSTING_DESCRIPTION) {
     throw { status: 400, message: "Projekt, Datum und Beschreibung sind erforderlich." };
   }
   if (BILLABLE_SPECIAL_KINDS.has(kind) && !b.STRUCTURE_ID) {
@@ -935,7 +935,7 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
     BOOKING_TYPE_ID:     b.BOOKING_TYPE_ID ? Number(b.BOOKING_TYPE_ID) : null,
     UNIT_LABEL:          unitLabel,
     EMPLOYEE_ID:         employeeId ?? (b.EMPLOYEE_ID ?? null),
-    DATE_VOUCHER:        b.DATE_VOUCHER,
+    BOOKING_DATE:        b.BOOKING_DATE,
     QUANTITY_INT:        qtyInt,
     COST_RATE:             cpRate,
     COST_TOTAL:              cpTot,
@@ -947,7 +947,7 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
     STRUCTURE_ID:        b.STRUCTURE_ID ? Number(b.STRUCTURE_ID) : null,
   };
 
-  const { data: inserted, error: insErr } = await supabase.from("TEC").insert([insertRow]).select("ID").single();
+  const { data: inserted, error: insErr } = await supabase.from("BOOKING").insert([insertRow]).select("ID").single();
   if (insErr) throw { status: 500, message: "Fehler beim Speichern der Buchung: " + insErr.message };
 
   if (insertRow.STRUCTURE_ID) {
@@ -971,7 +971,7 @@ async function createSpecialBuchung(supabase, { body, tenantId, employeeId }) {
 async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
   const b = body || {};
   const { data: existing, error: exErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("ID, STRUCTURE_ID, PROJECT_ID, TENANT_ID, BOOKING_KIND, ADVANCE_INVOICE_ID, INVOICE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
@@ -985,7 +985,7 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
   }
 
   const kind = existing.BOOKING_KIND; // Art wird beim Bearbeiten nicht gewechselt
-  if (!b.DATE_VOUCHER || !b.POSTING_DESCRIPTION) {
+  if (!b.BOOKING_DATE || !b.POSTING_DESCRIPTION) {
     throw { status: 400, message: "Datum und Beschreibung sind erforderlich." };
   }
   if (BILLABLE_SPECIAL_KINDS.has(kind) && !b.STRUCTURE_ID) {
@@ -1000,7 +1000,7 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
   const updateRow = {
     BOOKING_TYPE_ID:     b.BOOKING_TYPE_ID ? Number(b.BOOKING_TYPE_ID) : null,
     UNIT_LABEL:          unitLabel,
-    DATE_VOUCHER:        b.DATE_VOUCHER,
+    BOOKING_DATE:        b.BOOKING_DATE,
     QUANTITY_INT:        0,
     COST_RATE:             cpRate,
     COST_TOTAL:              cpTot,
@@ -1011,7 +1011,7 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
     STRUCTURE_ID:        newStructureId,
   };
 
-  const { error: updErr } = await supabase.from("TEC").update(updateRow).eq("ID", id).eq("TENANT_ID", tenantId);
+  const { error: updErr } = await supabase.from("BOOKING").update(updateRow).eq("ID", id).eq("TENANT_ID", tenantId);
   if (updErr) throw { status: 500, message: "Fehler beim Aktualisieren: " + updErr.message };
 
   const affected = new Set([existing.STRUCTURE_ID, newStructureId].filter((v) => v != null).map(Number));
@@ -1036,10 +1036,10 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
 
 async function listBuchungenByProject(supabase, { projectId, tenantId }) {
   const { data, error } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select(`
       ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID,
-      DATE_VOUCHER, TIME_START, TIME_FINISH,
+      BOOKING_DATE, TIME_START, TIME_FINISH,
       QUANTITY_INT, COST_RATE, COST_TOTAL,
       QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION,
@@ -1049,7 +1049,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
     `)
     .eq("TENANT_ID", tenantId)
     .eq("PROJECT_ID", projectId)
-    .order("DATE_VOUCHER", { ascending: true });
+    .order("BOOKING_DATE", { ascending: true });
 
   if (error) throw error;
   return data;
@@ -1174,9 +1174,9 @@ async function rebookBuchungen(supabase, {
   const target = await loadRebookTarget(supabase, { targetProjectId, targetStructureId, tenantId });
 
   const { data: rows, error: rowsErr } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select(`
-      ID, TENANT_ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID, DATE_VOUCHER,
+      ID, TENANT_ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID, BOOKING_DATE,
       QUANTITY_INT, QUANTITY_EXT, COST_RATE, COST_TOTAL, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION, STATUS, BOOKING_KIND, ENTRY_KIND,
       INVOICE_ID, ADVANCE_INVOICE_ID
@@ -1232,7 +1232,7 @@ async function rebookBuchungen(supabase, {
 
     const beschreibung = {
       ID:           Number(r.ID),
-      DATE_VOUCHER: r.DATE_VOUCHER,
+      BOOKING_DATE: r.BOOKING_DATE,
       QUANTITY_INT: Number(r.QUANTITY_INT ?? 0),
       POSTING_DESCRIPTION: r.POSTING_DESCRIPTION || "",
       FROM_PROJECT_ID:     r.PROJECT_ID != null ? Number(r.PROJECT_ID) : null,
@@ -1381,7 +1381,7 @@ async function rebookBuchungen(supabase, {
   let updateFehler = null;
   for (const { update, ids: gruppenIds } of gruppen.values()) {
     const { error: updErr } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .update(update)
       .in("ID", gruppenIds)
       .eq("TENANT_ID", tenantId);
@@ -1395,8 +1395,8 @@ async function rebookBuchungen(supabase, {
   // unvollstaendige — und der Fehler wird gemeldet, nicht geschluckt.
   const protokoll = verschoben.map(m => ({
     TENANT_ID:            tenantId,
-    TEC_ID:               m.ID,
-    DATE_VOUCHER:         m.DATE_VOUCHER || null,
+    BOOKING_ID:               m.ID,
+    BOOKING_DATE:         m.BOOKING_DATE || null,
     BOOKING_EMPLOYEE_ID:  m._row.EMPLOYEE_ID ?? null,
     QUANTITY_INT:         Number(m._row.QUANTITY_INT ?? 0),
     COST_TOTAL:               Number(m._row.COST_TOTAL ?? 0),
@@ -1417,7 +1417,7 @@ async function rebookBuchungen(supabase, {
   }));
   let logFehler = null;
   if (protokoll.length) {
-    const { error: logErr } = await supabase.from("TEC_REBOOKING").insert(protokoll);
+    const { error: logErr } = await supabase.from("BOOKING_REBOOKING").insert(protokoll);
     // Fehlt die Tabelle (Migration 0139 nicht eingespielt), ist das kein Grund,
     // die Umbuchung als gescheitert zu melden — sie hat stattgefunden.
     if (logErr && !/relation .* does not exist/i.test(logErr.message)) logFehler = logErr;

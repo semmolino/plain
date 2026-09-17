@@ -174,7 +174,7 @@ async function getBillingProposal(req, res, supabase) {
       });
     }
 
-    // Compute bookings sum from TEC entries already assigned to this invoice (no auto-assignment).
+    // Compute bookings sum from BOOKING entries already assigned to this invoice (no auto-assignment).
     if (bt2Ids.length > 0) {
       await svc.updateBt2FromTec(supabase, { invoiceId: id, contractId: inv.CONTRACT_ID, projectId: inv.PROJECT_ID, tenantId: req.tenantId });
     }
@@ -270,11 +270,11 @@ async function getTec(req, res, supabase) {
     if (bt2Ids.length === 0) return res.json({ data: [], hasBt2: false });
 
     const { data: tecRows, error: tecErr } = await supabase
-      .from("TEC")
-      .select("ID, DATE_VOUCHER, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, STRUCTURE_ID, ADVANCE_INVOICE_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
+      .from("BOOKING")
+      .select("ID, BOOKING_DATE, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, STRUCTURE_ID, ADVANCE_INVOICE_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
       .in("STRUCTURE_ID", bt2Ids)
       .neq("STATUS", "DRAFT")
-      .order("DATE_VOUCHER", { ascending: true });
+      .order("BOOKING_DATE", { ascending: true });
     if (tecErr) throw new Error(tecErr.message);
 
     const out = (tecRows || [])
@@ -284,7 +284,7 @@ async function getTec(req, res, supabase) {
       })
       .map((t) => ({
         ID: t.ID,
-        DATE_VOUCHER: t.DATE_VOUCHER,
+        BOOKING_DATE: t.BOOKING_DATE,
         EMPLOYEE_SHORT_NAME: t.EMPLOYEE?.ABBR ?? "",
         POSTING_DESCRIPTION: t.POSTING_DESCRIPTION ?? "",
         HOURLY_RATE_TOTAL: svc.round2(t.HOURLY_RATE_TOTAL),
@@ -331,7 +331,7 @@ async function postTec(req, res, supabase) {
 
     if (idsUnassign.length > 0) {
       const { error: unErr } = await supabase
-        .from("TEC")
+        .from("BOOKING")
         .update({ INVOICE_ID: null })
         .in("ID", idsUnassign)
         .eq("INVOICE_ID", id);
@@ -340,7 +340,7 @@ async function postTec(req, res, supabase) {
 
     if (idsAssign.length > 0) {
       const { data: rows, error: selErr } = await supabase
-        .from("TEC")
+        .from("BOOKING")
         .select("ID, ADVANCE_INVOICE_ID, INVOICE_ID")
         .in("ID", idsAssign);
       if (selErr) throw new Error(selErr.message);
@@ -350,7 +350,7 @@ async function postTec(req, res, supabase) {
         .map((t) => t.ID);
 
       if (allow.length > 0) {
-        const { error: asErr } = await supabase.from("TEC").update({ INVOICE_ID: id }).in("ID", allow);
+        const { error: asErr } = await supabase.from("BOOKING").update({ INVOICE_ID: id }).in("ID", allow);
         if (asErr) throw new Error(asErr.message);
       }
     }

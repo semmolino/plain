@@ -1559,9 +1559,9 @@ function EmployeeTimeAccount({ empId }: { empId: number }) {
   const patchBookingMut = useMutation({
     mutationFn: async () => {
       if (!editBooking) return
-      // PATCH-Semantik: nur die wirklich geänderten Felder schicken. DATE_VOUCHER,
+      // PATCH-Semantik: nur die wirklich geänderten Felder schicken. BOOKING_DATE,
       // COST_RATE etc. bleiben so unverändert in der DB. Ohne diesen Trimm
-      // setzte das Backend DATE_VOUCHER auf NULL → Buchung war aus der
+      // setzte das Backend BOOKING_DATE auf NULL → Buchung war aus der
       // Monatsübersicht verschwunden.
       const qty = Number(editQty.replace(',', '.')) || 0
       await updateBuchung(editBooking.id, {
@@ -2759,7 +2759,7 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
                         {emp.FIRST_NAME} {emp.LAST_NAME}
                       </span>}
                     </td>
-                    <td>{fmtDate(r.DATE_VOUCHER)}</td>
+                    <td>{fmtDate(r.BOOKING_DATE)}</td>
                     <td>{EVENT_LABEL[r.EVENT_TYPE] ?? r.EVENT_TYPE}</td>
                     <td>{sevBadge(r.SEVERITY)}</td>
                     <td style={{ fontSize: 12, color: 'var(--text-2)' }}>{fmtDetails(r.DETAILS || {})}</td>

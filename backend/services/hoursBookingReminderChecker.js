@@ -29,7 +29,7 @@ async function gamificationStreaksEnabled(supabase, tenantId) {
 const TYPE_KEY = "hours_booking_reminder";
 
 // Sendet pro Tenant einmal pro Tag eine Buchungs-Erinnerung an alle
-// aktiven Mitarbeiter, die heute noch keine TEC-Zeile haben — sobald die
+// aktiven Mitarbeiter, die heute noch keine BOOKING-Zeile haben — sobald die
 // in NOTIFICATION_SCHEDULE_CONFIG.SCHEDULE_TIME_OF_DAY hinterlegte Uhrzeit
 // erreicht ist.
 async function checkHoursBookingReminders(supabase) {
@@ -93,14 +93,14 @@ async function fireForTenant(supabase, cfg, todayStr) {
   if (empErr) throw empErr;
   if (!employees || employees.length === 0) return 0;
 
-  // Welche haben heute schon eine TEC-Zeile (DRAFT oder CONFIRMED)?
-  // Wir nehmen alle Zeilen mit DATE_VOUCHER = heute.
+  // Welche haben heute schon eine BOOKING-Zeile (DRAFT oder CONFIRMED)?
+  // Wir nehmen alle Zeilen mit BOOKING_DATE = heute.
   const empIds = employees.map(e => e.ID);
   const { data: tecToday } = await supabase
-    .from("TEC")
+    .from("BOOKING")
     .select("EMPLOYEE_ID")
     .eq("TENANT_ID", tenantId)
-    .eq("DATE_VOUCHER", todayStr)
+    .eq("BOOKING_DATE", todayStr)
     .in("EMPLOYEE_ID", empIds);
   const bookedIds = new Set((tecToday || []).map(r => Number(r.EMPLOYEE_ID)));
 

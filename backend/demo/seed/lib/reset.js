@@ -27,7 +27,7 @@ const MOVEMENT_TABLES = [
   "PROJECT_PROGRESS",
   "ARBZG_AUDIT",
   "EMPLOYEE_MONTH_CLOSE",
-  "TEC",
+  "BOOKING",
   // Abwesenheit (Migration 0086) — Namen defensiv; fehlende Tabellen werden übersprungen.
   "ABSENCE",
 ];

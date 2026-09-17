@@ -3,7 +3,7 @@
 /**
  * Recaps -- aggregierte Statistik fuer einen Zeitraum.
  *
- * Datenbasis: TEC (Buchungen), PROJECT (Projektmanager), INVOICE (Sender),
+ * Datenbasis: BOOKING (Buchungen), PROJECT (Projektmanager), INVOICE (Sender),
  * OFFER (Ersteller). Alles strikt persoenlich pro EMPLOYEE_ID.
  *
  *   period = 'week'  -> aktuelle Kalenderwoche (Mo-So)
@@ -48,12 +48,12 @@ function dateRangeFor(period, now = new Date()) {
 async function sumTecHours(supabase, { tenantId, employeeId, from, to }) {
   try {
     const { data, error } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("QUANTITY_INT")
       .eq("TENANT_ID",   tenantId)
       .eq("EMPLOYEE_ID", employeeId)
-      .gte("DATE_VOUCHER", from)
-      .lte("DATE_VOUCHER", to);
+      .gte("BOOKING_DATE", from)
+      .lte("BOOKING_DATE", to);
     if (error) return 0;
     let sum = 0;
     for (const r of data || []) {
@@ -67,12 +67,12 @@ async function sumTecHours(supabase, { tenantId, employeeId, from, to }) {
 async function countTec(supabase, { tenantId, employeeId, from, to }) {
   try {
     const { count, error } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("ID", { count: "exact", head: true })
       .eq("TENANT_ID",   tenantId)
       .eq("EMPLOYEE_ID", employeeId)
-      .gte("DATE_VOUCHER", from)
-      .lte("DATE_VOUCHER", to);
+      .gte("BOOKING_DATE", from)
+      .lte("BOOKING_DATE", to);
     if (error) return 0;
     return count || 0;
   } catch (_) { return 0; }
@@ -81,12 +81,12 @@ async function countTec(supabase, { tenantId, employeeId, from, to }) {
 async function distinctProjectsTouched(supabase, { tenantId, employeeId, from, to }) {
   try {
     const { data, error } = await supabase
-      .from("TEC")
+      .from("BOOKING")
       .select("PROJECT_ID")
       .eq("TENANT_ID",   tenantId)
       .eq("EMPLOYEE_ID", employeeId)
-      .gte("DATE_VOUCHER", from)
-      .lte("DATE_VOUCHER", to);
+      .gte("BOOKING_DATE", from)
+      .lte("BOOKING_DATE", to);
     if (error) return 0;
     const set = new Set();
     for (const r of data || []) if (r.PROJECT_ID != null) set.add(r.PROJECT_ID);

@@ -451,7 +451,7 @@ async function createRule(supabase, { tenantId, projectId, body, employeeId }) {
   if (error) throw { status: 500, message: error.message };
 
   // Sofort-Eval: wenn die neue Regel bereits ueberschritten ist, Notification
-  // jetzt feuern (nicht erst beim naechsten TEC-Change warten)
+  // jetzt feuern (nicht erst beim naechsten BOOKING-Change warten)
   try {
     await evaluateAfterTecChange(supabase, {
       tenantId,
