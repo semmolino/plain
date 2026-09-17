@@ -537,8 +537,8 @@
     },
     {
       "id": "07-abbr",
-      "status": "planned",
-      "note": "NAME_SHORT -> ABBR auf allen Traegern. Groesster Block.",
+      "status": "done",
+      "note": "NAME_SHORT -> ABBR auf allen Traegern. Groesster Block. ERLEDIGT 2026-09-17: Migrationen 0154/0155/0156, verify gruen, Rauchtest sauber, JSON des letzten Monatsabschlusses mitgezogen.",
       "tables": [
         {
           "from": "BOOKING_TYPE",
