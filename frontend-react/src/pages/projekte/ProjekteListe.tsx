@@ -31,7 +31,7 @@ import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
 import { rowClickHandler } from '@/utils/rowClick'
 
 const PAGE_SIZE = 25
-type SortKey = 'ABBR' | 'NAME_LONG' | 'STATUS_NAME' | 'MANAGER_NAME' | 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
+type SortKey = 'ABBR' | 'NAME' | 'STATUS_NAME' | 'MANAGER_NAME' | 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
 
 type OptColKey = 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
 
@@ -95,7 +95,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   // edit modal state
   const [editRow, setEditRow] = useState<Project | null>(null)
   const [editForm, setEditForm] = useState({
-    abbr: '', name_long: '',
+    abbr: '', name: '',
     project_status_id: '', project_type_id: '', project_manager_id: '',
     department_id: '',
     address_id: '', address_text: '',
@@ -146,7 +146,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   const processed = useMemo(() => {
     const q = search.trim().toLowerCase()
     let rows = q
-      ? projects.filter(p => `${p.ABBR} ${p.NAME_LONG} ${p.STATUS_NAME} ${p.MANAGER_NAME} ${p.TYPE_NAME ?? ''} ${p.DEPARTMENT_NAME ?? ''} ${p.ADDRESS_NAME ?? ''}`.toLowerCase().includes(q))
+      ? projects.filter(p => `${p.ABBR} ${p.NAME} ${p.STATUS_NAME} ${p.MANAGER_NAME} ${p.TYPE_NAME ?? ''} ${p.DEPARTMENT_NAME ?? ''} ${p.ADDRESS_NAME ?? ''}`.toLowerCase().includes(q))
       : projects
 
     if (activeFilters.status.size > 0) rows = rows.filter(p => p.STATUS_NAME && activeFilters.status.has(p.STATUS_NAME))
@@ -214,7 +214,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   function handleDelete(p: Project) {
     setConfirmState({
       title: 'Projekt löschen',
-      message: `Projekt „${p.ABBR} – ${p.NAME_LONG}" wirklich löschen?`,
+      message: `Projekt „${p.ABBR} – ${p.NAME}" wirklich löschen?`,
       onConfirm: () => deleteMut.mutate(p.ID),
     })
   }
@@ -303,7 +303,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   async function openEdit(p: Project) {
     setEditForm({
       abbr:         p.ABBR ?? '',
-      name_long:          p.NAME_LONG  ?? '',
+      name:          p.NAME  ?? '',
       project_status_id:  String(p.PROJECT_STATUS_ID  ?? ''),
       project_type_id:    String(p.PROJECT_TYPE_ID    ?? ''),
       project_manager_id: String(p.PROJECT_MANAGER_ID ?? ''),
@@ -332,7 +332,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
       id: editRow.ID,
       body: {
         abbr:         editForm.abbr,
-        name_long:          editForm.name_long,
+        name:          editForm.name,
         project_status_id:  editForm.project_status_id  ? Number(editForm.project_status_id)  : undefined,
         project_type_id:    editForm.project_type_id    ? Number(editForm.project_type_id)    : null,
         project_manager_id: editForm.project_manager_id ? Number(editForm.project_manager_id) : undefined,
@@ -493,7 +493,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
               <thead>
                 <tr>
                   <SortTh label="Kürzel"   column="ABBR"   {...sortProps} />
-                  <SortTh label="Name"     column="NAME_LONG"    {...sortProps} />
+                  <SortTh label="Name"     column="NAME"    {...sortProps} />
                   <SortTh label="Status"   column="STATUS_NAME"  {...sortProps} />
                   <SortTh label="Leitung"  column="MANAGER_NAME" {...sortProps} />
                   {visibleOptCols.map(c => (
@@ -541,7 +541,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                         : p.ABBR}
                       {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6 }}>intern</span>}
                     </td>
-                    <td><span className="cell-clamp" title={p.NAME_LONG}>{p.NAME_LONG}</span></td>
+                    <td><span className="cell-clamp" title={p.NAME}>{p.NAME}</span></td>
                     <td>
                       <InlineSelect
                         value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}
@@ -678,7 +678,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
             </div>
             <div className="form-group">
               <label>Name</label>
-              <input value={editForm.name_long} onChange={setE('name_long')} />
+              <input value={editForm.name} onChange={setE('name')} />
             </div>
             <div className="form-group">
               <label>Status</label>

@@ -71,7 +71,7 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
     if (projFilter.size)   result = result.filter(r => r.PROJECT_ID != null && projFilter.has(String(r.PROJECT_ID)))
     const q = search.trim().toLowerCase()
     if (q) result = result.filter(r =>
-      `${r.ABBR ?? ''} ${r.NAME_LONG} ${r.PROJECT_NAME ?? ''} ${r.STATUS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q))
+      `${r.ABBR ?? ''} ${r.NAME} ${r.PROJECT_NAME ?? ''} ${r.STATUS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q))
     return result
   }, [rows, search, statusFilter, catFilter, projFilter])
 
@@ -155,7 +155,7 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
               {filtered.map(r => (
                 <tr key={r.ID} style={{ cursor: 'pointer' }} onClick={() => navigate(`/nachtraege/${r.ID}`)}>
                   <td>{r.ABBR ?? `#${r.ID}`}</td>
-                  <td>{r.NAME_LONG}</td>
+                  <td>{r.NAME}</td>
                   {!projectId && <td>{r.PROJECT_NAME ?? '—'}</td>}
                   <td>{r.CATEGORY ? CATEGORY_LABELS[r.CATEGORY] : '—'}</td>
                   <td>
@@ -211,7 +211,7 @@ function NachtragCreateForm({ projectId, submitting, onSubmit }: {
     if (!nameLong.trim()) { setErr('Bitte einen Betreff angeben.'); return }
     onSubmit({
       project_id: Number(proj),
-      name_long:  nameLong.trim(),
+      name:  nameLong.trim(),
       category:   category ? (category as NachtragCategory) : null,
       claim_basis: claim.trim() || undefined,
     })
@@ -224,7 +224,7 @@ function NachtragCreateForm({ projectId, submitting, onSubmit }: {
         <label>Projekt *
           <select value={proj} onChange={e => setProj(e.target.value)}>
             <option value="">— wählen —</option>
-            {(projData?.data ?? []).map(p => <option key={p.ID} value={p.ID}>{p.ABBR} — {p.NAME_LONG}</option>)}
+            {(projData?.data ?? []).map(p => <option key={p.ID} value={p.ID}>{p.ABBR} — {p.NAME}</option>)}
           </select>
         </label>
       )}

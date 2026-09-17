@@ -65,7 +65,7 @@ async function fireForTenant(supabase, cfg) {
   // Projekte fuer diesen Tenant (gefiltert nach PROJECT_STATUS_IDS, falls gesetzt)
   let projectsQuery = supabase
     .from("PROJECT")
-    .select("ID, ABBR, NAME_LONG, PROJECT_MANAGER_ID, PROJECT_STATUS_ID")
+    .select("ID, ABBR, NAME, PROJECT_MANAGER_ID, PROJECT_STATUS_ID")
     .eq("TENANT_ID", tenantId);
   if (Array.isArray(cfg.PROJECT_STATUS_IDS) && cfg.PROJECT_STATUS_IDS.length > 0) {
     projectsQuery = projectsQuery.in("PROJECT_STATUS_ID", cfg.PROJECT_STATUS_IDS);
@@ -129,7 +129,7 @@ async function fireForTenant(supabase, cfg) {
 
 // Beschriftung eines Projekts fuer Titel und Fliesstext.
 function projektLabel(p) {
-  return `${p.ABBR || ""}${p.NAME_LONG ? " – " + p.NAME_LONG : ""}`.trim() || `#${p.ID}`;
+  return `${p.ABBR || ""}${p.NAME ? " – " + p.NAME : ""}`.trim() || `#${p.ID}`;
 }
 
 // Je Projekt eine eigene Nachricht (Vorgabe, bisheriges Verhalten).

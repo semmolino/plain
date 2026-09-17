@@ -2,7 +2,7 @@ import { apiClient, openPdfWithAuth } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface Country     { ID: string; NAME_LONG: string; ABBR: string }
+export interface Country     { ID: string; NAME: string; ABBR: string }
 export interface Salutation  { ID: number; SALUTATION: string }
 export interface Gender      { ID: number; GENDER: string }
 
@@ -105,7 +105,7 @@ export const addressTypeLabel = (id: number | null | undefined): string =>
 export interface AddressDetail {
   address:  Address
   contacts: Contact[]
-  projects: Array<{ ID: number; ABBR: string | null; NAME_LONG: string | null }>
+  projects: Array<{ ID: number; ABBR: string | null; NAME: string | null }>
   offers:   Array<{ ID: number; ABBR: string | null }>
   invoices: Array<{ ID: number; INVOICE_NUMBER: string | null }>
   partials: Array<{ ID: number; ADVANCE_INVOICE_NUMBER: string | null }>
@@ -214,8 +214,8 @@ export const createTyp = (abbr: string) =>
 export const createDepartment = (abbr: string) =>
   apiClient.post<{ data: unknown }>('/stammdaten/department', { abbr })
 
-export const createRolle = (abbr: string, name_long?: string, hourly_rate?: string) =>
-  apiClient.post<{ data: unknown }>('/stammdaten/rollen', { abbr, name_long, hourly_rate })
+export const createRolle = (abbr: string, name?: string, hourly_rate?: string) =>
+  apiClient.post<{ data: unknown }>('/stammdaten/rollen', { abbr, name, hourly_rate })
 
 export interface Currency { ID: number; ABBR: string }
 export interface VatRate  { ID: number; VAT: string; VAT_PERCENT: number }
@@ -235,7 +235,7 @@ export const putDefault = (key: string, value: string | null) =>
 // ── Stammdaten lists + delete ─────────────────────────────────────────────────
 
 export interface StammdatenItem { ID: number; ABBR: string }
-export interface Rolle { ID: number; ABBR: string; NAME_LONG: string | null; HOURLY_RATE: number | null }
+export interface Rolle { ID: number; ABBR: string; NAME: string | null; HOURLY_RATE: number | null }
 
 export const fetchDepartments = () =>
   apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/departments')
@@ -255,7 +255,7 @@ export const fetchRollen = () =>
   apiClient.get<{ data: Rolle[] }>('/stammdaten/rollen')
 export const deleteRolle = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/rolle/${id}`)
-export const updateRolle = (id: number, body: { abbr: string; name_long?: string; hourly_rate?: string | number | null }) =>
+export const updateRolle = (id: number, body: { abbr: string; name?: string; hourly_rate?: string | number | null }) =>
   apiClient.patch<{ data: Rolle }>(`/stammdaten/rolle/${id}`, body)
 
 export const deleteAddress = (id: number) =>
@@ -376,7 +376,7 @@ export interface LphBlock {
 export interface LphBlockPhase {
   ID:         number
   ABBR: string
-  NAME_LONG:  string | null
+  NAME:  string | null
   BLOCK_ID:   number | null
 }
 

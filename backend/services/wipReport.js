@@ -211,7 +211,7 @@ function stockChange(totalsNow, totalsBefore, method) {
 // ── Datenbeschaffung ─────────────────────────────────────────────────────────
 
 const SELECT_COLS = [
-  "PROJECT_ID", "ABBR", "NAME_LONG",
+  "PROJECT_ID", "ABBR", "NAME",
   "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
   "PROJECT_TYPE_ID", "PROJECT_TYPE_NAME_SHORT",
   "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
@@ -368,7 +368,7 @@ async function evaluateAsOf(supabase, tenantId, asOf, valuation, withDetails) {
     rows.push({
       PROJECT_ID:                r.PROJECT_ID,
       ABBR:                r.ABBR ?? null,
-      NAME_LONG:                 r.NAME_LONG ?? null,
+      NAME:                 r.NAME ?? null,
       PROJECT_STATUS_ID:         r.PROJECT_STATUS_ID ?? null,
       PROJECT_STATUS_NAME_SHORT: r.PROJECT_STATUS_NAME_SHORT ?? null,
       PROJECT_TYPE_ID:           r.PROJECT_TYPE_ID ?? null,
@@ -541,7 +541,7 @@ async function saveClosing(supabase, tenantId, opts = {}) {
     CLOSING_ID:           closingId,
     PROJECT_ID:           r.PROJECT_ID,
     ABBR:           r.ABBR,
-    NAME_LONG:            r.NAME_LONG,
+    NAME:            r.NAME,
     PROJECT_STATUS_NAME:  r.PROJECT_STATUS_NAME_SHORT,
     PROJECT_MANAGER:      r.PROJECT_MANAGER_DISPLAY,
     ORDER_VALUE_NET:      r.ORDER_VALUE_NET,

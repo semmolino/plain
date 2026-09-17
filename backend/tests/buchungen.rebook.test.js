@@ -26,16 +26,16 @@ const TENANT = 7;
 function welt(extraTec = []) {
   return makeFakeSupabase({
     PROJECT: [
-      { ID: 1, TENANT_ID: TENANT, ABBR: "P-26-001", NAME_LONG: "Falsches Projekt" },
-      { ID: 2, TENANT_ID: TENANT, ABBR: "P-26-002", NAME_LONG: "Richtiges Projekt" },
-      { ID: 9, TENANT_ID: 99,     ABBR: "FREMD",    NAME_LONG: "Anderer Mandant" },
+      { ID: 1, TENANT_ID: TENANT, ABBR: "P-26-001", NAME: "Falsches Projekt" },
+      { ID: 2, TENANT_ID: TENANT, ABBR: "P-26-002", NAME: "Richtiges Projekt" },
+      { ID: 9, TENANT_ID: 99,     ABBR: "FREMD",    NAME: "Anderer Mandant" },
     ],
     PROJECT_STRUCTURE: [
-      { ID: 10, TENANT_ID: TENANT, PROJECT_ID: 1, FATHER_ID: null, ABBR: "LP5", NAME_LONG: "Ausführungsplanung", BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
-      { ID: 20, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: null, ABBR: "LP3", NAME_LONG: "Entwurfsplanung",   BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
+      { ID: 10, TENANT_ID: TENANT, PROJECT_ID: 1, FATHER_ID: null, ABBR: "LP5", NAME: "Ausführungsplanung", BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
+      { ID: 20, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: null, ABBR: "LP3", NAME: "Entwurfsplanung",   BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
       // Knoten mit Kind: kein Blatt, also kein gueltiges Ziel.
-      { ID: 30, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: null, ABBR: "LP4", NAME_LONG: "Genehmigung", BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
-      { ID: 31, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: 30,   ABBR: "LP4.1", NAME_LONG: null, BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
+      { ID: 30, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: null, ABBR: "LP4", NAME: "Genehmigung", BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
+      { ID: 31, TENANT_ID: TENANT, PROJECT_ID: 2, FATHER_ID: 30,   ABBR: "LP4.1", NAME: null, BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0, COSTS: 0, REVENUE: 0 },
     ],
     EMPLOYEE2PROJECT: [
       { ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, PROJECT_ID: 2, ROLE_ID: 3, ROLE_ABBR: "PL", ROLE_NAME: "Projektleitung", HOURLY_RATE: 110 },

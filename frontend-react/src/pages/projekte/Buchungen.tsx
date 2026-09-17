@@ -457,7 +457,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   }
 
   const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
+  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME].filter(Boolean).join(' · ') || null) : null)
 
   return (
     <div>
@@ -466,7 +466,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
       {pid !== null && currentProject && (
         <div className="proj-jump-bar">
           <span className="proj-jump-label">{currentProject.ABBR}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
@@ -928,7 +928,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
     setBookingTypeId(id)
     const t = types.find(x => String(x.ID) === id)
     if (!t) return
-    setDescription(t.NAME_LONG || t.ABBR)
+    setDescription(t.NAME || t.ABBR)
     if (isUnit) {
       setUnitLabel(t.UNIT_LABEL || '')
       if (t.DEFAULT_SP_RATE != null) setSpRate(String(t.DEFAULT_SP_RATE))
@@ -992,7 +992,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
             <option value="">— Freitext (ohne Katalog) —</option>
             {types.map(t => (
               <option key={t.ID} value={t.ID}>
-                {t.ABBR}{t.NAME_LONG ? ` – ${t.NAME_LONG}` : ''}{t.SCOPE === 'project' ? ' (Projekt)' : ''}
+                {t.ABBR}{t.NAME ? ` – ${t.NAME}` : ''}{t.SCOPE === 'project' ? ' (Projekt)' : ''}
               </option>
             ))}
           </select>

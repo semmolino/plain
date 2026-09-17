@@ -10,7 +10,7 @@ export interface OfferStatus {
 export interface Offer {
   ID:              number
   ABBR:      string | null
-  NAME_LONG:       string
+  NAME:       string
   EMPLOYEE_ID:     number | null
   PROBABILITY:     number | null
   OFFER_TEXT_1:    string | null
@@ -59,7 +59,7 @@ export interface ConvertOfferPayload {
 export interface OfferListItem {
   ID:              number
   ABBR:      string | null
-  NAME_LONG:       string
+  NAME:       string
   PROBABILITY:     number | null
   CREATED_AT:      string | null
   OFFER_DATE:      string | null
@@ -77,7 +77,7 @@ export interface OfferListItem {
 export interface OfferStructureNode {
   ID:              number
   ABBR:      string | null
-  NAME_LONG:       string | null
+  NAME:       string | null
   OFFER_ID:        number
   REVENUE_BASIS:   number | null
   REVENUE:         number
@@ -111,7 +111,7 @@ export interface OfferStructureDraftRow {
   tmp_key:         string
   father_tmp_key:  string
   ABBR:      string
-  NAME_LONG:       string
+  NAME:       string
   BILLING_TYPE_ID: string
   EXTRAS_PERCENT:  string
   REVENUE:         string
@@ -123,7 +123,7 @@ export interface OfferStructureDraftRow {
 }
 
 export interface CreateOfferPayload {
-  name_long:        string
+  name:        string
   company_id:       string | number
   offer_status_id:  string | number
   employee_id:      string | number
@@ -138,7 +138,7 @@ export interface CreateOfferPayload {
 }
 
 export interface UpdateOfferPayload {
-  name_long?:        string
+  name?:        string
   company_id?:       string | number
   offer_status_id?:  string | number
   employee_id?:      string | number
@@ -156,7 +156,7 @@ export interface UpdateOfferPayload {
 
 export interface AddStructureNodePayload {
   abbr?:       string
-  name_long?:        string
+  name?:        string
   billing_type_id:   string | number
   extras_percent?:   string | number
   revenue?:          string | number
@@ -170,7 +170,7 @@ export interface AddStructureNodePayload {
 
 export interface UpdateStructureNodePayload {
   abbr?:       string
-  name_long?:        string
+  name?:        string
   billing_type_id?:  string | number
   extras_percent?:   string | number
   revenue?:          string | number

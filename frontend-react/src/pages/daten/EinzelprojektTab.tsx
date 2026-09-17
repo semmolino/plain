@@ -320,13 +320,13 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
 
   // Recents: zuletzt im Projekt-Report analysierte Projekte
   const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
+  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME].filter(Boolean).join(' · ') || null) : null)
 
   // Sync project input display when pid or projects change
   useEffect(() => {
     if (pid && projects.length > 0) {
       const p = projects.find(proj => proj.ID === pid)
-      if (p) setProjectInput(p.ABBR + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+      if (p) setProjectInput(p.ABBR + (p.NAME ? ` – ${p.NAME}` : ''))
     } else if (!pid) {
       setProjectInput('')
     }
@@ -340,7 +340,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
         setProjectDropdownOpen(false)
         if (pid) {
           const p = projects.find(proj => proj.ID === pid)
-          if (p) setProjectInput(p.ABBR + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+          if (p) setProjectInput(p.ABBR + (p.NAME ? ` – ${p.NAME}` : ''))
         }
       }
     }
@@ -354,7 +354,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
     if (!sq) return projects
     return projects.filter(p =>
       p.ABBR.toLowerCase().includes(sq) ||
-      (p.NAME_LONG?.toLowerCase().includes(sq) ?? false)
+      (p.NAME?.toLowerCase().includes(sq) ?? false)
     )
   }, [projects, projectInput, projectDropdownOpen])
   const loading   = headerLoading || structLoading
@@ -370,7 +370,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
       .map(s => ({
         ...s,
         ancestorPath: buildAncestorPath(s.PARENT_STRUCTURE_ID, byId),
-        displayLabel: s.NAME_LONG ? `${s.ABBR}: ${s.NAME_LONG}` : s.ABBR,
+        displayLabel: s.NAME ? `${s.ABBR}: ${s.NAME}` : s.ABBR,
       }))
   }, [structure, byId])
 
@@ -380,7 +380,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
     return leafRows.filter(s =>
       s.ancestorPath.toLowerCase().includes(q) ||
       s.ABBR.toLowerCase().includes(q) ||
-      (s.NAME_LONG ?? '').toLowerCase().includes(q),
+      (s.NAME ?? '').toLowerCase().includes(q),
     )
   }, [leafRows, search])
 
@@ -420,7 +420,7 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
         onSelect={(e) => {
           setPid(e.ENTITY_ID)
           const p = projects.find(proj => proj.ID === e.ENTITY_ID)
-          setProjectInput(p ? `${p.ABBR} – ${p.NAME_LONG ?? ''}` : '')
+          setProjectInput(p ? `${p.ABBR} – ${p.NAME ?? ''}` : '')
         }}
       />
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -443,12 +443,12 @@ export function EinzelprojektTab({ initialProjectId }: { initialProjectId?: numb
                   <div key={p.ID} className="project-ac-option"
                     onMouseDown={e => {
                       e.preventDefault()
-                      setProjectInput(p.ABBR + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''))
+                      setProjectInput(p.ABBR + (p.NAME ? ` – ${p.NAME}` : ''))
                       setProjectDropdownOpen(false)
                       setPid(p.ID)
                     }}>
                     <span className="project-ac-short">{p.ABBR}</span>
-                    {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
+                    {p.NAME && <span className="project-ac-long">{p.NAME}</span>}
                   </div>
                 ))}
               </div>

@@ -21,8 +21,8 @@ const row = (...cells) => { const r = [...cells]; while (r.length < HEAD.length)
 
 const seed = (extra = {}) => makeFakeSupabase({
   PROJECT: [
-    { ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME_LONG: "Projekt Eins", ADDRESS_ID: 11, CONTACT_ID: 21 },
-    { ID: 2, TENANT_ID: TENANT, ABBR: "P-2", NAME_LONG: "Projekt Zwei" },
+    { ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME: "Projekt Eins", ADDRESS_ID: 11, CONTACT_ID: 21 },
+    { ID: 2, TENANT_ID: TENANT, ABBR: "P-2", NAME: "Projekt Zwei" },
   ],
   PROJECT_STRUCTURE: [],
   CONTRACT: [],

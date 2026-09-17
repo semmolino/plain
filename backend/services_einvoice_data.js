@@ -294,7 +294,7 @@ ${basis}`;
       const structIds = invStructures.map(r => r.STRUCTURE_ID);
       const { data: projStructures } = await supabase
         .from('PROJECT_STRUCTURE')
-        .select('ID, ABBR, NAME_LONG, BILLING_TYPE_ID')
+        .select('ID, ABBR, NAME, BILLING_TYPE_ID')
         .in('ID', structIds);
 
       const nameMap = Object.fromEntries((projStructures ?? []).map(r => [r.ID, r]));
@@ -331,7 +331,7 @@ ${basis}`;
         const amountNet    = fmt2(row.AMOUNT_NET ?? 0);
         const amountExtras = fmt2(row.AMOUNT_EXTRAS_NET ?? 0);
         const lineTotal    = fmt2(amountNet + amountExtras);
-        const desc = [ps.ABBR, ps.NAME_LONG].filter(Boolean).join(' – ') || `Position ${idx + 1}`;
+        const desc = [ps.ABBR, ps.NAME].filter(Boolean).join(' – ') || `Position ${idx + 1}`;
 
         // Default Pauschal-Line
         let unitCode  = 'LS';

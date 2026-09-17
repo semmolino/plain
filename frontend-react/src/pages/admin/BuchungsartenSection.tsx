@@ -24,7 +24,7 @@ const KINDS: BookingKind[] = ['UNIT', 'LUMP_COST', 'LUMP_REVENUE']
 interface FormState {
   kind:            BookingKind
   abbr:      string
-  name_long:       string
+  name:       string
   unit_label:      string
   unit_code:       string
   default_sp_rate: string
@@ -33,14 +33,14 @@ interface FormState {
 }
 
 function emptyForm(): FormState {
-  return { kind: 'UNIT', abbr: '', name_long: '', unit_label: '', unit_code: '', default_sp_rate: '', default_cp_rate: '', active: true }
+  return { kind: 'UNIT', abbr: '', name: '', unit_label: '', unit_code: '', default_sp_rate: '', default_cp_rate: '', active: true }
 }
 
 function toForm(t: BookingType): FormState {
   return {
     kind:            t.KIND,
     abbr:      t.ABBR,
-    name_long:       t.NAME_LONG ?? '',
+    name:       t.NAME ?? '',
     unit_label:      t.UNIT_LABEL ?? '',
     unit_code:       t.UNIT_CODE ?? '',
     default_sp_rate: t.DEFAULT_SP_RATE != null ? String(t.DEFAULT_SP_RATE) : '',
@@ -108,7 +108,7 @@ export function BuchungsartenSection() {
               <tr key={t.ID} style={{ borderBottom: '1px solid var(--border-3)', opacity: t.ACTIVE === 0 ? 0.5 : 1 }}>
                 <td style={{ padding: '4px 6px 4px 0' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
                 <td style={{ padding: '4px 6px 4px 0', fontWeight: 600 }}>{t.ABBR}</td>
-                <td style={{ padding: '4px 6px 4px 0', color: 'var(--text-3)' }}>{t.NAME_LONG || '—'}</td>
+                <td style={{ padding: '4px 6px 4px 0', color: 'var(--text-3)' }}>{t.NAME || '—'}</td>
                 <td style={{ padding: '4px 6px 4px 0' }}>{t.KIND === 'UNIT' ? (t.UNIT_LABEL || '—') : '—'}</td>
                 <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(t.DEFAULT_SP_RATE)}</td>
                 <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(t.DEFAULT_CP_RATE)}</td>
@@ -165,7 +165,7 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
       const payload: BookingTypePayload = {
         kind:            form.kind,
         abbr:      form.abbr.trim(),
-        name_long:       form.name_long.trim() || null,
+        name:       form.name.trim() || null,
         scope:           'global',
         active:          form.active ? 1 : 0,
         unit_label:      isUnit ? (form.unit_label.trim() || null) : null,
@@ -199,7 +199,7 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
 
         <div className="form-row">
           <FormField label="Kürzel*"      id="bt-short" value={form.abbr} onChange={e => set('abbr')(e.target.value)} required />
-          <FormField label="Bezeichnung"  id="bt-long"  value={form.name_long}  onChange={e => set('name_long')(e.target.value)} />
+          <FormField label="Bezeichnung"  id="bt-long"  value={form.name}  onChange={e => set('name')(e.target.value)} />
         </div>
 
         {isUnit ? (

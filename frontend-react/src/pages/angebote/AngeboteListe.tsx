@@ -36,7 +36,7 @@ const TODAY = new Date().toISOString().slice(0, 10)
 // Sortierbare Spalten. Angebotssumme und Wahrscheinlichkeit sind Zahlen und
 // muessen als solche verglichen werden — die Datumsspalten liegen im
 // ISO-Format vor und sortieren als Text richtig.
-type SortKey = 'ABBR' | 'NAME_LONG' | 'STATUS_NAME' | 'EMPLOYEE_NAME' | 'ADDRESS_NAME'
+type SortKey = 'ABBR' | 'NAME' | 'STATUS_NAME' | 'EMPLOYEE_NAME' | 'ADDRESS_NAME'
              | 'TOTAL_AMOUNT' | 'PROBABILITY' | 'OFFER_DATE' | 'VALID_UNTIL'
 
 const NUMERIC_KEYS: readonly SortKey[] = ['TOTAL_AMOUNT', 'PROBABILITY']
@@ -142,7 +142,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
     if (activeEmployee.size > 0) result = result.filter(r => r.EMPLOYEE_NAME && activeEmployee.has(r.EMPLOYEE_NAME))
     const q = search.trim().toLowerCase()
     if (q) result = result.filter(r =>
-      `${r.ABBR} ${r.NAME_LONG} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
+      `${r.ABBR} ${r.NAME} ${r.STATUS_NAME ?? ''} ${r.ADDRESS_NAME ?? ''} ${r.EMPLOYEE_NAME ?? ''}`.toLowerCase().includes(q)
     )
     return [...result].sort((a, b) => compareRows(a, b, sortKey, sortDir, NUMERIC_KEYS))
   }, [rows, search, onlyOpen, rejectedId, activeStatus, activeEmployee, sortKey, sortDir])
@@ -164,7 +164,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
   function requestDelete(r: OfferListItem) {
     setConfirmState({
       title: 'Angebot löschen',
-      message: `Angebot „${r.ABBR ?? r.NAME_LONG}" wirklich löschen?`,
+      message: `Angebot „${r.ABBR ?? r.NAME}" wirklich löschen?`,
       confirmLabel: 'Löschen',
       onConfirm: () => deleteMut.mutate(r.ID),
     })
@@ -173,7 +173,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
   function requestReject(r: OfferListItem) {
     setConfirmState({
       title: 'Als abgelehnt markieren',
-      message: `Angebot „${r.ABBR ?? r.NAME_LONG}" als abgelehnt markieren?`,
+      message: `Angebot „${r.ABBR ?? r.NAME}" als abgelehnt markieren?`,
       confirmLabel: 'Abgelehnt markieren',
       onConfirm: () => rejectMut.mutate(r.ID),
     })
@@ -241,7 +241,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
             <thead>
               <tr>
                 <SortTh label="Nr."             column="ABBR"    {...sortProps} />
-                <SortTh label="Titel"           column="NAME_LONG"     {...sortProps} />
+                <SortTh label="Titel"           column="NAME"     {...sortProps} />
                 <SortTh label="Status"          column="STATUS_NAME"   {...sortProps} />
                 <SortTh label="Ansprechpartner" column="EMPLOYEE_NAME" {...sortProps} />
                 <SortTh label="Adresse"         column="ADDRESS_NAME"  {...sortProps} />
@@ -258,7 +258,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                   key={r.ID}
                   className={onSelectOffer ? 'clickable-row' : undefined}
                   onClick={onSelectOffer ? rowClickHandler(() => {
-                    void trackRecent('offer', r.ID, [r.ABBR, r.NAME_LONG].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
+                    void trackRecent('offer', r.ID, [r.ABBR, r.NAME].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
                     onSelectOffer(r.ID, r.ABBR ?? '')
                   }) : undefined}
                 >
@@ -268,7 +268,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                   <td className="cell-nowrap">
                     {onSelectOffer
                       ? <button className="link-btn" onClick={() => {
-                          void trackRecent('offer', r.ID, [r.ABBR, r.NAME_LONG].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
+                          void trackRecent('offer', r.ID, [r.ABBR, r.NAME].filter(Boolean).join(' · ') || `#${r.ID}`).catch(() => {})
                           onSelectOffer(r.ID, r.ABBR ?? '')
                         }}>{r.ABBR ?? '—'}</button>
                       : (r.ABBR ?? '—')}
@@ -276,7 +276,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                   {/* Einzeilig mit Auslassung: die Titel brachen sonst auf bis
                       zu vier Zeilen um, wodurch die Zeilenhoehen zwischen 56
                       und 96px schwankten. Volltext im title-Attribut. */}
-                  <td className="cell-ellipsis" title={r.NAME_LONG}>{r.NAME_LONG}</td>
+                  <td className="cell-ellipsis" title={r.NAME}>{r.NAME}</td>
                   <td>
                     <InlineSelect
                       value={r.OFFER_STATUS_ID} options={statusOpts} allowEmpty={false}
@@ -393,7 +393,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
     {beauftragtRow && (
       <BeauftragtModal
         open={beauftragtRow !== null}
-        offerName={beauftragtRow.ABBR ?? beauftragtRow.NAME_LONG}
+        offerName={beauftragtRow.ABBR ?? beauftragtRow.NAME}
         structNodes={structData?.data ?? []}
         onConvert={body => convertMut.mutate(body)}
         onMarkOrdered={body => markOrderedMut.mutate(body)}

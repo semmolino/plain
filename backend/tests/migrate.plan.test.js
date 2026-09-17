@@ -158,6 +158,9 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0154_07_abbr.sql",
       "0155_07_abbr_sql_objects.sql",
       "0156_07_abbr_values.sql",
+      "0157_08_name.sql",
+      "0158_08_name_sql_objects.sql",
+      "0159_08_name_values.sql",
     ]);
   });
 

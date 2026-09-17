@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchRecents } from '@/api/recents'
 
-export interface ProjectOption { ID: number; ABBR: string; NAME_LONG: string }
+export interface ProjectOption { ID: number; ABBR: string; NAME: string }
 
 interface Props {
   projects:    ProjectOption[]
@@ -13,7 +13,7 @@ interface Props {
   placeholder?: string
 }
 
-const displayName = (p: ProjectOption) => p.ABBR + (p.NAME_LONG ? ` – ${p.NAME_LONG}` : '')
+const displayName = (p: ProjectOption) => p.ABBR + (p.NAME ? ` – ${p.NAME}` : '')
 
 /**
  * Einheitliche Projekt-Suchbox (Autocomplete) für alle Projekt-Tabs.
@@ -47,7 +47,7 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
   const filtered = useMemo(() => {
     if (!isFiltering) return projects
     return projects.filter(p =>
-      p.ABBR.toLowerCase().includes(query) || (p.NAME_LONG?.toLowerCase().includes(query) ?? false),
+      p.ABBR.toLowerCase().includes(query) || (p.NAME?.toLowerCase().includes(query) ?? false),
     )
   }, [projects, query, isFiltering])
 
@@ -106,7 +106,7 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
                   className={`project-ac-option${p.ID === selectedId ? ' active' : ''}`}
                   onMouseDown={ev => { ev.preventDefault(); pick(p.ID) }}>
                   <span className="project-ac-short">{p.ABBR}</span>
-                  {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
+                  {p.NAME && <span className="project-ac-long">{p.NAME}</span>}
                 </button>
               ))}
               <div className="project-ac-section">Alle Projekte</div>
@@ -118,7 +118,7 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
               className={`project-ac-option${p.ID === selectedId ? ' active' : ''}`}
               onMouseDown={ev => { ev.preventDefault(); pick(p.ID) }}>
               <span className="project-ac-short">{p.ABBR}</span>
-              {p.NAME_LONG && <span className="project-ac-long">{p.NAME_LONG}</span>}
+              {p.NAME && <span className="project-ac-long">{p.NAME}</span>}
             </button>
           ))}
           {onGoToList && (

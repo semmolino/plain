@@ -126,7 +126,7 @@ export function LeistungsphasenBloeckeSection() {
               setFeeMasterId(null); setBlocks([]); setAssign({})
             }}>
               <option value="">Bitte wählen …</option>
-              {groups.map(g => <option key={g.ID} value={g.ID}>{g.ABBR}{g.NAME_LONG ? ` – ${g.NAME_LONG}` : ''}</option>)}
+              {groups.map(g => <option key={g.ID} value={g.ID}>{g.ABBR}{g.NAME ? ` – ${g.NAME}` : ''}</option>)}
             </select>
           </div>
           <div className="form-group">
@@ -134,7 +134,7 @@ export function LeistungsphasenBloeckeSection() {
             <select value={feeMasterId ?? ''} disabled={feeGroupId == null}
               onChange={e => setFeeMasterId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">Bitte wählen …</option>
-              {masters.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}{m.NAME_LONG ? ` – ${m.NAME_LONG}` : ''}</option>)}
+              {masters.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}{m.NAME ? ` – ${m.NAME}` : ''}</option>)}
             </select>
           </div>
         </div>
@@ -203,7 +203,7 @@ export function LeistungsphasenBloeckeSection() {
                         <tr key={p.ID}>
                           <td>
                             <strong>{p.ABBR}</strong>
-                            {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
+                            {p.NAME && <span className="tree-name-long"> {p.NAME}</span>}
                           </td>
                           <td>
                             <select

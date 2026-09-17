@@ -308,7 +308,7 @@ body {
   </div>
 
   {# Document title #}
-  <div class="doc-title">Angebot: {{ offer.NAME_LONG }}</div>
+  <div class="doc-title">Angebot: {{ offer.NAME }}</div>
 
   {# Kopftext #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
@@ -460,7 +460,7 @@ body {
   <div class="appendix-title">HOAI-Honorarübersicht</div>
   <div class="appendix-subtitle">
     {{ hc.nameShort }}{% if hc.nameLong %} – {{ hc.nameLong }}{% endif %}
-    &middot; {{ offer.ABBR }}{% if offer.NAME_LONG %} – {{ offer.NAME_LONG }}{% endif %}
+    &middot; {{ offer.ABBR }}{% if offer.NAME %} – {{ offer.NAME }}{% endif %}
     &middot; Stand: {{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}
   </div>
 
@@ -672,7 +672,7 @@ body {
   </div>
 
   {# Order subject #}
-  <div class="order-subject">{{ offer.NAME_LONG }}</div>
+  <div class="order-subject">{{ offer.NAME }}</div>
 
   {# Buyer info #}
   <div class="buyer-block">

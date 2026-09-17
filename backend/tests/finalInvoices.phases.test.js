@@ -31,7 +31,7 @@ function fixture({ cachedInvoiced }) {
     PROJECT_STRUCTURE: [
       {
         ID: STRUCT, TENANT_ID: TENANT, PROJECT_ID: 100, CONTRACT_ID: CONTRACT,
-        ABBR: "LPH 1-9", NAME_LONG: "Gebaeude", BILLING_TYPE_ID: 1,
+        ABBR: "LPH 1-9", NAME: "Gebaeude", BILLING_TYPE_ID: 1,
         REVENUE_COMPLETION: 100000, EXTRAS_PERCENT: 0,
         ADVANCE_INVOICED: 0, INVOICED: cachedInvoiced,
         CLOSED_BY_INVOICE_ID: null, FATHER_ID: null,

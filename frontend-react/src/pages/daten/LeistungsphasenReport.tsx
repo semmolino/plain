@@ -157,7 +157,7 @@ function PhaseCells({ p, indent }: { p: PhaseReportRow; indent?: boolean }) {
     <>
       <td style={indent ? { paddingLeft: 28 } : undefined}>
         {p.ABBR}
-        {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
+        {p.NAME && <span className="tree-name-long"> {p.NAME}</span>}
       </td>
       <td className="num">{money(p.HONORAR_NET)}</td>
       <td className="num">{fmtPct(p.LEISTUNGSSTAND_PERCENT)}</td>

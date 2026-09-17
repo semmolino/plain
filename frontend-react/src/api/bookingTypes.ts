@@ -14,7 +14,7 @@ export interface BookingType {
   ID:              number
   KIND:            BookingKind
   ABBR:      string
-  NAME_LONG:       string | null
+  NAME:       string | null
   UNIT_LABEL:      string | null
   UNIT_CODE:       string | null
   DEFAULT_SP_RATE: number | null
@@ -28,7 +28,7 @@ export interface BookingType {
 export interface BookingTypePayload {
   kind:            BookingKind
   abbr:      string
-  name_long?:      string | null
+  name?:      string | null
   unit_label?:     string | null
   unit_code?:      string | null
   default_sp_rate?: number | null
@@ -64,7 +64,7 @@ export interface SelectableBookingType {
   ID:              number
   KIND:            BookingKind
   ABBR:      string
-  NAME_LONG:       string | null
+  NAME:       string | null
   UNIT_LABEL:      string | null
   UNIT_CODE:       string | null
   DEFAULT_SP_RATE: number | null
@@ -114,7 +114,7 @@ export interface ProjectBookingPrice {
   BOOKING_TYPE_ID:   number
   KIND:              BookingKind
   ABBR:        string
-  NAME_LONG:         string | null
+  NAME:         string | null
   UNIT_LABEL:        string | null
   SCOPE:             'global' | 'project'
   DEFAULT_SP_RATE:   number | null

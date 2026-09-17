@@ -123,7 +123,7 @@ async function projectAggregate(supabase, projectId) {
 async function loadProjectMeta(supabase, projectId) {
   const { data } = await supabase
     .from('PROJECT')
-    .select('ID, ABBR, NAME_LONG, PROJECT_MANAGER_ID, BUDGET_WARNINGS_MUTED')
+    .select('ID, ABBR, NAME, PROJECT_MANAGER_ID, BUDGET_WARNINGS_MUTED')
     .eq('ID', projectId)
     .maybeSingle();
   return data || null;
@@ -132,7 +132,7 @@ async function loadProjectMeta(supabase, projectId) {
 async function loadStructureName(supabase, structureId) {
   const { data } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, ABBR, NAME_LONG, PROJECT_ID')
+    .select('ID, ABBR, NAME, PROJECT_ID')
     .eq('ID', structureId)
     .maybeSingle();
   return data || null;
@@ -152,9 +152,9 @@ async function notifyBudgetWarning(supabase, { rule, project, structure, budget,
   console.log(`[BUDGET_WARNING] rule ${rule.ID}: ${recipients.size} Empfaenger: ${Array.from(recipients).join(',')}`);
 
   const scopeLabel = structure
-    ? `${structure.ABBR ?? ''}${structure.NAME_LONG ? ' – ' + structure.NAME_LONG : ''}`
+    ? `${structure.ABBR ?? ''}${structure.NAME ? ' – ' + structure.NAME : ''}`
     : 'Projekt-Ebene';
-  const projectLabel = `${project?.ABBR ?? ''}${project?.NAME_LONG ? ': ' + project.NAME_LONG : ''}`;
+  const projectLabel = `${project?.ABBR ?? ''}${project?.NAME ? ': ' + project.NAME : ''}`;
 
   const pctActual = budget > 0 ? round2(actual / budget * 100) : 0;
   const title = `Budget ${Number(rule.THRESHOLD_PCT)} % erreicht – ${scopeLabel}`;
@@ -408,7 +408,7 @@ async function getProjectOverview(supabase, { tenantId, projectId }) {
     project: {
       ID: project.ID,
       ABBR: project.ABBR,
-      NAME_LONG:  project.NAME_LONG,
+      NAME:  project.NAME,
       PROJECT_MANAGER_ID: project.PROJECT_MANAGER_ID,
       BUDGET_WARNINGS_MUTED: !!project.BUDGET_WARNINGS_MUTED,
     },

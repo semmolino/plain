@@ -75,7 +75,7 @@ interface AddrFormProps {
   vals:      AddressPayload
   setK:      (k: keyof AddressPayload) => (v: string) => void
   msg:       { text: string; type: 'success' | 'error' } | null
-  countries: { ID: number | string; NAME_LONG?: string; ABBR?: string }[]
+  countries: { ID: number | string; NAME?: string; ABBR?: string }[]
 }
 
 export function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
@@ -108,7 +108,7 @@ export function AddrForm({ vals, setK, msg: m, countries }: AddrFormProps) {
         <label htmlFor="aco">Land*</label>
         <select id="aco" value={vals.country_id ?? ''} onChange={e => setK('country_id')(e.target.value)} required>
           <option value="">Bitte wählen …</option>
-          {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.ABBR || c.ID}</option>)}
+          {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME || c.ABBR || c.ID}</option>)}
         </select>
       </div>
 

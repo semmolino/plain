@@ -127,7 +127,7 @@ export function UmbuchenModal({ bookings, sourceProjectId, onClose, onDone }: Pr
               <option value="">Bitte wählen …</option>
               {projects.map(p => (
                 <option key={p.ID} value={p.ID}>
-                  {p.ABBR}{p.NAME_LONG ? `: ${p.NAME_LONG}` : ''}
+                  {p.ABBR}{p.NAME ? `: ${p.NAME}` : ''}
                 </option>
               ))}
             </select>

@@ -322,7 +322,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 
   const { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, FATHER_ID, BILLING_TYPE_ID, ABBR, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, ADVANCE_INVOICED, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
+    .select('ID, FATHER_ID, BILLING_TYPE_ID, ABBR, NAME, REVENUE, REVENUE_BASIS, EXTRAS, ADVANCE_INVOICED, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
     .eq('PROJECT_ID', projectId)
     .order('ID', { ascending: true });
 
@@ -424,7 +424,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
       isLeaf,
       depth,
       nameShort:      r.ABBR || '',
-      nameLong:       r.NAME_LONG  || '',
+      nameLong:       r.NAME  || '',
       feeTotal,
       alreadyBilled,
       thisDocNet,
@@ -498,9 +498,9 @@ async function loadTecRows({ supabase, docType, docId }) {
     const structMap = new Map();
     if (structIds.length) {
       const { data: structs } = await supabase
-        .from('PROJECT_STRUCTURE').select('ID, ABBR, NAME_LONG').in('ID', structIds);
+        .from('PROJECT_STRUCTURE').select('ID, ABBR, NAME').in('ID', structIds);
       (structs || []).forEach(s =>
-        structMap.set(String(s.ID), { kuerzel: s.ABBR || '', bezeichnung: s.NAME_LONG || '' })
+        structMap.set(String(s.ID), { kuerzel: s.ABBR || '', bezeichnung: s.NAME || '' })
       );
     }
 
@@ -658,13 +658,13 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   let projectName = '', contractName = '';
   if (rawDoc.PROJECT_ID) {
     const { data: proj } = await supabase
-      .from('PROJECT').select('ABBR, NAME_LONG').eq('ID', rawDoc.PROJECT_ID).maybeSingle();
-    if (proj) projectName = [proj.ABBR, proj.NAME_LONG].filter(Boolean).join(' \u2013 ');
+      .from('PROJECT').select('ABBR, NAME').eq('ID', rawDoc.PROJECT_ID).maybeSingle();
+    if (proj) projectName = [proj.ABBR, proj.NAME].filter(Boolean).join(' \u2013 ');
   }
   if (rawDoc.CONTRACT_ID) {
     const { data: con } = await supabase
-      .from('CONTRACT').select('ABBR, NAME_LONG').eq('ID', rawDoc.CONTRACT_ID).maybeSingle();
-    if (con) contractName = [con.ABBR, con.NAME_LONG].filter(Boolean).join(' \u2013 ');
+      .from('CONTRACT').select('ABBR, NAME').eq('ID', rawDoc.CONTRACT_ID).maybeSingle();
+    if (con) contractName = [con.ABBR, con.NAME].filter(Boolean).join(' \u2013 ');
   }
 
   // Appendix data
@@ -857,7 +857,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
     try {
       const { data: calcMasters } = await supabase
         .from('FEE_CALCULATION_MASTER')
-        .select('ID, ABBR, NAME_LONG')
+        .select('ID, ABBR, NAME')
         .eq('PROJECT_ID', rawDoc.PROJECT_ID)
         .eq('TENANT_ID', tenantId)
         .order('ID', { ascending: true });
@@ -1028,7 +1028,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   applyPlaceholders(vm, {
     belegnummer: vm.offer?.ABBR ?? '',
     belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
-    projekt:     vm.offer?.NAME_LONG ?? '',
+    projekt:     vm.offer?.NAME ?? '',
     kunde:       vm.buyer?.name ?? '',
     firma:       vm.seller?.name ?? '',
   });
@@ -1046,7 +1046,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   try {
     const { data: calcMasters } = await supabase
       .from('FEE_CALCULATION_MASTER')
-      .select('ID, ABBR, NAME_LONG')
+      .select('ID, ABBR, NAME')
       .eq('OFFER_ID', offerId)
       .eq('TENANT_ID', tenantId)
       .order('ID', { ascending: true });
@@ -1090,7 +1090,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   applyPlaceholders(vm, {
     belegnummer: vm.offer?.ABBR ?? '',
     belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
-    projekt:     vm.offer?.NAME_LONG ?? '',
+    projekt:     vm.offer?.NAME ?? '',
     kunde:       vm.buyer?.name ?? '',
     firma:       vm.seller?.name ?? '',
   });
@@ -1359,7 +1359,7 @@ async function buildHonorarCalcData(supabase, calcMasterId, tenantId) {
 
   const { data: surchargeRows } = await supabase
     .from('FEE_CALCULATION_SURCHARGES')
-    .select('ABBR, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, BL_FILTER, CALC_MODE, INCLUDE_BL')
+    .select('ABBR, NAME, PERCENT, BASE_AMOUNT, AMOUNT, LPH_FILTER, BL_FILTER, CALC_MODE, INCLUDE_BL')
     .eq('FEE_CALC_MASTER_ID', calcMasterId)
     .eq('TENANT_ID', tenantId)
     .order('SORT_ORDER', { ascending: true });
@@ -1536,7 +1536,7 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
     }
     return {
       nameShort:   r.ABBR || '',
-      nameLong:    r.NAME_LONG  || '',
+      nameLong:    r.NAME  || '',
       percent:     r.PERCENT ?? '',
       baseAmount:  effectiveBase,
       amount,
@@ -1549,10 +1549,10 @@ async function buildHonorarCalcContext(supabase, calcMasterId, tenantId) {
 
   return {
     nameShort: calc.ABBR || '',
-    nameLong:  calc.NAME_LONG  || '',
+    nameLong:  calc.NAME  || '',
     calc: {
       nameShort:           calc.ABBR || '',
-      nameLong:            calc.NAME_LONG  || '',
+      nameLong:            calc.NAME  || '',
       baseType,
       isAreaHa:            baseType === 'area_ha',
       isVerrechnungseinheiten: baseType === 'verrechnungseinheiten',
@@ -1621,8 +1621,8 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
     .single();
   let projectLabel = null;
   if (calcMeta?.PROJECT_ID) {
-    const { data: proj } = await supabase.from('PROJECT').select('ABBR, NAME_LONG').eq('ID', calcMeta.PROJECT_ID).maybeSingle();
-    if (proj) projectLabel = [proj.ABBR, proj.NAME_LONG].filter(Boolean).join(' – ');
+    const { data: proj } = await supabase.from('PROJECT').select('ABBR, NAME').eq('ID', calcMeta.PROJECT_ID).maybeSingle();
+    if (proj) projectLabel = [proj.ABBR, proj.NAME].filter(Boolean).join(' – ');
   }
 
   // Load company (seller) data + logo

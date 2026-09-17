@@ -198,7 +198,7 @@ export function BeauftragtModal({ open, offerName, structNodes, onConvert, onMar
                 <option value="">— Kein Projekt verknüpfen —</option>
                 {projects.map(p => (
                   <option key={p.ID} value={p.ID}>
-                    {p.ABBR}{p.NAME_LONG ? ` – ${p.NAME_LONG}` : ''}
+                    {p.ABBR}{p.NAME ? ` – ${p.NAME}` : ''}
                   </option>
                 ))}
               </select>

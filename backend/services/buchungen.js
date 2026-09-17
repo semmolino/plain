@@ -219,7 +219,7 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
       QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION, STATUS,
       PROJECT:PROJECT_ID(ABBR),
-      STRUCTURE:STRUCTURE_ID(ABBR, NAME_LONG)
+      STRUCTURE:STRUCTURE_ID(ABBR, NAME)
     `)
     .eq("EMPLOYEE_ID", employeeId)
     .eq("BOOKING_DATE", date)
@@ -1107,7 +1107,7 @@ async function loadRebookTarget(supabase, { targetProjectId, targetStructureId, 
   // dieselbe Zeile ein zweites Mal lesen zu lassen.
   const { data: node, error: nodeErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, PROJECT_ID, ABBR, NAME_LONG")
+    .select("ID, PROJECT_ID, ABBR, NAME")
     .eq("ID", structureId)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -1132,7 +1132,7 @@ async function loadRebookTarget(supabase, { targetProjectId, targetStructureId, 
 
   const { data: projekt } = await supabase
     .from("PROJECT")
-    .select("ID, ABBR, NAME_LONG")
+    .select("ID, ABBR, NAME")
     .eq("ID", projectId)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -1141,7 +1141,7 @@ async function loadRebookTarget(supabase, { targetProjectId, targetStructureId, 
     projectId,
     structureId,
     projectName:   projekt?.ABBR || `#${projectId}`,
-    structureName: node.NAME_LONG ? `${node.ABBR}: ${node.NAME_LONG}` : (node.ABBR || `#${structureId}`),
+    structureName: node.NAME ? `${node.ABBR}: ${node.NAME}` : (node.ABBR || `#${structureId}`),
   };
 }
 
@@ -1199,8 +1199,8 @@ async function rebookBuchungen(supabase, {
     })(),
     (async () => {
       if (!quellStrukturIds.length) return new Map();
-      const { data } = await supabase.from("PROJECT_STRUCTURE").select("ID, ABBR, NAME_LONG").in("ID", quellStrukturIds).eq("TENANT_ID", tenantId);
-      return new Map((data || []).map(s => [Number(s.ID), s.NAME_LONG ? `${s.ABBR}: ${s.NAME_LONG}` : (s.ABBR || `#${s.ID}`)]));
+      const { data } = await supabase.from("PROJECT_STRUCTURE").select("ID, ABBR, NAME").in("ID", quellStrukturIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(s => [Number(s.ID), s.NAME ? `${s.ABBR}: ${s.NAME}` : (s.ABBR || `#${s.ID}`)]));
     })(),
   ]);
 

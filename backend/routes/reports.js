@@ -360,7 +360,7 @@ module.exports = (supabase) => {
       // 1) Strukturknoten (für Baum + LPH-Zuordnung + Phasen-Labels)
       const { data: nodes, error: nErr } = await supabase
         .from("PROJECT_STRUCTURE")
-        .select("ID, FATHER_ID, ABBR, NAME_LONG, FEE_CALC_PHASE_ID")
+        .select("ID, FATHER_ID, ABBR, NAME, FEE_CALC_PHASE_ID")
         .eq("TENANT_ID", tenantId)
         .eq("PROJECT_ID", projectId);
       if (nErr) return res.status(500).json({ error: nErr.message });
@@ -417,7 +417,7 @@ module.exports = (supabase) => {
             PHASE_STRUCTURE_ID: anc.ID,
             CALC_PHASE_ID: anc.FEE_CALC_PHASE_ID,
             ABBR: anc.ABBR,
-            NAME_LONG:  anc.NAME_LONG,
+            NAME:  anc.NAME,
             SORT_KEY:   phaseSortKey(anc.ABBR),
             IS_UNASSIGNED: false,
           });
@@ -425,7 +425,7 @@ module.exports = (supabase) => {
           bucket = ensure("none", {
             PHASE_STRUCTURE_ID: null,
             ABBR: "Ohne Phasenzuordnung",
-            NAME_LONG:  null,
+            NAME:  null,
             SORT_KEY:   Number.MAX_SAFE_INTEGER,
             IS_UNASSIGNED: true,
           });
@@ -457,7 +457,7 @@ module.exports = (supabase) => {
           PHASE_STRUCTURE_ID: b.PHASE_STRUCTURE_ID,
           CALC_PHASE_ID: b.CALC_PHASE_ID ?? null,
           ABBR: b.ABBR,
-          NAME_LONG:  b.NAME_LONG,
+          NAME:  b.NAME,
           IS_UNASSIGNED: b.IS_UNASSIGNED,
           SORT_KEY: b.SORT_KEY,
           HONORAR_NET: honorar,
@@ -576,7 +576,7 @@ module.exports = (supabase) => {
       // Projekte des Mandanten (ggf. auf Reporting-Scope eingeschränkt).
       let projQ = supabase
         .from("PROJECT")
-        .select("ID, ABBR, NAME_LONG")
+        .select("ID, ABBR, NAME")
         .eq("TENANT_ID", tenantId);
       const { data: allProjects, error: pErr } = await projQ;
       if (pErr) return res.status(500).json({ error: pErr.message });
@@ -683,7 +683,7 @@ module.exports = (supabase) => {
             tot.HOURS_TOTAL += agg.HOURS_TOTAL; tot.COST_TOTAL += agg.COST_TOTAL;
           }
           return {
-            PROJECT_ID: p.ID, ABBR: p.ABBR, NAME_LONG: p.NAME_LONG,
+            PROJECT_ID: p.ID, ABBR: p.ABBR, NAME: p.NAME,
             cells, total: decorateCell(tot),
           };
         })
@@ -742,7 +742,7 @@ module.exports = (supabase) => {
       ({ data, error } = await supabase
         .from("VW_REPORT_PROJECT_DETAIL")
         .select([
-          "PROJECT_ID", "ABBR", "NAME_LONG",
+          "PROJECT_ID", "ABBR", "NAME",
           "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
           "PROJECT_TYPE_ID",   "PROJECT_TYPE_NAME_SHORT",
           "PROJECT_MANAGER_ID","PROJECT_MANAGER_DISPLAY",
@@ -1012,7 +1012,7 @@ module.exports = (supabase) => {
       ({ data, error } = await supabase
         .from("VW_REPORT_PROJECT_DETAIL")
         .select([
-          "PROJECT_ID", "ABBR", "NAME_LONG",
+          "PROJECT_ID", "ABBR", "NAME",
           "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
           "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
           "DEPARTMENT_ID", "DEPARTMENT_NAME",
@@ -1171,7 +1171,7 @@ module.exports = (supabase) => {
     let query = supabase
       .from("VW_REPORT_PROJECT_DETAIL")
       .select([
-        "PROJECT_ID", "ABBR", "NAME_LONG",
+        "PROJECT_ID", "ABBR", "NAME",
         "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
         "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
         "DEPARTMENT_ID", "DEPARTMENT_NAME",
@@ -1267,11 +1267,11 @@ module.exports = (supabase) => {
       if (projectIds.length > 0) {
         const { data: projs } = await supabase
           .from("PROJECT")
-          .select("ID, ABBR, NAME_LONG")
+          .select("ID, ABBR, NAME")
           .in("ID", projectIds);
         (projs || []).forEach(p => {
           const e = byProjectMap.get(p.ID);
-          if (e) { e.abbr = p.ABBR; e.name_long = p.NAME_LONG; }
+          if (e) { e.abbr = p.ABBR; e.name = p.NAME; }
         });
       }
       const byProject = [...byProjectMap.values()].sort((a, b) => b.total - a.total);
@@ -1338,7 +1338,7 @@ module.exports = (supabase) => {
     if (!tenantId) return;
     const { data, error } = await supabase
       .from("VW_REPORT_PROJECT_DETAIL")
-      .select("PROJECT_ID, ABBR, NAME_LONG, PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY, OPEN_NET_TOTAL")
+      .select("PROJECT_ID, ABBR, NAME, PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY, OPEN_NET_TOTAL")
       .eq("TENANT_ID", tenantId)
       .gt("OPEN_NET_TOTAL", 0)
       .order("OPEN_NET_TOTAL", { ascending: false });
@@ -1384,7 +1384,7 @@ module.exports = (supabase) => {
       .map((p) => ({
         PROJECT_ID:              p.PROJECT_ID,
         ABBR:              p.ABBR,
-        NAME_LONG:               p.NAME_LONG,
+        NAME:               p.NAME,
         PROJECT_MANAGER_DISPLAY: p.PROJECT_MANAGER_DISPLAY,
         OPEN_NET_TOTAL:          round2(Math.max(0, (Number(p.OPEN_NET_TOTAL) || 0) - (internalByProject.get(String(p.PROJECT_ID)) || 0))),
       }))

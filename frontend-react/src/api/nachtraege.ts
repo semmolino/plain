@@ -21,7 +21,7 @@ export interface NachtragStatus {
 export interface NachtragListItem {
   ID:                  number
   ABBR:          string | null
-  NAME_LONG:           string
+  NAME:           string
   NACHTRAG_TYPE:       NachtragType
   CATEGORY:            NachtragCategory | null
   STATUS_CODE:         string | null
@@ -44,7 +44,7 @@ export interface Nachtrag {
   CONTRACT_ID:         number | null
   OFFER_ID:            number | null
   ABBR:          string | null
-  NAME_LONG:           string
+  NAME:           string
   NACHTRAG_TYPE:       NachtragType
   NACHTRAG_STATUS_ID:  number | null
   CATEGORY:            NachtragCategory | null
@@ -75,7 +75,7 @@ export interface Nachtrag {
 export interface NachtragStructureNode {
   ID:                    number
   ABBR:            string | null
-  NAME_LONG:             string | null
+  NAME:             string | null
   NACHTRAG_ID:           number
   FATHER_ID:             number | null
   SORT_ORDER:            number
@@ -109,7 +109,7 @@ export interface NachtragRelease {
 
 export interface CreateNachtragPayload {
   project_id:       number
-  name_long:        string
+  name:        string
   nachtrag_type?:   NachtragType
   category?:        NachtragCategory | null
   claim_basis?:     string
@@ -119,7 +119,7 @@ export interface CreateNachtragPayload {
 }
 
 export interface UpdateNachtragPayload {
-  name_long?:       string
+  name?:       string
   category?:        NachtragCategory | null
   claim_basis?:     string | null
   reason?:          string | null
@@ -142,7 +142,7 @@ export interface ReviewPayload {
 
 export interface AddNachtragStructureNodePayload {
   abbr?:      string
-  name_long?:       string
+  name?:       string
   billing_type_id:  string | number
   extras_percent?:  string | number
   revenue?:         string | number

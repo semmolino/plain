@@ -57,7 +57,7 @@ export function Vertraege({ initialProjectId }: Props) {
     if (!c) return
 
     setNameShort(c.ABBR ?? '')
-    setNameLong(c.NAME_LONG ?? '')
+    setNameLong(c.NAME ?? '')
     setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
     setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
     setVatId(c.VAT_ID ?? null)
@@ -88,7 +88,7 @@ export function Vertraege({ initialProjectId }: Props) {
       if (!contract) throw new Error('Kein Vertrag geladen')
       return patchContract(contract.ID, {
         ABBR:            nameShort.trim(),
-        NAME_LONG:             nameLong.trim(),
+        NAME:             nameLong.trim(),
         INVOICE_ADDRESS_ID:    addressId,
         INVOICE_CONTACT_ID:    contactId,
         CASH_DISCOUNT_PERCENT: cashDiscPct !== '' ? parseFloat(cashDiscPct) : null,
@@ -138,7 +138,7 @@ export function Vertraege({ initialProjectId }: Props) {
     const c = contractData?.data
     if (!c) return
     setNameShort(c.ABBR ?? '')
-    setNameLong(c.NAME_LONG ?? '')
+    setNameLong(c.NAME ?? '')
     setContactId(c.INVOICE_CONTACT_ID ?? null)
     setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
     setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
@@ -164,7 +164,7 @@ export function Vertraege({ initialProjectId }: Props) {
       {pid && (
         <div className="proj-jump-bar">
           <span className="proj-jump-label">{currentProject?.ABBR ?? ''}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME_LONG ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>

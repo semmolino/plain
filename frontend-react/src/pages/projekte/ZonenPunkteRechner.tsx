@@ -76,7 +76,7 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
 
   const zoneLabel = (zoneId: number) => {
     const z = zones.find(zz => zz.ID === zoneId)
-    return z ? `${z.ABBR}${z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}` : `Zone ${zoneId}`
+    return z ? `${z.ABBR}${z.NAME ? ' – ' + z.NAME : ''}` : `Zone ${zoneId}`
   }
 
   const setPoint = (id: number, raw: string, max: number) => {

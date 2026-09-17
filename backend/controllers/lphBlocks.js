@@ -35,7 +35,7 @@ async function getBlocks(req, res, supabase) {
         .order("ID", { ascending: true }),
       // FEE_PHASE ist global (keine TENANT_ID) — nur die Katalog-Felder lesen.
       supabase.from("FEE_PHASE")
-        .select("ID, ABBR, NAME_LONG")
+        .select("ID, ABBR, NAME")
         .eq("FEE_MASTER_ID", feeMasterId),
     ]);
     if (bErr) throw bErr;

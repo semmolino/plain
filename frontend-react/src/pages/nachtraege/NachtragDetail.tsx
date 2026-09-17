@@ -101,7 +101,7 @@ export function NachtragDetail() {
 
       {/* ── Kopf ─────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-        <h1 className="master-title" style={{ margin: 0 }}>{nachtrag.ABBR} · {nachtrag.NAME_LONG}</h1>
+        <h1 className="master-title" style={{ margin: 0 }}>{nachtrag.ABBR} · {nachtrag.NAME}</h1>
         <span style={{ padding: '2px 10px', borderRadius: 999, fontSize: 12, background: 'var(--info-bg)', color: 'var(--accent2)' }}>
           {curStatus?.ABBR ?? '—'}
         </span>
@@ -175,7 +175,7 @@ export function NachtragDetail() {
                 const isLeaf = !withChildren.has(n.ID)
                 return (
                   <tr key={n.ID}>
-                    <td style={{ paddingLeft: 8 + d * 18 }}>{n.ABBR ? `${n.ABBR} — ` : ''}{n.NAME_LONG}</td>
+                    <td style={{ paddingLeft: 8 + d * 18 }}>{n.ABBR ? `${n.ABBR} — ` : ''}{n.NAME}</td>
                     <td>{Number(n.BILLING_TYPE_ID) === 2 ? 'Stunden' : Number(n.BILLING_TYPE_ID) === 1 ? 'Pauschal' : '—'}</td>
                     <td style={{ textAlign: 'right' }}>{money(n.REVENUE)}</td>
                     <td>
@@ -187,7 +187,7 @@ export function NachtragDetail() {
                     <td style={{ textAlign: 'right' }}>
                       <Can permission="nachtraege.edit">
                         {editable && isLeaf && n.APPROVAL_STATE === 'OPEN' && (
-                          <button className="row-action-btn" title="Position löschen" onClick={() => setConfirmDel({ kind: 'node', nodeId: n.ID, name: n.NAME_LONG || '' })}>
+                          <button className="row-action-btn" title="Position löschen" onClick={() => setConfirmDel({ kind: 'node', nodeId: n.ID, name: n.NAME || '' })}>
                             <Trash2 size={12} strokeWidth={2.5} />
                           </button>
                         )}
@@ -258,7 +258,7 @@ export function NachtragDetail() {
           open
           title={confirmDel.kind === 'nachtrag' ? 'Nachtrag löschen' : 'Position löschen'}
           message={confirmDel.kind === 'nachtrag'
-            ? `Nachtrag „${nachtrag.NAME_LONG}" wirklich löschen?`
+            ? `Nachtrag „${nachtrag.NAME}" wirklich löschen?`
             : `Position „${confirmDel.name}" wirklich löschen?`}
           confirmLabel="Löschen"
           onConfirm={() => { if (confirmDel.kind === 'nachtrag') delNachtragMut.mutate(); else delNodeMut.mutate(confirmDel.nodeId) }}
@@ -294,7 +294,7 @@ function AddPositionForm({ nodes, submitting, onSubmit }: {
   function submit() {
     if (!name.trim()) { setErr('Bitte eine Bezeichnung angeben.'); return }
     onSubmit({
-      name_long: name.trim(),
+      name: name.trim(),
       billing_type_id: bt,
       father_id: father || null,
       ...(bt === '2' ? { quantity: qty || 0, hourly_rate: rate || 0 } : { revenue: revenue || 0 }),
@@ -327,7 +327,7 @@ function AddPositionForm({ nodes, submitting, onSubmit }: {
         <label>Übergeordnete Position (optional)
           <select value={father} onChange={e => setFather(e.target.value)}>
             <option value="">— oberste Ebene —</option>
-            {nodes.map(n => <option key={n.ID} value={n.ID}>{n.NAME_LONG}</option>)}
+            {nodes.map(n => <option key={n.ID} value={n.ID}>{n.NAME}</option>)}
           </select>
         </label>
       )}
@@ -382,7 +382,7 @@ function ReleaseForm({ leaves, submitting, onSubmit }: {
             return (
               <tr key={l.ID}>
                 <td><input type="checkbox" checked={checked.has(l.ID)} onChange={() => toggle(l.ID)} /></td>
-                <td>{l.NAME_LONG}</td>
+                <td>{l.NAME}</td>
                 <td style={{ textAlign: 'right' }}>{money(l.REVENUE)}</td>
                 <td style={{ textAlign: 'right' }}>
                   {isBt1 ? (

@@ -17,14 +17,14 @@ import { useFeature } from '@/store/licenseStore'
 import { BeauftragtModal } from './BeauftragtModal'
 
 interface EditForm {
-  name_long: string; company_id: string; offer_status_id: string; employee_id: string
+  name: string; company_id: string; offer_status_id: string; employee_id: string
   probability: string; offer_text_1: string; offer_text_2: string
   address_id: string; contact_id: string; offer_date: string; valid_until: string
 }
 
 function offerToForm(o: Offer): EditForm {
   return {
-    name_long:       o.NAME_LONG       ?? '',
+    name:       o.NAME       ?? '',
     company_id:      o.COMPANY_ID != null ? String(o.COMPANY_ID) : '',
     offer_status_id: o.OFFER_STATUS_ID != null ? String(o.OFFER_STATUS_ID) : '',
     employee_id:     o.EMPLOYEE_ID != null ? String(o.EMPLOYEE_ID) : '',
@@ -85,7 +85,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
 
   const saveMut = useMutation({
     mutationFn: (f: EditForm) => updateOffer(oid!, {
-      name_long:       f.name_long,
+      name:       f.name,
       company_id:      f.company_id || undefined,
       offer_status_id: Number(f.offer_status_id),
       employee_id:     Number(f.employee_id),
@@ -204,7 +204,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
 
       <div className="form-group">
         <label>Angebotstitel*</label>
-        <input value={form.name_long} onChange={e => setF('name_long')(e.target.value)} />
+        <input value={form.name} onChange={e => setF('name')(e.target.value)} />
       </div>
 
       <div className="form-group">
@@ -276,7 +276,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
 
       <BeauftragtModal
         open={showBeauftragt}
-        offerName={offerData?.data?.ABBR ?? offerData?.data?.NAME_LONG ?? ''}
+        offerName={offerData?.data?.ABBR ?? offerData?.data?.NAME ?? ''}
         structNodes={structData?.data ?? []}
         onConvert={body => convertMut.mutate(body)}
         onMarkOrdered={body => markOrderedMut.mutate(body)}

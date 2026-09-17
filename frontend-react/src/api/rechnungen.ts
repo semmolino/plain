@@ -5,8 +5,8 @@ import type { EmailPreview } from './emailTemplates'
 
 export interface Company      { ID: number; COMPANY_NAME_1: string }
 export interface VatRate      { ID: number; VAT: string; VAT_PERCENT: number }
-export interface PaymentMeans { ID: number; ABBR: string; NAME_LONG: string }
-export interface Contract     { ID: number; ABBR: string; NAME_LONG: string; PROJECT_ID: number; CASH_DISCOUNT_PERCENT?: number | null; CASH_DISCOUNT_DAYS?: number | null; SE_ENABLED?: boolean; SE_PERCENT?: number | null; SE_BASIS?: 'BRUTTO' | 'NETTO' | null; SE_LEGAL_REFERENCE?: string | null }
+export interface PaymentMeans { ID: number; ABBR: string; NAME: string }
+export interface Contract     { ID: number; ABBR: string; NAME: string; PROJECT_ID: number; CASH_DISCOUNT_PERCENT?: number | null; CASH_DISCOUNT_DAYS?: number | null; SE_ENABLED?: boolean; SE_PERCENT?: number | null; SE_BASIS?: 'BRUTTO' | 'NETTO' | null; SE_LEGAL_REFERENCE?: string | null }
 
 // ── Invoice types ─────────────────────────────────────────────────────────────
 
@@ -141,7 +141,7 @@ export interface FinalPhase {
   ID:                   number
   FATHER_ID:            number | null
   ABBR:           string
-  NAME_LONG:            string | null
+  NAME:            string | null
   BILLING_TYPE_ID:      number | null
   REVENUE_COMPLETION:   number | null
   EXTRAS_AMOUNT:        number | null

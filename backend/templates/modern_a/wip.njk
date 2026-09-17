@@ -181,7 +181,7 @@ body {
       <tr>
         <td>{{ r.ABBR }}</td>
         <td>
-          {{ r.NAME_LONG }}
+          {{ r.NAME }}
           {% if 'no_snapshot' in r.flags %}<span class="marker">kein Snapshot zum Stichtag</span>{% endif %}
           {% if 'no_performance' in r.flags %}<span class="marker">Leistungsstand nicht gepflegt</span>{% endif %}
           {% if 'loss_risk' in r.flags %}<span class="marker">drohender Verlust</span>{% endif %}

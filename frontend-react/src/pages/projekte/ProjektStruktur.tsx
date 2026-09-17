@@ -33,12 +33,12 @@ type SurchargeEdit = {
 }
 
 type AddForm = {
-  ABBR: string; NAME_LONG: string; BILLING_TYPE_ID: string
+  ABBR: string; NAME: string; BILLING_TYPE_ID: string
   FATHER_ID: string; REVENUE: string; EXTRAS_PERCENT: string
 }
 
 function emptyAdd(): AddForm {
-  return { ABBR: '', NAME_LONG: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '' }
+  return { ABBR: '', NAME: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '' }
 }
 
 function depthOf(id: string, parentMap: Map<string, string | null>): number {
@@ -168,7 +168,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       flatTree
         .filter(({ node }) =>
           node.ABBR.toLowerCase().includes(sq) ||
-          (node.NAME_LONG?.toLowerCase().includes(sq))
+          (node.NAME?.toLowerCase().includes(sq))
         )
         .map(({ node }) => node.STRUCTURE_ID)
     )
@@ -194,7 +194,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     const node = structure.find(n => n.STRUCTURE_ID === structId)
     return {
       nameShort:    node?.ABBR ?? '',
-      nameLong:     node?.NAME_LONG  ?? '',
+      nameLong:     node?.NAME  ?? '',
       billingTypeId: String(node?.BILLING_TYPE_ID ?? ''),
       nk:     String(node?.EXTRAS_PERCENT ?? 0),
       budget: String(node?.REVENUE_BASIS ?? node?.REVENUE ?? 0),
@@ -220,7 +220,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       for (const r of rows) {
         await patchStructureNode(r.id, {
           ...(r.nameShortChanged     ? { ABBR:      r.nameShort }              : {}),
-          ...(r.nameLongChanged      ? { NAME_LONG:       r.nameLong }               : {}),
+          ...(r.nameLongChanged      ? { NAME:       r.nameLong }               : {}),
           ...(r.billingTypeIdChanged ? { BILLING_TYPE_ID: Number(r.billingTypeId) }  : {}),
           ...(r.nkChanged            ? { EXTRAS_PERCENT:  r.nk }                     : {}),
           ...(r.budgetChanged        ? { REVENUE:         r.budget }                 : {}),
@@ -372,7 +372,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const addMut = useMutation({
     mutationFn: (f: AddForm & { transfer_parent_values?: boolean }) => createStructureNode(selectedPid!, {
       ABBR:             f.ABBR.trim(),
-      NAME_LONG:              f.NAME_LONG.trim() || undefined,
+      NAME:              f.NAME.trim() || undefined,
       BILLING_TYPE_ID:        Number(f.BILLING_TYPE_ID),
       FATHER_ID:              f.FATHER_ID ? Number(f.FATHER_ID) : null,
       REVENUE:                f.REVENUE !== '' ? Number(f.REVENUE) : undefined,
@@ -444,7 +444,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       const origNk           = node?.EXTRAS_PERCENT ?? 0
       const origBudget       = node?.REVENUE ?? 0
       const origNameShort    = node?.ABBR ?? ''
-      const origNameLong     = node?.NAME_LONG  ?? ''
+      const origNameLong     = node?.NAME  ?? ''
       const origBillingTypeId = String(node?.BILLING_TYPE_ID ?? '')
       const nk     = edit.nk     !== '' ? Number(edit.nk)     : origNk
       const budget = edit.budget !== '' ? Number(edit.budget) : origBudget
@@ -692,7 +692,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       {selectedPid !== null && currentProject && (
         <div className="proj-jump-bar">
           <span className="proj-jump-label">{currentProject.ABBR}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.ABBR, backProject: { id: selectedPid, name: currentProject.ABBR } } })}>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME ?? currentProject.ABBR, backProject: { id: selectedPid, name: currentProject.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: selectedPid } })}>
@@ -789,7 +789,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                           <td></td>
                           <td></td>
                           <td style={{ paddingLeft: 4, fontSize: 13 }}>{currentProject.ABBR}</td>
-                          <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{currentProject.NAME_LONG}</td>
+                          <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{currentProject.NAME}</td>
                           <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
                           <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(rootRevenue)}</span></td>
                           <td className="num"><span style={{ color: rootSurcharges > 0 ? 'var(--success)' : rootSurcharges < 0 ? 'var(--danger)' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges !== 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
@@ -857,7 +857,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                         // Editable "Honorar" shows REVENUE_BASIS (the base before surcharges)
                         const budgetVal = edit?.budget ?? String(node.REVENUE_BASIS ?? node.REVENUE ?? 0)
                         const nameShort = edit?.nameShort     ?? (node.ABBR ?? '')
-                        const nameLong  = edit?.nameLong      ?? (node.NAME_LONG  ?? '')
+                        const nameLong  = edit?.nameLong      ?? (node.NAME  ?? '')
                         const btId      = edit?.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
                         const isTec     = Number(btId || node.BILLING_TYPE_ID) === 2
                         const isParent  = parentIds.has(String(node.STRUCTURE_ID))
@@ -1100,15 +1100,15 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label style={{ fontSize: 11 }}>Bezeichnung</label>
-              <input style={{ width: 160 }} value={addForm.NAME_LONG}
-                onChange={e => setAddForm(f => f && { ...f, NAME_LONG: e.target.value })} />
+              <input style={{ width: 160 }} value={addForm.NAME}
+                onChange={e => setAddForm(f => f && { ...f, NAME: e.target.value })} />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label style={{ fontSize: 11 }}>Abrechnungsart*</label>
               <select style={{ fontSize: 12 }} value={addForm.BILLING_TYPE_ID}
                 onChange={e => setAddForm(f => f && { ...f, BILLING_TYPE_ID: e.target.value })}>
                 <option value="">Bitte wählen …</option>
-                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
+                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}{b.NAME ? ' – ' + b.NAME : ''}</option>)}
               </select>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
@@ -1140,7 +1140,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                 <option value="">Projektlevel</option>
                 {flatTree.map(({ node }) => (
                   <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
-                    {node.ABBR}{node.NAME_LONG ? ' – ' + node.NAME_LONG : ''}
+                    {node.ABBR}{node.NAME ? ' – ' + node.NAME : ''}
                   </option>
                 ))}
               </select>
