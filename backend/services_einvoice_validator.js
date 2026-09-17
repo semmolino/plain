@@ -27,23 +27,35 @@
  *     { code: 'BR-02', severity: 'error'|'warning', message: string, btField: 'BT-1'|null }
  */
 
-const VAT_CATEGORIES_ALLOWED = new Set(['S', 'AE', 'E', 'Z', 'O', 'G', 'K']);
-// Regeln je USt-Kategorie ausser S. Ersetzt das frueher definierte, aber
-// nirgends benutzte VAT_CATEGORIES_REQUIRE_REASON — dadurch fehlten G und K
-// in der Pruefung komplett. Z verlangt bewusst KEINEN Befreiungsgrund; die
-// alte Konstante fuehrte Z faelschlich mit.
+// Zulaessige Kategorien und ihre Regeln kommen aus der Codeliste UNTDID 5305
+// (einvoice/codelists.js) — derselben, aus der `loadInvoiceData` die Kategorie
+// normalisiert und die Standard-Befreiungstexte holt.
+//
+// Dass diese Tabelle hier abgeleitet statt geschrieben wird, ist die Lehre aus
+// Befund R7: die zugelassenen Kategorien standen im Datenmodell, die
+// geprueften im Validator, und G und K fehlten in der zweiten Liste. Eine
+// Kategorie, die `data.js` durchlaesst, KANN jetzt nicht mehr ungeprueft
+// bleiben — es gibt nur noch eine Liste.
+//
+// Z verlangt bewusst KEINEN Befreiungsgrund.
 // ACHTUNG: Die Codes BR-G-* und BR-IC-* sowie die Zuordnung der -02/-03
 // Varianten sind nicht gegen den KoSIT-Katalog gegengeprueft.
-const VAT_CATEGORY_RULES = {
-  AE: { label: 'Reverse Charge',        rateCode: 'BR-AE-01', reasonCode: 'BR-AE-10', hint: '§13b UStG',
-        sellerVatCode: 'BR-AE-02', buyerVatCode: 'BR-AE-03' },
-  E:  { label: 'Steuerbefreit',         rateCode: 'BR-E-01',  reasonCode: 'BR-E-10',  hint: '' },
-  Z:  { label: 'Nullsatz',              rateCode: 'BR-Z-01',  reasonCode: null,       hint: '' },
-  O:  { label: 'Nicht steuerbar',       rateCode: 'BR-O-01',  reasonCode: 'BR-O-10',  hint: 'z.B. §19 Kleinunternehmer' },
-  G:  { label: 'Ausfuhrlieferung',      rateCode: 'BR-G-01',  reasonCode: 'BR-G-10',  hint: 'Drittland' },
-  K:  { label: 'Innergemeinschaftlich', rateCode: 'BR-IC-01', reasonCode: 'BR-IC-10', hint: 'EU-Lieferung',
-        sellerVatCode: 'BR-IC-02', buyerVatCode: 'BR-IC-03' },
-};
+const codelists = require('./einvoice/codelists');
+
+const VAT_CATEGORIES_ALLOWED = new Set(codelists.VAT_CATEGORY_CODES);
+
+const VAT_CATEGORY_RULES = Object.fromEntries(
+  Object.values(codelists.UNTDID_5305)
+    .filter(c => c.code !== 'S')
+    .map(c => [c.code, {
+      label:         c.labelDe,
+      hint:          c.hintDe,
+      rateCode:      c.rateRule,
+      reasonCode:    c.requiresReason ? c.reasonRule : null,
+      sellerVatCode: c.sellerVatRule,
+      buyerVatCode:  c.buyerVatRule,
+    }])
+);
 const ROUNDING_TOLERANCE = 0.02;   // EUR
 
 function fmt2(n) { return Math.round(Number(n || 0) * 100) / 100; }

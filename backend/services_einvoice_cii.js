@@ -17,33 +17,11 @@
  *   384 = Rechnungskorrektur / Storno
  */
 
-const PROFILES = {
-  MINIMUM: {
-    id: 'urn:factur-x.eu:1p0:minimum',
-    hasLines: false, hasTax: false, hasPaymentTerms: false,
-    hasBillingPeriod: false, hasLineNotes: false, hasLinePrices: false, hasContact: false,
-  },
-  BASIC_WL: {
-    id: 'urn:factur-x.eu:1p0:basicwl',
-    hasLines: false, hasTax: true, hasPaymentTerms: true,
-    hasBillingPeriod: true, hasLineNotes: false, hasLinePrices: false, hasContact: false,
-  },
-  BASIC: {
-    id: 'urn:factur-x.eu:1p0:basic',
-    hasLines: true, hasTax: true, hasPaymentTerms: true,
-    hasBillingPeriod: true, hasLineNotes: false, hasLinePrices: false, hasContact: false,
-  },
-  EN16931: {
-    id: 'urn:cen.eu:en16931:2017',
-    hasLines: true, hasTax: true, hasPaymentTerms: true,
-    hasBillingPeriod: true, hasLineNotes: true, hasLinePrices: true, hasContact: true,
-  },
-  EXTENDED: {
-    id: 'urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended',
-    hasLines: true, hasTax: true, hasPaymentTerms: true,
-    hasBillingPeriod: true, hasLineNotes: true, hasLinePrices: true, hasContact: true,
-  },
-};
+// Profile und Codelisten liegen seit 09/2026 in `einvoice/` — sie gelten fuer
+// beide Syntaxen und das Mapping-Dokument bezieht sich darauf. PROFILES bleibt
+// hier als Name bestehen, damit bestehende Aufrufer unveraendert laufen.
+const codelists = require('./einvoice/codelists');
+const { CII_PROFILES: PROFILES, CII_DEFAULT_PROFILE, ciiProfile } = require('./einvoice/profiles');
 
 // ── XML helpers ───────────────────────────────────────────────────────────────
 
@@ -89,7 +67,7 @@ function buildNotes(data) {
     // Betreffcode PMT (UNCL 4451) -- die von der XRechnung-FAQ vorgesehene
     // Stelle fuer Sicherheitseinbehalte. In CII strukturiert, in UBL als
     // #PMT#-Praefix.
-    notes.push(`    <ram:IncludedNote><ram:Content>${x(parts.join(' '))}</ram:Content><ram:SubjectCode>PMT</ram:SubjectCode></ram:IncludedNote>`);
+    notes.push(`    <ram:IncludedNote><ram:Content>${x(parts.join(' '))}</ram:Content><ram:SubjectCode>${codelists.NOTE_SUBJECT_PAYMENT_INFORMATION}</ram:SubjectCode></ram:IncludedNote>`);
   }
   const regContent = [
     data.seller.name,
@@ -97,7 +75,7 @@ function buildNotes(data) {
     [data.seller.postCode, data.seller.city].filter(Boolean).join(' '),
     data.seller.countryId,
   ].filter(Boolean).join('\n');
-  notes.push(`    <ram:IncludedNote><ram:Content>${x(regContent)}</ram:Content><ram:SubjectCode>REG</ram:SubjectCode></ram:IncludedNote>`);
+  notes.push(`    <ram:IncludedNote><ram:Content>${x(regContent)}</ram:Content><ram:SubjectCode>${codelists.NOTE_SUBJECT_SELLER_REGISTRATION}</ram:SubjectCode></ram:IncludedNote>`);
   return notes.join('\n');
 }
 
@@ -170,7 +148,7 @@ function buildPaymentMeans(data) {
   if (!s.iban) return '';
   return `
       <ram:SpecifiedTradeSettlementPaymentMeans>
-        <ram:TypeCode>58</ram:TypeCode>
+        <ram:TypeCode>${codelists.PAYMENT_MEANS_SEPA_CREDIT_TRANSFER}</ram:TypeCode>
         <ram:PayeePartyCreditorFinancialAccount>
           <ram:IBANID>${x(s.iban)}</ram:IBANID>
         </ram:PayeePartyCreditorFinancialAccount>
@@ -386,9 +364,8 @@ function buildLineItem(line, data, profile, idx = 0) {
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-function generateCiiXml(data, profileKey = 'EXTENDED') {
-  const profile = PROFILES[profileKey.toUpperCase()];
-  if (!profile) throw new Error(`Unknown CII profile: ${profileKey}`);
+function generateCiiXml(data, profileKey = CII_DEFAULT_PROFILE) {
+  const profile = ciiProfile(profileKey);
 
   const typeCode  = data.typeCodeCii ?? data.typeCode ?? '380';
   const lineItems = profile.hasLines

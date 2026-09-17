@@ -267,6 +267,65 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
 
 ---
 
+## E-Rechnung — das Mapping liegt im Code, nicht in einer Tabelle
+
+Bis 09/2026 stand das Feld-Mapping (welche DB-Spalte wird welches EN-16931-Feld)
+in `backend/config/Mapping BT.xlsx`. Die Datei ist weg, und zwar aus drei
+Gründen, von denen jeder für sich reicht: sie **konnte nichts beweisen** (ob ein
+Feld wirklich im XML landet, wusste sie nicht — BT-11 war monatelang geladen und
+wurde nie ausgegeben), sie war **im Review unlesbar** (`git diff` zeigt bei einer
+.xlsx „binary files differ"), und sie war **bereits falsch** (BT-13 und BT-14
+zeigten beide auf `CONTRACT.ABBR`). Ihr Lader `services_bt_mapping.js` hatte
+obendrein keinen einzigen Aufrufer.
+
+**An ihre Stelle tritt `backend/einvoice/`:**
+
+| Datei | Beantwortet |
+|---|---|
+| `btRegistry.js` | Welches Feld geht in welches XML-Element? (**Quelle der Wahrheit**) |
+| `codelists.js` | Welche Werte darf ein Feld tragen? (UNTDID 1001/5305/4461/4451, UN/ECE Rec. 20) |
+| `profiles.js` | Welche Ausbaustufe erzeugen wir? (Factur-X MINIMUM…EXTENDED, XRechnung, Peppol) |
+| `referenceDocument.js` | An welchem Beleg wird geprüft? (zwei Musterbelege: Regelsatz und §13b) |
+| `registryCheck.js` | Stimmt die Tabelle noch? (`npm run einvoice:check`) |
+| `generateMappingDoc.js` | Erzeugt `docs/EINVOICE_BT_MAPPING.md` (`npm run einvoice:gen`) |
+
+**Warum das nicht wieder driften kann**: `registryCheck` rendert aus den
+Musterbelegen echtes CII- und UBL-XML und hält die Registry dagegen — **in beide
+Richtungen**. Eine Zeile, deren Pfad im Dokument fehlt, ist ein Fehler; ein
+Element im Dokument, das keine Zeile hat, ebenso. Die zweite Richtung ist die,
+die eine gepflegte Tabelle nie hat: sie fängt das neu ergänzte Feld, an das
+niemand mehr gedacht hat. Dazu kommt: jede BT-Nummer im Quelltext und jedes
+`btField` einer Validator-Regel muss es in der Registry geben. Läuft als
+`tests/einvoice_mapping.test.js` bei jedem Push — dieselbe Bauart wie der
+Lizenz-Drift-Check.
+
+**Beim Ergänzen eines Feldes** (Reihenfolge ist bindend):
+1. Zeile in `btRegistry.js` auf `emitted` und beide XML-Pfade eintragen
+2. Builder ergänzen (`services_einvoice_cii.js` / `_ubl.js`)
+3. `referenceDocument.js` so füllen, dass das Feld wirklich anfällt — sonst
+   meldet der Check die Zeile als unbelegt
+4. `npm run einvoice:gen` und **die erzeugte `docs/EINVOICE_BT_MAPPING.md`
+   mitcommitten** (gleiche Regel wie bei `license:gen`)
+
+**Codes nie als Literal schreiben.** Belegart, Steuerkategorie, Zahlungsart und
+Mengeneinheit kommen aus `codelists.js`. Ein falscher Code ist beim Empfänger
+eine harte Abweisung, sieht im Quelltext aber aus wie jeder andere String. Die
+Belegart bildet `documentTypeCode()` — die fachliche Fallunterscheidung steht
+einmal da, der Unterschied zwischen den Syntaxen (CII 875/876/877, UBL 326/380)
+daneben. Vorher waren das zwei Ternär-Kaskaden nebeneinander.
+
+**Die XML-Erzeugung bleibt handgeschrieben.** Die beiden Builder sind auditiert
+und gegen Norm-Eigenheiten gehärtet, die ein generischer Serializer schlechter
+ausdrückt: Elementreihenfolge nach D16B-Sequenz, negative Menge statt negativem
+Einzelpreis beim Storno (BR-27), bedingt ausgelassene Gruppen. Getauscht wurde
+das, was risikobehaftet war — die unbeweisbare Tabelle daneben, nicht der
+geprüfte Code.
+
+Vollständige Feldtabelle samt Abdeckung: `docs/EINVOICE_BT_MAPPING.md`.
+Befundlage: `docs/AUDIT_2026-08-25_HOAI_UND_ERECHNUNG.md`.
+
+---
+
 ## Deployment
 
 **Gehostet wird auf Scalingo** (`planandsimple`), nicht mehr auf Railway. Railway war

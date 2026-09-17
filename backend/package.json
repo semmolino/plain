@@ -9,6 +9,8 @@
     "migrate:status": "node scripts/migrate.js --status",
     "license:check": "node licensing/driftCheck.js",
     "license:gen": "node licensing/generateSeedSql.js && node licensing/generateDocs.js",
+    "einvoice:check": "node einvoice/registryCheck.js",
+    "einvoice:gen": "node einvoice/generateMappingDoc.js",
     "test": "jest",
     "migrate:drift": "node scripts/migration-drift.mjs"
   },
