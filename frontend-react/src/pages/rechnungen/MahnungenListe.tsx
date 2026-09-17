@@ -557,7 +557,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
       totalGross: r.totalGross, paidGross: r.amountPaidGross,
       cashDiscountPct: 0, cashDiscountDays: 0,
     })
-    const params = r.sourceType === 'invoice' ? { invoice_id: r.sourceId } : { partial_payment_id: r.sourceId }
+    const params = r.sourceType === 'invoice' ? { invoice_id: r.sourceId } : { advance_invoice_id: r.sourceId }
     fetchPayments(params).then(res => setExistingPayments(res.data ?? [])).catch(() => {})
   }
 
@@ -584,7 +584,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
     payMut.mutate({
       ...(payTarget.sourceType === 'invoice'
         ? { invoice_id: payTarget.sourceId }
-        : { partial_payment_id: payTarget.sourceId }),
+        : { advance_invoice_id: payTarget.sourceId }),
       amount_payed_gross:  gross,
       payment_date:        payForm.payment_date,
       purpose_of_payment:  payForm.purpose_of_payment || undefined,

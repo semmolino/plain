@@ -194,8 +194,8 @@ function SeProjektDetails({ projectId, onBack }: { projectId: number; onBack: ()
                     const isStorno = r.status === 'STORNIERT'
                     return (
                     <tr key={r.id} className="ls-row" style={isStorno ? { opacity: 0.55, textDecoration: 'line-through' } : undefined}>
-                      <td className="ls-td"><strong>{r.partial_payment_number || `#${r.id}`}</strong></td>
-                      <td className="ls-td">{fmtDate(r.partial_payment_date)}</td>
+                      <td className="ls-td"><strong>{r.advance_invoice_number || `#${r.id}`}</strong></td>
+                      <td className="ls-td">{fmtDate(r.advance_invoice_date)}</td>
                       <td className="ls-td ls-right">{money(r.total_amount_gross)}</td>
                       <td className="ls-td ls-right">{r.se_percent != null ? `${r.se_percent} %` : '—'}</td>
                       <td className="ls-td">{r.se_basis === 'NETTO' ? 'Netto' : r.se_basis === 'BRUTTO' ? 'Brutto' : '—'}</td>

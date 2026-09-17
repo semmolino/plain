@@ -79,7 +79,7 @@ async function lookupCountryCode(supabase, countryId) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 async function loadInvoiceData(supabase, docId, docType, tenantId) {
-  const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
+  const table = docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE';
   const doc   = await one(supabase, table, docId, tenantId);
   if (!doc) throw new InvoiceDataError(`${table} ${docId} not found.`);
 
@@ -98,7 +98,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   // ── 1. Document type & TypeCodes ──────────────────────────────────────────
 
   const isInvoice  = docType === 'INVOICE';
-  const isStornoPP = docType === 'PARTIAL_PAYMENT' && !!doc.CANCELS_PARTIAL_PAYMENT_ID;
+  const isStornoPP = docType === 'ADVANCE_INVOICE' && !!doc.CANCELS_PARTIAL_PAYMENT_ID;
   const invoiceType = isInvoice
     ? (doc.INVOICE_TYPE || 'rechnung')
     : (isStornoPP ? 'stornorechnung' : 'partial_payment');
@@ -107,13 +107,13 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const isStorno = invoiceType === 'stornorechnung';
   const isGutschrift = invoiceType === 'gutschrift';
 
-  const number  = isInvoice ? doc.INVOICE_NUMBER        : doc.PARTIAL_PAYMENT_NUMBER;
-  const docDate = isInvoice ? doc.INVOICE_DATE          : doc.PARTIAL_PAYMENT_DATE;
-  const addressIdField = isInvoice ? 'INVOICE_ADDRESS_ID'      : 'PARTIAL_PAYMENT_ADDRESS_ID';
+  const number  = isInvoice ? doc.INVOICE_NUMBER        : doc.ADVANCE_INVOICE_NUMBER;
+  const docDate = isInvoice ? doc.INVOICE_DATE          : doc.ADVANCE_INVOICE_DATE;
+  const addressIdField = isInvoice ? 'INVOICE_ADDRESS_ID'      : 'ADVANCE_INVOICE_ADDRESS_ID';
 
   // CII type codes: EXTENDED allows 875/876/877; all profiles allow 380/381/384
   const typeCodeCii =
-    docType === 'PARTIAL_PAYMENT'
+    docType === 'ADVANCE_INVOICE'
       ? (isStornoPP    ? '384' : '875')
     : invoiceType === 'schlussrechnung'     ? '877'
     : invoiceType === 'teilschlussrechnung' ? '876'
@@ -123,7 +123,7 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // UBL type codes: 326=Abschlag, 380=Invoice/Schluss, 381=Gutschrift, 384=Storno
   const typeCodeUbl =
-    docType === 'PARTIAL_PAYMENT'
+    docType === 'ADVANCE_INVOICE'
       ? (isStornoPP ? '384' : '326')
     : isStorno    ? '384'
     : isGutschrift ? '381'
@@ -274,9 +274,9 @@ ${basis}`;
     canceledDocNumber = orig?.INVOICE_NUMBER ?? String(doc.CANCELS_INVOICE_ID);
     canceledDocDate   = asIsoDate(orig?.INVOICE_DATE);
   } else if (isStornoPP) {
-    const orig = await one(supabase, 'PARTIAL_PAYMENT', doc.CANCELS_PARTIAL_PAYMENT_ID, tenantId);
-    canceledDocNumber = orig?.PARTIAL_PAYMENT_NUMBER ?? String(doc.CANCELS_PARTIAL_PAYMENT_ID);
-    canceledDocDate   = asIsoDate(orig?.PARTIAL_PAYMENT_DATE);
+    const orig = await one(supabase, 'ADVANCE_INVOICE', doc.CANCELS_PARTIAL_PAYMENT_ID, tenantId);
+    canceledDocNumber = orig?.ADVANCE_INVOICE_NUMBER ?? String(doc.CANCELS_PARTIAL_PAYMENT_ID);
+    canceledDocDate   = asIsoDate(orig?.ADVANCE_INVOICE_DATE);
   }
 
   // ── 10. Line items ────────────────────────────────────────────────────────
@@ -375,7 +375,7 @@ ${basis}`;
     const amountNet    = fmt2(doc.AMOUNT_NET ?? 0);
     const amountExtras = fmt2(doc.AMOUNT_EXTRAS_NET ?? 0);
     const lineTotal    = fmt2(amountNet + amountExtras);
-    const label = docType === 'PARTIAL_PAYMENT' ? 'Abschlagsrechnung' : 'Rechnung';
+    const label = docType === 'ADVANCE_INVOICE' ? 'Abschlagsrechnung' : 'Rechnung';
 
     // Branch 3 — Stundenrechnungen: wenn TEC-Stunden mit diesem Dokument
     // verknuepft sind und deren HOURLY_RATE_TOTAL-Summe (== Stunden-Anteil am Net)
@@ -386,8 +386,8 @@ ${basis}`;
     let note      = amountExtras > 0 ? `Honorar: ${amountNet} / Nebenkosten: ${amountExtras}` : '';
 
     try {
-      const tecFilter = docType === 'PARTIAL_PAYMENT'
-        ? { col: 'PARTIAL_PAYMENT_ID', val: docId }
+      const tecFilter = docType === 'ADVANCE_INVOICE'
+        ? { col: 'ADVANCE_INVOICE_ID', val: docId }
         : { col: 'INVOICE_ID',          val: docId };
       const { data: tecRows } = await supabase
         .from('TEC')
@@ -434,20 +434,20 @@ ${basis}`;
   if (isFinal) {
     const { data: dedRows } = await supabase
       .from('INVOICE_DEDUCTION')
-      .select('DEDUCTION_AMOUNT_NET, PARTIAL_PAYMENT_ID')
+      .select('DEDUCTION_AMOUNT_NET, ADVANCE_INVOICE_ID')
       .eq('INVOICE_ID', docId)
       .eq('TENANT_ID', tenantId);
 
     if (dedRows && dedRows.length > 0) {
-      const ppIds = dedRows.map(r => r.PARTIAL_PAYMENT_ID);
+      const ppIds = dedRows.map(r => r.ADVANCE_INVOICE_ID);
       const { data: partials } = await supabase
-        .from('PARTIAL_PAYMENT')
-        .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, SE_AMOUNT')
+        .from('ADVANCE_INVOICE')
+        .select('ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, SE_AMOUNT')
         .in('ID', ppIds);
 
       const ppMap = Object.fromEntries((partials ?? []).map(p => [p.ID, p]));
       deductions = dedRows.map(d => {
-        const pp    = ppMap[d.PARTIAL_PAYMENT_ID] ?? {};
+        const pp    = ppMap[d.ADVANCE_INVOICE_ID] ?? {};
         const gross = fmt2(pp.TOTAL_AMOUNT_GROSS ?? 0);
         const net   = fmt2(d.DEDUCTION_AMOUNT_NET ?? pp.TOTAL_AMOUNT_NET ?? 0);
         // N10: Was die Abschlagsrechnung gefordert hat, und was davon
@@ -455,8 +455,8 @@ ${basis}`;
         // der Sicherheitseinbehalt wurde nie gezahlt.
         const retained = fmt2(pp.SE_AMOUNT ?? 0);
         return {
-          number:      pp.PARTIAL_PAYMENT_NUMBER ?? String(d.PARTIAL_PAYMENT_ID),
-          date:        asIsoDate(pp.PARTIAL_PAYMENT_DATE),
+          number:      pp.ADVANCE_INVOICE_NUMBER ?? String(d.ADVANCE_INVOICE_ID),
+          date:        asIsoDate(pp.ADVANCE_INVOICE_DATE),
           netAmount:   net,
           vatAmount:   fmt2(gross - net),
           grossAmount: gross,             // fakturiert
@@ -517,11 +517,11 @@ ${basis}`;
   if (docType === 'INVOICE' && doc.ID) {
     try {
       const { data: rels } = await supabase
-        .from('PARTIAL_PAYMENT')
-        .select('ID, PARTIAL_PAYMENT_NUMBER, SE_AMOUNT')
+        .from('ADVANCE_INVOICE')
+        .select('ID, ADVANCE_INVOICE_NUMBER, SE_AMOUNT')
         .eq('SE_RELEASED_BY_INVOICE_ID', doc.ID);
       seReleaseRows = (rels || []).map(r => ({
-        number: r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
+        number: r.ADVANCE_INVOICE_NUMBER || String(r.ID),
         amount: fmt2(toNum(r.SE_AMOUNT ?? 0)),
       }));
     } catch (_) { /* schema may lack column */ }

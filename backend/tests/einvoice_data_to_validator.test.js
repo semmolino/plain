@@ -99,7 +99,7 @@ function fixture(overrides = {}) {
       { ID: 701, TENANT_ID: TENANT, NAME_SHORT: "LPH 2", NAME_LONG: "Vorplanung", BILLING_TYPE_ID: 1 },
     ],
     INVOICE_DEDUCTION: [],
-    PARTIAL_PAYMENT: [],
+    ADVANCE_INVOICE: [],
     TEC: [],
   });
 }

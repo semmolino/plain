@@ -9,7 +9,7 @@
  *   Original — Tabellen- und Spaltennamen, Constraint-Namen, Policy-Texte:
  *
  *     new row violates row-level security policy for table "INVOICE"
- *     column "SE_AMOUNT" of relation "PARTIAL_PAYMENT" does not exist
+ *     column "SE_AMOUNT" of relation "ADVANCE_INVOICE" does not exist
  *
  *   Für Nutzer ist das unbrauchbar, für jemanden, der das System sondiert,
  *   eine Landkarte. Und weil dieselbe Zeile im Code auch die fachlichen Fehler

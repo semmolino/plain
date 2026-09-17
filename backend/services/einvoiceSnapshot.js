@@ -36,7 +36,7 @@ const CII_SNAPSHOT_PROFILE_KEY = `zugferd-${CII_SNAPSHOT_PROFILE.toLowerCase()}`
  *
  * @param {object} supabase
  * @param {object} opts
- * @param {'INVOICE'|'PARTIAL_PAYMENT'} opts.docType
+ * @param {'INVOICE'|'ADVANCE_INVOICE'} opts.docType
  * @param {number} opts.docId
  * @param {number} opts.tenantId
  * @param {number} opts.companyId
@@ -44,7 +44,7 @@ const CII_SNAPSHOT_PROFILE_KEY = `zugferd-${CII_SNAPSHOT_PROFILE.toLowerCase()}`
  * @returns {Promise<{assetId: number, profile: string}|null>} null bei jedem Fehlschlag
  */
 async function freezeCiiSnapshot(supabase, { docType, docId, tenantId, companyId, fileBase }) {
-  const table = docType === "INVOICE" ? "INVOICE" : "PARTIAL_PAYMENT";
+  const table = docType === "INVOICE" ? "INVOICE" : "ADVANCE_INVOICE";
   let asset = null;
   try {
     const data = await loadInvoiceData(supabase, parseInt(docId, 10), docType, tenantId);

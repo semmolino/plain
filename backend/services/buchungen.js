@@ -972,7 +972,7 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
   const b = body || {};
   const { data: existing, error: exErr } = await supabase
     .from("TEC")
-    .select("ID, STRUCTURE_ID, PROJECT_ID, TENANT_ID, BOOKING_KIND, PARTIAL_PAYMENT_ID, INVOICE_ID")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, TENANT_ID, BOOKING_KIND, ADVANCE_INVOICE_ID, INVOICE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .single();
@@ -980,7 +980,7 @@ async function updateSpecialBuchung(supabase, { id, body, tenantId }) {
   if (!SPECIAL_KINDS.has(existing.BOOKING_KIND)) {
     throw { status: 400, message: "Diese Buchung ist keine Pauschale/Stückleistung." };
   }
-  if (existing.PARTIAL_PAYMENT_ID != null || existing.INVOICE_ID != null) {
+  if (existing.ADVANCE_INVOICE_ID != null || existing.INVOICE_ID != null) {
     throw { status: 409, message: "Bereits abgerechnete Buchungen können nicht bearbeitet werden." };
   }
 
@@ -1044,7 +1044,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
       QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION,
       BOOKING_KIND, ENTRY_KIND, UNIT_LABEL, BOOKING_TYPE_ID,
-      PARTIAL_PAYMENT_ID, INVOICE_ID,
+      ADVANCE_INVOICE_ID, INVOICE_ID,
       EMPLOYEE:EMPLOYEE_ID(ABBR)
     `)
     .eq("TENANT_ID", tenantId)
@@ -1065,7 +1065,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
 //     daraus folgenden Saetze anfassen — Menge, Datum, Person und Beschreibung
 //     bleiben, wie gebucht wurde. patchBuchung schreibt alles, was im Body steht.
 //   * Abgerechnete Buchungen muessen gesperrt sein. patchBuchung prueft
-//     INVOICE_ID/PARTIAL_PAYMENT_ID bewusst nicht — sonst liesse sich ein
+//     INVOICE_ID/ADVANCE_INVOICE_ID bewusst nicht — sonst liesse sich ein
 //     Tippfehler in der Beschreibung nach dem Rechnungslauf nicht mehr
 //     geradeziehen. Beim Umbuchen ist die Sperre dagegen der Kern der Sache:
 //     eine gestellte Rechnung darf ihre Grundlage nicht verlieren.
@@ -1081,7 +1081,7 @@ async function listBuchungenByProject(supabase, { projectId, tenantId }) {
  *  so lesen es auch die Rechnungswege (isNullOrZero in services/invoices.js);
  *  Altbestand traegt dort teils 0 statt NULL. */
 const belegLos = (v) => v === null || v === undefined || String(v) === "0";
-const istAbgerechnet = (r) => !belegLos(r.INVOICE_ID) || !belegLos(r.PARTIAL_PAYMENT_ID);
+const istAbgerechnet = (r) => !belegLos(r.INVOICE_ID) || !belegLos(r.ADVANCE_INVOICE_ID);
 
 // Deckel gegen einen Aufruf, der die halbe Tabelle in einem Rutsch verschiebt:
 // jede Zeile zieht eine Protokollzeile und die Neuberechnung ihrer Struktur nach.
@@ -1179,7 +1179,7 @@ async function rebookBuchungen(supabase, {
       ID, TENANT_ID, PROJECT_ID, STRUCTURE_ID, EMPLOYEE_ID, DATE_VOUCHER,
       QUANTITY_INT, QUANTITY_EXT, COST_RATE, COST_TOTAL, HOURLY_RATE, HOURLY_RATE_TOTAL,
       POSTING_DESCRIPTION, STATUS, BOOKING_KIND, ENTRY_KIND,
-      INVOICE_ID, PARTIAL_PAYMENT_ID
+      INVOICE_ID, ADVANCE_INVOICE_ID
     `)
     .in("ID", idList)
     .eq("TENANT_ID", tenantId);
@@ -1207,7 +1207,7 @@ async function rebookBuchungen(supabase, {
   // Belegnummern der gesperrten Zeilen — „bereits abgerechnet" ohne Nummer
   // laesst den Nutzer suchen.
   const invoiceIds = [...new Set((rows || []).filter(r => !belegLos(r.INVOICE_ID)).map(r => Number(r.INVOICE_ID)))];
-  const partialIds = [...new Set((rows || []).filter(r => !belegLos(r.PARTIAL_PAYMENT_ID)).map(r => Number(r.PARTIAL_PAYMENT_ID)))];
+  const partialIds = [...new Set((rows || []).filter(r => !belegLos(r.ADVANCE_INVOICE_ID)).map(r => Number(r.ADVANCE_INVOICE_ID)))];
   const [invoiceNr, partialNr] = await Promise.all([
     (async () => {
       if (!invoiceIds.length) return new Map();
@@ -1216,8 +1216,8 @@ async function rebookBuchungen(supabase, {
     })(),
     (async () => {
       if (!partialIds.length) return new Map();
-      const { data } = await supabase.from("PARTIAL_PAYMENT").select("ID, PARTIAL_PAYMENT_NUMBER").in("ID", partialIds).eq("TENANT_ID", tenantId);
-      return new Map((data || []).map(p => [Number(p.ID), p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`]));
+      const { data } = await supabase.from("ADVANCE_INVOICE").select("ID, ADVANCE_INVOICE_NUMBER").in("ID", partialIds).eq("TENANT_ID", tenantId);
+      return new Map((data || []).map(p => [Number(p.ID), p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`]));
     })(),
   ]);
 
@@ -1244,7 +1244,7 @@ async function rebookBuchungen(supabase, {
     if (istAbgerechnet(r)) {
       const belege = [
         !belegLos(r.INVOICE_ID)         ? `Rechnung ${invoiceNr.get(Number(r.INVOICE_ID)) || `#${r.INVOICE_ID}`}` : null,
-        !belegLos(r.PARTIAL_PAYMENT_ID) ? `Abschlag ${partialNr.get(Number(r.PARTIAL_PAYMENT_ID)) || `#${r.PARTIAL_PAYMENT_ID}`}` : null,
+        !belegLos(r.ADVANCE_INVOICE_ID) ? `Abschlag ${partialNr.get(Number(r.ADVANCE_INVOICE_ID)) || `#${r.ADVANCE_INVOICE_ID}`}` : null,
       ].filter(Boolean).join(" · ");
       skipped.push({ ...beschreibung, reason: "billed", message: `${REBOOK_SKIP_REASON.billed} (${belege})` });
       continue;

@@ -108,7 +108,7 @@ export interface AddressDetail {
   projects: Array<{ ID: number; NAME_SHORT: string | null; NAME_LONG: string | null }>
   offers:   Array<{ ID: number; NAME_SHORT: string | null }>
   invoices: Array<{ ID: number; INVOICE_NUMBER: string | null }>
-  partials: Array<{ ID: number; PARTIAL_PAYMENT_NUMBER: string | null }>
+  partials: Array<{ ID: number; ADVANCE_INVOICE_NUMBER: string | null }>
 }
 
 export const fetchAddressDetail = (id: number) =>

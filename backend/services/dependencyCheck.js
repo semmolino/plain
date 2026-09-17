@@ -66,7 +66,7 @@ async function checkAddress(supabase, { tenantId, id }) {
     safeReferences(supabase, "PROJECT",         "ID, NAME_SHORT, NAME_LONG", { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "OFFER",           "ID, NAME_SHORT",            { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { ADDRESS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PARTIAL_PAYMENT", "ID, PARTIAL_PAYMENT_NUMBER",{ ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ ADDRESS_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [
@@ -74,7 +74,7 @@ async function checkAddress(supabase, { tenantId, id }) {
     formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`),
     formatRefBlock("offers",   offers,   o => o.NAME_SHORT || `#${o.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
-    formatRefBlock("partials", partials, p => p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`),
+    formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
   ].filter(Boolean);
 
   const labeled = refs.map(r => ({
@@ -114,14 +114,14 @@ async function checkContact(supabase, { tenantId, id }) {
     safeReferences(supabase, "PROJECT",         "ID, NAME_SHORT",            { CONTACT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "OFFER",           "ID, NAME_SHORT",            { CONTACT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { CONTACT_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PARTIAL_PAYMENT", "ID, PARTIAL_PAYMENT_NUMBER",{ CONTACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ CONTACT_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [
     formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`),
     formatRefBlock("offers",   offers,   o => o.NAME_SHORT || `#${o.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
-    formatRefBlock("partials", partials, p => p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`),
+    formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
   ].filter(Boolean);
 
   const labeled = refs.map(r => ({
@@ -242,7 +242,7 @@ async function checkProject(supabase, { tenantId, id }) {
   const [tec, invoices, partials, structure, e2p] = await Promise.all([
     safeReferences(supabase, "TEC",                    "ID", { PROJECT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",                "ID, INVOICE_NUMBER", { PROJECT_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PARTIAL_PAYMENT",        "ID, PARTIAL_PAYMENT_NUMBER", { PROJECT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE",        "ID, ADVANCE_INVOICE_NUMBER", { PROJECT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "PROJECT_STRUCTURE",      "ID", { PROJECT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE2PROJECT",       "ID", { PROJECT_ID: id, TENANT_ID: tenantId }),
   ]);
@@ -254,7 +254,7 @@ async function checkProject(supabase, { tenantId, id }) {
     refs.push({ ...blk, label: blk.count === 1 ? "Rechnung" : "Rechnungen" });
   }
   if (partials.length > 0) {
-    const blk = formatRefBlock("partials", partials, p => p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`);
+    const blk = formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Abschlag" : "Abschlägen" });
   }
   if (structure.length > 0)  refs.push({ kind: "structure", count: structure.length,  sample: [], label: structure.length === 1 ? "Projektelement" : "Projektelementen" });
@@ -330,8 +330,8 @@ async function checkMahnung(supabase, { tenantId, id }) {
     const { data: inv } = await supabase.from("INVOICE").select("INVOICE_NUMBER").eq("ID", m.INVOICE_ID).maybeSingle();
     docName = inv?.INVOICE_NUMBER ? ` zu Rechnung ${inv.INVOICE_NUMBER}` : "";
   } else if (m?.PP_ID) {
-    const { data: pp } = await supabase.from("PARTIAL_PAYMENT").select("PARTIAL_PAYMENT_NUMBER").eq("ID", m.PP_ID).maybeSingle();
-    docName = pp?.PARTIAL_PAYMENT_NUMBER ? ` zu Abschlag ${pp.PARTIAL_PAYMENT_NUMBER}` : "";
+    const { data: pp } = await supabase.from("ADVANCE_INVOICE").select("ADVANCE_INVOICE_NUMBER").eq("ID", m.PP_ID).maybeSingle();
+    docName = pp?.ADVANCE_INVOICE_NUMBER ? ` zu Abschlag ${pp.ADVANCE_INVOICE_NUMBER}` : "";
   }
   const entityLabel = `Mahnung${stufeName ? ` (${stufeName})` : ""}${docName}`;
 
@@ -363,13 +363,13 @@ async function checkProjectStatus(supabase, { tenantId, id }) {
     safeReferences(supabase, "PROJECT",         "ID, NAME_SHORT",            { PROJECT_STATUS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "OFFER",           "ID, NAME_SHORT",            { OFFER_STATUS_ID:   id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { STATUS_ID:         id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PARTIAL_PAYMENT", "ID, PARTIAL_PAYMENT_NUMBER",{ STATUS_ID:         id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ STATUS_ID:         id, TENANT_ID: tenantId }),
   ]);
   const refs = [
     formatRefBlock("projects", projects, p => p.NAME_SHORT || `#${p.ID}`),
     formatRefBlock("offers",   offers,   o => o.NAME_SHORT || `#${o.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
-    formatRefBlock("partials", partials, p => p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`),
+    formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
   ].filter(Boolean);
   const labeled = refs.map(r => ({
     ...r,
@@ -487,7 +487,7 @@ async function checkContract(supabase, { tenantId, id }) {
   const entityLabel = `Vertrag „${name}"`;
   const [invoices, partials, structure] = await Promise.all([
     safeReferences(supabase, "INVOICE",           "ID, INVOICE_NUMBER",         { CONTRACT_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PARTIAL_PAYMENT",   "ID, PARTIAL_PAYMENT_NUMBER", { CONTRACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE",   "ID, ADVANCE_INVOICE_NUMBER", { CONTRACT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "PROJECT_STRUCTURE", "ID",                          { CONTRACT_ID: id, TENANT_ID: tenantId }),
   ]);
   const refs = [];
@@ -496,7 +496,7 @@ async function checkContract(supabase, { tenantId, id }) {
     refs.push({ ...blk, label: blk.count === 1 ? "Rechnung" : "Rechnungen" });
   }
   if (partials.length > 0) {
-    const blk = formatRefBlock("partials", partials, p => p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`);
+    const blk = formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`);
     refs.push({ ...blk, label: blk.count === 1 ? "Abschlag" : "Abschlägen" });
   }
   if (structure.length > 0) {
@@ -537,7 +537,7 @@ async function checkWorkingTimeModel(supabase, { tenantId, id }) {
 async function checkTec(supabase, { tenantId, id }) {
   const { data: tec } = await supabase
     .from("TEC")
-    .select("DATE_VOUCHER, QUANTITY_INT, INVOICE_ID, PARTIAL_PAYMENT_ID, EMPLOYEE_ID")
+    .select("DATE_VOUCHER, QUANTITY_INT, INVOICE_ID, ADVANCE_INVOICE_ID, EMPLOYEE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -550,9 +550,9 @@ async function checkTec(supabase, { tenantId, id }) {
     const { data: inv } = await supabase.from("INVOICE").select("INVOICE_NUMBER").eq("ID", tec.INVOICE_ID).maybeSingle();
     refs.push({ kind: "invoice", count: 1, sample: [inv?.INVOICE_NUMBER || `#${tec.INVOICE_ID}`], label: "Rechnung" });
   }
-  if (tec?.PARTIAL_PAYMENT_ID) {
-    const { data: pp } = await supabase.from("PARTIAL_PAYMENT").select("PARTIAL_PAYMENT_NUMBER").eq("ID", tec.PARTIAL_PAYMENT_ID).maybeSingle();
-    refs.push({ kind: "partial", count: 1, sample: [pp?.PARTIAL_PAYMENT_NUMBER || `#${tec.PARTIAL_PAYMENT_ID}`], label: "Abschlag" });
+  if (tec?.ADVANCE_INVOICE_ID) {
+    const { data: pp } = await supabase.from("ADVANCE_INVOICE").select("ADVANCE_INVOICE_NUMBER").eq("ID", tec.ADVANCE_INVOICE_ID).maybeSingle();
+    refs.push({ kind: "partial", count: 1, sample: [pp?.ADVANCE_INVOICE_NUMBER || `#${tec.ADVANCE_INVOICE_ID}`], label: "Abschlag" });
   }
   const blocked = refs.length > 0;
   return {

@@ -42,10 +42,10 @@ const seed = (extra = {}) => makeFakeSupabase({
     { ID: 42, TENANT_ID: TENANT, PROJECT_ID: 1, FATHER_ID: null, NAME_SHORT: "LP5",   BILLING_TYPE_ID: 1, REVENUE: 50000, EXTRAS_PERCENT: 10 },
     { ID: 43, TENANT_ID: TENANT, PROJECT_ID: 1, FATHER_ID: null, NAME_SHORT: "BL",    BILLING_TYPE_ID: 2, REVENUE: 0,     EXTRAS_PERCENT: 0 },
   ],
-  PARTIAL_PAYMENT: [{ ID: 500, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 }],
+  ADVANCE_INVOICE: [{ ID: 500, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 }],
   INVOICE: [{ ID: 600, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 }],
   CONTACTS: [{ ID: 21, TENANT_ID: TENANT, ADDRESS_ID: 11 }],
-  PAYMENT: [], PAYMENT_STRUCTURE: [], PARTIAL_PAYMENT_STRUCTURE: [],
+  PAYMENT: [], PAYMENT_STRUCTURE: [], ADVANCE_INVOICE_STRUCTURE: [],
   ...extra,
 });
 
@@ -57,7 +57,7 @@ const runPreview = (buffer, supabase) =>
 /** Zuletzt geschriebene Belegpositionen aus dem Mock holen. */
 const ppsRows = () => ppSvc.writePpsRows.mock.calls.at(-1)[1].rows;
 /** Die Kopfdaten, die der Import auf den Beleg geschrieben hat. */
-const kopf = (supabase, table = "PARTIAL_PAYMENT") => supabase._tables[table][0];
+const kopf = (supabase, table = "ADVANCE_INVOICE") => supabase._tables[table][0];
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -108,8 +108,8 @@ describe("Belegpositionen", () => {
 
     const res = await runCommit(buffer, supabase);
     expect(kopf(supabase)).toMatchObject({
-      PARTIAL_PAYMENT_NUMBER: "AR-2025-007",
-      PARTIAL_PAYMENT_DATE: "2025-11-15",
+      ADVANCE_INVOICE_NUMBER: "AR-2025-007",
+      ADVANCE_INVOICE_DATE: "2025-11-15",
       DUE_DATE: "2025-12-15",
       VAT_PERCENT: 7,                                   // Datei schlaegt Vertragssatz
       COMMENT: "Altbestand",
@@ -176,7 +176,7 @@ describe("Teilzahlung", () => {
 describe("Pruefung", () => {
   it("lehnt eine bereits vergebene Belegnummer ab", async () => {
     const supabase = seed({
-      PARTIAL_PAYMENT: [{ ID: 500, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 2, PARTIAL_PAYMENT_NUMBER: "AR-2025-007", VAT_PERCENT: 19 }],
+      ADVANCE_INVOICE: [{ ID: 500, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 2, ADVANCE_INVOICE_NUMBER: "AR-2025-007", VAT_PERCENT: 19 }],
     });
     const buffer = await xlsxBuffer([HEAD, row("P-1", "AR-2025-007", "Abschlag", "15.11.2025", "", "LP5", "8000")]);
 
@@ -299,7 +299,7 @@ describe("Pruefung", () => {
     expect(pv.rows[1].messages.map((m) => m.text).join()).toContain("weicht von der ersten Zeile");
 
     await runCommit(buffer, supabase);
-    expect(kopf(supabase).PARTIAL_PAYMENT_DATE).toBe("2025-11-15");
+    expect(kopf(supabase).ADVANCE_INVOICE_DATE).toBe("2025-11-15");
   });
 });
 
@@ -319,6 +319,6 @@ describe("Rollback", () => {
     expect(supabase._tables.PAYMENT).toHaveLength(0);
     expect(supabase._tables.PAYMENT_STRUCTURE).toHaveLength(0);
     // Der Beleg selbst ist ebenfalls weg (er trug die Stapel-Kennung).
-    expect(supabase._tables.PARTIAL_PAYMENT.filter((r) => r.IMPORT_BATCH_ID === batchId)).toHaveLength(0);
+    expect(supabase._tables.ADVANCE_INVOICE.filter((r) => r.IMPORT_BATCH_ID === batchId)).toHaveLength(0);
   });
 });

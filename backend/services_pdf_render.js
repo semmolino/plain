@@ -322,7 +322,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 
   const { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, FATHER_ID, BILLING_TYPE_ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, PARTIAL_PAYMENTS, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
+    .select('ID, FATHER_ID, BILLING_TYPE_ID, NAME_SHORT, NAME_LONG, REVENUE, REVENUE_BASIS, EXTRAS, ADVANCE_INVOICED, INVOICED, SURCHARGES_TOTAL, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_EUR, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_EUR, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_EUR')
     .eq('PROJECT_ID', projectId)
     .order('ID', { ascending: true });
 
@@ -332,8 +332,8 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
   }
 
   // Per-phase amounts from this specific document
-  const structTable = docType === 'INVOICE' ? 'INVOICE_STRUCTURE' : 'PARTIAL_PAYMENT_STRUCTURE';
-  const docIdField  = docType === 'INVOICE' ? 'INVOICE_ID' : 'PARTIAL_PAYMENT_ID';
+  const structTable = docType === 'INVOICE' ? 'INVOICE_STRUCTURE' : 'ADVANCE_INVOICE_STRUCTURE';
+  const docIdField  = docType === 'INVOICE' ? 'INVOICE_ID' : 'ADVANCE_INVOICE_ID';
   const { data: docRows } = await supabase
     .from(structTable).select('STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET').eq(docIdField, docId);
   const docMap = Object.fromEntries((docRows || []).map(r => [r.STRUCTURE_ID, r]));
@@ -387,7 +387,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
   const leafPerformed = (l) => {
     const lFee = Math.round((Number(l.REVENUE || 0) + Number(l.EXTRAS || 0)) * 100) / 100;
     if (Number(l.BILLING_TYPE_ID) === 2) return lFee;
-    return docType === 'INVOICE' ? Number(l.INVOICED || 0) : Number(l.PARTIAL_PAYMENTS || 0);
+    return docType === 'INVOICE' ? Number(l.INVOICED || 0) : Number(l.ADVANCE_INVOICED || 0);
   };
 
   return rows.map(r => {
@@ -396,7 +396,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
     if (isLeaf) {
       revenue       = Number(r.REVENUE  || 0);
       extras        = Number(r.EXTRAS   || 0);
-      alreadyBilled = docType === 'INVOICE' ? Number(r.INVOICED || 0) : Number(r.PARTIAL_PAYMENTS || 0);
+      alreadyBilled = docType === 'INVOICE' ? Number(r.INVOICED || 0) : Number(r.ADVANCE_INVOICED || 0);
       performedAmount = leafPerformed(r);
       const dr = docMap[r.ID];
       thisDocNet = dr ? Number(dr.AMOUNT_NET || 0) + Number(dr.AMOUNT_EXTRAS_NET || 0) : 0;
@@ -407,7 +407,7 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
       revenue = leaves.reduce((s, l) => s + Number(l.REVENUE || 0), 0);
       extras  = leaves.reduce((s, l) => s + Number(l.EXTRAS  || 0), 0);
       alreadyBilled = leaves.reduce((s, l) => {
-        return s + (docType === 'INVOICE' ? Number(l.INVOICED || 0) : Number(l.PARTIAL_PAYMENTS || 0));
+        return s + (docType === 'INVOICE' ? Number(l.INVOICED || 0) : Number(l.ADVANCE_INVOICED || 0));
       }, 0);
       thisDocNet = leaves.reduce((s, l) => {
         const dr = docMap[l.ID];
@@ -447,30 +447,30 @@ async function loadProjectStructureRows({ supabase, projectId, docType, docId })
 async function loadProjectPayments({ supabase, projectId, currentDocType, currentDocId }) {
   if (!projectId) return [];
   const { data, error } = await supabase
-    .from('PARTIAL_PAYMENT')
-    .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID')
+    .from('ADVANCE_INVOICE')
+    .select('ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, STATUS_ID')
     .eq('PROJECT_ID', projectId)
-    .order('PARTIAL_PAYMENT_DATE', { ascending: true });
+    .order('ADVANCE_INVOICE_DATE', { ascending: true });
   if (error) {
-    if (isTableMissingErr(error, 'partial_payment')) return [];
+    if (isTableMissingErr(error, 'advance_invoice')) return [];
     console.error('[LOAD_PROJECT_PAYMENTS]', error.message);
     return [];
   }
   return (data || []).map(r => ({
     id:          r.ID,
-    number:      r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
-    date:        r.PARTIAL_PAYMENT_DATE || '',
+    number:      r.ADVANCE_INVOICE_NUMBER || String(r.ID),
+    date:        r.ADVANCE_INVOICE_DATE || '',
     netAmount:   Number(r.TOTAL_AMOUNT_NET  || 0),
     vatAmount:   Number(r.TAX_AMOUNT_NET    || 0),
     grossAmount: Number(r.TOTAL_AMOUNT_GROSS || 0),
-    isCurrent:   currentDocType === 'PARTIAL_PAYMENT' && r.ID === currentDocId,
+    isCurrent:   currentDocType === 'ADVANCE_INVOICE' && r.ID === currentDocId,
     isBooked:    Number(r.STATUS_ID) === 2,
   }));
 }
 
 async function loadTecRows({ supabase, docType, docId }) {
   try {
-    const field = docType === 'INVOICE' ? 'INVOICE_ID' : 'PARTIAL_PAYMENT_ID';
+    const field = docType === 'INVOICE' ? 'INVOICE_ID' : 'ADVANCE_INVOICE_ID';
     const { data, error } = await supabase
       .from('TEC')
       .select('ID, DATE_VOUCHER, EMPLOYEE_ID, STRUCTURE_ID, QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL, POSTING_DESCRIPTION, BOOKING_KIND')
@@ -577,7 +577,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   if (tenantId === undefined || tenantId === null || tenantId === '') {
     throw new Error('buildPdfViewModel: tenantId ist erforderlich');
   }
-  const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
+  const table = docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE';
 
   // Load raw doc for fields not exposed by loadInvoiceData
   const { data: rawDoc, error: rawErr } = await supabase
@@ -599,14 +599,14 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   //   "abzgl. bisheriger Abschlags." = sum of AMOUNT_NET of all prior PPs
   //   "In dieser Rechnung"           = AMOUNT_NET of this PP
   let arProgress = null;
-  if (docType === 'PARTIAL_PAYMENT') {
+  if (docType === 'ADVANCE_INVOICE') {
     amountNet       = Number(rawDoc.AMOUNT_NET       ?? inv.totals.lineTotal ?? 0);
     amountExtrasNet = Number(rawDoc.AMOUNT_EXTRAS_NET ?? 0);
     if (rawDoc.CONTRACT_ID) {
       try {
         const { data: contractPps } = await supabase
-          .from('PARTIAL_PAYMENT')
-          .select('ID, AMOUNT_NET, STATUS_ID, CANCELS_PARTIAL_PAYMENT_ID, PARTIAL_PAYMENT_DATE')
+          .from('ADVANCE_INVOICE')
+          .select('ID, AMOUNT_NET, STATUS_ID, CANCELS_PARTIAL_PAYMENT_ID, ADVANCE_INVOICE_DATE')
           .eq('CONTRACT_ID', rawDoc.CONTRACT_ID);
         const all = (contractPps || []).filter(p =>
           // exclude this very PP from "prior"
@@ -616,8 +616,8 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
           // include only booked or open (status != 3 = stornoed/cancelled, depending on schema)
           String(p.STATUS_ID) !== '3' &&
           // only PPs dated up to this one's date so older are summed
-          (!rawDoc.PARTIAL_PAYMENT_DATE || !p.PARTIAL_PAYMENT_DATE ||
-           p.PARTIAL_PAYMENT_DATE <= rawDoc.PARTIAL_PAYMENT_DATE)
+          (!rawDoc.ADVANCE_INVOICE_DATE || !p.ADVANCE_INVOICE_DATE ||
+           p.ADVANCE_INVOICE_DATE <= rawDoc.ADVANCE_INVOICE_DATE)
         );
         // also exclude PPs that are storno'd by another PP
         const cancelledIds = new Set(
@@ -685,7 +685,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   {
     const contactId = docType === 'INVOICE'
       ? rawDoc.INVOICE_CONTACT_ID
-      : rawDoc.PARTIAL_PAYMENT_CONTACT_ID;
+      : rawDoc.ADVANCE_INVOICE_CONTACT_ID;
     let lastName = '', title = '';
     if (contactId) {
       try {
@@ -807,13 +807,13 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   if (docType === 'INVOICE') {
     try {
       const { data: rels } = await supabase
-        .from('PARTIAL_PAYMENT')
-        .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, SE_AMOUNT')
+        .from('ADVANCE_INVOICE')
+        .select('ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, SE_AMOUNT')
         .eq('SE_RELEASED_BY_INVOICE_ID', parseInt(rawDoc.ID, 10))
-        .order('PARTIAL_PAYMENT_DATE', { ascending: true });
+        .order('ADVANCE_INVOICE_DATE', { ascending: true });
       seReleaseRows = (rels || []).map(r => ({
-        number: r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
-        date:   r.PARTIAL_PAYMENT_DATE,
+        number: r.ADVANCE_INVOICE_NUMBER || String(r.ID),
+        date:   r.ADVANCE_INVOICE_DATE,
         amount: Number(r.SE_AMOUNT || 0),
       }));
       if (seReleaseTotal === 0 && seReleaseRows.length > 0) {
@@ -824,16 +824,16 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
       // synthetisieren wir die Auflösung daraus, damit Preview = Buchung.
       if (seReleaseRows.length === 0 && Array.isArray(previewReleasePpIds) && previewReleasePpIds.length > 0) {
         const { data: previewPps } = await supabase
-          .from('PARTIAL_PAYMENT')
-          .select('ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID')
+          .from('ADVANCE_INVOICE')
+          .select('ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID')
           .in('ID', previewReleasePpIds)
-          .order('PARTIAL_PAYMENT_DATE', { ascending: true });
+          .order('ADVANCE_INVOICE_DATE', { ascending: true });
         const openPreview = (previewPps || []).filter(p =>
           Number(p.SE_AMOUNT || 0) > 0 && p.SE_RELEASED_BY_INVOICE_ID == null
         );
         seReleaseRows = openPreview.map(r => ({
-          number: r.PARTIAL_PAYMENT_NUMBER || String(r.ID),
-          date:   r.PARTIAL_PAYMENT_DATE,
+          number: r.ADVANCE_INVOICE_NUMBER || String(r.ID),
+          date:   r.ADVANCE_INVOICE_DATE,
           amount: Number(r.SE_AMOUNT || 0),
         }));
         seReleaseTotal = Math.round(seReleaseRows.reduce((s, r) => s + r.amount, 0) * 100) / 100;
@@ -915,7 +915,7 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
   if (tenantId === undefined || tenantId === null || tenantId === '') {
     throw new Error('renderDocumentPdf: tenantId ist erforderlich');
   }
-  const table = docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT';
+  const table = docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE';
   const { data: docMeta } = await supabase
     .from(table)
     .select('COMPANY_ID, TENANT_ID')
@@ -979,7 +979,7 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
     const refCol       = isInvoiceDoc ? 'CANCELS_INVOICE_ID' : 'CANCELS_PARTIAL_PAYMENT_ID';
     vm.stornoTitle     = isInvoiceDoc ? 'Stornorechnung' : 'Storno-Abschlagsrechnung';
     const { data: cancelsDoc } = await supabase
-      .from(isInvoiceDoc ? 'INVOICE' : 'PARTIAL_PAYMENT')
+      .from(isInvoiceDoc ? 'INVOICE' : 'ADVANCE_INVOICE')
       .select(refCol)
       .eq('ID', docId)
       .eq('TENANT_ID', tenantId)
@@ -994,16 +994,16 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
             .eq('TENANT_ID', tenantId)
             .maybeSingle()
         : await supabase
-            .from('PARTIAL_PAYMENT')
-            .select('PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE')
+            .from('ADVANCE_INVOICE')
+            .select('ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE')
             .eq('ID', cancelsId)
             .eq('TENANT_ID', tenantId)
             .maybeSingle();
       // Das Template kennt nur die Rechnungsfelder — Storno-ARs darauf mappen.
       vm.origInvoice = orig
         ? (isInvoiceDoc ? orig : {
-            INVOICE_NUMBER: orig.PARTIAL_PAYMENT_NUMBER,
-            INVOICE_DATE:   orig.PARTIAL_PAYMENT_DATE,
+            INVOICE_NUMBER: orig.ADVANCE_INVOICE_NUMBER,
+            INVOICE_DATE:   orig.ADVANCE_INVOICE_DATE,
             INVOICE_TYPE:   'abschlagsrechnung',
           })
         : null;
@@ -1191,7 +1191,7 @@ function applyPlaceholders(vm, values) {
 // ── Mahnung PDF ───────────────────────────────────────────────────────────────
 
 async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId }) {
-  const docType = invoiceId ? 'INVOICE' : 'PARTIAL_PAYMENT';
+  const docType = invoiceId ? 'INVOICE' : 'ADVANCE_INVOICE';
   const docId   = invoiceId || ppId;
 
   if (!docId) throw { status: 400, message: 'invoiceId oder ppId erforderlich' };
@@ -1207,7 +1207,7 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
 
   // Load company template for theme + logo
   const { data: docMeta } = await supabase
-    .from(docType === 'INVOICE' ? 'INVOICE' : 'PARTIAL_PAYMENT')
+    .from(docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE')
     .select('COMPANY_ID')
     .eq('ID', docId)
     .maybeSingle();
@@ -1696,7 +1696,7 @@ const CATEGORY_TITLE = {
 
 // Beleg-Kategorie aus invoiceType/docType ableiten (steuert die Anhang-Auswahl).
 function invoiceTypeToCategory(invoiceType, docType) {
-  if (docType === 'PARTIAL_PAYMENT' || invoiceType === 'partial_payment') return 'invoice_abschlags';
+  if (docType === 'ADVANCE_INVOICE' || invoiceType === 'partial_payment') return 'invoice_abschlags';
   if (invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung') return 'invoice_schluss';
   return 'invoice_rechnung'; // rechnung + stornorechnung (Storno hat ohnehin keine Anhänge)
 }

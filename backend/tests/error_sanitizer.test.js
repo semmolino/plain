@@ -42,8 +42,8 @@ describe("errorSanitizer", () => {
     });
 
     it("verraet keine Spalten- oder Tabellennamen", () => {
-      const raus = durchleiten(500, { error: 'column "SE_AMOUNT" of relation "PARTIAL_PAYMENT" does not exist' });
-      expect(JSON.stringify(raus)).not.toMatch(/SE_AMOUNT|PARTIAL_PAYMENT|relation/);
+      const raus = durchleiten(500, { error: 'column "SE_AMOUNT" of relation "ADVANCE_INVOICE" does not exist' });
+      expect(JSON.stringify(raus)).not.toMatch(/SE_AMOUNT|ADVANCE_INVOICE|relation/);
     });
 
     it("vergibt eine Fehlerkennung und protokolliert sie mit dem Original", () => {

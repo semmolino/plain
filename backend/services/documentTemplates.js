@@ -300,7 +300,7 @@ async function setDefaultDocumentTemplate(supabase, { id, tenantId }) {
 // (DRAFT/PUBLISHED/ARCHIVED + Versionierung) bleibt fuer eine spaetere
 // Vorlagen-Verwaltung erhalten; hier upserten wir das Default-Theme direkt.
 
-const BRANDING_DOC_TYPES = ["INVOICE", "PARTIAL_PAYMENT", "OFFER"];
+const BRANDING_DOC_TYPES = ["INVOICE", "ADVANCE_INVOICE", "OFFER"];
 
 async function getBrandingTheme(supabase, { tenantId }) {
   const companyId = await resolveCompanyId(supabase, tenantId);
@@ -336,7 +336,7 @@ async function getBrandingTheme(supabase, { tenantId }) {
   const blocksByCategory = {
     invoice_rechnung:  pick("invoice_rechnung",  "INVOICE"),
     invoice_schluss:   pick("invoice_schluss",   "INVOICE"),
-    invoice_abschlags: pick("invoice_abschlags", "PARTIAL_PAYMENT"),
+    invoice_abschlags: pick("invoice_abschlags", "ADVANCE_INVOICE"),
     offer_angebot:     pick("offer_angebot",     "OFFER"),
   };
 

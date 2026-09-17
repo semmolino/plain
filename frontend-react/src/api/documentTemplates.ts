@@ -80,11 +80,11 @@ export const LOGO_SIZES: { id: string; label: string; mm: number }[] = [
   { id: 'gross',  label: 'Groß',   mm: 28 },
 ]
 
-export type DocTemplateType = 'INVOICE' | 'PARTIAL_PAYMENT' | 'OFFER'
+export type DocTemplateType = 'INVOICE' | 'ADVANCE_INVOICE' | 'OFFER'
 
 export const DOC_TYPE_LABELS: Record<DocTemplateType, string> = {
   INVOICE:         'Rechnungen',
-  PARTIAL_PAYMENT: 'Abschlagsrechnungen',
+  ADVANCE_INVOICE: 'Abschlagsrechnungen',
   OFFER:           'Angebote',
 }
 
@@ -92,7 +92,7 @@ export const DOC_TYPE_LABELS: Record<DocTemplateType, string> = {
 // backend/services_pdf_render.js (APPENDIX_BY_DOCTYPE).
 export const APPENDIX_BLOCKS_BY_TYPE: Record<DocTemplateType, AppendixKey[]> = {
   INVOICE:         ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
-  PARTIAL_PAYMENT: ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
+  ADVANCE_INVOICE: ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
   OFFER:           ['showHonorar'],
 }
 

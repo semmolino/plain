@@ -1033,7 +1033,7 @@ async function loadOpeningBalanceContext(supabase, tenantId) {
     supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("CONTRACT").select("ID, PROJECT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("PARTIAL_PAYMENT").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).limit(100000),
+    supabase.from("ADVANCE_INVOICE").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).limit(100000),
     supabase.from("INVOICE").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).limit(100000),
   ]);
 
@@ -1191,7 +1191,7 @@ async function recordOpeningPayment(supabase, { tenantId, batchId, docType, docI
   const payDate = paymentDate || new Date().toISOString().slice(0, 10);
 
   const payRow = {
-    PARTIAL_PAYMENT_ID: docType === "partial" ? docId : null,
+    ADVANCE_INVOICE_ID: docType === "partial" ? docId : null,
     INVOICE_ID:         docType === "invoice" ? docId : null,
     AMOUNT_PAYED_GROSS: gross, AMOUNT_PAYED_NET: paidNet, AMOUNT_PAYED_VAT: vat,
     PAYMENT_DATE: payDate, PROJECT_ID: projectId, CONTRACT_ID: contractId,
@@ -1210,7 +1210,7 @@ async function recordOpeningPayment(supabase, { tenantId, batchId, docType, docI
     const share = totalDist > 0 ? fmt2(paidNet * d.amt / totalDist) : fmt2(paidNet / dist.length);
     allocated = fmt2(allocated + share);
     return {
-      PAYMENT_ID: created.ID, PARTIAL_PAYMENT_ID: docType === "partial" ? docId : null,
+      PAYMENT_ID: created.ID, ADVANCE_INVOICE_ID: docType === "partial" ? docId : null,
       INVOICE_ID: docType === "invoice" ? docId : null, STRUCTURE_ID: d.id,
       AMOUNT_PAYED_NET: share, AMOUNT_PAYED_EXTRAS_NET: 0, TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
     };
@@ -1239,11 +1239,11 @@ async function bookReferenceDocument(supabase, { tenantId, batchId, employeeId, 
     ? await svc.initInvoice(supabase, { companyId: doc.companyId, employeeId, projectId: doc.projectId, contractId: doc.contractId, invoiceType: null, tenantId })
     : await svc.initPartialPayment(supabase, { companyId: doc.companyId, employeeId, projectId: doc.projectId, contractId: doc.contractId, tenantId });
 
-  const table = isInvoice ? "INVOICE" : "PARTIAL_PAYMENT";
+  const table = isInvoice ? "INVOICE" : "ADVANCE_INVOICE";
   const upd = { IMPORT_BATCH_ID: batchId };
-  if (doc.docNumber) upd[isInvoice ? "INVOICE_NUMBER" : "PARTIAL_PAYMENT_NUMBER"] = doc.docNumber;
+  if (doc.docNumber) upd[isInvoice ? "INVOICE_NUMBER" : "ADVANCE_INVOICE_NUMBER"] = doc.docNumber;
   // Belegdatum: ohne es steht der Beleg datumslos in Listen und Auswertungen.
-  if (doc.docDate) upd[isInvoice ? "INVOICE_DATE" : "PARTIAL_PAYMENT_DATE"] = doc.docDate;
+  if (doc.docDate) upd[isInvoice ? "INVOICE_DATE" : "ADVANCE_INVOICE_DATE"] = doc.docDate;
   if (doc.dueDate) upd.DUE_DATE = doc.dueDate;
   // MwSt aus der Datei schlägt den Vertragssatz — historische Belege können
   // einen anderen Satz tragen als der heute gültige.
@@ -1252,7 +1252,7 @@ async function bookReferenceDocument(supabase, { tenantId, batchId, employeeId, 
   await supabase.from(table).update(upd).eq("ID", id).eq("TENANT_ID", tenantId);
 
   const structRows = doc.positions.map((d) => ({
-    [isInvoice ? "INVOICE_ID" : "PARTIAL_PAYMENT_ID"]: id,
+    [isInvoice ? "INVOICE_ID" : "ADVANCE_INVOICE_ID"]: id,
     STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * num(d.extrasPercent) / 100),
     TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
   }));
@@ -1306,9 +1306,9 @@ async function reverseOpeningPayments(supabase, tenantId, batchId) {
 
 // Rollback: reversiert die gebuchten Aggregate je Beleg-Art und löscht die Belege.
 async function reverseOpeningDocs(supabase, tenantId, batchId, kind) {
-  const docTable    = kind === "partial" ? "PARTIAL_PAYMENT" : "INVOICE";
-  const structTable = kind === "partial" ? "PARTIAL_PAYMENT_STRUCTURE" : "INVOICE_STRUCTURE";
-  const projCol     = kind === "partial" ? "PARTIAL_PAYMENTS" : "INVOICED";
+  const docTable    = kind === "partial" ? "ADVANCE_INVOICE" : "INVOICE";
+  const structTable = kind === "partial" ? "ADVANCE_INVOICE_STRUCTURE" : "INVOICE_STRUCTURE";
+  const projCol     = kind === "partial" ? "ADVANCE_INVOICED" : "INVOICED";
 
   const { data: docs } = await supabase.from(docTable).select("ID, PROJECT_ID, TOTAL_AMOUNT_NET").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
   if (!docs || !docs.length) return 0;
@@ -1341,7 +1341,7 @@ async function reverseOpeningDocs(supabase, tenantId, batchId, kind) {
 async function rollbackOpeningBalance({ supabase, tenantId, batchId }) {
   // Betroffene Projekte
   const projectIds = new Set();
-  for (const t of ["PARTIAL_PAYMENT", "INVOICE"]) {
+  for (const t of ["ADVANCE_INVOICE", "INVOICE"]) {
     const { data } = await supabase.from(t).select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
     for (const r of data || []) if (r.PROJECT_ID != null) projectIds.add(r.PROJECT_ID);
   }
@@ -1349,7 +1349,7 @@ async function rollbackOpeningBalance({ supabase, tenantId, batchId }) {
   if (ids.length) {
     // Schutz: an den Projekten hängen weitere gebuchte Belege außerhalb dieses Stapels.
     const blockers = [];
-    for (const t of [{ table: "PARTIAL_PAYMENT", label: "Abschlagsrechnung(en)" }, { table: "INVOICE", label: "Rechnung(en)" }]) {
+    for (const t of [{ table: "ADVANCE_INVOICE", label: "Abschlagsrechnung(en)" }, { table: "INVOICE", label: "Rechnung(en)" }]) {
       const { data, error } = await supabase.from(t.table).select("ID, IMPORT_BATCH_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).in("PROJECT_ID", ids);
       if (error) continue;
       const live = (data || []).filter((r) => r.IMPORT_BATCH_ID !== batchId).length;
@@ -1394,7 +1394,7 @@ async function loadOpenItemContext(supabase, tenantId) {
     supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("CONTRACT").select("ID, PROJECT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, NAME_SHORT, NAME_LONG, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("PARTIAL_PAYMENT").select("PARTIAL_PAYMENT_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("ADVANCE_INVOICE").select("ADVANCE_INVOICE_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("INVOICE").select("INVOICE_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
   ]);
 
@@ -1416,7 +1416,7 @@ async function loadOpenItemContext(supabase, tenantId) {
   // Vergebene Belegnummern — eine importierte Altnummer darf nicht mit einer
   // bestehenden kollidieren.
   const takenNumbers = new Set();
-  for (const r of ppRes.data || []) if (r.PARTIAL_PAYMENT_NUMBER) takenNumbers.add(norm(r.PARTIAL_PAYMENT_NUMBER));
+  for (const r of ppRes.data || []) if (r.ADVANCE_INVOICE_NUMBER) takenNumbers.add(norm(r.ADVANCE_INVOICE_NUMBER));
   for (const r of invRes.data || []) if (r.INVOICE_NUMBER) takenNumbers.add(norm(r.INVOICE_NUMBER));
 
   const projectsByNumber = new Map();
@@ -1778,7 +1778,7 @@ async function structureBatchBlockers({ supabase, tenantId, batchId }) {
   const projectIds = [...new Set((structs || []).map((r) => r.PROJECT_ID).filter(Boolean))];
   if (!projectIds.length) return [];
   const blockers = [];
-  for (const dep of [{ table: "INVOICE", label: "Rechnung(en)" }, { table: "TEC", label: "Buchung(en)" }, { table: "PARTIAL_PAYMENT", label: "Abschlagszahlung(en)" }]) {
+  for (const dep of [{ table: "INVOICE", label: "Rechnung(en)" }, { table: "TEC", label: "Buchung(en)" }, { table: "ADVANCE_INVOICE", label: "Abschlagszahlung(en)" }]) {
     const { count, error } = await supabase
       .from(dep.table).select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
     if (error) {
@@ -1833,7 +1833,7 @@ const DOMAINS = {
       { table: "CONTRACT",        column: "INVOICE_CONTACT_ID", label: "Vertrag/Verträge" },
       { table: "OFFER",           column: "CONTACT_ID",         label: "Angebot(e)" },
       { table: "INVOICE",         column: "CONTACT_ID",         label: "Rechnung(en)" },
-      { table: "PARTIAL_PAYMENT", column: "CONTACT_ID",         label: "Abschlagsrechnung(en)" },
+      { table: "ADVANCE_INVOICE", column: "CONTACT_ID",         label: "Abschlagsrechnung(en)" },
     ],
     loadContext: loadContactContext,
     buildEntry: buildContactEntry,
@@ -1892,7 +1892,7 @@ const DOMAINS = {
   opening_balance: {
     key: "opening_balance",
     label: "Anfangsbestände (Altrechnungen)",
-    table: "PARTIAL_PAYMENT",
+    table: "ADVANCE_INVOICE",
     matchLabel: "Projektnummer",
     fields: OPENING_BALANCE_FIELDS,
     loadContext: loadOpeningBalanceContext,
@@ -1903,7 +1903,7 @@ const DOMAINS = {
   open_items: {
     key: "open_items",
     label: "Offene Posten (Altbelege)",
-    table: "PARTIAL_PAYMENT",
+    table: "ADVANCE_INVOICE",
     matchLabel: "Belegnummer",
     fields: OPEN_ITEM_FIELDS,
     exampleRows: [

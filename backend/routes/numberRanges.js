@@ -19,7 +19,7 @@ module.exports = (supabase) => {
   }
 
   // Get number ranges for the authenticated tenant's company/year
-  // - GLOBAL: shared counter for INVOICE/PARTIAL_PAYMENT
+  // - GLOBAL: shared counter for INVOICE/ADVANCE_INVOICE
   // - PROJECT: separate counter for projects
   router.get("/", async (req, res) => {
     const year = parseInt(String(req.query.year || currentYear()), 10);

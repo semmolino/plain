@@ -340,7 +340,7 @@ export function AddressDetailPage() {
           <LinkList items={detail!.invoices} icon={<Receipt size={14} />} label="Rechnungen"
             render={i => i.INVOICE_NUMBER || `#${i.ID}`} onClick={() => navigate('/rechnungen')} />
           <LinkList items={detail!.partials} icon={<Banknote size={14} />} label="Abschläge"
-            render={p => p.PARTIAL_PAYMENT_NUMBER || `#${p.ID}`} onClick={() => navigate('/rechnungen')} />
+            render={p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`} onClick={() => navigate('/rechnungen')} />
         </Card>
       )}
 

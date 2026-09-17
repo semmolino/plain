@@ -148,6 +148,9 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0144_03_role_name.sql",
       "0145_04_employee_abbr.sql",
       "0146_04_employee_abbr_sql_objects.sql",
+      "0147_05_advance_invoice.sql",
+      "0148_05_advance_invoice_sql_objects.sql",
+      "0149_05_advance_invoice_values.sql",
     ]);
   });
 

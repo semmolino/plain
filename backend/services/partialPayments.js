@@ -84,15 +84,15 @@ async function loadProjectStructuresForContext(supabase, { contractId, projectId
 }
 
 // ---------------------------------------------------------------------------
-// PARTIAL_PAYMENT_STRUCTURE helpers
+// ADVANCE_INVOICE_STRUCTURE helpers
 // ---------------------------------------------------------------------------
 
-const PPS_TABLE_CANDIDATES = ["PARTIAL_PAYMENT_STRUCTURE", "PARTIAL_PAYMENT_STRUCTURE"];
+const PPS_TABLE_CANDIDATES = ["ADVANCE_INVOICE_STRUCTURE", "ADVANCE_INVOICE_STRUCTURE"];
 
 const isMissingPpsRelation = (err) => {
   const msg = String(err?.message || "");
   return (
-    /relation\s+\"public\.(partial_payment_structure|PARTIAL_PAYMENT_STRUCTURE)\"/i.test(msg) &&
+    /relation\s+\"public\.(partial_payment_structure|ADVANCE_INVOICE_STRUCTURE)\"/i.test(msg) &&
     /does\s+not\s+exist/i.test(msg)
   );
 };
@@ -115,22 +115,22 @@ async function sumTecForStructures(supabase, { structureIds, partialPaymentId })
 
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
-    .select("ID, HOURLY_RATE_TOTAL, PARTIAL_PAYMENT_ID, INVOICE_ID, STRUCTURE_ID")
+    .select("ID, HOURLY_RATE_TOTAL, ADVANCE_INVOICE_ID, INVOICE_ID, STRUCTURE_ID")
     .in("STRUCTURE_ID", structureIds)
     .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error(tecErr.message);
 
   const eligible = (tecRows || []).filter((t) => {
     if (!isUninvoiced(t.INVOICE_ID)) return false;
-    const ppId = t.PARTIAL_PAYMENT_ID;
+    const ppId = t.ADVANCE_INVOICE_ID;
     return isNullOrZero(ppId) || String(ppId) === String(partialPaymentId);
   });
 
-  const toAssignIds = eligible.filter((t) => isNullOrZero(t.PARTIAL_PAYMENT_ID)).map((t) => t.ID);
+  const toAssignIds = eligible.filter((t) => isNullOrZero(t.ADVANCE_INVOICE_ID)).map((t) => t.ID);
 
   const assignedSum = round2(
     eligible.reduce((acc, t) => {
-      const isAssigned = String(t.PARTIAL_PAYMENT_ID) === String(partialPaymentId) || toAssignIds.includes(t.ID);
+      const isAssigned = String(t.ADVANCE_INVOICE_ID) === String(partialPaymentId) || toAssignIds.includes(t.ID);
       return acc + (isAssigned ? toNum(t.HOURLY_RATE_TOTAL) : 0);
     }, 0)
   );
@@ -149,8 +149,8 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   // zählt — sonst wird der "Empfohlene Leistungsbetrag" doppelt zu hoch.
   const statusIds = bookedStatusId === 2 ? [2, 3] : [bookedStatusId];
 
-  // --- Amounts from booked PARTIAL_PAYMENT rows ---
-  let ppQ = supabase.from("PARTIAL_PAYMENT").select("ID");
+  // --- Amounts from booked ADVANCE_INVOICE rows ---
+  let ppQ = supabase.from("ADVANCE_INVOICE").select("ID");
   if (contractId !== null && contractId !== undefined) ppQ = ppQ.eq("CONTRACT_ID", contractId);
   else if (projectId !== null && projectId !== undefined) ppQ = ppQ.eq("PROJECT_ID", projectId);
   if (bookedStatusId !== null && bookedStatusId !== undefined) ppQ = ppQ.in("STATUS_ID", statusIds);
@@ -161,7 +161,7 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   const ppIds = (ppRows || []).map((r) => r.ID);
   if (ppIds.length > 0) {
     const { data, error } = await execWithPpsTableFallback(supabase, (sb, table) =>
-      sb.from(table).select("STRUCTURE_ID, AMOUNT_NET").in("STRUCTURE_ID", structureIds).in("PARTIAL_PAYMENT_ID", ppIds)
+      sb.from(table).select("STRUCTURE_ID, AMOUNT_NET").in("STRUCTURE_ID", structureIds).in("ADVANCE_INVOICE_ID", ppIds)
     );
     if (error) throw new Error(error.message);
     (data || []).forEach((r) => {
@@ -196,7 +196,7 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
 
 async function sumPpsForPartialPayment(supabase, { partialPaymentId, structureIds }) {
   const { data, error } = await execWithPpsTableFallback(supabase, (sb, table) => {
-    let q = sb.from(table).select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET").eq("PARTIAL_PAYMENT_ID", partialPaymentId);
+    let q = sb.from(table).select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET").eq("ADVANCE_INVOICE_ID", partialPaymentId);
     if (Array.isArray(structureIds) && structureIds.length > 0) q = q.in("STRUCTURE_ID", structureIds);
     return q;
   });
@@ -239,7 +239,7 @@ function distributeAcrossRemaining({ total, remainingByStructure }) {
 async function writePpsRows(supabase, { partialPaymentId, structureIds, rows }) {
   if (Array.isArray(structureIds) && structureIds.length > 0) {
     const { error: delErr } = await execWithPpsTableFallback(supabase, (sb, table) =>
-      sb.from(table).delete().eq("PARTIAL_PAYMENT_ID", partialPaymentId).in("STRUCTURE_ID", structureIds)
+      sb.from(table).delete().eq("ADVANCE_INVOICE_ID", partialPaymentId).in("STRUCTURE_ID", structureIds)
     );
     if (delErr) throw new Error(delErr.message);
   }
@@ -253,11 +253,11 @@ async function writePpsRows(supabase, { partialPaymentId, structureIds, rows }) 
 
 async function recomputePartialPaymentTotals(supabase, partialPaymentId) {
   const { data: pp, error: ppErr } = await supabase
-    .from("PARTIAL_PAYMENT")
+    .from("ADVANCE_INVOICE")
     .select("ID, VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
     .eq("ID", partialPaymentId)
     .maybeSingle();
-  if (ppErr || !pp) throw new Error("PARTIAL_PAYMENT konnte nicht geladen werden");
+  if (ppErr || !pp) throw new Error("ADVANCE_INVOICE konnte nicht geladen werden");
 
   // Self-Heal VAT_PERCENT (siehe recomputeInvoiceTotals)
   let vatPercent = toNum(pp.VAT_PERCENT);
@@ -306,7 +306,7 @@ async function recomputePartialPaymentTotals(supabase, partialPaymentId) {
   if (vatPercent !== 0) updatePayload.VAT_PERCENT = vatPercent;
   if (resolvedVatId)    updatePayload.VAT_ID      = resolvedVatId;
 
-  const { error: upErr } = await supabase.from("PARTIAL_PAYMENT").update(updatePayload).eq("ID", partialPaymentId);
+  const { error: upErr } = await supabase.from("ADVANCE_INVOICE").update(updatePayload).eq("ID", partialPaymentId);
   if (upErr) throw new Error(upErr.message);
 
   return {
@@ -362,7 +362,7 @@ async function applyPerformanceAmount(supabase, { partialPaymentId, contractId, 
     const extrasPercent = toNum(s.EXTRAS_PERCENT);
     const extras = round2(amt * (extrasPercent / 100));
     return {
-      PARTIAL_PAYMENT_ID: partialPaymentId,
+      ADVANCE_INVOICE_ID: partialPaymentId,
       STRUCTURE_ID: s.ID,
       AMOUNT_NET: amt,
       AMOUNT_EXTRAS_NET: extras,
@@ -393,7 +393,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
   const { data: tecRows, error: tecErr } = await supabase
     .from("TEC")
     .select("STRUCTURE_ID, HOURLY_RATE_TOTAL")
-    .eq("PARTIAL_PAYMENT_ID", partialPaymentId)
+    .eq("ADVANCE_INVOICE_ID", partialPaymentId)
     .in("STRUCTURE_ID", bt2Ids)
     .neq("STATUS", "DRAFT");
   if (tecErr) throw new Error(tecErr.message);
@@ -411,7 +411,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
     const extrasPercent = toNum(s.EXTRAS_PERCENT);
     const extras = round2(amt * (extrasPercent / 100));
     return {
-      PARTIAL_PAYMENT_ID: partialPaymentId,
+      ADVANCE_INVOICE_ID: partialPaymentId,
       STRUCTURE_ID: s.ID,
       AMOUNT_NET: amt,
       AMOUNT_EXTRAS_NET: extras,
@@ -430,20 +430,20 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
 // ---------------------------------------------------------------------------
 
 async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
-  const BASE_COLS = "ID, PARTIAL_PAYMENT_NUMBER, PARTIAL_PAYMENT_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID";
+  const BASE_COLS = "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_PARTIAL_PAYMENT_ID";
   const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASED_BY_INVOICE_ID";
   const buildQuery = (cols) => {
     let q1 = supabase
-      .from("PARTIAL_PAYMENT")
+      .from("ADVANCE_INVOICE")
       .select(cols)
       .eq("TENANT_ID", tenantId)
-      .order("PARTIAL_PAYMENT_DATE", { ascending: false })
+      .order("ADVANCE_INVOICE_DATE", { ascending: false })
       .limit(limit);
     if (statusId) q1 = q1.eq("STATUS_ID", statusId);
     if (q) {
       // Frueher nur % und _ — Strukturzeichen (Komma, Klammer) blieben durch.
       const esc = suchwert(q);
-      q1 = q1.or(`PARTIAL_PAYMENT_NUMBER.ilike.%${esc}%,CONTACT.ilike.%${esc}%`);
+      q1 = q1.or(`ADVANCE_INVOICE_NUMBER.ilike.%${esc}%,CONTACT.ilike.%${esc}%`);
     }
     return q1;
   };
@@ -459,10 +459,10 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
   const ppIds = Array.from(new Set(ppRows.map((r) => r.ID).filter(Boolean)));
   const payedGrossMap = {};
   if (ppIds.length > 0) {
-    const { data: pays, error: payErr } = await supabase.from("PAYMENT").select("PARTIAL_PAYMENT_ID, AMOUNT_PAYED_GROSS").in("PARTIAL_PAYMENT_ID", ppIds);
+    const { data: pays, error: payErr } = await supabase.from("PAYMENT").select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", ppIds);
     if (!payErr) {
       (pays || []).forEach((p) => {
-        const k = p.PARTIAL_PAYMENT_ID;
+        const k = p.ADVANCE_INVOICE_ID;
         const v = typeof p.AMOUNT_PAYED_GROSS === "number" ? p.AMOUNT_PAYED_GROSS : parseFloat(String(p.AMOUNT_PAYED_GROSS ?? "0"));
         if (!Number.isFinite(v)) return;
         payedGrossMap[k] = (payedGrossMap[k] || 0) + v;
@@ -493,8 +493,8 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
 
   return ppRows.map((r) => ({
     ID: r.ID,
-    PARTIAL_PAYMENT_NUMBER: r.PARTIAL_PAYMENT_NUMBER ?? "",
-    PARTIAL_PAYMENT_DATE: r.PARTIAL_PAYMENT_DATE ?? null,
+    ADVANCE_INVOICE_NUMBER: r.ADVANCE_INVOICE_NUMBER ?? "",
+    ADVANCE_INVOICE_DATE: r.ADVANCE_INVOICE_DATE ?? null,
     DUE_DATE: r.DUE_DATE ?? null,
     BILLING_PERIOD_START: r.BILLING_PERIOD_START ?? null,
     BILLING_PERIOD_FINISH: r.BILLING_PERIOD_FINISH ?? null,
@@ -662,7 +662,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     EMPLOYEE_SALUTATION: employeeSalutation,
     EMPLOYEE_MAIL: employee.MAIL ?? null,
     EMPLOYEE_PHONE: employee.MOBILE ?? null,
-    PARTIAL_PAYMENT_ADDRESS_ID: invoiceAddressId,
+    ADVANCE_INVOICE_ADDRESS_ID: invoiceAddressId,
     ADDRESS_NAME_1: invoiceAddress.ADDRESS_NAME_1 ?? null,
     ADDRESS_NAME_2: invoiceAddress.ADDRESS_NAME_2 ?? null,
     ADDRESS_STREET: invoiceAddress.STREET ?? null,
@@ -677,7 +677,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     VAT_CATEGORY:              contractRow.VAT_CATEGORY              ?? 'S',
     VAT_EXEMPTION_REASON_CODE: contractRow.VAT_EXEMPTION_REASON_CODE ?? null,
     VAT_EXEMPTION_REASON_TEXT: contractRow.VAT_EXEMPTION_REASON_TEXT ?? null,
-    PARTIAL_PAYMENT_CONTACT_ID: invoiceContactId,
+    ADVANCE_INVOICE_CONTACT_ID: invoiceContactId,
     CONTACT: `${(invoiceContact.FIRST_NAME ?? "").trim()} ${(invoiceContact.LAST_NAME ?? "").trim()}`.trim(),
     CONTACT_SALUTATION: contactSalutation,
     CONTACT_MAIL: invoiceContact.EMAIL ?? null,
@@ -685,15 +685,15 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
     TENANT_ID: tenantId,
   };
 
-  const { data: created, error: insertErr } = await supabase.from("PARTIAL_PAYMENT").insert([insertRow]).select("ID").single();
+  const { data: created, error: insertErr } = await supabase.from("ADVANCE_INVOICE").insert([insertRow]).select("ID").single();
   if (insertErr) throw { status: 500, message: insertErr.message };
 
   return { id: created.ID };
 }
 
 async function getPartialPayment(supabase, { id, tenantId }) {
-  const { data: pp, error } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
-  if (error || !pp) throw { status: 500, message: "PARTIAL_PAYMENT konnte nicht geladen werden" };
+  const { data: pp, error } = await supabase.from("ADVANCE_INVOICE").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  if (error || !pp) throw { status: 500, message: "ADVANCE_INVOICE konnte nicht geladen werden" };
 
   const { data: project } = await supabase.from("PROJECT").select("NAME_SHORT, NAME_LONG").eq("ID", pp.PROJECT_ID).maybeSingle();
 
@@ -709,19 +709,19 @@ async function getPartialPayment(supabase, { id, tenantId }) {
 }
 
 async function deletePartialPayment(supabase, { id, tenantId }) {
-  const { data: pp, error: ppErr } = await supabase.from("PARTIAL_PAYMENT").select("ID, STATUS_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
-  if (ppErr || !pp) throw { status: 404, message: "PARTIAL_PAYMENT nicht gefunden" };
+  const { data: pp, error: ppErr } = await supabase.from("ADVANCE_INVOICE").select("ID, STATUS_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  if (ppErr || !pp) throw { status: 404, message: "ADVANCE_INVOICE nicht gefunden" };
   if (String(pp.STATUS_ID) === "2") throw { status: 400, message: "Gebuchte Abschlagsrechnungen können nicht gelöscht werden" };
 
-  const { error: tecErr } = await supabase.from("TEC").update({ PARTIAL_PAYMENT_ID: null }).eq("PARTIAL_PAYMENT_ID", id);
+  const { error: tecErr } = await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: null }).eq("ADVANCE_INVOICE_ID", id);
   if (tecErr) throw new Error(tecErr.message);
 
   const { error: ppsErr } = await execWithPpsTableFallback(supabase, (sb, table) =>
-    sb.from(table).delete().eq("PARTIAL_PAYMENT_ID", id)
+    sb.from(table).delete().eq("ADVANCE_INVOICE_ID", id)
   );
   if (ppsErr) throw new Error(ppsErr.message);
 
-  const { error: delErr } = await supabase.from("PARTIAL_PAYMENT").delete().eq("ID", id).eq("TENANT_ID", tenantId);
+  const { error: delErr } = await supabase.from("ADVANCE_INVOICE").delete().eq("ID", id).eq("TENANT_ID", tenantId);
   if (delErr) throw new Error(delErr.message);
 }
 
@@ -730,7 +730,7 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
   // skipDocuments (z. B. Datenimport von Anfangsbeständen): überspringt
   // Vorprüfung + PDF + XRechnung; Nummer/Status/Aggregate bleiben unverändert.
   if (!skipDocuments) try {
-    const data = await loadInvoiceData(supabase, parseInt(id, 10), "PARTIAL_PAYMENT", tenantId || pp.TENANT_ID);
+    const data = await loadInvoiceData(supabase, parseInt(id, 10), "ADVANCE_INVOICE", tenantId || pp.TENANT_ID);
     const v = validateEInvoiceData(data);
     if (!v.ok && !force) {
       const err = new Error(`E-Rechnung Validierung fehlgeschlagen: ${v.errors.length} Fehler`);
@@ -749,16 +749,16 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
     }
   }
 
-  if (!pp.PARTIAL_PAYMENT_NUMBER || !String(pp.PARTIAL_PAYMENT_NUMBER).trim()) {
+  if (!pp.ADVANCE_INVOICE_NUMBER || !String(pp.ADVANCE_INVOICE_NUMBER).trim()) {
     const { data: num, error: numErr } = await supabase.rpc("next_document_number", {
       p_company_id: pp.COMPANY_ID,
-      p_doc_type: "PARTIAL_PAYMENT",
+      p_doc_type: "ADVANCE_INVOICE",
     });
     if (numErr || !num) throw { status: 500, message: `Nummernkreis konnte nicht verwendet werden: ${numErr?.message || "unknown error"}` };
 
-    const { error: upNumErr } = await supabase.from("PARTIAL_PAYMENT").update({ PARTIAL_PAYMENT_NUMBER: num }).eq("ID", id);
+    const { error: upNumErr } = await supabase.from("ADVANCE_INVOICE").update({ ADVANCE_INVOICE_NUMBER: num }).eq("ID", id);
     if (upNumErr) throw { status: 500, message: upNumErr.message };
-    pp.PARTIAL_PAYMENT_NUMBER = num;
+    pp.ADVANCE_INVOICE_NUMBER = num;
   }
 
   const vatPercent = toNum(pp.VAT_PERCENT);
@@ -771,29 +771,29 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
     const r = await renderDocumentPdf({
       supabase,
       tenantId,
-      docType: "PARTIAL_PAYMENT",
+      docType: "ADVANCE_INVOICE",
       docId: parseInt(id, 10),
       templateId: pp.DOCUMENT_TEMPLATE_ID ? parseInt(String(pp.DOCUMENT_TEMPLATE_ID), 10) : null,
     });
     tpl = r.template;
     theme = r.theme;
-    const fileName = `Abschlagsrechnung_${pp.PARTIAL_PAYMENT_NUMBER || pp.ID}.pdf`;
-    pdfAsset = await storeGeneratedPdfAsAsset({ supabase, companyId: pp.COMPANY_ID, fileName, pdfBuffer: r.pdf, assetType: "PDF_PARTIAL_PAYMENT" });
+    const fileName = `Abschlagsrechnung_${pp.ADVANCE_INVOICE_NUMBER || pp.ID}.pdf`;
+    pdfAsset = await storeGeneratedPdfAsAsset({ supabase, companyId: pp.COMPANY_ID, fileName, pdfBuffer: r.pdf, assetType: "PDF_ADVANCE_INVOICE" });
   } catch (e) {
-    console.error("[BOOK_PP][PDF]", { partial_payment_id: id, error: e?.message || String(e), stack: e?.stack });
+    console.error("[BOOK_PP][PDF]", { advance_invoice_id: id, error: e?.message || String(e), stack: e?.stack });
     throw { status: 500, message: `PDF konnte nicht erzeugt werden: ${e?.message || e}` };
   }
 
   let xmlAsset = null;
   if (!skipDocuments) try {
-    const { data: ppFull, error: ppFullErr } = await supabase.from("PARTIAL_PAYMENT").select("*").eq("ID", id).maybeSingle();
-    if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "PARTIAL_PAYMENT nicht gefunden");
+    const { data: ppFull, error: ppFullErr } = await supabase.from("ADVANCE_INVOICE").select("*").eq("ID", id).maybeSingle();
+    if (ppFullErr || !ppFull) throw new Error(ppFullErr?.message || "ADVANCE_INVOICE nicht gefunden");
 
     const xml = await generateUblInvoiceXml({ supabase, partialPayment: ppFull });
-    const xmlName = `XRechnung_${pp.PARTIAL_PAYMENT_NUMBER || pp.ID}.xml`;
-    xmlAsset = await storeGeneratedXmlAsAsset({ supabase, companyId: pp.COMPANY_ID, fileName: xmlName, xmlString: xml, assetType: "XML_XRECHNUNG_PARTIAL_PAYMENT" });
+    const xmlName = `XRechnung_${pp.ADVANCE_INVOICE_NUMBER || pp.ID}.xml`;
+    xmlAsset = await storeGeneratedXmlAsAsset({ supabase, companyId: pp.COMPANY_ID, fileName: xmlName, xmlString: xml, assetType: "XML_XRECHNUNG_ADVANCE_INVOICE" });
   } catch (e) {
-    console.error("[BOOK_PP][XRECHNUNG_XML]", { partial_payment_id: id, error: e?.message || String(e), stack: e?.stack });
+    console.error("[BOOK_PP][XRECHNUNG_XML]", { advance_invoice_id: id, error: e?.message || String(e), stack: e?.stack });
     await bestEffortDeleteAsset({ supabase, asset: pdfAsset });
     throw { status: 500, message: `E-Rechnung konnte nicht erzeugt werden: ${e?.message || e}` };
   }
@@ -813,7 +813,7 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
     DOCUMENT_XML_RENDERED_AT: new Date().toISOString(),
   };
 
-  const { error: upErr } = await supabase.from("PARTIAL_PAYMENT").update(ppUpdate).eq("ID", id);
+  const { error: upErr } = await supabase.from("ADVANCE_INVOICE").update(ppUpdate).eq("ID", id);
   if (upErr) {
     await bestEffortDeleteAsset({ supabase, asset: pdfAsset });
     await bestEffortDeleteAsset({ supabase, asset: xmlAsset });
@@ -831,25 +831,25 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
   // Beleg ist fachlich vollstaendig, sobald PDF und UBL stehen.
   if (!skipDocuments) {
     await freezeCiiSnapshot(supabase, {
-      docType: "PARTIAL_PAYMENT",
+      docType: "ADVANCE_INVOICE",
       docId: parseInt(id, 10),
       tenantId: pp.TENANT_ID ?? tenantId ?? null,
       companyId: pp.COMPANY_ID,
-      fileBase: `ZUGFeRD_${pp.PARTIAL_PAYMENT_NUMBER || pp.ID}`,
+      fileBase: `ZUGFeRD_${pp.ADVANCE_INVOICE_NUMBER || pp.ID}`,
     });
   }
 
-  const { data: project, error: projErr } = await supabase.from("PROJECT").select("ID, PARTIAL_PAYMENTS").eq("ID", pp.PROJECT_ID).maybeSingle();
+  const { data: project, error: projErr } = await supabase.from("PROJECT").select("ID, ADVANCE_INVOICED").eq("ID", pp.PROJECT_ID).maybeSingle();
   if (projErr || !project) {
-    await supabase.from("PARTIAL_PAYMENT").update({ STATUS_ID: 1, DOCUMENT_PDF_ASSET_ID: null, DOCUMENT_XML_ASSET_ID: null }).eq("ID", id);
+    await supabase.from("ADVANCE_INVOICE").update({ STATUS_ID: 1, DOCUMENT_PDF_ASSET_ID: null, DOCUMENT_XML_ASSET_ID: null }).eq("ID", id);
     await bestEffortDeleteAsset({ supabase, asset: pdfAsset });
     await bestEffortDeleteAsset({ supabase, asset: xmlAsset });
     throw { status: 500, message: "Projekt konnte nicht geladen werden" };
   }
 
-  const { error: projUpErr } = await supabase.from("PROJECT").update({ PARTIAL_PAYMENTS: round2(toNum(project.PARTIAL_PAYMENTS) + toNum(pp.TOTAL_AMOUNT_NET)) }).eq("ID", pp.PROJECT_ID);
+  const { error: projUpErr } = await supabase.from("PROJECT").update({ ADVANCE_INVOICED: round2(toNum(project.ADVANCE_INVOICED) + toNum(pp.TOTAL_AMOUNT_NET)) }).eq("ID", pp.PROJECT_ID);
   if (projUpErr) {
-    await supabase.from("PARTIAL_PAYMENT").update({ STATUS_ID: 1, DOCUMENT_PDF_ASSET_ID: null, DOCUMENT_XML_ASSET_ID: null }).eq("ID", id);
+    await supabase.from("ADVANCE_INVOICE").update({ STATUS_ID: 1, DOCUMENT_PDF_ASSET_ID: null, DOCUMENT_XML_ASSET_ID: null }).eq("ID", id);
     await bestEffortDeleteAsset({ supabase, asset: pdfAsset });
     await bestEffortDeleteAsset({ supabase, asset: xmlAsset });
     throw { status: 500, message: projUpErr.message };
@@ -870,11 +870,11 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
       const structureIds = Array.from(addByStructure.keys()).map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n));
 
       if (structureIds.length > 0) {
-        const { data: psRows, error: psErr } = await supabase.from("PROJECT_STRUCTURE").select("ID, PARTIAL_PAYMENTS").in("ID", structureIds);
+        const { data: psRows, error: psErr } = await supabase.from("PROJECT_STRUCTURE").select("ID, ADVANCE_INVOICED").in("ID", structureIds);
         if (psErr) throw new Error(psErr.message);
 
         const currentById = new Map();
-        (psRows || []).forEach((s) => currentById.set(String(s.ID), toNum(s.PARTIAL_PAYMENTS)));
+        (psRows || []).forEach((s) => currentById.set(String(s.ID), toNum(s.ADVANCE_INVOICED)));
 
         const updates = structureIds.map((sid) => {
           const key = String(sid);
@@ -882,17 +882,17 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
           // INSERT ... ON CONFLICT, und RLS prueft WITH CHECK gegen die
           // vorgeschlagene Zeile. Ohne Mandant bricht das Speichern mit
           // "new row violates row-level security policy" ab.
-          return { ID: sid, TENANT_ID: tenantId, PARTIAL_PAYMENTS: round2((currentById.get(key) || 0) + (addByStructure.get(key) || 0)) };
+          return { ID: sid, TENANT_ID: tenantId, ADVANCE_INVOICED: round2((currentById.get(key) || 0) + (addByStructure.get(key) || 0)) };
         });
 
         const { error: psUpErr } = await supabase.from("PROJECT_STRUCTURE").upsert(updates, { onConflict: "ID" });
         if (psUpErr) throw new Error(psUpErr.message);
 
-        // PROJECT_PROGRESS: carry-forward snapshot + PARTIAL_PAYMENTS delta
+        // PROJECT_PROGRESS: carry-forward snapshot + ADVANCE_INVOICED delta
         const ppProgressRows = structureIds.map((sid) => ({
           TENANT_ID:        pp.TENANT_ID ?? null,
           STRUCTURE_ID:     sid,
-          PARTIAL_PAYMENTS: round2(addByStructure.get(String(sid)) || 0),
+          ADVANCE_INVOICED: round2(addByStructure.get(String(sid)) || 0),
         }));
         if (ppProgressRows.length > 0) {
           const { error: ppProgErr } = await insertProgressSnapshot(supabase, ppProgressRows);
@@ -901,7 +901,7 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
       }
     }
   } catch (e) {
-    await supabase.from("PARTIAL_PAYMENT").update({ STATUS_ID: 1, DOCUMENT_PDF_ASSET_ID: null, DOCUMENT_XML_ASSET_ID: null }).eq("ID", id);
+    await supabase.from("ADVANCE_INVOICE").update({ STATUS_ID: 1, DOCUMENT_PDF_ASSET_ID: null, DOCUMENT_XML_ASSET_ID: null }).eq("ID", id);
     await bestEffortDeleteAsset({ supabase, asset: pdfAsset });
     await bestEffortDeleteAsset({ supabase, asset: xmlAsset });
     throw { status: 500, message: `PROJECT_STRUCTURE konnte nicht aktualisiert werden: ${e?.message || e}` };
@@ -909,7 +909,7 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
 
   // If this is a Storno-AR, mark the original partial payment as cancelled
   if (pp.CANCELS_PARTIAL_PAYMENT_ID) {
-    await supabase.from("PARTIAL_PAYMENT").update({ STATUS_ID: 3 }).eq("ID", pp.CANCELS_PARTIAL_PAYMENT_ID);
+    await supabase.from("ADVANCE_INVOICE").update({ STATUS_ID: 3 }).eq("ID", pp.CANCELS_PARTIAL_PAYMENT_ID);
   }
 
   return { success: true, pdf_asset_id: pdfAsset?.ID ?? null, xml_asset_id: xmlAsset?.ID ?? null };
@@ -920,13 +920,13 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
 // ---------------------------------------------------------------------------
 async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = false }) {
   const { data: orig, error: origErr } = await supabase
-    .from("PARTIAL_PAYMENT").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+    .from("ADVANCE_INVOICE").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (origErr || !orig) throw { status: 404, message: "Abschlagsrechnung nicht gefunden" };
   if (String(orig.STATUS_ID) !== "2") throw { status: 400, message: "Nur gebuchte Abschlagsrechnungen können storniert werden" };
 
   // Prevent duplicate
   const { data: existing } = await supabase
-    .from("PARTIAL_PAYMENT").select("ID, STATUS_ID").eq("CANCELS_PARTIAL_PAYMENT_ID", id).maybeSingle();
+    .from("ADVANCE_INVOICE").select("ID, STATUS_ID").eq("CANCELS_PARTIAL_PAYMENT_ID", id).maybeSingle();
   if (existing) {
     const label = String(existing.STATUS_ID) === "2" ? "gebucht" : "als Entwurf angelegt";
     throw { status: 409, message: `Es existiert bereits eine Storno-Abschlagsrechnung (${label}) für diesen Eintrag` };
@@ -936,7 +936,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   // Storno proceeds, but the linked Schluss already accounted for the SE — manual
   // reconciliation may be needed.
   if (Number(orig.SE_AMOUNT || 0) > 0 && orig.SE_RELEASED_BY_INVOICE_ID) {
-    console.warn(`[CANCEL_PARTIAL_PAYMENT] AR ${id} has SE_AMOUNT=${orig.SE_AMOUNT} already released by INVOICE ${orig.SE_RELEASED_BY_INVOICE_ID}. Storno will not auto-reverse the Schluss; manual reconciliation may be required.`);
+    console.warn(`[CANCEL_ADVANCE_INVOICE] AR ${id} has SE_AMOUNT=${orig.SE_AMOUNT} already released by INVOICE ${orig.SE_RELEASED_BY_INVOICE_ID}. Storno will not auto-reverse the Schluss; manual reconciliation may be required.`);
   }
 
   // ── Optional: delete existing payments ──────────────────────────────────
@@ -944,7 +944,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
     const { data: payments } = await supabase
       .from("PAYMENT")
       .select("ID, AMOUNT_PAYED_NET, PROJECT_ID")
-      .eq("PARTIAL_PAYMENT_ID", id)
+      .eq("ADVANCE_INVOICE_ID", id)
       .eq("TENANT_ID", tenantId);
 
     for (const payment of payments || []) {
@@ -988,7 +988,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   }
 
   const {
-    ID: _id, PARTIAL_PAYMENT_NUMBER: _num, STATUS_ID: _st,
+    ID: _id, ADVANCE_INVOICE_NUMBER: _num, STATUS_ID: _st,
     DOCUMENT_PDF_ASSET_ID: _pdf, DOCUMENT_XML_ASSET_ID: _xml,
     DOCUMENT_XML_PROFILE: _xp, DOCUMENT_XML_RENDERED_AT: _xr,
     DOCUMENT_RENDERED_AT: _dr, DOCUMENT_TEMPLATE_ID: _tpl,
@@ -999,7 +999,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
 
   const cancelRow = {
     ...rest,
-    PARTIAL_PAYMENT_NUMBER: `S-${orig.PARTIAL_PAYMENT_NUMBER || ""}`,
+    ADVANCE_INVOICE_NUMBER: `S-${orig.ADVANCE_INVOICE_NUMBER || ""}`,
     CANCELS_PARTIAL_PAYMENT_ID: parseInt(id, 10),
     STATUS_ID:          1,
     AMOUNT_NET:        -round2(toNum(orig.AMOUNT_NET)),
@@ -1016,21 +1016,21 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   if ("SE_BASIS_AMT" in orig) cancelRow.SE_BASIS_AMT = orig.SE_BASIS_AMT != null ? -round2(toNum(orig.SE_BASIS_AMT)) : null;
 
   const { data: created, error: insertErr } = await supabase
-    .from("PARTIAL_PAYMENT").insert([cancelRow]).select("ID").single();
+    .from("ADVANCE_INVOICE").insert([cancelRow]).select("ID").single();
   if (insertErr) throw { status: 500, message: insertErr.message };
 
   const newId = created.ID;
 
-  // Copy PARTIAL_PAYMENT_STRUCTURE rows with negated amounts
+  // Copy ADVANCE_INVOICE_STRUCTURE rows with negated amounts
   const { data: ppsRows, error: ppsSelErr } = await execWithPpsTableFallback(supabase, (sb, table) =>
-    sb.from(table).select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, TENANT_ID").eq("PARTIAL_PAYMENT_ID", id)
+    sb.from(table).select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, TENANT_ID").eq("ADVANCE_INVOICE_ID", id)
   );
   if (ppsSelErr && !isMissingPpsRelation(ppsSelErr)) {
-    throw { status: 500, message: `PARTIAL_PAYMENT_STRUCTURE lesen fehlgeschlagen: ${ppsSelErr.message}` };
+    throw { status: 500, message: `ADVANCE_INVOICE_STRUCTURE lesen fehlgeschlagen: ${ppsSelErr.message}` };
   }
   if (ppsRows && ppsRows.length > 0) {
     const newPpsRows = ppsRows.map(r => ({
-      PARTIAL_PAYMENT_ID: newId,
+      ADVANCE_INVOICE_ID: newId,
       STRUCTURE_ID:       r.STRUCTURE_ID,
       AMOUNT_NET:        -round2(toNum(r.AMOUNT_NET)),
       AMOUNT_EXTRAS_NET: -round2(toNum(r.AMOUNT_EXTRAS_NET)),
@@ -1040,7 +1040,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
       sb.from(table).insert(newPpsRows)
     );
     if (ppsInsErr && !isMissingPpsRelation(ppsInsErr)) {
-      throw { status: 500, message: `PARTIAL_PAYMENT_STRUCTURE copy failed: ${ppsInsErr.message}` };
+      throw { status: 500, message: `ADVANCE_INVOICE_STRUCTURE copy failed: ${ppsInsErr.message}` };
     }
   }
 
@@ -1049,7 +1049,7 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   await bookPartialPayment(supabase, { id: newId, pp: cancelPp });
 
   // Unlink TEC bookings so they can be re-invoiced
-  await supabase.from("TEC").update({ PARTIAL_PAYMENT_ID: null }).eq("PARTIAL_PAYMENT_ID", id);
+  await supabase.from("TEC").update({ ADVANCE_INVOICE_ID: null }).eq("ADVANCE_INVOICE_ID", id);
 
   return { id: newId };
 }
