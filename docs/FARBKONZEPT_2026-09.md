@@ -642,13 +642,21 @@ Schritt 9 ist die einzige verbleibende Entscheidung. Die Ampel aus Schritt 6 wur
    `docs/MARKENFARBKONZEPT_2026-09.md`:** keine der vier, sondern `#2d66b1` —
    derselbe Farbton wie heute bei halber Sättigung und unveränderter Helligkeit.
    Der nächste Versuch läuft weiterhin als Theme daneben, nicht als Ersatz.
-   Damit hat jedes der sieben Themes eine dunkle Kopfzeile. Das hat nebenbei die
-   Wortmarken-Regel vereinfacht: Der Selektor `[data-theme]` nahm ausgerechnet das
-   Default-Theme aus — mit dunkler Kopfzeile hätte dort der farbige Schriftzug
-   dunkel auf dunkel gestanden.
-2. ~~**Ersetzen oder ergänzen?**~~ — ersetzt. Bestandsnutzer sehen die Änderung;
-   wer die alte helle Kopfzeile will, hat keine Entsprechung mehr. Das war die
-   bewusste Entscheidung gegen ein achtes Theme in einer ohnehin langen Liste.
+
+   *Hier standen zwei Sätze aus der Zeit, als Palette C live war: „Damit hat jedes
+   der sieben Themes eine dunkle Kopfzeile" und der Hinweis, das habe die
+   Wortmarken-Regel vereinfacht. Beides gilt seit der Rücknahme nicht mehr — das
+   helle Theme hat wieder `--chrome: #ffffff`. Und die Wortmarken-Regel wurde
+   nicht einfacher, sondern komplizierter: der Selektor `[data-theme]` nimmt das
+   Default-Theme aus, weshalb das Vorschau-Theme `trust` (weiße Kopfzeile) per
+   `:not()` ausgenommen werden musste — sonst hätte dort die weiße Wortmarke weiß
+   auf weiß gestanden.*
+2. ~~**Ersetzen oder ergänzen?**~~ — **ergänzt.** *Ursprünglich stand hier
+   „ersetzt", mit der Begründung gegen ein achtes Theme. Nach der Rücknahme von
+   Palette C und der Lehre aus §6.2 ist es umgekehrt entschieden: `trust` und
+   `trust-dark` laufen als zusätzliche Themes in der Gruppe „Vorschau", das helle
+   Standard-Theme ist unverändert. Bestandsnutzer sehen ohne eigene Auswahl
+   nichts.*
 3. **Soll die Ampel an weitere Stellen?** Sie ersetzt derzeit nur die fünf Orte, an denen vorher schon eingefärbt wurde (§4.4). Kandidaten wären die Rechnungsliste (Fälligkeit) und die Kostenquote-Spalte — beides bräuchte eigene Schwellen und ist deshalb bewusst nicht mitgelaufen.
 
 ---
