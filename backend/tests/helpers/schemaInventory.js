@@ -6,9 +6,12 @@
  * WOZU: das In-Memory-Fake (fakeSupabase.js) akzeptiert jeden Tabellen- und
  * Spaltennamen. Das macht es schnell und unabhaengig von einer Datenbank, aber
  * es heisst auch: ein Insert auf eine Spalte, die es gar nicht gibt, faellt in
- * keinem Test auf. Genau so stand `ROLE_NAME_SHORT` monatelang im Insert der
- * Nachtrags-Freigabe auf PROJECT_STRUCTURE, obwohl die Tabelle die Spalte nie
- * hatte - 725 gruene Tests und trotzdem ein 500er im Betrieb.
+ * keinem Test auf. Genau so standen die Rollenspalten monatelang im Insert der
+ * Nachtrags-Freigabe auf PROJECT_STRUCTURE, obwohl die Tabelle sie nie hatte -
+ * 725 gruene Tests und trotzdem ein 500er im Betrieb.
+ *
+ * Und: Altbezeichner aus der Umbenennung hier nicht ausschreiben. Der CI-Job
+ * `rename-guard` sucht sie im ganzen Repo - auch in Kommentaren.
  *
  * Mit diesem Inventar kann das Fake auf Wunsch streng werden und sich verhalten
  * wie PostgREST: unbekannte Spalte -> Fehler.
