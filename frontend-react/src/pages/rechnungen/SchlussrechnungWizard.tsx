@@ -55,7 +55,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
   const [projectLabel,        setProjectLabel]        = useState('')
   const [contractId,          setContractId]          = useState<number | null>(null)
   const [contractLabel,       setContractLabel]       = useState('')
-  const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; NAME_SHORT: string; NAME_LONG: string }>>([])
+  const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; ABBR: string; NAME_LONG: string }>>([])
   const [employeeId,          setEmployeeId]          = useState(() => String(useAuthStore.getState().employeeId ?? ''))
 
   // Step 1
@@ -172,7 +172,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
       })
       if (list.length === 1) {
         setContractId(list[0].ID)
-        setContractLabel(`${list[0].NAME_SHORT} – ${list[0].NAME_LONG}`)
+        setContractLabel(`${list[0].ABBR} – ${list[0].NAME_LONG}`)
       } else {
         setContractId(null); setContractLabel('')
       }
@@ -192,10 +192,10 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
     const ancestors: string[] = []
     let cur: FinalPhase | undefined = p.FATHER_ID != null ? phaseMap.get(p.FATHER_ID) : undefined
     while (cur) {
-      ancestors.unshift(cur.NAME_SHORT)
+      ancestors.unshift(cur.ABBR)
       cur = cur.FATHER_ID != null ? phaseMap.get(cur.FATHER_ID) : undefined
     }
-    const leaf = `${p.NAME_SHORT}${p.NAME_LONG ? ' – ' + p.NAME_LONG : ''}`
+    const leaf = `${p.ABBR}${p.NAME_LONG ? ' – ' + p.NAME_LONG : ''}`
     return ancestors.length ? `${ancestors.join(' > ')} > ${leaf}` : leaf
   }
 
@@ -203,7 +203,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
     const ancestors: string[] = []
     let cur: FinalPhase | undefined = p.FATHER_ID != null ? phaseMap.get(p.FATHER_ID) : undefined
     while (cur) {
-      ancestors.unshift(cur.NAME_SHORT)
+      ancestors.unshift(cur.ABBR)
       cur = cur.FATHER_ID != null ? phaseMap.get(cur.FATHER_ID) : undefined
     }
     return (
@@ -211,7 +211,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
         {ancestors.length > 0 && (
           <span className="tree-name-long">{ancestors.join(' > ')} &gt; </span>
         )}
-        <strong>{p.NAME_SHORT}</strong>
+        <strong>{p.ABBR}</strong>
         {p.NAME_LONG && <span className="tree-name-long"> – {p.NAME_LONG}</span>}
       </>
     )
@@ -534,7 +534,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
             }}
             search={async q => {
               const res = await searchProjectsApi(q)
-              return res.data.map(p => ({ id: p.ID, label: `${p.NAME_SHORT} – ${p.NAME_LONG}` }))
+              return res.data.map(p => ({ id: p.ID, label: `${p.ABBR} – ${p.NAME_LONG}` }))
             }}
             placeholder="Projekt suchen …"
           />
@@ -561,7 +561,7 @@ export function SchlussrechnungWizard({ initialDraft, initialProjectId, initialP
                 res.data.forEach(c => {
                   contractSkontoRef.current.set(c.ID, { pct: c.CASH_DISCOUNT_PERCENT ?? null, days: c.CASH_DISCOUNT_DAYS ?? null })
                 })
-                return res.data.map(c => ({ id: c.ID, label: `${c.NAME_SHORT} – ${c.NAME_LONG}` }))
+                return res.data.map(c => ({ id: c.ID, label: `${c.ABBR} – ${c.NAME_LONG}` }))
               }}
               placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
             />

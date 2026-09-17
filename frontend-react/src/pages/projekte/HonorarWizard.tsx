@@ -162,7 +162,7 @@ function computeBlItemAmount(
 function newSurchargeRow(calcMasterId: number, sortOrder: number): FeeCalcSurcharge {
   return {
     FEE_CALC_MASTER_ID: calcMasterId, FEE_SURCHARGE_ID: null,
-    NAME_SHORT: '', NAME_LONG: '', PERCENT: null, BASE_AMOUNT: null, AMOUNT: null,
+    ABBR: '', NAME_LONG: '', PERCENT: null, BASE_AMOUNT: null, AMOUNT: null,
     SORT_ORDER: sortOrder, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false, BL_FILTER: null,
   }
 }
@@ -206,7 +206,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   const [calcMaster, setCalcMaster] = useState<FeeCalcMaster | null>(null)
   const [zones, setZones]           = useState<Awaited<ReturnType<typeof fetchFeeZones>>['data']>([])
   const [basis, setBasis]           = useState({
-    NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '',
+    ABBR: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '',
     K0: '', K1: '', K2: '', K3: '', K4: '',
   })
   const [din276Open, setDin276Open] = useState(false)
@@ -243,7 +243,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     enabled:  !!offerId,
   })
   const offerLabel = offerData?.data
-    ? [offerData.data.NAME_SHORT, offerData.data.NAME_LONG].filter(Boolean).join(' – ')
+    ? [offerData.data.ABBR, offerData.data.NAME_LONG].filter(Boolean).join(' – ')
     : 'Angebot'
 
   const groups   = groupsData?.data   ?? []
@@ -365,7 +365,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   const loadCalcIntoState = useCallback(async (row: FeeCalcMaster) => {
     setCalcMaster(row)
     setBasis({
-      NAME_SHORT:   row.NAME_SHORT ?? '',
+      ABBR:   row.ABBR ?? '',
       NAME_LONG:    row.NAME_LONG  ?? '',
       PROJECT_ID:   row.PROJECT_ID != null ? String(row.PROJECT_ID) : '',
       ZONE_ID:      row.ZONE_ID    != null ? String(row.ZONE_ID) : '',
@@ -432,7 +432,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   function populateBasis(row: FeeCalcMaster) {
     setCalcMaster(row)
     setBasis({
-      NAME_SHORT:   row.NAME_SHORT ?? '',
+      ABBR:   row.ABBR ?? '',
       NAME_LONG:    row.NAME_LONG  ?? '',
       PROJECT_ID:   row.PROJECT_ID != null ? String(row.PROJECT_ID) : (initialProjectId ? String(initialProjectId) : ''),
       ZONE_ID:      row.ZONE_ID    != null ? String(row.ZONE_ID) : '',
@@ -481,7 +481,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       // damit die Auswahl später beide Dropdowns wiederherstellen kann.
       const m = masters.find(x => String(x.ID) === String(feeMasterId))
       void trackRecent('fee_master', Number(feeMasterId),
-        m ? `${m.NAME_SHORT}${m.NAME_LONG ? ' – ' + m.NAME_LONG : ''}` : String(feeMasterId),
+        m ? `${m.ABBR}${m.NAME_LONG ? ' – ' + m.NAME_LONG : ''}` : String(feeMasterId),
         { fee_group_id: feeGroupId ? Number(feeGroupId) : null },
       ).catch(() => { /* Tracking ist Komfort, kein Grund den Wizard zu stoppen */ })
       setMsg(null); setStep(2)
@@ -495,7 +495,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     setLoading(true); setMsg({ text: 'Speichere Basisdaten …', type: 'info' })
     try {
       const updated = await saveFeeCalcBasis(calcMaster.ID, {
-        NAME_SHORT:            basis.NAME_SHORT || null,
+        ABBR:            basis.ABBR || null,
         NAME_LONG:             basis.NAME_LONG  || null,
         PROJECT_ID:            isOfferMode ? null : (basis.PROJECT_ID ? Number(basis.PROJECT_ID) : null),
         OFFER_ID:              isOfferMode ? offerId : null,
@@ -668,7 +668,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     committedRef.current = true   // regulär abgeschlossen → Kalkulation behalten
     setStep(firstStep); setCalcMaster(null); setPhases([]); setBlItems([]); setSurcharges([])
     setFeeGroupId(''); setFeeMasterId(''); setMasters([])
-    setBasis({ NAME_SHORT: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '', K0: '', K1: '', K2: '', K3: '', K4: '' })
+    setBasis({ ABBR: '', NAME_LONG: '', PROJECT_ID: '', ZONE_ID: '', ZONE_PERCENT: '', K0: '', K1: '', K2: '', K3: '', K4: '' })
     setFatherId(''); setMsg(null)
     onDone?.()
   }
@@ -692,7 +692,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       ...prev,
       {
         FEE_CALC_MASTER_ID: calcMaster.ID, FEE_SURCHARGE_ID: g.ID,
-        NAME_SHORT: g.NAME_SHORT, NAME_LONG: g.NAME_LONG ?? '',
+        ABBR: g.ABBR, NAME_LONG: g.NAME_LONG ?? '',
         // Vorschlagswert aus dem Katalog übernehmen (z. B. 20 % Umbauzuschlag
         // nach § 6 Abs. 2 Satz 4, −50 % Wiederholungsminderung). Bleibt
         // änderbar; ohne Vorschlagswert wie bisher leer.
@@ -797,7 +797,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               <label>Projekt*</label>
               <select value={projectId} onChange={e => { setProjectId(e.target.value); setBasis(b => ({ ...b, PROJECT_ID: e.target.value })) }}>
                 <option value="">Bitte wählen …</option>
-                {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
+                {projects.map(p => <option key={p.ID} value={p.ID}>{p.ABBR} – {p.NAME_LONG}</option>)}
               </select>
             </div>
           )}
@@ -811,14 +811,14 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             <label>Honorarordnung</label>
             <select value={feeGroupId} onChange={e => void loadMasters(e.target.value)}>
               <option value="">Bitte wählen …</option>
-              {groups.map(g => <option key={g.ID} value={g.ID}>{g.NAME_SHORT}{g.NAME_LONG ? ' – ' + g.NAME_LONG : ''}</option>)}
+              {groups.map(g => <option key={g.ID} value={g.ID}>{g.ABBR}{g.NAME_LONG ? ' – ' + g.NAME_LONG : ''}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label>Leistungsbild</label>
             <select value={feeMasterId} onChange={e => setFeeMasterId(e.target.value)} disabled={!feeGroupId}>
               <option value="">{feeGroupId ? 'Bitte wählen …' : 'Erst Honorarordnung wählen …'}</option>
-              {masters.map(m => <option key={m.ID} value={m.ID}>{m.NAME_SHORT}{m.NAME_LONG ? ' – ' + m.NAME_LONG : ''}</option>)}
+              {masters.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}{m.NAME_LONG ? ' – ' + m.NAME_LONG : ''}</option>)}
             </select>
           </div>
 
@@ -840,7 +840,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           <div className="form-row">
             <div className="form-group">
               <label>Paragraph</label>
-              <input value={basis.NAME_SHORT} onChange={e => setBasis(b => ({ ...b, NAME_SHORT: e.target.value }))} />
+              <input value={basis.ABBR} onChange={e => setBasis(b => ({ ...b, ABBR: e.target.value }))} />
             </div>
             <div className="form-group">
               <label>Bezeichnung</label>
@@ -857,7 +857,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               <label>Projekt</label>
               <select value={basis.PROJECT_ID} onChange={e => { setBasis(b => ({ ...b, PROJECT_ID: e.target.value })); setProjectId(e.target.value) }}>
                 <option value="">—</option>
-                {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
+                {projects.map(p => <option key={p.ID} value={p.ID}>{p.ABBR} – {p.NAME_LONG}</option>)}
               </select>
             </div>
           )}
@@ -868,7 +868,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </label>
               <select value={basis.ZONE_ID} onChange={e => setBasis(b => ({ ...b, ZONE_ID: e.target.value }))}>
                 <option value="">—</option>
-                {zones.map(z => <option key={z.ID} value={z.ID}>{z.NAME_SHORT}{z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}</option>)}
+                {zones.map(z => <option key={z.ID} value={z.ID}>{z.ABBR}{z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}</option>)}
               </select>
               <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                 <button type="button" className="btn-small" onClick={() => setPunkteOpen(true)}>
@@ -1094,8 +1094,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                       <tr key={idx}>
                         <td>
                           <input className="tbl-input" style={{ width: '100%' }} placeholder="Kürzel"
-                            value={b.NAME_SHORT ?? ''}
-                            onChange={e => updateBl({ NAME_SHORT: e.target.value || null })} />
+                            value={b.ABBR ?? ''}
+                            onChange={e => updateBl({ ABBR: e.target.value || null })} />
                         </td>
                         <td>
                           <input className="tbl-input" style={{ width: '100%' }} placeholder="Bezeichnung"
@@ -1174,7 +1174,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             if (!calcMaster) return
             setBlItems(prev => [...prev, {
               FEE_CALC_MASTER_ID: calcMaster.ID,
-              NAME_SHORT: null, NAME: '', LPH_REF: null, LPH_PHASE_ID: null,
+              ABBR: null, NAME: '', LPH_REF: null, LPH_PHASE_ID: null,
               AMOUNT_TYPE: 'fixed', PERCENT: null, KX_REF: null,
               AMOUNT: 0, SORT_ORDER: prev.length,
             }])
@@ -1224,7 +1224,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 return (
                   <button key={g.ID} type="button" className="btn-small" style={{ marginRight: 6, marginBottom: 4 }}
                     onClick={() => addSurchargeFromGlobal(g)} title={titel || undefined}>
-                    + {g.NAME_SHORT}
+                    + {g.ABBR}
                     {g.DEFAULT_PERCENT != null && (
                       <span style={{ color: 'var(--text-3)' }}> ({g.DEFAULT_PERCENT} %)</span>
                     )}
@@ -1260,8 +1260,8 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                       <>
                         <tr key={idx}>
                           <td>
-                            <input className="tbl-input" style={{ width: '100%' }} value={r.NAME_SHORT ?? ''}
-                              onChange={e => updateSurcharge(idx, 'NAME_SHORT', e.target.value)} />
+                            <input className="tbl-input" style={{ width: '100%' }} value={r.ABBR ?? ''}
+                              onChange={e => updateSurcharge(idx, 'ABBR', e.target.value)} />
                           </td>
                           <td>
                             <input className="tbl-input" style={{ width: '100%' }} value={r.NAME_LONG ?? ''}
@@ -1333,7 +1333,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                                         <label key={b.ID ?? b.SORT_ORDER} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
                                           <input type="checkbox" checked={checked}
                                             onChange={() => { if (b.ID != null) toggleSurchargeBl(idx, b.ID) }} />
-                                          {b.NAME_SHORT ? `${b.NAME_SHORT} — ${b.NAME || ''}` : (b.NAME || `BL ${b.SORT_ORDER + 1}`)}
+                                          {b.ABBR ? `${b.ABBR} — ${b.NAME || ''}` : (b.NAME || `BL ${b.SORT_ORDER + 1}`)}
                                         </label>
                                       )
                                     })}
@@ -1392,7 +1392,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             {!isEdit && ' & Zuordnen'}
           </h3>
           <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 8 }}>
-            {calcMaster?.NAME_SHORT}{calcMaster?.NAME_LONG ? ' – ' + calcMaster.NAME_LONG : ''}
+            {calcMaster?.ABBR}{calcMaster?.NAME_LONG ? ' – ' + calcMaster.NAME_LONG : ''}
             {isEdit
               ? ' · Übersicht über die aktualisierten Werte:'
               : ' · Folgende Elemente werden in der Projektstruktur angelegt:'}
@@ -1425,7 +1425,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 {/* BL rows */}
                 {blTotal !== 0 && blItems.map((b, i) => blComputedAmounts[i] !== 0 && (
                   <tr key={`bl-${i}`}>
-                    <td style={{ fontSize: 13 }}>{[b.NAME_SHORT, b.NAME].filter(Boolean).join(': ') || `BL ${i + 1}`}</td>
+                    <td style={{ fontSize: 13 }}>{[b.ABBR, b.NAME].filter(Boolean).join(': ') || `BL ${i + 1}`}</td>
                     <td style={{ fontSize: 11, color: 'var(--text-3)' }}>Besondere Leistung</td>
                     <td style={{ textAlign: 'right', fontSize: 12 }}>{money(blComputedAmounts[i])}</td>
                   </tr>
@@ -1441,7 +1441,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 {surcharges.map((r, idx) => {
                   const eff = surchargeEffects[idx]
                   if (!eff || eff.amount === 0) return null
-                  const label = [r.NAME_SHORT, r.NAME_LONG].filter(Boolean).join(': ') || `Zuschlag ${idx + 1}`
+                  const label = [r.ABBR, r.NAME_LONG].filter(Boolean).join(': ') || `Zuschlag ${idx + 1}`
                   return (
                     <tr key={`s-${idx}`}>
                       <td style={{ fontSize: 13 }}>{label}</td>
@@ -1490,7 +1490,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 <option value="">Bitte wählen …</option>
                 {structureNodes.map(s => (
                   <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>
-                    {s.NAME_SHORT} – {s.NAME_LONG}
+                    {s.ABBR} – {s.NAME_LONG}
                   </option>
                 ))}
               </select>
@@ -1506,7 +1506,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                 <option value="">— Keine Zuordnung —</option>
                 {offerStructureNodes.map(s => (
                   <option key={s.ID} value={s.ID}>
-                    {s.NAME_SHORT ? `${s.NAME_SHORT} – ` : ''}{s.NAME_LONG ?? `Position ${s.ID}`}
+                    {s.ABBR ? `${s.ABBR} – ` : ''}{s.NAME_LONG ?? `Position ${s.ID}`}
                   </option>
                 ))}
               </select>
@@ -1613,18 +1613,18 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
     ? allRows
     : allRows.filter(r => r.PROJECT_ID != null || r.OFFER_ID == null)
 
-  const allParas    = Array.from(new Set(visibleRows.map(r => r.NAME_SHORT).filter((s): s is string => !!s))).sort()
+  const allParas    = Array.from(new Set(visibleRows.map(r => r.ABBR).filter((s): s is string => !!s))).sort()
   const allProjekte = Array.from(new Set(visibleRows.map(r => r.projectLabel ?? r.offerLabel).filter((s): s is string => !!s))).sort()
 
   // Client-side search + filter
   const q = search.trim().toLowerCase()
   const filtered = visibleRows.filter(r => {
     const label = r.projectLabel ?? r.offerLabel ?? ''
-    if (paraFilter.size > 0 && !(r.NAME_SHORT && paraFilter.has(r.NAME_SHORT))) return false
+    if (paraFilter.size > 0 && !(r.ABBR && paraFilter.has(r.ABBR))) return false
     if (projektFilter.size > 0 && !projektFilter.has(label)) return false
     if (!q) return true
     return (
-      (r.NAME_SHORT ?? '').toLowerCase().includes(q) ||
+      (r.ABBR ?? '').toLowerCase().includes(q) ||
       (r.NAME_LONG  ?? '').toLowerCase().includes(q) ||
       label.toLowerCase().includes(q)
     )
@@ -1633,7 +1633,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
   const sorted = [...filtered].sort((a, b) => {
     let va: string | number = 0
     let vb: string | number = 0
-    if (sort.col === 'nameShort')    { va = a.NAME_SHORT ?? ''; vb = b.NAME_SHORT ?? '' }
+    if (sort.col === 'nameShort')    { va = a.ABBR ?? ''; vb = b.ABBR ?? '' }
     if (sort.col === 'nameLong')     { va = a.NAME_LONG  ?? ''; vb = b.NAME_LONG  ?? '' }
     if (sort.col === 'project')      { va = (a.projectLabel ?? a.offerLabel) ?? ''; vb = (b.projectLabel ?? b.offerLabel) ?? '' }
     if (sort.col === 'grundhonorar') { va = a.grundhonorar  ?? 0; vb = b.grundhonorar  ?? 0 }
@@ -1725,7 +1725,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
             <tbody>
               {sorted.map(r => (
                 <tr key={r.ID}>
-                  <td>{r.NAME_SHORT || '—'}</td>
+                  <td>{r.ABBR || '—'}</td>
                   <td>{r.NAME_LONG || '—'}</td>
                   <td>
                     {r.projectLabel
@@ -1751,7 +1751,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                       </button>
                       <button type="button" className="row-action-btn row-action-btn--danger" title="Löschen"
                         disabled={deleteMut.isPending}
-                        onClick={() => setConfirmDelete({ id: r.ID, label: r.NAME_LONG || r.NAME_SHORT || 'Kalkulation' })}>
+                        onClick={() => setConfirmDelete({ id: r.ID, label: r.NAME_LONG || r.ABBR || 'Kalkulation' })}>
                         <Trash2 size={14} strokeWidth={2} />
                       </button>
                       {r.PROJECT_ID != null && (

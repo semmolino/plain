@@ -308,7 +308,7 @@ describe("buildProjectEntry", () => {
   it("keeps the project number, resolves FKs and sets company", () => {
     const e = buildProjectEntry({ project_number: "P-2024-012", name_long: "Neubau Kita", status: "in Bearbeitung", project_type: "Neubau", manager: "MMu", client: "Stadt Musterhausen" }, ctx);
     expect(e.ok).toBe(true);
-    expect(e.dbRow.NAME_SHORT).toBe("P-2024-012");
+    expect(e.dbRow.ABBR).toBe("P-2024-012");
     expect(e.dbRow.COMPANY_ID).toBe(7);
     expect(e.dbRow.PROJECT_STATUS_ID).toBe(10);
     expect(e.dbRow.PROJECT_TYPE_ID).toBe(20);

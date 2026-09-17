@@ -11,7 +11,7 @@ export interface DashboardKpis {
 
 export interface DashboardProject {
   PROJECT_ID:                number | null
-  NAME_SHORT:                string | null
+  ABBR:                string | null
   NAME_LONG:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null
@@ -58,7 +58,7 @@ export interface DashboardOpenSe {
   count:     number
   byProject: Array<{
     project_id: number
-    name_short?: string
+    abbr?: string
     name_long?:  string
     total:      number
     count:      number
@@ -93,7 +93,7 @@ export const fetchDashboardByStatus = () =>
 
 export interface ProjectReportHeader {
   PROJECT_ID:                number
-  NAME_SHORT:                string
+  ABBR:                string
   NAME_LONG:                 string
   PROJECT_STATUS_NAME_SHORT: string | null
   PROJECT_MANAGER_DISPLAY:   string | null
@@ -116,7 +116,7 @@ export interface ProjectReportHeader {
 export interface ProjectReportStructure {
   STRUCTURE_ID:           number
   PARENT_STRUCTURE_ID:    number | null
-  NAME_SHORT:             string
+  ABBR:             string
   NAME_LONG:              string | null
   IS_LEAF:                boolean
   HOURS_TOTAL:            number
@@ -147,7 +147,7 @@ function buildDateParams(f: DateFilter): string {
 
 export interface ProjectListRow {
   PROJECT_ID:                number
-  NAME_SHORT:                string
+  ABBR:                string
   NAME_LONG:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null
@@ -194,7 +194,7 @@ export const fetchProjectReportStructure = (projectId: number, filter: DateFilte
 
 export interface PhaseReportRow {
   PHASE_STRUCTURE_ID:     number | null
-  NAME_SHORT:             string
+  ABBR:             string
   NAME_LONG:              string | null
   IS_UNASSIGNED:          boolean
   SORT_KEY:               number
@@ -247,7 +247,7 @@ export interface PhaseCell {
 
 export interface PhaseMatrixProject {
   PROJECT_ID: number
-  NAME_SHORT: string
+  ABBR: string
   NAME_LONG:  string | null
   cells:      Record<number, PhaseCell>
   total:      PhaseCell
@@ -355,7 +355,7 @@ export const fetchTeamUtilization = () =>
 
 export interface RiskProject {
   PROJECT_ID:                number
-  NAME_SHORT:                string
+  ABBR:                string
   NAME_LONG:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null
@@ -377,7 +377,7 @@ export interface RiskProject {
 
 export interface BillingProject {
   PROJECT_ID:              number
-  NAME_SHORT:              string
+  ABBR:              string
   NAME_LONG:               string | null
   PROJECT_MANAGER_DISPLAY: string | null
   OPEN_NET_TOTAL:          number
@@ -539,7 +539,7 @@ export type WipMethod = 'hk' | 'erloes'
 
 export interface WipRow {
   PROJECT_ID:                number
-  NAME_SHORT:                string | null
+  ABBR:                string | null
   NAME_LONG:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null

@@ -148,14 +148,14 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
                       style={{ cursor: 'pointer' }}
                       onClick={() => setPicker({
                         projectId:       p.PROJECT_ID,
-                        projectName:     p.NAME_SHORT,
+                        projectName:     p.ABBR,
                         projectNameLong: p.NAME_LONG,
                         openAmount:      p.OPEN_NET_TOTAL,
                       })}
                       title="Klicken um Rechnung zu erstellen"
                     >
                       <td className="ls-td">
-                        <strong>{p.NAME_SHORT}</strong>
+                        <strong>{p.ABBR}</strong>
                         {p.NAME_LONG && (
                           <span style={{ display: 'block', fontSize: 11, color: 'var(--text-3)', fontWeight: 400 }}>
                             {p.NAME_LONG}

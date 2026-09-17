@@ -457,7 +457,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   }
 
   const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.NAME_SHORT, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
+  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME_LONG].filter(Boolean).join(' · ') || null) : null)
 
   return (
     <div>
@@ -465,8 +465,8 @@ export function Buchungen({ initialProjectId }: Props = {}) {
 
       {pid !== null && currentProject && (
         <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject.NAME_SHORT}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.NAME_SHORT, backProject: { id: pid, name: currentProject.NAME_SHORT } } })}>
+          <span className="proj-jump-label">{currentProject.ABBR}</span>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME_LONG ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
@@ -494,7 +494,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                   <option value="">Alle Projektelemente</option>
                   {allStructureSorted.map(n => (
                     <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
-                      {pathCache.get(n.STRUCTURE_ID) ?? n.NAME_SHORT}
+                      {pathCache.get(n.STRUCTURE_ID) ?? n.ABBR}
                     </option>
                   ))}
                 </select>
@@ -569,7 +569,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                     <label>Projektelement*</label>
                     <select value={form.STRUCTURE_ID} onChange={setF('STRUCTURE_ID')} required>
                       <option value="">Bitte wählen …</option>
-                      {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
+                      {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.ABBR}</option>)}
                     </select>
                     <RecentList
                       type="project_structure"
@@ -772,7 +772,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
             <label>Projektelement*</label>
             <select value={editForm.STRUCTURE_ID} onChange={setEF('STRUCTURE_ID')} required>
               <option value="">Bitte wählen …</option>
-              {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.NAME_SHORT}</option>)}
+              {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.ABBR}</option>)}
             </select>
           </div>
           <div className="form-row">
@@ -928,7 +928,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
     setBookingTypeId(id)
     const t = types.find(x => String(x.ID) === id)
     if (!t) return
-    setDescription(t.NAME_LONG || t.NAME_SHORT)
+    setDescription(t.NAME_LONG || t.ABBR)
     if (isUnit) {
       setUnitLabel(t.UNIT_LABEL || '')
       if (t.DEFAULT_SP_RATE != null) setSpRate(String(t.DEFAULT_SP_RATE))
@@ -992,7 +992,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
             <option value="">— Freitext (ohne Katalog) —</option>
             {types.map(t => (
               <option key={t.ID} value={t.ID}>
-                {t.NAME_SHORT}{t.NAME_LONG ? ` – ${t.NAME_LONG}` : ''}{t.SCOPE === 'project' ? ' (Projekt)' : ''}
+                {t.ABBR}{t.NAME_LONG ? ` – ${t.NAME_LONG}` : ''}{t.SCOPE === 'project' ? ' (Projekt)' : ''}
               </option>
             ))}
           </select>

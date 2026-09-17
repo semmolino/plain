@@ -90,8 +90,8 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
     .select(`
       ID, BOOKING_DATE, TIME_START, TIME_FINISH, QUANTITY_INT, POSTING_DESCRIPTION,
       PROJECT_ID, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND,
-      PROJECT:PROJECT_ID(NAME_SHORT),
-      STRUCTURE:STRUCTURE_ID(NAME_SHORT)
+      PROJECT:PROJECT_ID(ABBR),
+      STRUCTURE:STRUCTURE_ID(ABBR)
     `)
     .eq('TENANT_ID', tenantId)
     .eq('EMPLOYEE_ID', employeeId)
@@ -115,8 +115,8 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
       id:           row.ID,
       hours:        h,
       description:  row.POSTING_DESCRIPTION || '',
-      project:      row.PROJECT?.NAME_SHORT  || '',
-      structure:    row.STRUCTURE?.NAME_SHORT || '',
+      project:      row.PROJECT?.ABBR  || '',
+      structure:    row.STRUCTURE?.ABBR || '',
       time_start:   row.TIME_START  || null,
       time_finish:  row.TIME_FINISH || null,
       project_id:   row.PROJECT_ID  ?? null,
@@ -451,8 +451,8 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   const empIds = employees.map(e => e.ID);
 
   const { data: depts } = await supabase.from('PROJECT_DEPARTMENT')
-    .select('ID, NAME_SHORT').eq('TENANT_ID', tenantId);
-  const deptMap = new Map((depts || []).map(d => [d.ID, d.NAME_SHORT]));
+    .select('ID, ABBR').eq('TENANT_ID', tenantId);
+  const deptMap = new Map((depts || []).map(d => [d.ID, d.ABBR]));
 
   // Bulk BOOKING (CONFIRMED only)
   const { data: tecRows, error: tecErr } = await supabase

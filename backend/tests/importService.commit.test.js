@@ -43,8 +43,8 @@ describe("buildTemplate", () => {
   const seed = () => makeFakeSupabase({
     COUNTRY: [{ NAME_LONG: "Deutschland" }, { NAME_LONG: "Österreich" }],
     GENDER: [{ GENDER: "weiblich" }, { GENDER: "männlich" }],
-    PROJECT_STATUS: [{ NAME_SHORT: "in Bearbeitung" }, { NAME_SHORT: "abgeschlossen" }],
-    PROJECT_TYPE: [{ TENANT_ID: TENANT, NAME_SHORT: "Neubau" }],
+    PROJECT_STATUS: [{ ABBR: "in Bearbeitung" }, { ABBR: "abgeschlossen" }],
+    PROJECT_TYPE: [{ TENANT_ID: TENANT, ABBR: "Neubau" }],
     EMPLOYEE: [{ TENANT_ID: TENANT, ABBR: "MMu" }, { TENANT_ID: TENANT, ABBR: "TBe" }],
     ADDRESS: [{ TENANT_ID: TENANT, ADDRESS_NAME_1: "Stadt Musterhausen" }],
   });
@@ -94,7 +94,7 @@ describe("buildTemplate", () => {
 // ── Dateiformate ──────────────────────────────────────────────────────────────
 describe("Dateiformate", () => {
   const seed = () => makeFakeSupabase({
-    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }],
+    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", ABBR: "DE" }],
     ADDRESS: [],
   });
 
@@ -134,7 +134,7 @@ describe("Dateiformate", () => {
 
   it("nimmt Zahlen- und Datumszellen so, wie Excel sie speichert", async () => {
     const supabase = makeFakeSupabase({
-      PROJECT: [{ ID: 1, TENANT_ID: TENANT, NAME_SHORT: "P-1", NAME_LONG: "Projekt Eins" }],
+      PROJECT: [{ ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME_LONG: "Projekt Eins" }],
       PROJECT_STRUCTURE: [],
       TENANT_SETTINGS: [],
     });
@@ -158,7 +158,7 @@ describe("commit + rollback (address)", () => {
   ]);
 
   const seed = () => makeFakeSupabase({
-    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }],
+    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", ABBR: "DE" }],
     ADDRESS: [{ ID: 900, TENANT_ID: TENANT, ADDRESS_NAME_1: "Bestand GmbH", POST_CODE: "10115" }],
   });
 
@@ -227,7 +227,7 @@ describe("commit + rollback (project_fee)", () => {
   ]);
 
   const seed = () => makeFakeSupabase({
-    PROJECT: [{ ID: 1, TENANT_ID: TENANT, NAME_SHORT: "P-1", NAME_LONG: "Projekt Eins", ADDRESS_ID: 11, CONTACT_ID: 21 }],
+    PROJECT: [{ ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME_LONG: "Projekt Eins", ADDRESS_ID: 11, CONTACT_ID: 21 }],
     PROJECT_STRUCTURE: [],
     TENANT_SETTINGS: [
       { TENANT_ID: TENANT, KEY: "default_vat_id", VALUE: "2" },
@@ -251,7 +251,7 @@ describe("commit + rollback (project_fee)", () => {
     // ohne SORT_ORDER stuenden alle auf 0 und die Reihenfolge waere zufaellig.
     expect(nodes.every(n => n.CONTRACT_ID === contracts[0].ID)).toBe(true);
     expect(nodes.map(n => n.SORT_ORDER)).toEqual([0, 10, 20, 30, 40, 50, 60, 70, 80]);
-    expect(nodes.map(n => n.NAME_SHORT)).toEqual(["LP1", "LP2", "LP3", "LP4", "LP5", "LP6", "LP7", "LP8", "LP9"]);
+    expect(nodes.map(n => n.ABBR)).toEqual(["LP1", "LP2", "LP3", "LP4", "LP5", "LP6", "LP7", "LP8", "LP9"]);
     // Verteilung trifft die Honorarsumme exakt (Rundungsrest auf LP8).
     expect(nodes.reduce((s, n) => s + n.REVENUE, 0)).toBeCloseTo(80000, 2);
 
@@ -300,7 +300,7 @@ describe("commit (opening_balance)", () => {
   ]);
 
   const seed = () => makeFakeSupabase({
-    PROJECT: [{ ID: 1, TENANT_ID: TENANT, NAME_SHORT: "P-1", NAME_LONG: "Projekt Eins", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 }],
+    PROJECT: [{ ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME_LONG: "Projekt Eins", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 }],
     CONTRACT: [{ ID: 31, TENANT_ID: TENANT, PROJECT_ID: 1, INVOICE_ADDRESS_ID: 11, INVOICE_CONTACT_ID: 21 }],
     PROJECT_STRUCTURE: [{ ID: 41, TENANT_ID: TENANT, PROJECT_ID: 1, BILLING_TYPE_ID: 1, REVENUE: 80000, EXTRAS_PERCENT: 0 }],
     // Belege, die die gemockte init-Funktion "erzeugt" haette:
@@ -341,7 +341,7 @@ describe("commit + rollback (opening_cost)", () => {
   ]);
 
   const seed = () => makeFakeSupabase({
-    PROJECT: [{ ID: 1, TENANT_ID: TENANT, NAME_SHORT: "P-1" }],
+    PROJECT: [{ ID: 1, TENANT_ID: TENANT, ABBR: "P-1" }],
     PROJECT_STRUCTURE: [{ ID: 41, TENANT_ID: TENANT, PROJECT_ID: 1, FATHER_ID: null, BILLING_TYPE_ID: 2, EXTRAS_PERCENT: 0 }],
   });
 
@@ -375,7 +375,7 @@ describe("commit + rollback (opening_cost)", () => {
 // ── Fehlerprotokoll ───────────────────────────────────────────────────────────
 describe("errorReport", () => {
   const seed = () => makeFakeSupabase({
-    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }],
+    COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", ABBR: "DE" }],
     ADDRESS: [],
   });
 
@@ -425,7 +425,7 @@ describe("errorReport", () => {
 // ── Leere/unbrauchbare Dateien ────────────────────────────────────────────────
 describe("commit ohne importierbare Zeilen", () => {
   it("legt keinen Stapel an, wenn nur Fehlerzeilen kommen", async () => {
-    const supabase = makeFakeSupabase({ COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", NAME_SHORT: "DE" }], ADDRESS: [] });
+    const supabase = makeFakeSupabase({ COUNTRY: [{ ID: 1, NAME_LONG: "Deutschland", ABBR: "DE" }], ADDRESS: [] });
     const buffer = await fileOf([["Name 1 (Firma/Nachname) *", "PLZ"], ["", "10117"]]);
 
     await expect(run("address", buffer, supabase)).rejects.toMatchObject({ status: 400 });

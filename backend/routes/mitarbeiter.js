@@ -474,7 +474,7 @@ router.get("/", async (req, res) => {
     const today = new Date().toISOString().slice(0, 10);
     const [genderRes, deptRes, wmaRes] = await Promise.all([
       supabase.from("GENDER").select("ID, GENDER"),
-      supabase.from("PROJECT_DEPARTMENT").select("ID, NAME_SHORT").eq("TENANT_ID", req.tenantId),
+      supabase.from("PROJECT_DEPARTMENT").select("ID, ABBR").eq("TENANT_ID", req.tenantId),
       supabase.from("EMPLOYEE_WORK_MODEL").select("EMPLOYEE_ID, MODEL_ID, VALID_FROM")
         .eq("TENANT_ID", req.tenantId).lte("VALID_FROM", today),
     ]);
@@ -482,7 +482,7 @@ router.get("/", async (req, res) => {
     if (genderRes.error) return res.status(500).json({ error: genderRes.error.message });
 
     const genMap  = new Map((genderRes.data  || []).map(g => [String(g.ID), g.GENDER]));
-    const deptMap = new Map((deptRes.data    || []).map(d => [String(d.ID), d.NAME_SHORT]));
+    const deptMap = new Map((deptRes.data    || []).map(d => [String(d.ID), d.ABBR]));
 
     // Find most recent model per employee
     const currentModelByEmp = new Map();

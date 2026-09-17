@@ -65,7 +65,7 @@ function flattenOfferStructure(rows) {
 async function getOfferStatuses(supabase) {
   const { data, error } = await supabase
     .from('OFFER_STATUS')
-    .select('ID, NAME_SHORT')
+    .select('ID, ABBR')
     .order('ID', { ascending: true });
   if (error) throw error;
   return data || [];
@@ -76,7 +76,7 @@ async function getOfferStatuses(supabase) {
 async function listOffers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from('OFFER')
-    .select('ID, NAME_SHORT, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID')
+    .select('ID, ABBR, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID')
     .eq('TENANT_ID', tenantId)
     .order('ID', { ascending: false });
   if (error) throw error;
@@ -91,12 +91,12 @@ async function listOffers(supabase, { tenantId }) {
   const projectIds = [...new Set(rows.map(r => r.PROJECT_ID).filter(Boolean))];
 
   const [statusRes, empRes, addrRes, contactRes, structRes, projectRes] = await Promise.all([
-    statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, NAME_SHORT').in('ID', statusIds) : Promise.resolve({ data: [] }),
+    statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, ABBR').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
     contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
-    projectIds.length ? supabase.from('PROJECT').select('ID, NAME_SHORT').in('ID', projectIds) : Promise.resolve({ data: [] }),
+    projectIds.length ? supabase.from('PROJECT').select('ID, ABBR').in('ID', projectIds) : Promise.resolve({ data: [] }),
   ]);
 
   const statusMap  = new Map((statusRes.data  || []).map(r => [r.ID, r]));
@@ -134,14 +134,14 @@ async function listOffers(supabase, { tenantId }) {
     const contact = contactMap.get(r.CONTACT_ID);
     return {
       ID:              r.ID,
-      NAME_SHORT:      r.NAME_SHORT,
+      ABBR:      r.ABBR,
       NAME_LONG:       r.NAME_LONG,
       PROBABILITY:     r.PROBABILITY,
       CREATED_AT:      r.CREATED_AT,
       OFFER_DATE:      r.OFFER_DATE   ?? null,
       VALID_UNTIL:     r.VALID_UNTIL  ?? null,
       TOTAL_AMOUNT:    totalMap.get(r.ID) ?? null,
-      STATUS_NAME:     statusMap.get(r.OFFER_STATUS_ID)?.NAME_SHORT ?? null,
+      STATUS_NAME:     statusMap.get(r.OFFER_STATUS_ID)?.ABBR ?? null,
       OFFER_STATUS_ID: r.OFFER_STATUS_ID,
       EMPLOYEE_NAME:   emp
         ? `${emp.ABBR ? emp.ABBR + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()
@@ -151,7 +151,7 @@ async function listOffers(supabase, { tenantId }) {
         ? `${contact.FIRST_NAME ?? ''} ${contact.LAST_NAME ?? ''}`.trim()
         : null,
       PROJECT_ID:        r.PROJECT_ID ?? null,
-      PROJECT_NAME:      r.PROJECT_ID ? (projectMap.get(r.PROJECT_ID)?.NAME_SHORT ?? null) : null,
+      PROJECT_NAME:      r.PROJECT_ID ? (projectMap.get(r.PROJECT_ID)?.ABBR ?? null) : null,
     };
   });
 }
@@ -208,7 +208,7 @@ async function createOffer(supabase, { tenantId, body }) {
   const { data: offer, error: offerErr } = await supabase
     .from('OFFER')
     .insert([{
-      NAME_SHORT:      numData,
+      ABBR:      numData,
       NAME_LONG:       String(b.name_long).trim(),
       EMPLOYEE_ID:     parseInt(String(b.employee_id), 10),
       PROBABILITY:     b.probability != null && b.probability !== '' ? Number(b.probability) : null,
@@ -247,7 +247,7 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
     const extras      = fmt2(revenue * extPct / 100);
 
     return {
-      NAME_SHORT:      String(n.NAME_SHORT || '').trim(),
+      ABBR:      String(n.ABBR || '').trim(),
       NAME_LONG:       String(n.NAME_LONG  || '').trim(),
       OFFER_ID:        offer.ID,
       BILLING_TYPE_ID: btId,
@@ -416,7 +416,7 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
   const { data, error } = await supabase
     .from('OFFER_STRUCTURE')
     .insert([{
-      NAME_SHORT:      String(b.name_short || '').trim(),
+      ABBR:      String(b.abbr || '').trim(),
       NAME_LONG:       String(b.name_long  || '').trim(),
       OFFER_ID:        offerId,
       BILLING_TYPE_ID: btId,
@@ -448,7 +448,7 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
   const isHourly = btId === 2;
   const patch    = {};
 
-  if (b.name_short      !== undefined) patch.NAME_SHORT      = String(b.name_short).trim();
+  if (b.abbr      !== undefined) patch.ABBR      = String(b.abbr).trim();
   if (b.name_long       !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
   if (btId              !== undefined) patch.BILLING_TYPE_ID = btId;
   if (b.extras_percent  !== undefined) patch.EXTRAS_PERCENT  = Number(b.extras_percent) || 0;
@@ -712,7 +712,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   const structureSurchargesTotal = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).reduce((s, r) => s + Number(r.SURCHARGES_TOTAL || 0), 0);
   const offerSurchargesTotal = fmt2(structureSurchargesTotal + offerLevelSurcharges);
   const surchargeSummaryRows = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).map(r => ({
-    nameShort:      r.NAME_SHORT || '',
+    nameShort:      r.ABBR || '',
     nameLong:       r.NAME_LONG  || '',
     revenueBasis:   Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0),
     surchargesTotal: Number(r.SURCHARGES_TOTAL || 0),
@@ -770,7 +770,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
     structureRows: flat.map(({ node: n, depth }) => ({
       id:              n.ID,
       depth,
-      nameShort:       n.NAME_SHORT  || '',
+      nameShort:       n.ABBR  || '',
       nameLong:        n.NAME_LONG   || '',
       btId:            Number(n.BILLING_TYPE_ID),
       isHourly:        Number(n.BILLING_TYPE_ID) === 2,
@@ -829,7 +829,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   if (activePhases.length) {
     const phaseIds = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
     if (phaseIds.length) {
-      const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, NAME_SHORT, NAME_LONG').in('ID', phaseIds);
+      const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, ABBR, NAME_LONG').in('ID', phaseIds);
       phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
     }
   }
@@ -875,7 +875,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       const def = phaseMap.get(r.FEE_PHASE_ID) || {};
       const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
       return {
-        NAME_SHORT: def.NAME_SHORT || `LPH ${r.FEE_PHASE_ID}`,
+        ABBR: def.ABBR || `LPH ${r.FEE_PHASE_ID}`,
         NAME_LONG:  def.NAME_LONG  || null,
         REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
         PROJECT_ID: projectId, FATHER_ID: fatherId,
@@ -905,7 +905,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
     const blInsert = blItems.map(b => {
       const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
       return {
-        NAME_SHORT: b.NAME || 'BL',
+        ABBR: b.NAME || 'BL',
         NAME_LONG:  b.NAME || null,
         REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
         PROJECT_ID: projectId, FATHER_ID: fatherId,
@@ -968,7 +968,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
   const phaseIds = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
   let phaseMap = new Map();
   if (phaseIds.length) {
-    const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, NAME_SHORT, NAME_LONG').in('ID', phaseIds);
+    const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, ABBR, NAME_LONG').in('ID', phaseIds);
     phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
   }
 
@@ -1017,7 +1017,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
       const def = phaseMap.get(r.FEE_PHASE_ID) || {};
       const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
       return {
-        NAME_SHORT:     def.NAME_SHORT || `LPH ${r.FEE_PHASE_ID}`,
+        ABBR:     def.ABBR || `LPH ${r.FEE_PHASE_ID}`,
         NAME_LONG:      def.NAME_LONG  || null,
         OFFER_ID:       offerId, FATHER_ID: fatherId,
         BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
@@ -1035,7 +1035,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
     const blRows = blItems.map((b, i) => {
       const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
       return {
-        NAME_SHORT:      b.NAME || b.NAME_SHORT || 'BL',
+        ABBR:      b.NAME || b.ABBR || 'BL',
         NAME_LONG:       b.NAME || null,
         OFFER_ID:        offerId, FATHER_ID: fatherId,
         BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
@@ -1095,7 +1095,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 
   // Insert PROJECT — also copy root-level (offer-level) surcharges
   const projectRow = {
-    NAME_SHORT:         num,
+    ABBR:         num,
     NAME_LONG:          offer.NAME_LONG,
     COMPANY_ID:         companyId,
     PROJECT_STATUS_ID:  parseInt(String(b.project_status_id), 10),
@@ -1124,7 +1124,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   let project = null;
   {
     const r = await supabase.from('PROJECT').insert([projectRow])
-      .select('ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
+      .select('ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
       .single();
     if (r.error) {
       const msg = String(r.error.message || '');
@@ -1140,7 +1140,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         delete row2.SURCHARGES_TOTAL;
       }
       const r2 = await supabase.from('PROJECT').insert([row2])
-        .select('ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
+        .select('ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
         .single();
       if (r2.error) throw { status: 500, message: r2.error.message };
       project = r2.data;
@@ -1181,7 +1181,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       const btId  = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
       const isBt1 = btId === 1;
       return {
-      NAME_SHORT:       String(n.NAME_SHORT || '').trim(),
+      ABBR:       String(n.ABBR || '').trim(),
       NAME_LONG:        String(n.NAME_LONG  || '').trim(),
       PROJECT_ID:       project.ID,
       BILLING_TYPE_ID:  btId,
@@ -1279,7 +1279,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   for (const row of settingsRows || []) defaults[row.KEY] = row.VALUE;
 
   const contractRow = {
-    NAME_SHORT:         project.NAME_SHORT,
+    ABBR:         project.ABBR,
     NAME_LONG:          project.NAME_LONG,
     PROJECT_ID:         project.ID,
     INVOICE_ADDRESS_ID: project.ADDRESS_ID,
@@ -1305,7 +1305,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   try {
     const { data: feeCalcs } = await supabase
       .from('FEE_CALCULATION_MASTER')
-      .select('ID, NAME_SHORT, NAME_LONG, ATTACH_TO_OFFER_STRUCTURE_ID')
+      .select('ID, ABBR, NAME_LONG, ATTACH_TO_OFFER_STRUCTURE_ID')
       .eq('OFFER_ID', offerId)
       .eq('TENANT_ID', tenantId);
 
@@ -1324,7 +1324,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         // No matching parent found — create a root node for this HOAI calculation
         if (!fatherId) {
           const { data: rootNode } = await supabase.from('PROJECT_STRUCTURE').insert([{
-            NAME_SHORT:        calc.NAME_SHORT || 'Honorar',
+            ABBR:        calc.ABBR || 'Honorar',
             NAME_LONG:         calc.NAME_LONG  || null,
             PROJECT_ID:        project.ID, BILLING_TYPE_ID: 1, FATHER_ID: null,
             REVENUE: 0, EXTRAS: 0, COSTS: 0, EXTRAS_PERCENT: 0,
@@ -1373,7 +1373,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
             if (missingBls.length) {
               console.log('[convertOffer] creating %d missing BL structure rows for calcMasterId=%d', missingBls.length, calc.ID);
               const blRows = missingBls.map(b => ({
-                NAME_SHORT: b.NAME || 'BL', NAME_LONG: b.NAME || null,
+                ABBR: b.NAME || 'BL', NAME_LONG: b.NAME || null,
                 REVENUE: Number(b.AMOUNT) || 0, EXTRAS: 0, COSTS: 0,
                 PROJECT_ID: project.ID, FATHER_ID: fatherId, EXTRAS_PERCENT: 0,
                 BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
@@ -1404,7 +1404,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     console.warn('[HOAI conversion] soft-fail:', feeErr?.message || feeErr);
   }
 
-  return { project, projectName: project.NAME_SHORT };
+  return { project, projectName: project.ABBR };
 }
 
 // ── copy offer ────────────────────────────────────────────────────────────────
@@ -1419,10 +1419,10 @@ async function copyOffer(supabase, { offerId, tenantId }) {
   if (numErr || !newNum) throw { status: 500, message: 'Nummernkreis Fehler: ' + (numErr?.message || '') };
 
   // eslint-disable-next-line no-unused-vars
-  const { ID: _id, CREATED_AT: _ca, UPDATED_AT: _ua, NAME_SHORT: _ns, PROJECT_ID: _pid, ...offerRest } = src;
+  const { ID: _id, CREATED_AT: _ca, UPDATED_AT: _ua, ABBR: _ns, PROJECT_ID: _pid, ...offerRest } = src;
   const { data: newOffer, error: offerInsErr } = await supabase
     .from('OFFER')
-    .insert([{ ...offerRest, NAME_SHORT: newNum, PROJECT_ID: null, TENANT_ID: tenantId }])
+    .insert([{ ...offerRest, ABBR: newNum, PROJECT_ID: null, TENANT_ID: tenantId }])
     .select('*').single();
   if (offerInsErr) throw offerInsErr;
 
@@ -1449,7 +1449,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
   // Copy FEE_CALCULATION_MASTER + phases + BL + surcharges
   const { data: feeCalcs } = await supabase
     .from('FEE_CALCULATION_MASTER')
-    .select('ID, NAME_SHORT, NAME_LONG, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, ATTACH_TO_OFFER_STRUCTURE_ID')
+    .select('ID, ABBR, NAME_LONG, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, ATTACH_TO_OFFER_STRUCTURE_ID')
     .eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId);
 
   for (const calc of (feeCalcs || [])) {
@@ -1458,7 +1458,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
     const { data: newCalc, error: calcInsErr } = await supabase
       .from('FEE_CALCULATION_MASTER')
       .insert([{
-        NAME_SHORT: calc.NAME_SHORT, NAME_LONG: calc.NAME_LONG,
+        ABBR: calc.ABBR, NAME_LONG: calc.NAME_LONG,
         FEE_MASTER_ID: calc.FEE_MASTER_ID, ZONE_ID: calc.ZONE_ID, ZONE_PERCENT: calc.ZONE_PERCENT,
         CONSTRUCTION_COSTS_K0: calc.CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1: calc.CONSTRUCTION_COSTS_K1,
         CONSTRUCTION_COSTS_K2: calc.CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3: calc.CONSTRUCTION_COSTS_K3,
@@ -1477,7 +1477,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
     if (phases?.length) await supabase.from('FEE_CALCULATION_PHASE').insert(phases.map(p => ({ ...p, FEE_MASTER_ID: newCalc.ID })));
 
     const { data: blItems } = await supabase.from('FEE_CALCULATION_BL')
-      .select('ID, NAME, NAME_SHORT, LPH_REF, LPH_PHASE_ID, AMOUNT_TYPE, PERCENT, KX_REF, AMOUNT, SORT_ORDER')
+      .select('ID, NAME, ABBR, LPH_REF, LPH_PHASE_ID, AMOUNT_TYPE, PERCENT, KX_REF, AMOUNT, SORT_ORDER')
       .eq('FEE_CALC_MASTER_ID', calc.ID).eq('TENANT_ID', tenantId);
     const oldToNewBlId = new Map();
     if (blItems?.length) {
@@ -1487,7 +1487,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
     }
 
     const { data: surcharges } = await supabase.from('FEE_CALCULATION_SURCHARGES')
-      .select('FEE_SURCHARGE_ID, NAME_SHORT, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, INCLUDE_BL, LPH_FILTER, BL_FILTER')
+      .select('FEE_SURCHARGE_ID, ABBR, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, INCLUDE_BL, LPH_FILTER, BL_FILTER')
       .eq('FEE_CALC_MASTER_ID', calc.ID).eq('TENANT_ID', tenantId);
     if (surcharges?.length) {
       const surRows = surcharges.map(s => {

@@ -141,9 +141,9 @@ describe('parentStructureIds', () => {
 
 describe('structurePaths', () => {
   const rows = [
-    node(1, null, { NAME_SHORT: 'LP1', NAME_LONG: 'Grundlagen' }),
-    node(2, 1,    { NAME_SHORT: 'LP5', NAME_LONG: 'Ausführungsplanung' }),
-    node(3, 2,    { NAME_SHORT: 'a',   NAME_LONG: '' }),
+    node(1, null, { ABBR: 'LP1', NAME_LONG: 'Grundlagen' }),
+    node(2, 1,    { ABBR: 'LP5', NAME_LONG: 'Ausführungsplanung' }),
+    node(3, 2,    { ABBR: 'a',   NAME_LONG: '' }),
   ]
 
   it('setzt Vorfahren mit Kuerzel vor Kuerzel und Langtext des Elements', () => {
@@ -155,8 +155,8 @@ describe('structurePaths', () => {
 
   it('haengt sich bei einem zyklischen FATHER_ID nicht auf', () => {
     const zyklus = [
-      node(1, 2, { NAME_SHORT: 'A', NAME_LONG: '' }),
-      node(2, 1, { NAME_SHORT: 'B', NAME_LONG: '' }),
+      node(1, 2, { ABBR: 'A', NAME_LONG: '' }),
+      node(2, 1, { ABBR: 'B', NAME_LONG: '' }),
     ]
     const paths = structurePaths(zyklus)
     expect(paths.get(1)).toBe('B > A')

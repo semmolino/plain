@@ -81,14 +81,14 @@ async function runMonatsabschluss(supabase, tenantId, { year, month, isTest = fa
   let query = supabase
     .from("VW_REPORT_PROJECT_DETAIL")
     .select([
-      "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+      "PROJECT_ID", "ABBR", "NAME_LONG",
       "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
       "PROJECT_TYPE_ID",   "PROJECT_TYPE_NAME_SHORT",
       "BUDGET_TOTAL_NET", "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",
       "BILLED_NET_TOTAL", "OPEN_NET_TOTAL", "PAYED_NET_TOTAL",
     ].join(", "))
     .eq("TENANT_ID", tenantId)
-    .order("NAME_SHORT", { ascending: true });
+    .order("ABBR", { ascending: true });
 
   if (statusIds.length > 0) {
     query = query.in("PROJECT_STATUS_ID", statusIds);

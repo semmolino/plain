@@ -360,7 +360,7 @@ module.exports = (supabase) => {
       // 1) Strukturknoten (für Baum + LPH-Zuordnung + Phasen-Labels)
       const { data: nodes, error: nErr } = await supabase
         .from("PROJECT_STRUCTURE")
-        .select("ID, FATHER_ID, NAME_SHORT, NAME_LONG, FEE_CALC_PHASE_ID")
+        .select("ID, FATHER_ID, ABBR, NAME_LONG, FEE_CALC_PHASE_ID")
         .eq("TENANT_ID", tenantId)
         .eq("PROJECT_ID", projectId);
       if (nErr) return res.status(500).json({ error: nErr.message });
@@ -416,15 +416,15 @@ module.exports = (supabase) => {
           bucket = ensure(anc.ID, {
             PHASE_STRUCTURE_ID: anc.ID,
             CALC_PHASE_ID: anc.FEE_CALC_PHASE_ID,
-            NAME_SHORT: anc.NAME_SHORT,
+            ABBR: anc.ABBR,
             NAME_LONG:  anc.NAME_LONG,
-            SORT_KEY:   phaseSortKey(anc.NAME_SHORT),
+            SORT_KEY:   phaseSortKey(anc.ABBR),
             IS_UNASSIGNED: false,
           });
         } else {
           bucket = ensure("none", {
             PHASE_STRUCTURE_ID: null,
-            NAME_SHORT: "Ohne Phasenzuordnung",
+            ABBR: "Ohne Phasenzuordnung",
             NAME_LONG:  null,
             SORT_KEY:   Number.MAX_SAFE_INTEGER,
             IS_UNASSIGNED: true,
@@ -456,7 +456,7 @@ module.exports = (supabase) => {
         return {
           PHASE_STRUCTURE_ID: b.PHASE_STRUCTURE_ID,
           CALC_PHASE_ID: b.CALC_PHASE_ID ?? null,
-          NAME_SHORT: b.NAME_SHORT,
+          ABBR: b.ABBR,
           NAME_LONG:  b.NAME_LONG,
           IS_UNASSIGNED: b.IS_UNASSIGNED,
           SORT_KEY: b.SORT_KEY,
@@ -475,7 +475,7 @@ module.exports = (supabase) => {
         .map(decorate)
         .filter((p) => p.HONORAR_NET !== 0 || p.COST_TOTAL !== 0 || p.HOURS_TOTAL !== 0)
         .sort((a, b) => a.SORT_KEY - b.SORT_KEY
-          || String(a.NAME_SHORT).localeCompare(String(b.NAME_SHORT)));
+          || String(a.ABBR).localeCompare(String(b.ABBR)));
 
       // 4b) Block-Zuordnung auflösen: Phasenknoten → FEE_CALCULATION_PHASE →
       //     FEE_PHASE.BLOCK_ID → LPH_BLOCK. Soft-fail, wenn Migration 0097 fehlt.
@@ -503,7 +503,7 @@ module.exports = (supabase) => {
           let blockMeta = new Map();
           if (blockIds.length) {
             const { data: blocks, error: blErr } = await supabase
-              .from("LPH_BLOCK").select("ID, NAME_SHORT, SORT_ORDER")
+              .from("LPH_BLOCK").select("ID, ABBR, SORT_ORDER")
               .eq("TENANT_ID", tenantId).in("ID", blockIds);
             if (blErr) throw blErr;
             blockMeta = new Map((blocks || []).map((r) => [r.ID, r]));
@@ -514,7 +514,7 @@ module.exports = (supabase) => {
             const blockId    = feePhaseId != null ? feePhaseToBlock.get(feePhaseId) : null;
             const meta       = blockId != null ? blockMeta.get(blockId) : null;
             p.BLOCK_ID   = blockId ?? null;
-            p.BLOCK_NAME = meta ? meta.NAME_SHORT : null;
+            p.BLOCK_NAME = meta ? meta.ABBR : null;
             p.BLOCK_SORT = meta ? Number(meta.SORT_ORDER) : null;
             if (meta) hasBlocks = true;
           }
@@ -576,7 +576,7 @@ module.exports = (supabase) => {
       // Projekte des Mandanten (ggf. auf Reporting-Scope eingeschränkt).
       let projQ = supabase
         .from("PROJECT")
-        .select("ID, NAME_SHORT, NAME_LONG")
+        .select("ID, ABBR, NAME_LONG")
         .eq("TENANT_ID", tenantId);
       const { data: allProjects, error: pErr } = await projQ;
       if (pErr) return res.status(500).json({ error: pErr.message });
@@ -593,7 +593,7 @@ module.exports = (supabase) => {
       // Strukturknoten + Blatt-Kennzahlen in einem Rutsch für alle Projekte.
       const [{ data: nodes, error: nErr }, { data: viewRows, error: vErr }] = await Promise.all([
         supabase.from("PROJECT_STRUCTURE")
-          .select("ID, PROJECT_ID, FATHER_ID, NAME_SHORT, FEE_CALC_PHASE_ID")
+          .select("ID, PROJECT_ID, FATHER_ID, ABBR, FEE_CALC_PHASE_ID")
           .eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds),
         supabase.from("VW_REPORT_PROJECT_DETAIL_STRUCTURE")
           .select("STRUCTURE_ID, PROJECT_ID, IS_LEAF, HOURS_TOTAL, COST_TOTAL, EARNED_VALUE_NET, HONORAR_NET")
@@ -632,10 +632,10 @@ module.exports = (supabase) => {
         if (!r.IS_LEAF) continue;
         const anc = phaseAncestor(r.PROJECT_ID, r.STRUCTURE_ID);
         if (!anc) continue; // nur phasenzugeordnete Blätter zählen
-        const num = phaseNum(anc.NAME_SHORT);
+        const num = phaseNum(anc.ABBR);
         if (num == null) continue;
         projectsWithPhases.add(r.PROJECT_ID);
-        if (!phaseLabels.has(num)) phaseLabels.set(num, anc.NAME_SHORT);
+        if (!phaseLabels.has(num)) phaseLabels.set(num, anc.ABBR);
 
         if (!matrix.has(r.PROJECT_ID)) matrix.set(r.PROJECT_ID, new Map());
         const pm = matrix.get(r.PROJECT_ID);
@@ -683,11 +683,11 @@ module.exports = (supabase) => {
             tot.HOURS_TOTAL += agg.HOURS_TOTAL; tot.COST_TOTAL += agg.COST_TOTAL;
           }
           return {
-            PROJECT_ID: p.ID, NAME_SHORT: p.NAME_SHORT, NAME_LONG: p.NAME_LONG,
+            PROJECT_ID: p.ID, ABBR: p.ABBR, NAME_LONG: p.NAME_LONG,
             cells, total: decorateCell(tot),
           };
         })
-        .sort((a, b) => String(a.NAME_SHORT).localeCompare(String(b.NAME_SHORT)));
+        .sort((a, b) => String(a.ABBR).localeCompare(String(b.ABBR)));
 
       // Portfolio-Gesamtsummen für Anteile.
       let totHonorar = 0, totHours = 0;
@@ -742,7 +742,7 @@ module.exports = (supabase) => {
       ({ data, error } = await supabase
         .from("VW_REPORT_PROJECT_DETAIL")
         .select([
-          "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+          "PROJECT_ID", "ABBR", "NAME_LONG",
           "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
           "PROJECT_TYPE_ID",   "PROJECT_TYPE_NAME_SHORT",
           "PROJECT_MANAGER_ID","PROJECT_MANAGER_DISPLAY",
@@ -755,7 +755,7 @@ module.exports = (supabase) => {
           "PAYED_NET_TOTAL",   "SALES_TOTAL",            "QTY_EXT_TOTAL",
         ].join(", "))
         .eq("TENANT_ID", tenantId)
-        .order("NAME_SHORT", { ascending: true }));
+        .order("ABBR", { ascending: true }));
     }
 
     if (error) return res.status(500).json({ error: error.message });
@@ -1012,7 +1012,7 @@ module.exports = (supabase) => {
       ({ data, error } = await supabase
         .from("VW_REPORT_PROJECT_DETAIL")
         .select([
-          "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+          "PROJECT_ID", "ABBR", "NAME_LONG",
           "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
           "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
           "DEPARTMENT_ID", "DEPARTMENT_NAME",
@@ -1171,7 +1171,7 @@ module.exports = (supabase) => {
     let query = supabase
       .from("VW_REPORT_PROJECT_DETAIL")
       .select([
-        "PROJECT_ID", "NAME_SHORT", "NAME_LONG",
+        "PROJECT_ID", "ABBR", "NAME_LONG",
         "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
         "PROJECT_MANAGER_ID", "PROJECT_MANAGER_DISPLAY",
         "DEPARTMENT_ID", "DEPARTMENT_NAME",
@@ -1267,11 +1267,11 @@ module.exports = (supabase) => {
       if (projectIds.length > 0) {
         const { data: projs } = await supabase
           .from("PROJECT")
-          .select("ID, NAME_SHORT, NAME_LONG")
+          .select("ID, ABBR, NAME_LONG")
           .in("ID", projectIds);
         (projs || []).forEach(p => {
           const e = byProjectMap.get(p.ID);
-          if (e) { e.name_short = p.NAME_SHORT; e.name_long = p.NAME_LONG; }
+          if (e) { e.abbr = p.ABBR; e.name_long = p.NAME_LONG; }
         });
       }
       const byProject = [...byProjectMap.values()].sort((a, b) => b.total - a.total);
@@ -1338,7 +1338,7 @@ module.exports = (supabase) => {
     if (!tenantId) return;
     const { data, error } = await supabase
       .from("VW_REPORT_PROJECT_DETAIL")
-      .select("PROJECT_ID, NAME_SHORT, NAME_LONG, PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY, OPEN_NET_TOTAL")
+      .select("PROJECT_ID, ABBR, NAME_LONG, PROJECT_MANAGER_ID, PROJECT_MANAGER_DISPLAY, OPEN_NET_TOTAL")
       .eq("TENANT_ID", tenantId)
       .gt("OPEN_NET_TOTAL", 0)
       .order("OPEN_NET_TOTAL", { ascending: false });
@@ -1383,7 +1383,7 @@ module.exports = (supabase) => {
     const projects = (data || [])
       .map((p) => ({
         PROJECT_ID:              p.PROJECT_ID,
-        NAME_SHORT:              p.NAME_SHORT,
+        ABBR:              p.ABBR,
         NAME_LONG:               p.NAME_LONG,
         PROJECT_MANAGER_DISPLAY: p.PROJECT_MANAGER_DISPLAY,
         OPEN_NET_TOTAL:          round2(Math.max(0, (Number(p.OPEN_NET_TOTAL) || 0) - (internalByProject.get(String(p.PROJECT_ID)) || 0))),

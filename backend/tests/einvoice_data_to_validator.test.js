@@ -88,15 +88,15 @@ function fixture(overrides = {}) {
       FIRST_NAME: "Simon", LAST_NAME: "Messina",
       PHONE: "+49 89 1234567", MAIL: "info@example.de",
     }],
-    COUNTRY: [{ ID: 1, NAME_SHORT: "DE" }],
+    COUNTRY: [{ ID: 1, ABBR: "DE" }],
     CONTRACT: [{ ID: 30, TENANT_ID: TENANT, SE_LEGAL_REFERENCE: null }],
     INVOICE_STRUCTURE: [
       { ID: 1, TENANT_ID: TENANT, INVOICE_ID: INVOICE_ID, STRUCTURE_ID: 700, AMOUNT_NET: 3000, AMOUNT_EXTRAS_NET: 0 },
       { ID: 2, TENANT_ID: TENANT, INVOICE_ID: INVOICE_ID, STRUCTURE_ID: 701, AMOUNT_NET: 1500, AMOUNT_EXTRAS_NET: 0 },
     ],
     PROJECT_STRUCTURE: [
-      { ID: 700, TENANT_ID: TENANT, NAME_SHORT: "LPH 1", NAME_LONG: "Grundlagenermittlung", BILLING_TYPE_ID: 1 },
-      { ID: 701, TENANT_ID: TENANT, NAME_SHORT: "LPH 2", NAME_LONG: "Vorplanung", BILLING_TYPE_ID: 1 },
+      { ID: 700, TENANT_ID: TENANT, ABBR: "LPH 1", NAME_LONG: "Grundlagenermittlung", BILLING_TYPE_ID: 1 },
+      { ID: 701, TENANT_ID: TENANT, ABBR: "LPH 2", NAME_LONG: "Vorplanung", BILLING_TYPE_ID: 1 },
     ],
     INVOICE_DEDUCTION: [],
     ADVANCE_INVOICE: [],

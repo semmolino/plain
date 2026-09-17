@@ -56,7 +56,7 @@ export function Vertraege({ initialProjectId }: Props) {
     const c = contractData?.data
     if (!c) return
 
-    setNameShort(c.NAME_SHORT ?? '')
+    setNameShort(c.ABBR ?? '')
     setNameLong(c.NAME_LONG ?? '')
     setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
     setCashDiscDays(c.CASH_DISCOUNT_DAYS != null ? String(c.CASH_DISCOUNT_DAYS) : '')
@@ -87,7 +87,7 @@ export function Vertraege({ initialProjectId }: Props) {
       const contract = contractData?.data
       if (!contract) throw new Error('Kein Vertrag geladen')
       return patchContract(contract.ID, {
-        NAME_SHORT:            nameShort.trim(),
+        ABBR:            nameShort.trim(),
         NAME_LONG:             nameLong.trim(),
         INVOICE_ADDRESS_ID:    addressId,
         INVOICE_CONTACT_ID:    contactId,
@@ -137,7 +137,7 @@ export function Vertraege({ initialProjectId }: Props) {
   function handleReset() {
     const c = contractData?.data
     if (!c) return
-    setNameShort(c.NAME_SHORT ?? '')
+    setNameShort(c.ABBR ?? '')
     setNameLong(c.NAME_LONG ?? '')
     setContactId(c.INVOICE_CONTACT_ID ?? null)
     setCashDiscPct(c.CASH_DISCOUNT_PERCENT != null ? String(c.CASH_DISCOUNT_PERCENT) : '')
@@ -163,8 +163,8 @@ export function Vertraege({ initialProjectId }: Props) {
       {/* Jump bar */}
       {pid && (
         <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject?.NAME_SHORT ?? ''}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME_LONG ?? currentProject?.NAME_SHORT, backProject: { id: pid, name: currentProject?.NAME_SHORT } } })}>
+          <span className="proj-jump-label">{currentProject?.ABBR ?? ''}</span>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME_LONG ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>

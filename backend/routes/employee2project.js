@@ -109,7 +109,7 @@ module.exports = (supabase) => {
     const projectIds = [...new Set(e2pRows.map(r => r.PROJECT_ID).filter(Boolean))];
     const { data: projects } = await supabase
       .from("PROJECT")
-      .select("ID, NAME_SHORT, NAME_LONG, STATUS:PROJECT_STATUS_ID(NAME_SHORT)")
+      .select("ID, ABBR, NAME_LONG, STATUS:PROJECT_STATUS_ID(ABBR)")
       .in("ID", projectIds)
       .eq("TENANT_ID", req.tenantId);
 
@@ -120,9 +120,9 @@ module.exports = (supabase) => {
       .map(r => ({
         ID:              r.ID,
         PROJECT_ID:      r.PROJECT_ID,
-        PROJECT_NUMBER:  projMap[r.PROJECT_ID]?.NAME_SHORT ?? null,
+        PROJECT_NUMBER:  projMap[r.PROJECT_ID]?.ABBR ?? null,
         PROJECT_NAME:    projMap[r.PROJECT_ID]?.NAME_LONG  ?? null,
-        STATUS_NAME:     projMap[r.PROJECT_ID]?.STATUS?.NAME_SHORT ?? null,
+        STATUS_NAME:     projMap[r.PROJECT_ID]?.STATUS?.ABBR ?? null,
         ROLE_ABBR: r.ROLE_ABBR ?? null,
         HOURLY_RATE:         r.HOURLY_RATE ?? null,
       }));

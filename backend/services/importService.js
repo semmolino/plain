@@ -113,11 +113,11 @@ const ADDRESS_FIELDS = [
 
 async function loadAddressContext(supabase, tenantId) {
   // Länder (global, kein TENANT_ID) → Name/Kürzel → ID; Default = Deutschland.
-  const { data: countries } = await supabase.from("COUNTRY").select("ID, NAME_LONG, NAME_SHORT");
+  const { data: countries } = await supabase.from("COUNTRY").select("ID, NAME_LONG, ABBR");
   const byName = new Map();
   let def = null;
   for (const c of countries || []) {
-    const nl = norm(c.NAME_LONG), ns = norm(c.NAME_SHORT);
+    const nl = norm(c.NAME_LONG), ns = norm(c.ABBR);
     if (nl) byName.set(nl, c.ID);
     if (ns) byName.set(ns, c.ID);
     if (nl === "deutschland" || nl === "germany" || ns === "de" || ns === "ger") def = c.ID;
@@ -440,18 +440,18 @@ const PROJECT_FIELDS = [
 async function loadProjectContext(supabase, tenantId) {
   const [companyRes, statusRes, typeRes, empRes, addrRes, projRes] = await Promise.all([
     supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
-    supabase.from("PROJECT_STATUS").select("ID, NAME_SHORT"),                          // global
-    supabase.from("PROJECT_TYPE").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId),
+    supabase.from("PROJECT_STATUS").select("ID, ABBR"),                          // global
+    supabase.from("PROJECT_TYPE").select("ID, ABBR").eq("TENANT_ID", tenantId),
     supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("PROJECT").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("ID, ABBR").eq("TENANT_ID", tenantId).limit(100000),
   ]);
 
   const companyId = companyRes.data?.[0]?.ID ?? null;
   const statusByName = new Map();
-  for (const r of statusRes.data || []) if (r.NAME_SHORT) statusByName.set(norm(r.NAME_SHORT), r.ID);
+  for (const r of statusRes.data || []) if (r.ABBR) statusByName.set(norm(r.ABBR), r.ID);
   const typeByName = new Map();
-  for (const r of typeRes.data || []) if (r.NAME_SHORT) typeByName.set(norm(r.NAME_SHORT), r.ID);
+  for (const r of typeRes.data || []) if (r.ABBR) typeByName.set(norm(r.ABBR), r.ID);
   const empByName = new Map();
   for (const e of empRes.data || []) {
     if (e.ABBR) empByName.set(norm(e.ABBR), e.ID);
@@ -463,9 +463,9 @@ async function loadProjectContext(supabase, tenantId) {
   const existingKeys = new Set();
   const existingIds = new Map();
   for (const p of projRes.data || []) {
-    if (!p.NAME_SHORT) continue;
-    existingKeys.add(norm(p.NAME_SHORT));
-    if (p.ID != null && !existingIds.has(norm(p.NAME_SHORT))) existingIds.set(norm(p.NAME_SHORT), p.ID);
+    if (!p.ABBR) continue;
+    existingKeys.add(norm(p.ABBR));
+    if (p.ID != null && !existingIds.has(norm(p.ABBR))) existingIds.set(norm(p.ABBR), p.ID);
   }
 
   return { companyId, statusByName, typeByName, empByName, addrByName, existingKeys, existingIds };
@@ -502,7 +502,7 @@ function buildProjectEntry(mapped, ctx) {
   const addressId = resolveReq(mapped.client,  ctx.addrByName,   "Bauherr/Adresse", "zuerst Adressen importieren");
 
   const dbRow = {
-    NAME_SHORT:         number || null,   // alte Projektnummer beibehalten
+    ABBR:         number || null,   // alte Projektnummer beibehalten
     NAME_LONG:          name || null,
     COMPANY_ID:         ctx.companyId,
     PROJECT_STATUS_ID:  statusId,
@@ -543,13 +543,13 @@ const PROJECT_FEE_FIELDS = [
 
 async function loadProjectFeeContext(supabase, tenantId) {
   const { data: projects } = await supabase
-    .from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000);
+    .from("PROJECT").select("ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000);
   const projectsByNumber = new Map();
   const idToNumber = new Map();
   for (const p of projects || []) {
-    if (!p.NAME_SHORT) continue;
-    projectsByNumber.set(norm(p.NAME_SHORT), { id: p.ID, name: p.NAME_LONG || p.NAME_SHORT, addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null });
-    idToNumber.set(p.ID, p.NAME_SHORT);
+    if (!p.ABBR) continue;
+    projectsByNumber.set(norm(p.ABBR), { id: p.ID, name: p.NAME_LONG || p.ABBR, addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null });
+    idToNumber.set(p.ID, p.ABBR);
   }
   // Projekte, die bereits eine Leistungsstruktur haben → Honorar gilt als gesetzt (Dublette).
   const { data: structs } = await supabase.from("PROJECT_STRUCTURE").select("PROJECT_ID").eq("TENANT_ID", tenantId).limit(100000);
@@ -617,14 +617,14 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
       nodes = HOAI_LP.map((lp) => {
         const rev = isPauschal ? fmt2(e.fee * lp.pct / 100) : 0;
         allocated = fmt2(allocated + rev);
-        return { NAME_SHORT: lp.code, NAME_LONG: lp.name, REVENUE: rev };
+        return { ABBR: lp.code, NAME_LONG: lp.name, REVENUE: rev };
       });
       if (isPauschal) {
         const diff = fmt2(e.fee - allocated);          // Rundungsrest auf LP8 (größte Phase)
         if (diff !== 0) nodes[7].REVENUE = fmt2(nodes[7].REVENUE + diff);
       }
     } else {
-      nodes = [{ NAME_SHORT: "Honorar", NAME_LONG: isPauschal ? "Honorar (Pauschal)" : "Honorar (Stunden)", REVENUE: isPauschal ? fmt2(e.fee) : 0 }];
+      nodes = [{ ABBR: "Honorar", NAME_LONG: isPauschal ? "Honorar (Pauschal)" : "Honorar (Stunden)", REVENUE: isPauschal ? fmt2(e.fee) : 0 }];
     }
 
     // 1a) Vertrag zuerst — die Strukturknoten sollen ihn kennen (CONTRACT_ID).
@@ -633,7 +633,7 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
     let contractId = existing?.[0]?.ID ?? null;
     if (contractId == null) {
       const contractRow = {
-        NAME_SHORT: e.projectNumber, NAME_LONG: e.projectName, PROJECT_ID: e.projectId,
+        ABBR: e.projectNumber, NAME_LONG: e.projectName, PROJECT_ID: e.projectId,
         INVOICE_ADDRESS_ID: e.addressId, INVOICE_CONTACT_ID: e.contactId,
         TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
         ...contractDefaults(defaults),
@@ -646,7 +646,7 @@ async function commitProjectFeeRows(rows, { supabase, tenantId, batchId, ctx, op
     // SORT_ORDER in Zehnerschritten wie beim manuellen Anlegen — ohne ihn stehen
     // alle Knoten auf 0 und die Leistungsphasen erscheinen in zufälliger Reihenfolge.
     const structRows = nodes.map((n, i) => ({
-      NAME_SHORT: n.NAME_SHORT, NAME_LONG: n.NAME_LONG, PROJECT_ID: e.projectId,
+      ABBR: n.ABBR, NAME_LONG: n.NAME_LONG, PROJECT_ID: e.projectId,
       BILLING_TYPE_ID: e.billingTypeId, FATHER_ID: null, REVENUE: n.REVENUE,
       EXTRAS_PERCENT: 0, EXTRAS: 0, COSTS: 0,
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
@@ -689,7 +689,7 @@ const MAX_STRUCTURE_DEPTH = 5;
 const PROJECT_STRUCTURE_FIELDS = [
   { key: "project_number",  header: "Projektnummer",                   required: true,  example: "P-2024-012",                aliases: ["projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
   { key: "outline",         header: "Gliederung",                      required: true,  example: "1.1",                       aliases: ["gliederung", "gliederungsnummer", "position", "pos", "ordnungszahl", "nr", "outline", "wbs", "stufe"], type: "text" },
-  { key: "name_short",      header: "Kürzel",                          required: true,  example: "LP1-4",                     aliases: ["kuerzel", "kurzzeichen", "shortname", "code", "krzl"] },
+  { key: "abbr",      header: "Kürzel",                          required: true,  example: "LP1-4",                     aliases: ["kuerzel", "kurzzeichen", "shortname", "code", "krzl"] },
   { key: "name_long",       header: "Bezeichnung",                     required: false, example: "Vorplanung bis Genehmigung", aliases: ["bezeichnung", "name", "namelong", "beschreibung", "leistung", "titel"] },
   { key: "billing",         header: "Abrechnungsart (Pauschal/Stunden)", required: false, example: "Pauschal",                aliases: ["abrechnungsart", "abrechnung", "billing", "billingtype", "art"], list: "billing" },
   { key: "revenue",         header: "Honorar netto",                   required: false, example: "27000",                     aliases: ["honorar", "honorarsumme", "betrag", "summe", "nettohonorar", "revenue", "wert"], type: "money" },
@@ -699,7 +699,7 @@ const PROJECT_STRUCTURE_FIELDS = [
 
 async function loadProjectStructureContext(supabase, tenantId) {
   const [projRes, structRes, contractRes, settingsRes] = await Promise.all([
-    supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT_STRUCTURE").select("PROJECT_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("CONTRACT").select("ID, PROJECT_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId),
@@ -712,13 +712,13 @@ async function loadProjectStructureContext(supabase, tenantId) {
   const projectsByNumber = new Map();
   const existingKeys = new Set();
   for (const p of projRes.data || []) {
-    if (!p.NAME_SHORT) continue;
-    projectsByNumber.set(norm(p.NAME_SHORT), {
-      id: p.ID, number: p.NAME_SHORT, name: p.NAME_LONG || p.NAME_SHORT,
+    if (!p.ABBR) continue;
+    projectsByNumber.set(norm(p.ABBR), {
+      id: p.ID, number: p.ABBR, name: p.NAME_LONG || p.ABBR,
       addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null,
       contractId: contractByProject.get(p.ID) ?? null,
     });
-    if (withStructure.has(p.ID)) existingKeys.add(norm(p.NAME_SHORT));
+    if (withStructure.has(p.ID)) existingKeys.add(norm(p.ABBR));
   }
 
   const defaults = {};
@@ -747,7 +747,7 @@ function buildProjectStructureEntry(mapped, ctx) {
     if (!proj) { messages.push({ level: "error", text: `Projekt „${number}“ nicht gefunden — zuerst das Projekt importieren/anlegen` }); ok = false; }
   }
 
-  const nameShort = s(mapped.name_short);
+  const nameShort = s(mapped.abbr);
   if (!nameShort) { messages.push({ level: "error", text: "Kürzel fehlt (Pflichtfeld)" }); ok = false; }
 
   // Hierarchie: Gliederungsnummer bevorzugt, sonst Ebene.
@@ -948,7 +948,7 @@ async function commitProjectStructureRows(rows, { supabase, tenantId, batchId, c
       let contractId = first.contractId;
       if (contractId == null) {
         const contractRow = {
-          NAME_SHORT: number, NAME_LONG: first.projectName, PROJECT_ID: first.projectId,
+          ABBR: number, NAME_LONG: first.projectName, PROJECT_ID: first.projectId,
           INVOICE_ADDRESS_ID: first.addressId, INVOICE_CONTACT_ID: first.contactId,
           TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
           ...contractDefaults(defaults),
@@ -964,7 +964,7 @@ async function commitProjectStructureRows(rows, { supabase, tenantId, batchId, c
         const e = r._dbRow;
         const revenue = e.billingTypeId === 1 ? fmt2(e.revenue) : 0;
         return {
-          NAME_SHORT: e.nameShort, NAME_LONG: e.nameLong, PROJECT_ID: e.projectId,
+          ABBR: e.nameShort, NAME_LONG: e.nameLong, PROJECT_ID: e.projectId,
           BILLING_TYPE_ID: e.billingTypeId, FATHER_ID: null, CONTRACT_ID: contractId,
           REVENUE: revenue, EXTRAS_PERCENT: e.extrasPercent, EXTRAS: fmt2(revenue * e.extrasPercent / 100), COSTS: 0,
           REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
@@ -1030,7 +1030,7 @@ const OPENING_BALANCE_FIELDS = [
 
 async function loadOpeningBalanceContext(supabase, tenantId) {
   const [projRes, contractRes, structRes, ppRes, invRes] = await Promise.all([
-    supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("CONTRACT").select("ID, PROJECT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("ADVANCE_INVOICE").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("STATUS_ID", 2).limit(100000),
@@ -1054,15 +1054,15 @@ async function loadOpeningBalanceContext(supabase, tenantId) {
   const byNumber = new Map();
   const existingKeys = new Set();
   for (const p of projRes.data || []) {
-    if (!p.NAME_SHORT) continue;
+    if (!p.ABBR) continue;
     const contract = contractByProject.get(p.ID) || null;
     const btStructures = btByProject.get(p.ID) || [];
-    byNumber.set(norm(p.NAME_SHORT), {
-      projectId: p.ID, name: p.NAME_LONG || p.NAME_SHORT, companyId: p.COMPANY_ID ?? null,
+    byNumber.set(norm(p.ABBR), {
+      projectId: p.ID, name: p.NAME_LONG || p.ABBR, companyId: p.COMPANY_ID ?? null,
       addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null,
       contract, btStructures,
     });
-    if (bookedProjects.has(p.ID)) existingKeys.add(norm(p.NAME_SHORT));
+    if (bookedProjects.has(p.ID)) existingKeys.add(norm(p.ABBR));
   }
   return { byNumber, existingKeys };
 }
@@ -1391,9 +1391,9 @@ const OPEN_ITEM_FIELDS = [
 
 async function loadOpenItemContext(supabase, tenantId) {
   const [projRes, contractRes, structRes, ppRes, invRes] = await Promise.all([
-    supabase.from("PROJECT").select("ID, NAME_SHORT, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("CONTRACT").select("ID, PROJECT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, NAME_SHORT, NAME_LONG, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, ABBR, NAME_LONG, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("ADVANCE_INVOICE").select("ADVANCE_INVOICE_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("INVOICE").select("INVOICE_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
   ]);
@@ -1408,7 +1408,7 @@ async function loadOpenItemContext(supabase, tenantId) {
     if (fatherIds.has(st.ID)) continue;
     if (!nodesByProject.has(st.PROJECT_ID)) nodesByProject.set(st.PROJECT_ID, []);
     nodesByProject.get(st.PROJECT_ID).push({
-      id: st.ID, nameShort: st.NAME_SHORT || "", nameLong: st.NAME_LONG || "",
+      id: st.ID, nameShort: st.ABBR || "", nameLong: st.NAME_LONG || "",
       revenue: num(st.REVENUE), extrasPercent: num(st.EXTRAS_PERCENT), billingTypeId: Number(st.BILLING_TYPE_ID),
     });
   }
@@ -1421,10 +1421,10 @@ async function loadOpenItemContext(supabase, tenantId) {
 
   const projectsByNumber = new Map();
   for (const p of projRes.data || []) {
-    if (!p.NAME_SHORT) continue;
+    if (!p.ABBR) continue;
     const contract = contractByProject.get(p.ID) || null;
-    projectsByNumber.set(norm(p.NAME_SHORT), {
-      id: p.ID, name: p.NAME_LONG || p.NAME_SHORT, companyId: p.COMPANY_ID ?? null,
+    projectsByNumber.set(norm(p.ABBR), {
+      id: p.ID, name: p.NAME_LONG || p.ABBR, companyId: p.COMPANY_ID ?? null,
       addressId: p.ADDRESS_ID ?? null, contactId: p.CONTACT_ID ?? null, contract,
       nodes: nodesByProject.get(p.ID) || [],
     });
@@ -1679,7 +1679,7 @@ const OPENING_COST_FIELDS = [
 
 async function loadOpeningCostContext(supabase, tenantId) {
   const [projRes, structRes, tecRes] = await Promise.all([
-    supabase.from("PROJECT").select("ID, NAME_SHORT").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("ID, ABBR").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("BOOKING").select("PROJECT_ID").eq("TENANT_ID", tenantId).eq("BOOKING_KIND", "LUMP_COST").not("IMPORT_BATCH_ID", "is", null).limit(100000),
   ]);
@@ -1697,9 +1697,9 @@ async function loadOpeningCostContext(supabase, tenantId) {
   const byNumber = new Map();
   const idToNumber = new Map();
   for (const p of projRes.data || []) {
-    if (!p.NAME_SHORT) continue;
-    byNumber.set(norm(p.NAME_SHORT), { projectId: p.ID, structureId: leafByProject.get(p.ID)?.ID ?? null });
-    idToNumber.set(p.ID, p.NAME_SHORT);
+    if (!p.ABBR) continue;
+    byNumber.set(norm(p.ABBR), { projectId: p.ID, structureId: leafByProject.get(p.ID)?.ID ?? null });
+    idToNumber.set(p.ID, p.ABBR);
   }
   const importedCostProjects = new Set();
   for (const r of tecRes.data || []) if (r.PROJECT_ID != null) importedCostProjects.add(r.PROJECT_ID);
@@ -1875,11 +1875,11 @@ const DOMAINS = {
     matchLabel: "Projektnummer",
     fields: PROJECT_STRUCTURE_FIELDS,
     exampleRows: [
-      { project_number: "P-2024-012", outline: "1",   name_short: "LB Gebäude", name_long: "Leistungsbild Gebäude",       billing: "",         revenue: "",      extras_percent: "5" },
-      { project_number: "P-2024-012", outline: "1.1", name_short: "LP1-4",      name_long: "Vorplanung bis Genehmigung",  billing: "Pauschal", revenue: "27000", extras_percent: "" },
-      { project_number: "P-2024-012", outline: "1.2", name_short: "LP5",        name_long: "Ausführungsplanung",          billing: "Pauschal", revenue: "25000", extras_percent: "" },
-      { project_number: "P-2024-012", outline: "1.3", name_short: "LP6-8",      name_long: "Vergabe und Bauüberwachung",  billing: "Pauschal", revenue: "28000", extras_percent: "" },
-      { project_number: "P-2024-012", outline: "2",   name_short: "BL",         name_long: "Besondere Leistungen",        billing: "Stunden",  revenue: "",      extras_percent: "" },
+      { project_number: "P-2024-012", outline: "1",   abbr: "LB Gebäude", name_long: "Leistungsbild Gebäude",       billing: "",         revenue: "",      extras_percent: "5" },
+      { project_number: "P-2024-012", outline: "1.1", abbr: "LP1-4",      name_long: "Vorplanung bis Genehmigung",  billing: "Pauschal", revenue: "27000", extras_percent: "" },
+      { project_number: "P-2024-012", outline: "1.2", abbr: "LP5",        name_long: "Ausführungsplanung",          billing: "Pauschal", revenue: "25000", extras_percent: "" },
+      { project_number: "P-2024-012", outline: "1.3", abbr: "LP6-8",      name_long: "Vergabe und Bauüberwachung",  billing: "Pauschal", revenue: "28000", extras_percent: "" },
+      { project_number: "P-2024-012", outline: "2",   abbr: "BL",         name_long: "Besondere Leistungen",        billing: "Stunden",  revenue: "",      extras_percent: "" },
     ],
     dedupeInFile: false,               // viele Zeilen je Projekt sind der Normalfall
     loadContext: loadProjectStructureContext,
@@ -2404,8 +2404,8 @@ async function loadTemplateLists(supabase, tenantId) {
     safe(() => supabase.from("COUNTRY").select("NAME_LONG")),
     safe(() => supabase.from("GENDER").select("GENDER")),
     safe(() => supabase.from("SALUTATION").select("SALUTATION")),
-    safe(() => supabase.from("PROJECT_STATUS").select("NAME_SHORT")),
-    safe(() => supabase.from("PROJECT_TYPE").select("NAME_SHORT").eq("TENANT_ID", tenantId)),
+    safe(() => supabase.from("PROJECT_STATUS").select("ABBR")),
+    safe(() => supabase.from("PROJECT_TYPE").select("ABBR").eq("TENANT_ID", tenantId)),
     safe(() => supabase.from("EMPLOYEE").select("ABBR").eq("TENANT_ID", tenantId).limit(2000)),
     safe(() => supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(2000)),
   ]);
@@ -2413,8 +2413,8 @@ async function loadTemplateLists(supabase, tenantId) {
   lists.country       = pick(countries.data, "NAME_LONG");
   lists.gender        = pick(genders.data, "GENDER");
   lists.salutation    = pick(salutations.data, "SALUTATION");
-  lists.projectStatus = pick(statuses.data, "NAME_SHORT");
-  lists.projectType   = pick(types.data, "NAME_SHORT");
+  lists.projectStatus = pick(statuses.data, "ABBR");
+  lists.projectType   = pick(types.data, "ABBR");
   lists.employeeShort = pick(employees.data, "ABBR");
   lists.addressName   = pick(addresses.data, "ADDRESS_NAME_1");
   return lists;
@@ -2712,11 +2712,11 @@ async function buildStructurePrefill({ supabase, tenantId }) {
 
   const rows = [];
   for (const p of offen) {
-    rows.push({ project_number: p.number, outline: "1", name_short: "LB", name_long: `Leistungsbild — ${p.name}` });
+    rows.push({ project_number: p.number, outline: "1", abbr: "LB", name_long: `Leistungsbild — ${p.name}` });
     HOAI_LP.forEach((lp, i) => {
       rows.push({
         project_number: p.number, outline: `1.${i + 1}`,
-        name_short: lp.code, name_long: lp.name, billing: "Pauschal",
+        abbr: lp.code, name_long: lp.name, billing: "Pauschal",
       });
     });
   }

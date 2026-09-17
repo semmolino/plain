@@ -28,7 +28,7 @@ async function listEstimates(req, res, supabase) {
   const offerId   = req.query.offer_id   ? parseInt(req.query.offer_id, 10)   : null;
   try {
     let q = supabase.from("DIN276_COST_ESTIMATE")
-      .select("ID, NAME_SHORT, NAME_LONG, STAGE, STATUS, MITVERARBEITETE_BAUSUBSTANZ, PROJECT_ID, OFFER_ID, created_at")
+      .select("ID, ABBR, NAME_LONG, STAGE, STATUS, MITVERARBEITETE_BAUSUBSTANZ, PROJECT_ID, OFFER_ID, created_at")
       .eq("TENANT_ID", tenantId)
       .order("created_at", { ascending: false });
     if (projectId) q = q.eq("PROJECT_ID", projectId);
@@ -68,7 +68,7 @@ async function createEstimate(req, res, supabase) {
   try {
     const { data: est, error } = await supabase.from("DIN276_COST_ESTIMATE").insert({
       TENANT_ID: tenantId, PROJECT_ID: projectId, OFFER_ID: offerId,
-      NAME_SHORT: req.body?.name_short || null, NAME_LONG: req.body?.name_long || null,
+      ABBR: req.body?.abbr || null, NAME_LONG: req.body?.name_long || null,
       STAGE: req.body?.stage || "berechnung",
     }).select("*").single();
     if (error) throw error;
@@ -91,7 +91,7 @@ async function updateEstimate(req, res, supabase) {
   const tenantId = req.tenantId;
   const id = parseInt(req.params.id, 10);
   const patch = {};
-  if ("name_short" in (req.body || {})) patch.NAME_SHORT = req.body.name_short || null;
+  if ("abbr" in (req.body || {})) patch.ABBR = req.body.abbr || null;
   if ("name_long"  in (req.body || {})) patch.NAME_LONG  = req.body.name_long  || null;
   if ("stage"      in (req.body || {})) patch.STAGE      = req.body.stage;
   if ("status"     in (req.body || {})) patch.STATUS     = req.body.status;

@@ -21,8 +21,8 @@ const row = (...cells) => { const r = [...cells]; while (r.length < HEAD.length)
 
 const seed = (extra = {}) => makeFakeSupabase({
   PROJECT: [
-    { ID: 1, TENANT_ID: TENANT, NAME_SHORT: "P-1", NAME_LONG: "Projekt Eins", ADDRESS_ID: 11, CONTACT_ID: 21 },
-    { ID: 2, TENANT_ID: TENANT, NAME_SHORT: "P-2", NAME_LONG: "Projekt Zwei" },
+    { ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME_LONG: "Projekt Eins", ADDRESS_ID: 11, CONTACT_ID: 21 },
+    { ID: 2, TENANT_ID: TENANT, ABBR: "P-2", NAME_LONG: "Projekt Zwei" },
   ],
   PROJECT_STRUCTURE: [],
   CONTRACT: [],
@@ -54,7 +54,7 @@ describe("Baum anlegen", () => {
 
     expect(res.inserted).toBe(5);
     const nodes = supabase._tables.PROJECT_STRUCTURE;
-    const by = (k) => nodes.find((n) => n.NAME_SHORT === k);
+    const by = (k) => nodes.find((n) => n.ABBR === k);
 
     expect(by("LB").FATHER_ID).toBeNull();
     expect(by("BL").FATHER_ID).toBeNull();
@@ -70,7 +70,7 @@ describe("Baum anlegen", () => {
   it("rechnet den Elternwert aus den Kindern statt ihn zu uebernehmen", async () => {
     const supabase = seed();
     await runCommit(await baum(), supabase);
-    const lb = supabase._tables.PROJECT_STRUCTURE.find((n) => n.NAME_SHORT === "LB");
+    const lb = supabase._tables.PROJECT_STRUCTURE.find((n) => n.ABBR === "LB");
 
     expect(lb.REVENUE).toBe(80000);          // 27000 + 25000 + 28000
     expect(lb.REVENUE_BASIS).toBe(80000);
@@ -107,7 +107,7 @@ describe("Baum anlegen", () => {
 
     await runCommit(buffer, supabase);
     const nodes = supabase._tables.PROJECT_STRUCTURE;
-    const lb = nodes.find((n) => n.NAME_SHORT === "LB");
+    const lb = nodes.find((n) => n.ABBR === "LB");
     expect(nodes.filter((n) => n.FATHER_ID === lb.ID)).toHaveLength(2);
     expect(lb.REVENUE).toBe(52000);
   });
@@ -142,7 +142,7 @@ describe("Honorar", () => {
     expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("aus den Unterzeilen gerechnet");
 
     await runCommit(buffer, supabase);
-    expect(supabase._tables.PROJECT_STRUCTURE.find((n) => n.NAME_SHORT === "LB").REVENUE).toBe(1000);
+    expect(supabase._tables.PROJECT_STRUCTURE.find((n) => n.ABBR === "LB").REVENUE).toBe(1000);
   });
 
   it("nullt das Honorar von Stunden-Positionen", async () => {
@@ -239,7 +239,7 @@ describe("Pruefung", () => {
   });
 
   it("ueberspringt Projekte, die schon eine Struktur haben", async () => {
-    const supabase = seed({ PROJECT_STRUCTURE: [{ ID: 900, TENANT_ID: TENANT, PROJECT_ID: 1, NAME_SHORT: "alt" }] });
+    const supabase = seed({ PROJECT_STRUCTURE: [{ ID: 900, TENANT_ID: TENANT, PROJECT_ID: 1, ABBR: "alt" }] });
     const pv = await runPreview(await baum(), supabase);
 
     expect(pv.summary.duplicate).toBe(5);

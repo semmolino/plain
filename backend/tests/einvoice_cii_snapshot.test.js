@@ -57,13 +57,13 @@ function fixture() {
       VAT_ID: "DE987654321",
     }],
     EMPLOYEE: [{ ID: 20, TENANT_ID: TENANT, FIRST_NAME: "Simon", LAST_NAME: "Messina" }],
-    COUNTRY: [{ ID: 1, NAME_SHORT: "DE" }],
+    COUNTRY: [{ ID: 1, ABBR: "DE" }],
     CONTRACT: [{ ID: 30, TENANT_ID: TENANT }],
     INVOICE_STRUCTURE: [
       { ID: 1, TENANT_ID: TENANT, INVOICE_ID: INVOICE_ID, STRUCTURE_ID: 700, AMOUNT_NET: 4500, AMOUNT_EXTRAS_NET: 0 },
     ],
     PROJECT_STRUCTURE: [
-      { ID: 700, TENANT_ID: TENANT, NAME_SHORT: "LPH 1", NAME_LONG: "Grundlagenermittlung", BILLING_TYPE_ID: 1 },
+      { ID: 700, TENANT_ID: TENANT, ABBR: "LPH 1", NAME_LONG: "Grundlagenermittlung", BILLING_TYPE_ID: 1 },
     ],
     INVOICE_DEDUCTION: [], ADVANCE_INVOICE: [], BOOKING: [], ASSET: [],
   });

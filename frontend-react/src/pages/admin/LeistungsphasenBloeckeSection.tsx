@@ -53,7 +53,7 @@ export function LeistungsphasenBloeckeSection() {
   useEffect(() => {
     const d = blocksData?.data
     if (!d) return
-    setBlocks((d.blocks ?? []).map(b => ({ key: `b${b.ID}`, id: b.ID, name: b.NAME_SHORT })))
+    setBlocks((d.blocks ?? []).map(b => ({ key: `b${b.ID}`, id: b.ID, name: b.ABBR })))
     const a: Record<number, string | null> = {}
     for (const p of (d.phases ?? [])) a[p.ID] = p.BLOCK_ID != null ? `b${p.BLOCK_ID}` : null
     setAssign(a)
@@ -64,7 +64,7 @@ export function LeistungsphasenBloeckeSection() {
     mutationFn: () => {
       const payloadBlocks: LphBlockInput[] = blocks
         .filter(b => b.name.trim())
-        .map((b, i) => ({ key: b.key, id: b.id, name_short: b.name.trim(), sort_order: i }))
+        .map((b, i) => ({ key: b.key, id: b.id, abbr: b.name.trim(), sort_order: i }))
       // Zuordnungen auf noch existierende Blöcke begrenzen.
       const liveKeys = new Set(payloadBlocks.map(b => b.key))
       const cleanAssign: Record<number, string | null> = {}
@@ -126,7 +126,7 @@ export function LeistungsphasenBloeckeSection() {
               setFeeMasterId(null); setBlocks([]); setAssign({})
             }}>
               <option value="">Bitte wählen …</option>
-              {groups.map(g => <option key={g.ID} value={g.ID}>{g.NAME_SHORT}{g.NAME_LONG ? ` – ${g.NAME_LONG}` : ''}</option>)}
+              {groups.map(g => <option key={g.ID} value={g.ID}>{g.ABBR}{g.NAME_LONG ? ` – ${g.NAME_LONG}` : ''}</option>)}
             </select>
           </div>
           <div className="form-group">
@@ -134,7 +134,7 @@ export function LeistungsphasenBloeckeSection() {
             <select value={feeMasterId ?? ''} disabled={feeGroupId == null}
               onChange={e => setFeeMasterId(e.target.value ? Number(e.target.value) : null)}>
               <option value="">Bitte wählen …</option>
-              {masters.map(m => <option key={m.ID} value={m.ID}>{m.NAME_SHORT}{m.NAME_LONG ? ` – ${m.NAME_LONG}` : ''}</option>)}
+              {masters.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}{m.NAME_LONG ? ` – ${m.NAME_LONG}` : ''}</option>)}
             </select>
           </div>
         </div>
@@ -202,7 +202,7 @@ export function LeistungsphasenBloeckeSection() {
                       {phases.map(p => (
                         <tr key={p.ID}>
                           <td>
-                            <strong>{p.NAME_SHORT}</strong>
+                            <strong>{p.ABBR}</strong>
                             {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
                           </td>
                           <td>

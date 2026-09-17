@@ -212,7 +212,7 @@ body {
       {% set totalLS     = totalLS     + (p.LEISTUNGSSTAND_VALUE | float(0)) %}
 
       <tr>
-        <td>{{ p.NAME_SHORT }}</td>
+        <td>{{ p.ABBR }}</td>
         <td>
           {{ p.NAME_LONG }}
           {% if p.PROJECT_TYPE_NAME_SHORT %}

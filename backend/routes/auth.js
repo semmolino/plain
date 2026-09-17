@@ -108,7 +108,7 @@ async function seedTenantRbacAndAssignAdmin(supabase, tenantId, employeeId) {
     for (const rd of roleDefs) {
       const { data: role, error: roleErr } = await supabase
         .from("USER_ROLE")
-        .insert([{ TENANT_ID: tenantId, NAME_SHORT: rd.name, NAME_LONG: rd.long, COLOR: rd.color, IS_SYSTEM: true, IS_DEFAULT: rd.isDefault }])
+        .insert([{ TENANT_ID: tenantId, ABBR: rd.name, NAME_LONG: rd.long, COLOR: rd.color, IS_SYSTEM: true, IS_DEFAULT: rd.isDefault }])
         .select("ID")
         .single();
       if (roleErr || !role) { console.error("[SIGNUP][ROLE]", rd.name, roleErr?.message); continue; }
@@ -125,7 +125,7 @@ async function seedTenantRbacAndAssignAdmin(supabase, tenantId, employeeId) {
     if (!adminRoleId) {
       const { data: existing } = await supabase
         .from("USER_ROLE").select("ID")
-        .eq("TENANT_ID", tenantId).eq("NAME_SHORT", "Administrator").maybeSingle();
+        .eq("TENANT_ID", tenantId).eq("ABBR", "Administrator").maybeSingle();
       adminRoleId = existing?.ID ?? null;
     }
 

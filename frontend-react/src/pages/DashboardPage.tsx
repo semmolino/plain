@@ -1140,7 +1140,7 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
   const flags    = project.flags ?? []
 
   return (
-    <Modal open={true} onClose={onClose} title={project.NAME_SHORT} className="projekt-detail-modal">
+    <Modal open={true} onClose={onClose} title={project.ABBR} className="projekt-detail-modal">
       <div className="projekt-detail-grid">
 
         <div>
@@ -1179,7 +1179,7 @@ function ProjektDetailModal({ project, onClose }: { project: RiskProject; onClos
             <button className="btn btn-sm" onClick={() => { onClose(); navigate('/daten', { state: { tab: 'einzelprojekt', projectId: project.PROJECT_ID } }) }}>
               → Projektbericht
             </button>
-            <button className="btn btn-sm" onClick={() => { onClose(); navigate('/rechnungen', { state: { projectSearch: project.NAME_SHORT } }) }}>
+            <button className="btn btn-sm" onClick={() => { onClose(); navigate('/rechnungen', { state: { projectSearch: project.ABBR } }) }}>
               → Rechnungen
             </button>
           </div>
@@ -1255,7 +1255,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
   const base = ampelFilter === 'alle' ? projects : projects.filter(p => p.ampel === ampelFilter)
   const filtered = sort(base, (p, f) => {
     switch (f) {
-      case 'name':      return (p.NAME_SHORT || '').toLowerCase()
+      case 'name':      return (p.ABBR || '').toLowerCase()
       case 'budget':    return Number(p.BUDGET_TOTAL_NET || 0)
       case 'cost':      return Number(p.COST_TOTAL || 0)
       case 'budgetpct': return Number(p.COST_RATIO || 0)
@@ -1326,7 +1326,7 @@ function RisikoView({ projects }: { projects: RiskProject[] }) {
                   >
                     <td style={{ padding: 0 }}></td>
                     <td>
-                      <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
+                      <div style={{ fontWeight: 500 }}>{p.ABBR}</div>
                       {p.PROJECT_MANAGER_DISPLAY && (
                         <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
                       )}
@@ -1388,7 +1388,7 @@ function TopOpenOffersCard() {
   const offersQ   = useQuery({ queryKey: ['dashboard', 'top-open-offers'], queryFn: fetchOffers,        staleTime: 300000 })
   const statusesQ = useQuery({ queryKey: ['offer-statuses'],               queryFn: fetchOfferStatuses, staleTime: 600000 })
 
-  const rejectedId = statusesQ.data?.data?.find(s => s.NAME_SHORT === 'Abgelehnt')?.ID ?? null
+  const rejectedId = statusesQ.data?.data?.find(s => s.ABBR === 'Abgelehnt')?.ID ?? null
   const offers: OfferListItem[] = offersQ.data?.data ?? []
   const open = offers
     .filter(o => o.PROJECT_ID === null && (rejectedId === null || o.OFFER_STATUS_ID !== rejectedId))
@@ -1412,7 +1412,7 @@ function TopOpenOffersCard() {
               <tbody>
                 {open.map(o => (
                   <tr key={o.ID} className="clickable-row" onClick={() => navigate('/angebote')} title="Zu den Angeboten">
-                    <td>{o.NAME_SHORT || o.NAME_LONG || '—'}</td>
+                    <td>{o.ABBR || o.NAME_LONG || '—'}</td>
                     <td className="col-hide-mobile" style={{ color: 'var(--text-3)' }}>{o.ADDRESS_NAME || '—'}</td>
                     <td className="num">{money(o.TOTAL_AMOUNT)}</td>
                   </tr>
@@ -1490,10 +1490,10 @@ function BillingPotentialTable({ projects, maxRows = 10 }: { projects: BillingPr
           <tr
             key={i}
             className="clickable-row"
-            onClick={() => navigate('/rechnungen', { state: { projectSearch: p.NAME_SHORT } })}
+            onClick={() => navigate('/rechnungen', { state: { projectSearch: p.ABBR } })}
           >
             <td>
-              <div style={{ fontWeight: 500 }}>{p.NAME_SHORT}</div>
+              <div style={{ fontWeight: 500 }}>{p.ABBR}</div>
               {p.PROJECT_MANAGER_DISPLAY && (
                 <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{p.PROJECT_MANAGER_DISPLAY}</div>
               )}

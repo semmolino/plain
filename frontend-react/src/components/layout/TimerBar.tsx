@@ -51,7 +51,7 @@ function LeafPicker({
         onChange={e => { onProjectId(e.target.value ? Number(e.target.value) : null); onStructureId(null, '') }}
       >
         <option value="">— Projekt wählen —</option>
-        {projects.map(p => <option key={p.ID} value={p.ID}>{p.NAME_SHORT} – {p.NAME_LONG}</option>)}
+        {projects.map(p => <option key={p.ID} value={p.ID}>{p.ABBR} – {p.NAME_LONG}</option>)}
       </select>
       {projectId && (
         <select
@@ -59,14 +59,14 @@ function LeafPicker({
           value={structureId ?? ''}
           onChange={e => {
             const id = e.target.value ? Number(e.target.value) : null
-            const name = leaves.find(fn => fn.node.STRUCTURE_ID === id)?.node.NAME_SHORT ?? ''
+            const name = leaves.find(fn => fn.node.STRUCTURE_ID === id)?.node.ABBR ?? ''
             onStructureId(id, name)
           }}
         >
           <option value="">— Leistung wählen —</option>
           {leaves.map(({ node, depth }) => (
             <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
-              {'  '.repeat(depth)}{node.NAME_SHORT}{node.NAME_LONG ? ` – ${node.NAME_LONG}` : ''}
+              {'  '.repeat(depth)}{node.ABBR}{node.NAME_LONG ? ` – ${node.NAME_LONG}` : ''}
             </option>
           ))}
         </select>
@@ -98,7 +98,7 @@ function StartModal({ onClose }: { onClose: () => void }) {
   }, [employeeId])
 
   const projects = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
-  const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.NAME_SHORT]))
+  const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.ABBR]))
 
   function handleStart() {
     if (!employeeId || !structureId || !projectId) return
@@ -192,7 +192,7 @@ function NextTaskModal({ onClose }: { onClose: () => void }) {
   const [error, setError]   = useState<string | null>(null)
 
   const projects = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
-  const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.NAME_SHORT]))
+  const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.ABBR]))
 
   if (!session) return null
   const elapsed = elapsedSeconds(session.blockStartIso)
@@ -596,8 +596,8 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
                           </span>
                         ) : (
                           <>
-                            <span className="tbm-review-proj">{d.PROJECT?.NAME_SHORT}</span>
-                            <span className="tbm-review-struct">{d.STRUCTURE?.NAME_SHORT}</span>
+                            <span className="tbm-review-proj">{d.PROJECT?.ABBR}</span>
+                            <span className="tbm-review-struct">{d.STRUCTURE?.ABBR}</span>
                           </>
                         )}
                       </td>

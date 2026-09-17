@@ -301,7 +301,7 @@ body {
         {% endif %}
         <tr>
           <td class="ml">Angebots-Nr.</td>
-          <td class="mv bold">{{ offer.NAME_SHORT }}</td>
+          <td class="mv bold">{{ offer.ABBR }}</td>
         </tr>
       </table>
     </div>
@@ -460,7 +460,7 @@ body {
   <div class="appendix-title">HOAI-Honorarübersicht</div>
   <div class="appendix-subtitle">
     {{ hc.nameShort }}{% if hc.nameLong %} – {{ hc.nameLong }}{% endif %}
-    &middot; {{ offer.NAME_SHORT }}{% if offer.NAME_LONG %} – {{ offer.NAME_LONG }}{% endif %}
+    &middot; {{ offer.ABBR }}{% if offer.NAME_LONG %} – {{ offer.NAME_LONG }}{% endif %}
     &middot; Stand: {{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}
   </div>
 
@@ -639,7 +639,7 @@ body {
     <table>
       <tr>
         <td class="lbl">Angebots-Nr.</td>
-        <td class="val">{{ offer.NAME_SHORT }}</td>
+        <td class="val">{{ offer.ABBR }}</td>
       </tr>
       <tr>
         <td class="lbl">Angebotsdatum</td>
@@ -664,7 +664,7 @@ body {
 
   {# Acceptance statement #}
   <div class="acceptance-text">
-    Hiermit erteilen wir den Auftrag gemäß Angebot Nr.&nbsp;<strong>{{ offer.NAME_SHORT }}</strong>
+    Hiermit erteilen wir den Auftrag gemäß Angebot Nr.&nbsp;<strong>{{ offer.ABBR }}</strong>
     vom&nbsp;{{ (offer.OFFER_DATE or offer.CREATED_AT) | date_de }}
     über&nbsp;<strong>{{ (grossTotal if vatPercent > 0 else totals.total) | money }}</strong>
     {% if vatPercent > 0 %}(brutto, inkl. {{ vatPercent }}&thinsp;% MwSt.){% else %}(netto){% endif %}

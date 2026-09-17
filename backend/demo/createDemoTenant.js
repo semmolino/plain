@@ -57,7 +57,7 @@ async function seedRolesAndAssignAdmin(supabase, tenantId, employeeId) {
   for (const rd of roleDefs) {
     const { data: role, error: rErr } = await supabase
       .from("USER_ROLE")
-      .insert([{ TENANT_ID: tenantId, NAME_SHORT: rd.name, NAME_LONG: rd.long, COLOR: rd.color, IS_SYSTEM: true, IS_DEFAULT: rd.isDefault }])
+      .insert([{ TENANT_ID: tenantId, ABBR: rd.name, NAME_LONG: rd.long, COLOR: rd.color, IS_SYSTEM: true, IS_DEFAULT: rd.isDefault }])
       .select("ID").single();
     if (rErr || !role) { console.error("[demo][ROLE]", rd.name, rErr?.message); continue; }
     if (rd.name === "Administrator") adminRoleId = role.ID;

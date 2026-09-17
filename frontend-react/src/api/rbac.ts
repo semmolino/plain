@@ -15,7 +15,7 @@ export interface Permission {
 
 export interface UserRole {
   ID:              number
-  NAME_SHORT:      string
+  ABBR:      string
   NAME_LONG:       string | null
   COLOR:           string | null
   IS_SYSTEM:       boolean
@@ -40,14 +40,14 @@ export interface MyPermissionsResponse {
 }
 
 export interface CreateRolePayload {
-  name_short:     string
+  abbr:     string
   name_long?:     string | null
   color?:         string | null
   permission_ids?: number[]
 }
 
 export interface PatchRolePayload {
-  name_short?:     string
+  abbr?:     string
   name_long?:      string | null
   color?:          string | null
   is_default?:     boolean

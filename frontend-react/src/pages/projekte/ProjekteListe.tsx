@@ -31,7 +31,7 @@ import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
 import { rowClickHandler } from '@/utils/rowClick'
 
 const PAGE_SIZE = 25
-type SortKey = 'NAME_SHORT' | 'NAME_LONG' | 'STATUS_NAME' | 'MANAGER_NAME' | 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
+type SortKey = 'ABBR' | 'NAME_LONG' | 'STATUS_NAME' | 'MANAGER_NAME' | 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
 
 type OptColKey = 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
 
@@ -63,7 +63,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
 
   // list state
   const [search,        setSearch]        = useState('')
-  const [sortKey,       setSortKey]       = useStickyState<SortKey>('projekte.sortKey', 'NAME_SHORT')
+  const [sortKey,       setSortKey]       = useStickyState<SortKey>('projekte.sortKey', 'ABBR')
   const [sortDir,       setSortDir]       = useStickyState<'asc'|'desc'>('projekte.sortDir', 'asc')
   const [page,          setPage]          = useState(1)
   const [activeFilters, setActiveFilters] = useStickyState<ActiveFilters>('projekte.filters', emptyFilters, {
@@ -95,7 +95,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   // edit modal state
   const [editRow, setEditRow] = useState<Project | null>(null)
   const [editForm, setEditForm] = useState({
-    name_short: '', name_long: '',
+    abbr: '', name_long: '',
     project_status_id: '', project_type_id: '', project_manager_id: '',
     department_id: '',
     address_id: '', address_text: '',
@@ -122,10 +122,10 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
 
   // ── Inline-Edit (Status / Leitung / Typ / Abteilung direkt in der Liste) ──
   const canEdit = usePermission('projects.edit')
-  const statusOpts:  InlineOption[] = useMemo(() => statuses.map(s    => ({ value: String(s.ID), label: s.NAME_SHORT })), [statuses])
-  const typeOpts:    InlineOption[] = useMemo(() => types.map(t       => ({ value: String(t.ID), label: t.NAME_SHORT })), [types])
+  const statusOpts:  InlineOption[] = useMemo(() => statuses.map(s    => ({ value: String(s.ID), label: s.ABBR })), [statuses])
+  const typeOpts:    InlineOption[] = useMemo(() => types.map(t       => ({ value: String(t.ID), label: t.ABBR })), [types])
   const managerOpts: InlineOption[] = useMemo(() => managers.map(m    => ({ value: String(m.ID), label: m.ABBR })), [managers])
-  const deptOpts:    InlineOption[] = useMemo(() => departments.map(d => ({ value: String(d.ID), label: d.NAME_SHORT })), [departments])
+  const deptOpts:    InlineOption[] = useMemo(() => departments.map(d => ({ value: String(d.ID), label: d.ABBR })), [departments])
 
   const inlineMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateProject>[1] }) => updateProject(id, body),
@@ -146,7 +146,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   const processed = useMemo(() => {
     const q = search.trim().toLowerCase()
     let rows = q
-      ? projects.filter(p => `${p.NAME_SHORT} ${p.NAME_LONG} ${p.STATUS_NAME} ${p.MANAGER_NAME} ${p.TYPE_NAME ?? ''} ${p.DEPARTMENT_NAME ?? ''} ${p.ADDRESS_NAME ?? ''}`.toLowerCase().includes(q))
+      ? projects.filter(p => `${p.ABBR} ${p.NAME_LONG} ${p.STATUS_NAME} ${p.MANAGER_NAME} ${p.TYPE_NAME ?? ''} ${p.DEPARTMENT_NAME ?? ''} ${p.ADDRESS_NAME ?? ''}`.toLowerCase().includes(q))
       : projects
 
     if (activeFilters.status.size > 0) rows = rows.filter(p => p.STATUS_NAME && activeFilters.status.has(p.STATUS_NAME))
@@ -214,7 +214,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   function handleDelete(p: Project) {
     setConfirmState({
       title: 'Projekt löschen',
-      message: `Projekt „${p.NAME_SHORT} – ${p.NAME_LONG}" wirklich löschen?`,
+      message: `Projekt „${p.ABBR} – ${p.NAME_LONG}" wirklich löschen?`,
       onConfirm: () => deleteMut.mutate(p.ID),
     })
   }
@@ -302,7 +302,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
 
   async function openEdit(p: Project) {
     setEditForm({
-      name_short:         p.NAME_SHORT ?? '',
+      abbr:         p.ABBR ?? '',
       name_long:          p.NAME_LONG  ?? '',
       project_status_id:  String(p.PROJECT_STATUS_ID  ?? ''),
       project_type_id:    String(p.PROJECT_TYPE_ID    ?? ''),
@@ -331,7 +331,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
     updateMut.mutate({
       id: editRow.ID,
       body: {
-        name_short:         editForm.name_short,
+        abbr:         editForm.abbr,
         name_long:          editForm.name_long,
         project_status_id:  editForm.project_status_id  ? Number(editForm.project_status_id)  : undefined,
         project_type_id:    editForm.project_type_id    ? Number(editForm.project_type_id)    : null,
@@ -492,7 +492,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
             <table className="master-table master-table--einzeilig master-table--aufklappbar">
               <thead>
                 <tr>
-                  <SortTh label="Kürzel"   column="NAME_SHORT"   {...sortProps} />
+                  <SortTh label="Kürzel"   column="ABBR"   {...sortProps} />
                   <SortTh label="Name"     column="NAME_LONG"    {...sortProps} />
                   <SortTh label="Status"   column="STATUS_NAME"  {...sortProps} />
                   <SortTh label="Leitung"  column="MANAGER_NAME" {...sortProps} />
@@ -530,15 +530,15 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                         sichtbar={felder.length > 0}
                         offen={offen}
                         onToggle={() => detail.toggle(schluessel)}
-                        bezeichnung={`Projekt ${p.NAME_SHORT}`}
+                        bezeichnung={`Projekt ${p.ABBR}`}
                         panelId={panelId}
                       />
                       {/* Das Kuerzel ist der fokussierbare Einstieg in die Zeile —
                           es ersetzt die frueher in JEDER Zeile wiederholte
                           Schaltflaeche „Oeffnen" und bleibt per Tab erreichbar. */}
                       {onSelectProject
-                        ? <button className="link-btn" onClick={() => onSelectProject(p.ID)}>{p.NAME_SHORT}</button>
-                        : p.NAME_SHORT}
+                        ? <button className="link-btn" onClick={() => onSelectProject(p.ID)}>{p.ABBR}</button>
+                        : p.ABBR}
                       {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6 }}>intern</span>}
                     </td>
                     <td><span className="cell-clamp" title={p.NAME_LONG}>{p.NAME_LONG}</span></td>
@@ -591,7 +591,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
                           type="checkbox"
                           checked={p.IS_INTERNAL ?? false}
                           title="Internes Projekt"
-                          aria-label={`${p.NAME_SHORT} ist ein internes Projekt`}
+                          aria-label={`${p.ABBR} ist ein internes Projekt`}
                           disabled={internalMut.isPending}
                           onChange={e => internalMut.mutate({ id: p.ID, val: e.target.checked })}
                           style={{ width: 16, height: 16, cursor: 'pointer' }}
@@ -674,7 +674,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
           <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
             <div className="form-group">
               <label>Kürzel</label>
-              <input value={editForm.name_short} onChange={setE('name_short')} />
+              <input value={editForm.abbr} onChange={setE('abbr')} />
             </div>
             <div className="form-group">
               <label>Name</label>
@@ -684,14 +684,14 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
               <label>Status</label>
               <select value={editForm.project_status_id} onChange={setE('project_status_id')}>
                 <option value="">—</option>
-                {statuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+                {statuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
               </select>
             </div>
             <div className="form-group">
               <label>Typ</label>
               <select value={editForm.project_type_id} onChange={setE('project_type_id')}>
                 <option value="">—</option>
-                {types.map(t => <option key={t.ID} value={t.ID}>{t.NAME_SHORT}</option>)}
+                {types.map(t => <option key={t.ID} value={t.ID}>{t.ABBR}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -705,7 +705,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
               <label>Abteilung</label>
               <select value={editForm.department_id} onChange={setE('department_id')}>
                 <option value="">—</option>
-                {departments.map(d => <option key={d.ID} value={d.ID}>{d.NAME_SHORT}</option>)}
+                {departments.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
               </select>
             </div>
             <Autocomplete

@@ -19,7 +19,7 @@ function buildRow(body) {
   if (!VALID_KINDS.has(kind)) {
     throw { status: 400, message: "Ungültige Buchungsart (kind)." };
   }
-  const nameShort = (body.name_short || "").trim();
+  const nameShort = (body.abbr || "").trim();
   if (!nameShort) throw { status: 400, message: "Kürzel ist erforderlich." };
 
   const scope = body.scope === "project" ? "project" : "global";
@@ -30,7 +30,7 @@ function buildRow(body) {
 
   return {
     KIND:            kind,
-    NAME_SHORT:      nameShort,
+    ABBR:      nameShort,
     NAME_LONG:       (body.name_long || "").trim() || null,
     UNIT_LABEL:      kind === "UNIT" ? ((body.unit_label || "").trim() || null) : null,
     UNIT_CODE:       kind === "UNIT" ? ((body.unit_code || "").trim() || null) : null,
@@ -50,7 +50,7 @@ async function listBookingTypes(supabase, { tenantId, projectId = null, activeOn
     .select("*")
     .eq("TENANT_ID", tenantId)
     .order("SORT_ORDER", { ascending: true })
-    .order("NAME_SHORT", { ascending: true });
+    .order("ABBR", { ascending: true });
 
   if (activeOnly) query = query.eq("ACTIVE", 1);
   if (projectId != null) query = query.eq("PROJECT_ID", projectId);
@@ -78,11 +78,11 @@ async function loadProjectPriceMap(supabase, tenantId, projectId) {
 async function listSelectableForBooking(supabase, { tenantId, projectId = null }) {
   const { data, error } = await supabase
     .from("BOOKING_TYPE")
-    .select("ID, KIND, NAME_SHORT, NAME_LONG, UNIT_LABEL, UNIT_CODE, DEFAULT_SP_RATE, DEFAULT_CP_RATE, SCOPE, PROJECT_ID")
+    .select("ID, KIND, ABBR, NAME_LONG, UNIT_LABEL, UNIT_CODE, DEFAULT_SP_RATE, DEFAULT_CP_RATE, SCOPE, PROJECT_ID")
     .eq("TENANT_ID", tenantId)
     .eq("ACTIVE", 1)
     .order("SORT_ORDER", { ascending: true })
-    .order("NAME_SHORT", { ascending: true });
+    .order("ABBR", { ascending: true });
   if (error) throw { status: 500, message: error.message };
 
   const rows = (data || []).filter(
@@ -108,11 +108,11 @@ async function listProjectPriceList(supabase, { tenantId, projectId }) {
   if (!projectId) throw { status: 400, message: "projectId ist erforderlich" };
   const { data, error } = await supabase
     .from("BOOKING_TYPE")
-    .select("ID, KIND, NAME_SHORT, NAME_LONG, UNIT_LABEL, DEFAULT_SP_RATE, DEFAULT_CP_RATE, SCOPE, PROJECT_ID, ACTIVE")
+    .select("ID, KIND, ABBR, NAME_LONG, UNIT_LABEL, DEFAULT_SP_RATE, DEFAULT_CP_RATE, SCOPE, PROJECT_ID, ACTIVE")
     .eq("TENANT_ID", tenantId)
     .eq("ACTIVE", 1)
     .order("SORT_ORDER", { ascending: true })
-    .order("NAME_SHORT", { ascending: true });
+    .order("ABBR", { ascending: true });
   if (error) throw { status: 500, message: error.message };
 
   const rows = (data || []).filter(
@@ -125,7 +125,7 @@ async function listProjectPriceList(supabase, { tenantId, projectId }) {
     return {
       BOOKING_TYPE_ID:   r.ID,
       KIND:              r.KIND,
-      NAME_SHORT:        r.NAME_SHORT,
+      ABBR:        r.ABBR,
       NAME_LONG:         r.NAME_LONG,
       UNIT_LABEL:        r.UNIT_LABEL,
       SCOPE:             r.SCOPE,

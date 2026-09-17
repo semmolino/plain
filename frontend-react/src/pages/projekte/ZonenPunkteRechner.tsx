@@ -76,7 +76,7 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
 
   const zoneLabel = (zoneId: number) => {
     const z = zones.find(zz => zz.ID === zoneId)
-    return z ? `${z.NAME_SHORT}${z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}` : `Zone ${zoneId}`
+    return z ? `${z.ABBR}${z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}` : `Zone ${zoneId}`
   }
 
   const setPoint = (id: number, raw: string, max: number) => {
@@ -101,7 +101,7 @@ export function ZonenPunkteRechner({ open, onClose, feeMasterId, zones, onApply 
     .sort((a, b) => a.POINTS_FROM - b.POINTS_FROM)
     .map(t => {
       const z = zones.find(zz => zz.ID === t.ZONE_ID)
-      const name = z?.NAME_SHORT ?? '?'
+      const name = z?.ABBR ?? '?'
       return t.POINTS_FROM === 0 ? `${name} bis ${t.POINTS_TO}` : `${name} ${t.POINTS_FROM}–${t.POINTS_TO}`
     })
 

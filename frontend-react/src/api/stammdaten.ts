@@ -2,7 +2,7 @@ import { apiClient, openPdfWithAuth } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface Country     { ID: string; NAME_LONG: string; NAME_SHORT: string }
+export interface Country     { ID: string; NAME_LONG: string; ABBR: string }
 export interface Salutation  { ID: number; SALUTATION: string }
 export interface Gender      { ID: number; GENDER: string }
 
@@ -105,8 +105,8 @@ export const addressTypeLabel = (id: number | null | undefined): string =>
 export interface AddressDetail {
   address:  Address
   contacts: Contact[]
-  projects: Array<{ ID: number; NAME_SHORT: string | null; NAME_LONG: string | null }>
-  offers:   Array<{ ID: number; NAME_SHORT: string | null }>
+  projects: Array<{ ID: number; ABBR: string | null; NAME_LONG: string | null }>
+  offers:   Array<{ ID: number; ABBR: string | null }>
   invoices: Array<{ ID: number; INVOICE_NUMBER: string | null }>
   partials: Array<{ ID: number; ADVANCE_INVOICE_NUMBER: string | null }>
 }
@@ -205,19 +205,19 @@ export const updateCompany = (id: number, body: CompanyPayload) =>
 
 // ── Stammdaten (status, typ, rollen) ──────────────────────────────────────────
 
-export const createStatus = (name_short: string) =>
-  apiClient.post<{ data: unknown }>('/stammdaten/status', { name_short })
+export const createStatus = (abbr: string) =>
+  apiClient.post<{ data: unknown }>('/stammdaten/status', { abbr })
 
-export const createTyp = (name_short: string) =>
-  apiClient.post<{ data: unknown }>('/stammdaten/typ', { name_short })
+export const createTyp = (abbr: string) =>
+  apiClient.post<{ data: unknown }>('/stammdaten/typ', { abbr })
 
-export const createDepartment = (name_short: string) =>
-  apiClient.post<{ data: unknown }>('/stammdaten/department', { name_short })
+export const createDepartment = (abbr: string) =>
+  apiClient.post<{ data: unknown }>('/stammdaten/department', { abbr })
 
-export const createRolle = (name_short: string, name_long?: string, hourly_rate?: string) =>
-  apiClient.post<{ data: unknown }>('/stammdaten/rollen', { name_short, name_long, hourly_rate })
+export const createRolle = (abbr: string, name_long?: string, hourly_rate?: string) =>
+  apiClient.post<{ data: unknown }>('/stammdaten/rollen', { abbr, name_long, hourly_rate })
 
-export interface Currency { ID: number; NAME_SHORT: string }
+export interface Currency { ID: number; ABBR: string }
 export interface VatRate  { ID: number; VAT: string; VAT_PERCENT: number }
 
 export const fetchCurrencies = () =>
@@ -234,28 +234,28 @@ export const putDefault = (key: string, value: string | null) =>
 
 // ── Stammdaten lists + delete ─────────────────────────────────────────────────
 
-export interface StammdatenItem { ID: number; NAME_SHORT: string }
-export interface Rolle { ID: number; NAME_SHORT: string; NAME_LONG: string | null; HOURLY_RATE: number | null }
+export interface StammdatenItem { ID: number; ABBR: string }
+export interface Rolle { ID: number; ABBR: string; NAME_LONG: string | null; HOURLY_RATE: number | null }
 
 export const fetchDepartments = () =>
   apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/departments')
 export const deleteDepartment = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/department/${id}`)
-export const updateDepartment = (id: number, name_short: string) =>
-  apiClient.patch<{ data: StammdatenItem }>(`/stammdaten/department/${id}`, { name_short })
+export const updateDepartment = (id: number, abbr: string) =>
+  apiClient.patch<{ data: StammdatenItem }>(`/stammdaten/department/${id}`, { abbr })
 
 export const fetchTypen = () =>
   apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/typen')
 export const deleteTyp = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/typ/${id}`)
-export const updateTyp = (id: number, name_short: string) =>
-  apiClient.patch<{ data: StammdatenItem }>(`/stammdaten/typ/${id}`, { name_short })
+export const updateTyp = (id: number, abbr: string) =>
+  apiClient.patch<{ data: StammdatenItem }>(`/stammdaten/typ/${id}`, { abbr })
 
 export const fetchRollen = () =>
   apiClient.get<{ data: Rolle[] }>('/stammdaten/rollen')
 export const deleteRolle = (id: number) =>
   apiClient.delete<{ ok: boolean }>(`/stammdaten/rolle/${id}`)
-export const updateRolle = (id: number, body: { name_short: string; name_long?: string; hourly_rate?: string | number | null }) =>
+export const updateRolle = (id: number, body: { abbr: string; name_long?: string; hourly_rate?: string | number | null }) =>
   apiClient.patch<{ data: Rolle }>(`/stammdaten/rolle/${id}`, body)
 
 export const deleteAddress = (id: number) =>
@@ -369,13 +369,13 @@ export const openMonatsabschlussPdf = () =>
 
 export interface LphBlock {
   ID:         number
-  NAME_SHORT: string
+  ABBR: string
   SORT_ORDER: number
 }
 
 export interface LphBlockPhase {
   ID:         number
-  NAME_SHORT: string
+  ABBR: string
   NAME_LONG:  string | null
   BLOCK_ID:   number | null
 }
@@ -391,7 +391,7 @@ export interface LphBlocksData {
 export interface LphBlockInput {
   key:        string
   id:         number | null
-  name_short: string
+  abbr: string
   sort_order: number
 }
 

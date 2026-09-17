@@ -84,10 +84,10 @@ async function listMahnungen(supabase, { tenantId }) {
   if (projectIds.length > 0) {
     const { data: projects } = await supabase
       .from("PROJECT")
-      .select("ID, NAME_SHORT, NAME_LONG")
+      .select("ID, ABBR, NAME_LONG")
       .in("ID", projectIds);
     for (const p of (projects || [])) {
-      projectsMap[p.ID] = { number: p.NAME_SHORT, name: p.NAME_LONG };
+      projectsMap[p.ID] = { number: p.ABBR, name: p.NAME_LONG };
     }
   }
 
@@ -95,13 +95,13 @@ async function listMahnungen(supabase, { tenantId }) {
     // Try CONTRACT first, then CONTRACTS (legacy table name)
     const { data: c1, error: c1Err } = await supabase
       .from("CONTRACT")
-      .select("ID, NAME_SHORT, NAME_LONG")
+      .select("ID, ABBR, NAME_LONG")
       .in("ID", contractIds);
     const contractList = c1Err
-      ? (await supabase.from("CONTRACTS").select("ID, NAME_SHORT, NAME_LONG").in("ID", contractIds)).data
+      ? (await supabase.from("CONTRACTS").select("ID, ABBR, NAME_LONG").in("ID", contractIds)).data
       : c1;
     for (const c of (contractList || [])) {
-      contractsMap[c.ID] = c.NAME_LONG || c.NAME_SHORT || null;
+      contractsMap[c.ID] = c.NAME_LONG || c.ABBR || null;
     }
   }
 

@@ -4,12 +4,12 @@ import { apiClient, openPdfWithAuth } from './client'
 
 export interface OfferStatus {
   ID:         number
-  NAME_SHORT: string
+  ABBR: string
 }
 
 export interface Offer {
   ID:              number
-  NAME_SHORT:      string | null
+  ABBR:      string | null
   NAME_LONG:       string
   EMPLOYEE_ID:     number | null
   PROBABILITY:     number | null
@@ -58,7 +58,7 @@ export interface ConvertOfferPayload {
 
 export interface OfferListItem {
   ID:              number
-  NAME_SHORT:      string | null
+  ABBR:      string | null
   NAME_LONG:       string
   PROBABILITY:     number | null
   CREATED_AT:      string | null
@@ -76,7 +76,7 @@ export interface OfferListItem {
 
 export interface OfferStructureNode {
   ID:              number
-  NAME_SHORT:      string | null
+  ABBR:      string | null
   NAME_LONG:       string | null
   OFFER_ID:        number
   REVENUE_BASIS:   number | null
@@ -110,7 +110,7 @@ export interface OfferStructureNode {
 export interface OfferStructureDraftRow {
   tmp_key:         string
   father_tmp_key:  string
-  NAME_SHORT:      string
+  ABBR:      string
   NAME_LONG:       string
   BILLING_TYPE_ID: string
   EXTRAS_PERCENT:  string
@@ -155,7 +155,7 @@ export interface UpdateOfferPayload {
 }
 
 export interface AddStructureNodePayload {
-  name_short?:       string
+  abbr?:       string
   name_long?:        string
   billing_type_id:   string | number
   extras_percent?:   string | number
@@ -169,7 +169,7 @@ export interface AddStructureNodePayload {
 }
 
 export interface UpdateStructureNodePayload {
-  name_short?:       string
+  abbr?:       string
   name_long?:        string
   billing_type_id?:  string | number
   extras_percent?:   string | number
@@ -235,7 +235,7 @@ export const openAuftragsbestaetigungPdf = (id: number) =>
   openPdfWithAuth(`/angebote/${id}/auftragsbestaetigung`)
 
 export const convertOffer = (id: number, body: ConvertOfferPayload) =>
-  apiClient.post<{ data: { project: { ID: number; NAME_SHORT: string }; projectName: string } }>(`/angebote/${id}/convert`, body)
+  apiClient.post<{ data: { project: { ID: number; ABBR: string }; projectName: string } }>(`/angebote/${id}/convert`, body)
 
 export const copyOffer = (id: number) =>
   apiClient.post<{ data: Offer }>(`/angebote/${id}/copy`, {})

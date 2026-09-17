@@ -130,13 +130,13 @@ async function calculateRevenueFields(supabase, { feeMasterId, zoneId, zonePerce
 
   if (!zoneId) return empty;
 
-  const { data: zone, error: zoneErr } = await supabase.from("FEE_ZONES").select("ID, NAME_SHORT").eq("ID", zoneId).single();
+  const { data: zone, error: zoneErr } = await supabase.from("FEE_ZONES").select("ID, ABBR").eq("ID", zoneId).single();
   if (zoneErr) throw new Error(zoneErr.message);
   if (!zone) throw new Error("FEE_ZONE not found");
 
-  const zoneKeyRaw = String(zone.NAME_SHORT || "").trim().toUpperCase();
+  const zoneKeyRaw = String(zone.ABBR || "").trim().toUpperCase();
   const zoneColumns = FEE_ZONE_COLUMN_BY_ROMAN[zoneKeyRaw];
-  if (!zoneColumns) throw new Error(`Unsupported FEE_ZONE.NAME_SHORT "${zone.NAME_SHORT}"`);
+  if (!zoneColumns) throw new Error(`Unsupported FEE_ZONE.ABBR "${zone.ABBR}"`);
 
   const { data: feeTables, error: tblErr } = await supabase
     .from("FEE_TABLES")
@@ -224,7 +224,7 @@ function zoneFromPoints(punkte, thresholds) {
 }
 
 // Sortierschlüssel für Leistungsphasen. Bevorzugt SORT_ORDER (explizit
-// gepflegt); ohne SORT_ORDER Fallback auf die führende Zahl aus NAME_SHORT
+// gepflegt); ohne SORT_ORDER Fallback auf die führende Zahl aus ABBR
 // ("LPH 1" → 1). Der Fallback greift bei Leistungsbildern, deren
 // Teilleistungen keine Nummer im Namen tragen (z. B. Geotechnik: "TL a"/"TL
 // b"/"TL c") NICHT — dort ist SORT_ORDER Pflicht, sonst sortieren alle Zeilen
@@ -232,7 +232,7 @@ function zoneFromPoints(punkte, thresholds) {
 function feePhaseSortKey(phase) {
   const sortOrder = toNumberOrNull(phase?.SORT_ORDER);
   if (sortOrder !== null) return sortOrder;
-  const m = String(phase?.NAME_SHORT || "").match(/\d+/);
+  const m = String(phase?.ABBR || "").match(/\d+/);
   return m ? parseInt(m[0], 10) : Number.MAX_SAFE_INTEGER;
 }
 
@@ -247,7 +247,7 @@ async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
   const phaseIds = Array.from(new Set((phaseRows || []).map((r) => r.FEE_PHASE_ID).filter(Boolean)));
   let phaseMap = new Map();
   if (phaseIds.length) {
-    const { data: phases, error: phaseErr } = await supabase.from("FEE_PHASE").select("ID, NAME_SHORT, NAME_LONG, FEE_PERCENT, SORT_ORDER").in("ID", phaseIds);
+    const { data: phases, error: phaseErr } = await supabase.from("FEE_PHASE").select("ID, ABBR, NAME_LONG, FEE_PERCENT, SORT_ORDER").in("ID", phaseIds);
     if (phaseErr) throw new Error(phaseErr.message);
     phaseMap = new Map((phases || []).map((p) => [p.ID, p]));
   }
@@ -257,7 +257,7 @@ async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
       const phase = phaseMap.get(row.FEE_PHASE_ID) || {};
       return {
         ...row,
-        PHASE_LABEL: `${phase.NAME_SHORT || ""}: ${phase.NAME_LONG || ""}`.replace(/:\s*$/, ""),
+        PHASE_LABEL: `${phase.ABBR || ""}: ${phase.NAME_LONG || ""}`.replace(/:\s*$/, ""),
         FEE_PERCENT_BASE: row.FEE_PERCENT_BASE ?? phase.FEE_PERCENT ?? null,
       };
     })
@@ -330,12 +330,12 @@ async function interpolateHonorarForZone(supabase, { feeMasterId, zoneId, zonePe
   if (!feeMasterId || !zoneId || kx === null) return null;
 
   const { data: zone, error: zoneErr } = await supabase
-    .from("FEE_ZONES").select("ID, NAME_SHORT").eq("ID", zoneId).single();
+    .from("FEE_ZONES").select("ID, ABBR").eq("ID", zoneId).single();
   if (zoneErr) throw new Error(zoneErr.message);
   if (!zone) throw new Error("FEE_ZONE not found");
-  const zoneKey = String(zone.NAME_SHORT || "").trim().toUpperCase();
+  const zoneKey = String(zone.ABBR || "").trim().toUpperCase();
   const zoneColumns = FEE_ZONE_COLUMN_BY_ROMAN[zoneKey];
-  if (!zoneColumns) throw new Error(`Unsupported FEE_ZONE.NAME_SHORT "${zone.NAME_SHORT}"`);
+  if (!zoneColumns) throw new Error(`Unsupported FEE_ZONE.ABBR "${zone.ABBR}"`);
 
   const { data: feeTables, error: tblErr } = await supabase
     .from("FEE_TABLES")

@@ -577,7 +577,7 @@ export function ProjektlisteTab() {
     if (search.trim()) {
       const q = search.toLowerCase()
       rows = rows.filter(r =>
-        r.NAME_SHORT.toLowerCase().includes(q) ||
+        r.ABBR.toLowerCase().includes(q) ||
         (r.NAME_LONG ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_STATUS_NAME_SHORT ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_MANAGER_DISPLAY ?? '').toLowerCase().includes(q) ||
@@ -618,8 +618,8 @@ export function ProjektlisteTab() {
     const arr = [...filtered]
     arr.sort((a, b) => {
       const col = COLUMNS.find(c => c.key === sortField)
-      const va  = sortField === 'name' ? a.NAME_SHORT : (col?.sortValue(a) ?? '')
-      const vb  = sortField === 'name' ? b.NAME_SHORT : (col?.sortValue(b) ?? '')
+      const va  = sortField === 'name' ? a.ABBR : (col?.sortValue(a) ?? '')
+      const vb  = sortField === 'name' ? b.ABBR : (col?.sortValue(b) ?? '')
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ?  1 : -1
       return 0
@@ -735,7 +735,7 @@ export function ProjektlisteTab() {
                     onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: r.PROJECT_ID } })}
                   >
                     <td>
-                      <strong>{r.NAME_SHORT}</strong>
+                      <strong>{r.ABBR}</strong>
                       {r.NAME_LONG && <span className="tree-name-long"> – {r.NAME_LONG}</span>}
                     </td>
                     {visibleCols.map(c => (

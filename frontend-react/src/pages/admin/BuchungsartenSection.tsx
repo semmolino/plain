@@ -23,7 +23,7 @@ const KINDS: BookingKind[] = ['UNIT', 'LUMP_COST', 'LUMP_REVENUE']
 
 interface FormState {
   kind:            BookingKind
-  name_short:      string
+  abbr:      string
   name_long:       string
   unit_label:      string
   unit_code:       string
@@ -33,13 +33,13 @@ interface FormState {
 }
 
 function emptyForm(): FormState {
-  return { kind: 'UNIT', name_short: '', name_long: '', unit_label: '', unit_code: '', default_sp_rate: '', default_cp_rate: '', active: true }
+  return { kind: 'UNIT', abbr: '', name_long: '', unit_label: '', unit_code: '', default_sp_rate: '', default_cp_rate: '', active: true }
 }
 
 function toForm(t: BookingType): FormState {
   return {
     kind:            t.KIND,
-    name_short:      t.NAME_SHORT,
+    abbr:      t.ABBR,
     name_long:       t.NAME_LONG ?? '',
     unit_label:      t.UNIT_LABEL ?? '',
     unit_code:       t.UNIT_CODE ?? '',
@@ -107,7 +107,7 @@ export function BuchungsartenSection() {
             {rows.map(t => (
               <tr key={t.ID} style={{ borderBottom: '1px solid var(--border-3)', opacity: t.ACTIVE === 0 ? 0.5 : 1 }}>
                 <td style={{ padding: '4px 6px 4px 0' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
-                <td style={{ padding: '4px 6px 4px 0', fontWeight: 600 }}>{t.NAME_SHORT}</td>
+                <td style={{ padding: '4px 6px 4px 0', fontWeight: 600 }}>{t.ABBR}</td>
                 <td style={{ padding: '4px 6px 4px 0', color: 'var(--text-3)' }}>{t.NAME_LONG || '—'}</td>
                 <td style={{ padding: '4px 6px 4px 0' }}>{t.KIND === 'UNIT' ? (t.UNIT_LABEL || '—') : '—'}</td>
                 <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(t.DEFAULT_SP_RATE)}</td>
@@ -118,7 +118,7 @@ export function BuchungsartenSection() {
                       <Pencil size={13} strokeWidth={2} />
                     </button>
                     <button className="row-action-btn row-action-btn--danger"
-                      onClick={() => setConfirmState({ id: t.ID, label: t.NAME_SHORT })} title="Löschen">
+                      onClick={() => setConfirmState({ id: t.ID, label: t.ABBR })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>
                   </Can>
@@ -164,7 +164,7 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
     mutationFn: () => {
       const payload: BookingTypePayload = {
         kind:            form.kind,
-        name_short:      form.name_short.trim(),
+        abbr:      form.abbr.trim(),
         name_long:       form.name_long.trim() || null,
         scope:           'global',
         active:          form.active ? 1 : 0,
@@ -180,7 +180,7 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
   })
 
   function handleSave() {
-    if (!form.name_short.trim()) { setMsg({ text: 'Kürzel erforderlich', type: 'error' }); return }
+    if (!form.abbr.trim()) { setMsg({ text: 'Kürzel erforderlich', type: 'error' }); return }
     setMsg(null); saveMut.mutate()
   }
 
@@ -188,7 +188,7 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
   const lumpField = form.kind === 'LUMP_COST' ? 'default_cp_rate' : 'default_sp_rate'
 
   return (
-    <Modal open onClose={onClose} title={isCreate ? 'Neue Buchungsart' : `Buchungsart bearbeiten — ${form.name_short}`}>
+    <Modal open onClose={onClose} title={isCreate ? 'Neue Buchungsart' : `Buchungsart bearbeiten — ${form.abbr}`}>
       <div className="master-form">
         <div className="form-group">
           <label>Art*</label>
@@ -198,7 +198,7 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
         </div>
 
         <div className="form-row">
-          <FormField label="Kürzel*"      id="bt-short" value={form.name_short} onChange={e => set('name_short')(e.target.value)} required />
+          <FormField label="Kürzel*"      id="bt-short" value={form.abbr} onChange={e => set('abbr')(e.target.value)} required />
           <FormField label="Bezeichnung"  id="bt-long"  value={form.name_long}  onChange={e => set('name_long')(e.target.value)} />
         </div>
 

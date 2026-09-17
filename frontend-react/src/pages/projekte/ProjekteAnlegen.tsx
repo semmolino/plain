@@ -106,7 +106,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
       void qc.invalidateQueries({ queryKey: ['projects-short'] })
-      setMsg({ text: `Projekt "${res.data.NAME_SHORT}" wurde angelegt.`, type: 'success' })
+      setMsg({ text: `Projekt "${res.data.ABBR}" wurde angelegt.`, type: 'success' })
       if (onProjectCreated) {
         onProjectCreated(res.data.ID)
       }
@@ -145,7 +145,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
       [empId]: {
         ...prev[empId],
         role_id:         roleId,
-        role_abbr: role?.NAME_SHORT ?? '',
+        role_abbr: role?.ABBR ?? '',
         role_name:  role?.NAME_LONG  ?? '',
         hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : (prev[empId]?.hourly_rate ?? ''),
       },
@@ -249,14 +249,14 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
             <label>Status*</label>
             <select value={basic.project_status_id} onChange={e => setB('project_status_id')(e.target.value)}>
               <option value="">Bitte wählen …</option>
-              {statuses.map(s => <option key={s.ID} value={s.ID}>{s.NAME_SHORT}</option>)}
+              {statuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label>Typ</label>
             <select value={basic.project_type_id} onChange={e => setB('project_type_id')(e.target.value)}>
               <option value="">—</option>
-              {types.map(t => <option key={t.ID} value={t.ID}>{t.NAME_SHORT}</option>)}
+              {types.map(t => <option key={t.ID} value={t.ID}>{t.ABBR}</option>)}
             </select>
           </div>
           <div className="form-group">
@@ -264,7 +264,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
             <select value={basic.department_id} onChange={e => setB('department_id')(e.target.value)}>
               <option value="">—</option>
               {departments.map(d => (
-                <option key={d.ID} value={d.ID}>{d.NAME_SHORT}: {d.NAME_LONG}</option>
+                <option key={d.ID} value={d.ID}>{d.ABBR}: {d.NAME_LONG}</option>
               ))}
             </select>
           </div>
@@ -363,7 +363,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                         <td>
                           <select className="tbl-select" value={row.role_id} onChange={e => applyRolePreset(empId, e.target.value)}>
                             <option value="">—</option>
-                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.NAME_SHORT}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
+                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
                           </select>
                         </td>
                         <td><input className="tbl-input" style={{ width: 80 }} value={row.role_abbr} onChange={e => setE2pField(empId, 'role_abbr', e.target.value)} /></td>
@@ -398,7 +398,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                     {bookingTypes.map(t => (
                       <tr key={t.ID}>
                         <td style={{ fontSize: 12, color: 'var(--text-3, var(--text-3))' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
-                        <td>{t.NAME_SHORT}{t.NAME_LONG ? <span style={{ color: 'var(--text-3, var(--text-3))' }}> – {t.NAME_LONG}</span> : null}</td>
+                        <td>{t.ABBR}{t.NAME_LONG ? <span style={{ color: 'var(--text-3, var(--text-3))' }}> – {t.NAME_LONG}</span> : null}</td>
                         <td style={{ fontVariantNumeric: 'tabular-nums' }}>{t.DEFAULT_SP_RATE != null ? `${t.DEFAULT_SP_RATE} €` : '—'}</td>
                         <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" placeholder="Standard"
                           value={bookingPrices[t.ID]?.sp ?? ''} onChange={e => setPrice(t.ID, 'sp', e.target.value)} /></td>

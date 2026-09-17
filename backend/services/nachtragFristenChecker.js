@@ -45,7 +45,7 @@ async function checkNachtragFristen(supabase) {
 
   const { data: rows, error } = await supabase
     .from("NACHTRAG")
-    .select("ID, TENANT_ID, NAME_SHORT, REVIEW_DUE_DATE, NACHTRAG_STATUS_ID")
+    .select("ID, TENANT_ID, ABBR, REVIEW_DUE_DATE, NACHTRAG_STATUS_ID")
     .not("REVIEW_DUE_DATE", "is", null);
 
   if (error) {
@@ -60,7 +60,7 @@ async function checkNachtragFristen(supabase) {
     const due = new Date(n.REVIEW_DUE_DATE);
     due.setHours(0, 0, 0, 0);
     const diff  = daysBetween(today, due); // positiv = Zukunft, negativ = überschritten
-    const label = n.NAME_SHORT || `#${n.ID}`;
+    const label = n.ABBR || `#${n.ID}`;
     const link  = `/nachtraege/${n.ID}`;
     const dateStr = String(n.REVIEW_DUE_DATE).slice(0, 10);
 
