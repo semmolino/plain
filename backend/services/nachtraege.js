@@ -72,7 +72,7 @@ async function statusByCode(supabase, code) {
 async function list(supabase, { tenantId, projectId }) {
   let q = supabase
     .from('NACHTRAG')
-    .select('ID, ABBR, NAME_LONG, NACHTRAG_TYPE, NACHTRAG_STATUS_ID, CATEGORY, PROJECT_ID, EMPLOYEE_ID, ADDRESS_ID, REVIEW_DUE_DATE, AMOUNT_CLAIMED_NET, AMOUNT_APPROVED_NET, CREATED_AT')
+    .select('ID, ABBR, NAME, NACHTRAG_TYPE, NACHTRAG_STATUS_ID, CATEGORY, PROJECT_ID, EMPLOYEE_ID, ADDRESS_ID, REVIEW_DUE_DATE, AMOUNT_CLAIMED_NET, AMOUNT_APPROVED_NET, CREATED_AT')
     .eq('TENANT_ID', tenantId);
   if (projectId) q = q.eq('PROJECT_ID', projectId);
   const { data, error } = await q.order('ID', { ascending: false });
@@ -87,7 +87,7 @@ async function list(supabase, { tenantId, projectId }) {
 
   const [statusRes, projRes, empRes, addrRes] = await Promise.all([
     statusIds.length  ? supabase.from('NACHTRAG_STATUS').select('ID, CODE, ABBR').in('ID', statusIds) : Promise.resolve({ data: [] }),
-    projectIds.length ? supabase.from('PROJECT').select('ID, ABBR, NAME_LONG').in('ID', projectIds)   : Promise.resolve({ data: [] }),
+    projectIds.length ? supabase.from('PROJECT').select('ID, ABBR, NAME').in('ID', projectIds)   : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds)             : Promise.resolve({ data: [] }),
   ]);
@@ -103,7 +103,7 @@ async function list(supabase, { tenantId, projectId }) {
     return {
       ID:                  r.ID,
       ABBR:          r.ABBR,
-      NAME_LONG:           r.NAME_LONG,
+      NAME:           r.NAME,
       NACHTRAG_TYPE:       r.NACHTRAG_TYPE,
       CATEGORY:            r.CATEGORY,
       STATUS_CODE:         st?.CODE ?? null,
@@ -132,7 +132,7 @@ async function get(supabase, { tenantId, nachtragId }) {
 async function create(supabase, { tenantId, body, employeeId }) {
   const b = body || {};
   if (!b.project_id)                       throw { status: 400, message: 'Projekt ist erforderlich' };
-  if (!b.name_long || !String(b.name_long).trim()) throw { status: 400, message: 'Betreff (name_long) ist erforderlich' };
+  if (!b.name || !String(b.name).trim()) throw { status: 400, message: 'Betreff (name) ist erforderlich' };
 
   const type = b.nachtrag_type && VALID_TYPES.has(String(b.nachtrag_type)) ? String(b.nachtrag_type) : 'OWN';
   const category = b.category && VALID_CATEGORIES.has(String(b.category)) ? String(b.category) : null;
@@ -165,7 +165,7 @@ async function create(supabase, { tenantId, body, employeeId }) {
     PROJECT_ID:         project.ID,
     CONTRACT_ID:        contract?.ID ?? null,
     ABBR:         num,
-    NAME_LONG:          String(b.name_long).trim(),
+    NAME:          String(b.name).trim(),
     NACHTRAG_TYPE:      type,
     NACHTRAG_STATUS_ID: draft?.ID ?? null,
     CATEGORY:           category,
@@ -199,7 +199,7 @@ async function update(supabase, { tenantId, nachtragId, body, employeeId }) {
   if (st && (st.CODE === 'COMMISSIONED')) throw { status: 409, message: 'Beauftragte Nachträge können nicht mehr bearbeitet werden' };
 
   const patch = {};
-  if (b.name_long        !== undefined) patch.NAME_LONG      = String(b.name_long).trim();
+  if (b.name        !== undefined) patch.NAME      = String(b.name).trim();
   if (b.nachtrag_type    !== undefined && VALID_TYPES.has(String(b.nachtrag_type)))      patch.NACHTRAG_TYPE = String(b.nachtrag_type);
   if (b.category         !== undefined) patch.CATEGORY       = b.category && VALID_CATEGORIES.has(String(b.category)) ? String(b.category) : null;
   if (b.claim_basis      !== undefined) patch.CLAIM_BASIS    = b.claim_basis || null;
@@ -269,7 +269,7 @@ async function addStructureNode(supabase, { tenantId, nachtragId, body }) {
 
   const { data, error } = await supabase.from('NACHTRAG_STRUCTURE').insert([{
     ABBR:      String(b.abbr || '').trim(),
-    NAME_LONG:       String(b.name_long  || '').trim(),
+    NAME:       String(b.name  || '').trim(),
     NACHTRAG_ID:     nachtragId,
     BILLING_TYPE_ID: btId,
     FATHER_ID:       fatherId,
@@ -301,7 +301,7 @@ async function updateStructureNode(supabase, { tenantId, nodeId, body }) {
   const patch    = {};
 
   if (b.abbr     !== undefined) patch.ABBR      = String(b.abbr).trim();
-  if (b.name_long      !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
+  if (b.name      !== undefined) patch.NAME       = String(b.name).trim();
   if (btId             !== undefined) patch.BILLING_TYPE_ID = btId;
   if (b.extras_percent !== undefined) patch.EXTRAS_PERCENT  = Number(b.extras_percent) || 0;
   if (b.role_abbr !== undefined) patch.ROLE_ABBR = b.role_abbr || null;
@@ -413,10 +413,10 @@ async function recomputeHeadTotals(supabase, { tenantId, nachtragId }) {
 // Findet/erzeugt den „Nachträge"-Container-Wurzelknoten eines Projekts (Option A).
 async function ensureNachtragContainer(supabase, { tenantId, projectId }) {
   const { data: existing } = await supabase.from('PROJECT_STRUCTURE')
-    .select('ID').eq('PROJECT_ID', projectId).is('FATHER_ID', null).eq('NAME_LONG', 'Nachträge').is('BILLING_TYPE_ID', null).limit(1).maybeSingle();
+    .select('ID').eq('PROJECT_ID', projectId).is('FATHER_ID', null).eq('NAME', 'Nachträge').is('BILLING_TYPE_ID', null).limit(1).maybeSingle();
   if (existing) return existing.ID;
   const { data: created, error } = await supabase.from('PROJECT_STRUCTURE').insert([{
-    ABBR: 'NT', NAME_LONG: 'Nachträge', PROJECT_ID: projectId, FATHER_ID: null,
+    ABBR: 'NT', NAME: 'Nachträge', PROJECT_ID: projectId, FATHER_ID: null,
     BILLING_TYPE_ID: null, REVENUE: 0, REVENUE_BASIS: 0, EXTRAS: 0, EXTRAS_PERCENT: 0, COSTS: 0,
     REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
     TENANT_ID: tenantId,
@@ -488,7 +488,7 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
       groupId = existingGroup.ID;
     } else {
       const { data: g, error: gErr } = await supabase.from('PROJECT_STRUCTURE').insert([{
-        ABBR: nachtrag.ABBR, NAME_LONG: nachtrag.NAME_LONG, PROJECT_ID: nachtrag.PROJECT_ID,
+        ABBR: nachtrag.ABBR, NAME: nachtrag.NAME, PROJECT_ID: nachtrag.PROJECT_ID,
         FATHER_ID: containerId, BILLING_TYPE_ID: null, NACHTRAG_ID: nachtragId,
         REVENUE: 0, REVENUE_BASIS: 0, EXTRAS: 0, EXTRAS_PERCENT: 0, COSTS: 0,
         REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
@@ -511,7 +511,7 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
     releaseSum += isBt1 ? (revenue + extras) : 0;
 
     const { data: ps, error: psErr } = await supabase.from('PROJECT_STRUCTURE').insert([{
-      ABBR: node.ABBR, NAME_LONG: node.NAME_LONG, PROJECT_ID: nachtrag.PROJECT_ID,
+      ABBR: node.ABBR, NAME: node.NAME, PROJECT_ID: nachtrag.PROJECT_ID,
       FATHER_ID: groupId, BILLING_TYPE_ID: node.BILLING_TYPE_ID, NACHTRAG_ID: nachtragId,
       REVENUE_BASIS: isBt1 ? revenue : 0, REVENUE: revenue, EXTRAS_PERCENT: extrasPct, EXTRAS: extras, COSTS: 0,
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
@@ -643,7 +643,7 @@ async function buildNachtragPdfViewModel(supabase, { nachtragId, tenantId }) {
   if (!nachtrag) throw { status: 404, message: 'Nachtrag nicht gefunden' };
 
   const [projectRes, companyRes, addressRes, contactRes, employeeRes, structRes] = await Promise.all([
-    nachtrag.PROJECT_ID ? supabase.from('PROJECT').select('ABBR, NAME_LONG').eq('ID', nachtrag.PROJECT_ID).maybeSingle() : Promise.resolve({ data: null }),
+    nachtrag.PROJECT_ID ? supabase.from('PROJECT').select('ABBR, NAME').eq('ID', nachtrag.PROJECT_ID).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.COMPANY_ID ? supabase.from('COMPANY').select('COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, IBAN, BIC, "TAX-ID", TAX_NUMBER').eq('ID', nachtrag.COMPANY_ID).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.ADDRESS_ID ? supabase.from('ADDRESS').select('ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY').eq('ID', nachtrag.ADDRESS_ID).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.CONTACT_ID ? supabase.from('CONTACT').select('FIRST_NAME, LAST_NAME, EMAIL, MOBILE').eq('ID', nachtrag.CONTACT_ID).maybeSingle() : Promise.resolve({ data: null }),
@@ -672,7 +672,7 @@ async function buildNachtragPdfViewModel(supabase, { nachtragId, tenantId }) {
 
   return {
     nachtrag,
-    projectName:   project ? `${project.ABBR} — ${project.NAME_LONG}` : '',
+    projectName:   project ? `${project.ABBR} — ${project.NAME}` : '',
     categoryLabel: nachtrag.CATEGORY ? (CATEGORY_LABELS_PDF[nachtrag.CATEGORY] || nachtrag.CATEGORY) : '',
     employeeName,
     seller: {
@@ -687,7 +687,7 @@ async function buildNachtragPdfViewModel(supabase, { nachtragId, tenantId }) {
     contact: contact || null,
     structureRows: flat.map(({ node: n, depth, isLeaf }) => ({
       depth, isLeaf,
-      nameShort: n.ABBR || '', nameLong: n.NAME_LONG || '',
+      nameShort: n.ABBR || '', nameLong: n.NAME || '',
       isHourly: Number(n.BILLING_TYPE_ID) === 2,
       quantity: Number(n.QUANTITY || 0), spRate: Number(n.HOURLY_RATE || 0),
       revenue: Number(n.REVENUE || 0), extras: Number(n.EXTRAS || 0),

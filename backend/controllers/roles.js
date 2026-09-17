@@ -136,7 +136,7 @@ async function listRoles(req, res, supabase) {
   try {
     const { data: roles, error } = await supabase
       .from("USER_ROLE")
-      .select("ID, ABBR, NAME_LONG, COLOR, IS_SYSTEM, IS_DEFAULT, CREATED_AT, UPDATED_AT")
+      .select("ID, ABBR, NAME, COLOR, IS_SYSTEM, IS_DEFAULT, CREATED_AT, UPDATED_AT")
       .eq("TENANT_ID", req.tenantId)
       .order("IS_SYSTEM", { ascending: false })
       .order("ABBR", { ascending: true });
@@ -175,7 +175,7 @@ async function getRole(req, res, supabase) {
 
     const { data: role, error } = await supabase
       .from("USER_ROLE")
-      .select("ID, ABBR, NAME_LONG, COLOR, IS_SYSTEM, IS_DEFAULT")
+      .select("ID, ABBR, NAME, COLOR, IS_SYSTEM, IS_DEFAULT")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -205,7 +205,7 @@ async function createRole(req, res, supabase) {
     const insertRow = {
       TENANT_ID:  req.tenantId,
       ABBR: abbr,
-      NAME_LONG:  b.name_long || null,
+      NAME:  b.name || null,
       COLOR:      b.color     || null,
       IS_SYSTEM:  false,
       IS_DEFAULT: false,
@@ -250,7 +250,7 @@ async function patchRole(req, res, supabase) {
 
     // System-Rollen: Name/IS_SYSTEM/IS_DEFAULT bleiben unveraendert, aber Permissions + Color + Long-Name editierbar
     if (b.abbr != null && !existing.IS_SYSTEM) update.ABBR = String(b.abbr).trim();
-    if (b.name_long  !== undefined) update.NAME_LONG  = b.name_long || null;
+    if (b.name  !== undefined) update.NAME  = b.name || null;
     if (b.color      !== undefined) update.COLOR      = b.color     || null;
     if (b.is_default !== undefined && !existing.IS_SYSTEM) update.IS_DEFAULT = !!b.is_default;
 
@@ -310,7 +310,7 @@ async function duplicateRole(req, res, supabase) {
 
     const { data: src } = await supabase
       .from("USER_ROLE")
-      .select("ABBR, NAME_LONG, COLOR")
+      .select("ABBR, NAME, COLOR")
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -337,7 +337,7 @@ async function duplicateRole(req, res, supabase) {
       .insert([{
         TENANT_ID:  req.tenantId,
         ABBR: candidate,
-        NAME_LONG:  src.NAME_LONG,
+        NAME:  src.NAME,
         COLOR:      src.COLOR,
         IS_SYSTEM:  false,
         IS_DEFAULT: false,

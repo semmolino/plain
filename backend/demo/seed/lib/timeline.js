@@ -62,7 +62,7 @@ function buildDefaults(md, spanYears = 4) {
 
     return {
       projectId: p.ID,
-      name: p.ABBR || p.NAME_LONG || String(p.ID),
+      name: p.ABBR || p.NAME || String(p.ID),
       revenue: Math.round(rev),
       start,
       end,

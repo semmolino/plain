@@ -21,7 +21,7 @@ export interface DraftEntry {
   STATUS:              string
   ENTRY_KIND?:         EntryKind
   PROJECT:             { ABBR: string } | null
-  STRUCTURE:           { ABBR: string; NAME_LONG: string } | null
+  STRUCTURE:           { ABBR: string; NAME: string } | null
 }
 
 export interface CreateDraftPayload {

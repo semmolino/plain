@@ -207,7 +207,7 @@ function RoleSection({ employeeId, roles, mapping }: {
               <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || 'var(--text-3)' }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{r.ABBR}</div>
-                {r.NAME_LONG && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.NAME_LONG}</div>}
+                {r.NAME && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.NAME}</div>}
               </div>
               {r.IS_SYSTEM && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>SYSTEM</span>}
             </label>

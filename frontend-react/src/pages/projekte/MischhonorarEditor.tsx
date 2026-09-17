@@ -121,7 +121,7 @@ export function MischhonorarEditor({ open, onClose, calcMasterId, zones, onAppli
                     <td>
                       <select value={r.zoneId} onChange={e => setRow(i, { zoneId: e.target.value ? Number(e.target.value) : '' })}>
                         <option value="">— wählen —</option>
-                        {zones.map(z => <option key={z.ID} value={z.ID}>{z.ABBR}{z.NAME_LONG ? ` – ${z.NAME_LONG}` : ''}</option>)}
+                        {zones.map(z => <option key={z.ID} value={z.ID}>{z.ABBR}{z.NAME ? ` – ${z.NAME}` : ''}</option>)}
                       </select>
                     </td>
                     <td>

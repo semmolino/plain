@@ -16,14 +16,14 @@ function addDays(iso: string, days: number): string {
 }
 
 interface BasicForm {
-  name_long:       string; company_id:      string; offer_status_id: string
+  name:       string; company_id:      string; offer_status_id: string
   employee_id:     string; probability:     string; offer_text_1:    string
   offer_text_2:    string; address_id:      string; contact_id:      string
   offer_date:      string; valid_until:     string
 }
 
 function emptyBasic(): BasicForm {
-  return { name_long: '', company_id: '', offer_status_id: '', employee_id: '',
+  return { name: '', company_id: '', offer_status_id: '', employee_id: '',
     probability: '', offer_text_1: '', offer_text_2: '', address_id: '',
     contact_id: '', offer_date: todayIso(), valid_until: '' }
 }
@@ -120,7 +120,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
 
   function validateStep1() {
     const missing: string[] = []
-    if (!basic.name_long)       missing.push('Angebotstitel')
+    if (!basic.name)       missing.push('Angebotstitel')
     if (!basic.offer_status_id) missing.push('Angebotsstatus')
     if (!basic.employee_id)     missing.push('Ansprechpartner')
     if (!basic.address_id)      missing.push('Adresse')
@@ -132,7 +132,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
   function submit() {
     setMsg(null)
     createMut.mutate({
-      name_long:       basic.name_long,
+      name:       basic.name,
       company_id:      basic.company_id || 0,
       offer_status_id: Number(basic.offer_status_id),
       employee_id:     Number(basic.employee_id),
@@ -177,7 +177,7 @@ export function AngeboteAnlegen({ onOfferCreated }: { onOfferCreated?: (id: numb
 
           <div className="form-group">
             <label>Angebotstitel*</label>
-            <input value={basic.name_long} onChange={e => setB('name_long')(e.target.value)} placeholder="Titel des Angebots" />
+            <input value={basic.name} onChange={e => setB('name')(e.target.value)} placeholder="Titel des Angebots" />
           </div>
 
           <div className="form-group">

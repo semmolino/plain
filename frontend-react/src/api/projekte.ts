@@ -5,15 +5,15 @@ import { apiClient } from './client'
 export interface ProjectStatus     { ID: number; ABBR: string }
 export interface ProjectType       { ID: number; ABBR: string }
 export interface ProjectManager    { ID: number; ABBR: string; FIRST_NAME?: string | null; LAST_NAME?: string | null }
-export interface Department        { ID: number; ABBR: string; NAME_LONG: string }
+export interface Department        { ID: number; ABBR: string; NAME: string }
 export interface ActiveEmployee { ID: number; ABBR: string; FIRST_NAME: string; LAST_NAME: string }
-export interface ActiveRole     { ID: number; ABBR: string; NAME_LONG: string; HOURLY_RATE: number | null }
-export interface BillingType    { ID: number; ABBR: string; NAME_LONG: string }
+export interface ActiveRole     { ID: number; ABBR: string; NAME: string; HOURLY_RATE: number | null }
+export interface BillingType    { ID: number; ABBR: string; NAME: string }
 
 export interface Project {
   ID:                  number
   ABBR:          string
-  NAME_LONG:           string
+  NAME:           string
   PROJECT_STATUS_ID:   number | null
   PROJECT_TYPE_ID:     number | null
   PROJECT_MANAGER_ID:  number | null
@@ -32,7 +32,7 @@ export interface Project {
 export interface StructureNode {
   STRUCTURE_ID:                number
   ABBR:                  string
-  NAME_LONG:                   string
+  NAME:                   string
   PROJECT_ID:                  number
   BILLING_TYPE_ID:             number | null
   FATHER_ID:                   number | null
@@ -75,14 +75,14 @@ export interface StructureDraftRow {
   tmp_key:         string
   father_tmp_key:  string
   ABBR:      string
-  NAME_LONG:       string
+  NAME:       string
   BILLING_TYPE_ID: string | number
   EXTRAS_PERCENT:  string | number
 }
 
 export interface CreateProjectPayload {
   company_id:          string | number
-  name_long:           string
+  name:           string
   project_status_id:   string | number
   project_type_id?:    string | number
   department_id?:      string | number
@@ -116,7 +116,7 @@ export const fetchProjectListFull = () =>
   apiClient.get<{ data: Project[] }>('/projekte/list?limit=2000')
 
 export const fetchProjectsShort = () =>
-  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME_LONG: string }> }>('/projekte')
+  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME: string }> }>('/projekte')
 
 export interface ProjectRootSurcharges {
   ID:                number
@@ -160,14 +160,14 @@ export const copyProject = (id: number) =>
   apiClient.post<{ data: { project: { ID: number; ABBR: string }; projectName: string } }>(`/projekte/${id}/copy`, {})
 
 export const updateProject = (id: number, body: Partial<{
-  abbr: string; name_long: string
+  abbr: string; name: string
   project_status_id: number; project_type_id: number | null; project_manager_id: number
   department_id: number | null; address_id: number | null; contact_id: number | null
   is_internal: boolean
 }>) => apiClient.patch<{ data: Project }>(`/projekte/${id}`, body)
 
 export const searchProjectsApi = (q: string) =>
-  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME_LONG: string; COMPANY_ID: number | null }> }>(
+  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME: string; COMPANY_ID: number | null }> }>(
     `/projekte/search?q=${encodeURIComponent(q)}`
   )
 
@@ -185,7 +185,7 @@ export const patchStructureExtras = (structureId: number, extrasPercent: number)
   apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}`, { EXTRAS_PERCENT: extrasPercent })
 
 export const patchStructureNode = (structureId: number, body: Partial<{
-  ABBR: string; NAME_LONG: string
+  ABBR: string; NAME: string
   BILLING_TYPE_ID: number; REVENUE: number; EXTRAS_PERCENT: number
   REVENUE_COMPLETION_PERCENT: number; EXTRAS_COMPLETION_PERCENT: number
   IS_INTERNAL: boolean
@@ -211,7 +211,7 @@ export const transferFatherToChild = (fatherId: number, childId: number) =>
 
 export const createStructureNode = (projectId: number, node: {
   ABBR: string
-  NAME_LONG?: string
+  NAME?: string
   BILLING_TYPE_ID: number
   FATHER_ID?: number | null
   REVENUE?: number
@@ -236,7 +236,7 @@ export const createProgressSnapshot = (projectId: number) =>
 export interface Contract {
   ID:                    number
   ABBR:            string
-  NAME_LONG:             string
+  NAME:             string
   PROJECT_ID:            number
   INVOICE_ADDRESS_ID:    number | null
   INVOICE_ADDRESS_NAME:  string | null
@@ -260,7 +260,7 @@ export const fetchContractByProject = (projectId: number) =>
 
 export const patchContract = (contractId: number, body: Partial<{
   ABBR: string
-  NAME_LONG: string
+  NAME: string
   INVOICE_ADDRESS_ID: number | null
   INVOICE_CONTACT_ID: number | null
   CASH_DISCOUNT_PERCENT: number | null

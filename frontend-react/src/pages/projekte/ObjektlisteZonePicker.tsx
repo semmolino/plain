@@ -48,7 +48,7 @@ export function ObjektlisteZonePicker({ open, onClose, feeMasterId, zones, onApp
 
   const zoneLabel = (zoneId: number) => {
     const z = zones.find(zz => zz.ID === zoneId)
-    return z ? `${z.ABBR}${z.NAME_LONG ? ' – ' + z.NAME_LONG : ''}` : `Zone ${zoneId}`
+    return z ? `${z.ABBR}${z.NAME ? ' – ' + z.NAME : ''}` : `Zone ${zoneId}`
   }
 
   const filtered = useMemo(() => {

@@ -38,9 +38,9 @@ const isUninvoiced = (invoiceId) =>
 
 async function getCountryNameLong(supabase, countryId) {
   if (!countryId) return null;
-  const { data, error } = await supabase.from("COUNTRY").select("NAME_LONG").eq("ID", countryId).maybeSingle();
+  const { data, error } = await supabase.from("COUNTRY").select("NAME").eq("ID", countryId).maybeSingle();
   if (error) return null;
-  return data?.NAME_LONG ?? null;
+  return data?.NAME ?? null;
 }
 
 async function getCountryNameShort(supabase, countryId) {
@@ -475,20 +475,20 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
 
   const projectMap = {};
   if (projectIds.length > 0) {
-    const { data: projects } = await supabase.from("PROJECT").select("ID, ABBR, NAME_LONG").in("ID", projectIds);
-    (projects || []).forEach((p) => { projectMap[p.ID] = `${p.ABBR ?? ""}: ${p.NAME_LONG ?? ""}`.trim(); });
+    const { data: projects } = await supabase.from("PROJECT").select("ID, ABBR, NAME").in("ID", projectIds);
+    (projects || []).forEach((p) => { projectMap[p.ID] = `${p.ABBR ?? ""}: ${p.NAME ?? ""}`.trim(); });
   }
 
   const contractMap = {};
   if (contractIds.length > 0) {
     let contracts = null;
-    const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, ABBR, NAME_LONG").in("ID", contractIds);
+    const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, ABBR, NAME").in("ID", contractIds);
     if (!c1Err) contracts = c1;
     if (!Array.isArray(contracts) || contracts.length === 0) {
-      const { data: c2 } = await supabase.from("CONTRACTS").select("ID, ABBR, NAME_LONG").in("ID", contractIds);
+      const { data: c2 } = await supabase.from("CONTRACTS").select("ID, ABBR, NAME").in("ID", contractIds);
       contracts = c2;
     }
-    (contracts || []).forEach((c) => { contractMap[c.ID] = `${c.ABBR ?? ""}: ${c.NAME_LONG ?? ""}`.trim(); });
+    (contracts || []).forEach((c) => { contractMap[c.ID] = `${c.ABBR ?? ""}: ${c.NAME ?? ""}`.trim(); });
   }
 
   return ppRows.map((r) => ({
@@ -540,7 +540,7 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   if (tenantId === undefined || tenantId === null || tenantId === "") {
     throw new Error("initPartialPayment: tenantId ist erforderlich");
   }
-  const { data: project, error: projectErr } = await supabase.from("PROJECT").select("ID, ABBR, NAME_LONG, TENANT_ID, COMPANY_ID").eq("ID", projectId).eq("TENANT_ID", tenantId).maybeSingle();
+  const { data: project, error: projectErr } = await supabase.from("PROJECT").select("ID, ABBR, NAME, TENANT_ID, COMPANY_ID").eq("ID", projectId).eq("TENANT_ID", tenantId).maybeSingle();
   if (projectErr || !project) throw { status: 500, message: "Projekt konnte nicht geladen werden" };
 
   let resolvedCompanyId = companyId || project.COMPANY_ID;
@@ -576,10 +576,10 @@ async function initPartialPayment(supabase, { companyId, employeeId, projectId, 
   if (!employee) throw { status: 500, message: "Mitarbeiter konnte nicht geladen werden" };
 
   let contractRow = null;
-  const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, ABBR, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).eq("TENANT_ID", tenantId).maybeSingle();
+  const { data: c1, error: c1Err } = await supabase.from("CONTRACT").select("ID, ABBR, NAME, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).eq("TENANT_ID", tenantId).maybeSingle();
   if (!c1Err && c1) contractRow = c1;
   if (!contractRow) {
-    const { data: c2, error: c2Err } = await supabase.from("CONTRACTS").select("ID, ABBR, NAME_LONG, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).maybeSingle();
+    const { data: c2, error: c2Err } = await supabase.from("CONTRACTS").select("ID, ABBR, NAME, PROJECT_ID, CURRENCY_ID, VAT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT").eq("ID", contractId).maybeSingle();
     if (c2Err || !c2) throw { status: 500, message: "Vertrag konnte nicht geladen werden" };
     contractRow = c2;
   }
@@ -695,13 +695,13 @@ async function getPartialPayment(supabase, { id, tenantId }) {
   const { data: pp, error } = await supabase.from("ADVANCE_INVOICE").select("*").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   if (error || !pp) throw { status: 500, message: "ADVANCE_INVOICE konnte nicht geladen werden" };
 
-  const { data: project } = await supabase.from("PROJECT").select("ABBR, NAME_LONG").eq("ID", pp.PROJECT_ID).maybeSingle();
+  const { data: project } = await supabase.from("PROJECT").select("ABBR, NAME").eq("ID", pp.PROJECT_ID).maybeSingle();
 
   let contract = null;
-  const { data: c1 } = await supabase.from("CONTRACT").select("ABBR, NAME_LONG").eq("ID", pp.CONTRACT_ID).maybeSingle();
+  const { data: c1 } = await supabase.from("CONTRACT").select("ABBR, NAME").eq("ID", pp.CONTRACT_ID).maybeSingle();
   contract = c1;
   if (!contract) {
-    const { data: c2 } = await supabase.from("CONTRACTS").select("ABBR, NAME_LONG").eq("ID", pp.CONTRACT_ID).maybeSingle();
+    const { data: c2 } = await supabase.from("CONTRACTS").select("ABBR, NAME").eq("ID", pp.CONTRACT_ID).maybeSingle();
     contract = c2;
   }
 

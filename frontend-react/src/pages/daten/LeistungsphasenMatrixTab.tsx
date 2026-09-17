@@ -143,7 +143,7 @@ export function LeistungsphasenMatrixTab() {
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--accent)', font: 'inherit', textAlign: 'left' }}>
                     <strong>{p.ABBR}</strong>
                   </button>
-                  {p.NAME_LONG && <span className="tree-name-long"> {p.NAME_LONG}</span>}
+                  {p.NAME && <span className="tree-name-long"> {p.NAME}</span>}
                 </td>
                 {phases.map(ph => {
                   const c = p.cells[ph.num]

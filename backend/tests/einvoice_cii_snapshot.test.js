@@ -63,7 +63,7 @@ function fixture() {
       { ID: 1, TENANT_ID: TENANT, INVOICE_ID: INVOICE_ID, STRUCTURE_ID: 700, AMOUNT_NET: 4500, AMOUNT_EXTRAS_NET: 0 },
     ],
     PROJECT_STRUCTURE: [
-      { ID: 700, TENANT_ID: TENANT, ABBR: "LPH 1", NAME_LONG: "Grundlagenermittlung", BILLING_TYPE_ID: 1 },
+      { ID: 700, TENANT_ID: TENANT, ABBR: "LPH 1", NAME: "Grundlagenermittlung", BILLING_TYPE_ID: 1 },
     ],
     INVOICE_DEDUCTION: [], ADVANCE_INVOICE: [], BOOKING: [], ASSET: [],
   });

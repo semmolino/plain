@@ -63,7 +63,7 @@ async function checkAddress(supabase, { tenantId, id }) {
 
   const [contacts, projects, offers, invoices, partials] = await Promise.all([
     safeReferences(supabase, "CONTACTS",        "ID, FIRST_NAME, LAST_NAME", { ADDRESS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "PROJECT",         "ID, ABBR, NAME_LONG", { ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT",         "ID, ABBR, NAME", { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "OFFER",           "ID, ABBR",            { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ ADDRESS_ID: id, TENANT_ID: tenantId }),
@@ -232,11 +232,11 @@ async function checkEmployee(supabase, { tenantId, id }) {
 async function checkProject(supabase, { tenantId, id }) {
   const { data: proj } = await supabase
     .from("PROJECT")
-    .select("ABBR, NAME_LONG")
+    .select("ABBR, NAME")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const name = proj ? `${proj.ABBR || ""}${proj.ABBR && proj.NAME_LONG ? " — " : ""}${proj.NAME_LONG || ""}`.trim() : `#${id}`;
+  const name = proj ? `${proj.ABBR || ""}${proj.ABBR && proj.NAME ? " — " : ""}${proj.NAME || ""}`.trim() : `#${id}`;
   const entityLabel = `Projekt „${name}"`;
 
   const [tec, invoices, partials, structure, e2p] = await Promise.all([
@@ -276,11 +276,11 @@ async function checkProject(supabase, { tenantId, id }) {
 async function checkOffer(supabase, { tenantId, id }) {
   const { data: off } = await supabase
     .from("OFFER")
-    .select("ABBR, NAME_LONG, PROJECT_ID")
+    .select("ABBR, NAME, PROJECT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
-  const name = off ? `${off.ABBR || ""}${off.ABBR && off.NAME_LONG ? " — " : ""}${off.NAME_LONG || ""}`.trim() : `#${id}`;
+  const name = off ? `${off.ABBR || ""}${off.ABBR && off.NAME ? " — " : ""}${off.NAME || ""}`.trim() : `#${id}`;
   const entityLabel = `Angebot „${name}"`;
 
   const refs = [];
@@ -482,8 +482,8 @@ async function checkUserRole(supabase, { tenantId, id }) {
 // ── CONTRACT ──────────────────────────────────────────────────────────────
 
 async function checkContract(supabase, { tenantId, id }) {
-  const { data: c } = await supabase.from("CONTRACT").select("ABBR, NAME_LONG").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
-  const name = c ? `${c.ABBR || ""}${c.ABBR && c.NAME_LONG ? " — " : ""}${c.NAME_LONG || ""}`.trim() : `#${id}`;
+  const { data: c } = await supabase.from("CONTRACT").select("ABBR, NAME").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  const name = c ? `${c.ABBR || ""}${c.ABBR && c.NAME ? " — " : ""}${c.NAME || ""}`.trim() : `#${id}`;
   const entityLabel = `Vertrag „${name}"`;
   const [invoices, partials, structure] = await Promise.all([
     safeReferences(supabase, "INVOICE",           "ID, INVOICE_NUMBER",         { CONTRACT_ID: id, TENANT_ID: tenantId }),

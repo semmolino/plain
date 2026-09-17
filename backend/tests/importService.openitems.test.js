@@ -35,7 +35,7 @@ const HEAD = [
 const row = (...cells) => { const r = [...cells]; while (r.length < HEAD.length) r.push(""); return r; };
 
 const seed = (extra = {}) => makeFakeSupabase({
-  PROJECT: [{ ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME_LONG: "Projekt Eins", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 }],
+  PROJECT: [{ ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME: "Projekt Eins", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 }],
   CONTRACT: [{ ID: 31, TENANT_ID: TENANT, PROJECT_ID: 1, INVOICE_ADDRESS_ID: 11, INVOICE_CONTACT_ID: 21 }],
   PROJECT_STRUCTURE: [
     { ID: 41, TENANT_ID: TENANT, PROJECT_ID: 1, FATHER_ID: null, ABBR: "LP1-4", BILLING_TYPE_ID: 1, REVENUE: 30000, EXTRAS_PERCENT: 0 },
@@ -246,8 +246,8 @@ describe("Pruefung", () => {
   it("meldet dieselbe Belegnummer bei zwei Projekten", async () => {
     const supabase = seed({
       PROJECT: [
-        { ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME_LONG: "Eins", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 },
-        { ID: 2, TENANT_ID: TENANT, ABBR: "P-2", NAME_LONG: "Zwei", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 },
+        { ID: 1, TENANT_ID: TENANT, ABBR: "P-1", NAME: "Eins", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 },
+        { ID: 2, TENANT_ID: TENANT, ABBR: "P-2", NAME: "Zwei", COMPANY_ID: 3, ADDRESS_ID: 11, CONTACT_ID: 21 },
       ],
       CONTRACT: [
         { ID: 31, TENANT_ID: TENANT, PROJECT_ID: 1, INVOICE_ADDRESS_ID: 11, INVOICE_CONTACT_ID: 21 },

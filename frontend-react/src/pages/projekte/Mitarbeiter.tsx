@@ -100,7 +100,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
       ...f,
       role_id:         roleId,
       role_abbr: role?.ABBR ?? f.role_abbr,
-      role_name:  role?.NAME_LONG  ?? f.role_name,
+      role_name:  role?.NAME  ?? f.role_name,
       hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
     }))
   }
@@ -111,7 +111,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
       ...f,
       role_id:         roleId,
       role_abbr: role?.ABBR ?? f.role_abbr,
-      role_name:  role?.NAME_LONG  ?? f.role_name,
+      role_name:  role?.NAME  ?? f.role_name,
       hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
     }))
   }
@@ -189,7 +189,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
       {pid && (
         <div className="proj-jump-bar">
           <span className="proj-jump-label">{currentProject?.ABBR ?? ''}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME_LONG ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
+          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
             Rechnungen →
           </button>
           <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
@@ -231,7 +231,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                         <td>
                           <select className="tbl-select" value={editForm.role_id} onChange={e => applyRoleToEdit(e.target.value)}>
                             <option value="">—</option>
-                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
+                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME ? ' – ' + r.NAME : ''}</option>)}
                           </select>
                         </td>
                         <td><input className="tbl-input" style={{ width: 90 }} value={editForm.role_abbr} onChange={e => setEF('role_abbr')(e.target.value)} /></td>
@@ -282,7 +282,7 @@ export function Mitarbeiter({ initialProjectId }: Props) {
                 <td>
                   <select className="tbl-select" value={addForm.role_id} onChange={e => applyRoleToAdd(e.target.value)}>
                     <option value="">—</option>
-                    {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
+                    {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME ? ' – ' + r.NAME : ''}</option>)}
                   </select>
                 </td>
                 <td><input className="tbl-input" style={{ width: 90 }} value={addForm.role_abbr} onChange={e => setAF('role_abbr')(e.target.value)} placeholder="Kürzel" /></td>
@@ -434,7 +434,7 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
                 return (
                   <tr key={r.BOOKING_TYPE_ID}>
                     <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{BOOKING_KIND_LABEL[r.KIND]}{r.SCOPE === 'project' ? ' · Projekt' : ''}</td>
-                    <td>{r.ABBR}{r.NAME_LONG ? <span style={{ color: 'var(--text-3)' }}> – {r.NAME_LONG}</span> : null}</td>
+                    <td>{r.ABBR}{r.NAME ? <span style={{ color: 'var(--text-3)' }}> – {r.NAME}</span> : null}</td>
                     <td>{r.KIND === 'UNIT' ? (r.UNIT_LABEL || '—') : '—'}</td>
                     <td className="num">{fmtRateOpt(r.DEFAULT_SP_RATE)}</td>
                     <td className="num">{fmtRateOpt(r.DEFAULT_CP_RATE)}</td>
@@ -515,7 +515,7 @@ function ProjectBookingTypeModal({ projectId, onClose, onSaved }: { projectId: n
         project_id:      projectId,
         kind,
         abbr:      nameShort.trim(),
-        name_long:       nameLong.trim() || null,
+        name:       nameLong.trim() || null,
         unit_label:      isUnit ? (unitLabel.trim() || null) : null,
         // Bei Pauschalen ist der Betrag der Standardwert: Kosten→CP, Erlös→SP.
         default_sp_rate: (isUnit || kind === 'LUMP_REVENUE') && sp !== '' ? Number(sp) : null,

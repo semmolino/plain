@@ -113,13 +113,13 @@ async function seSummary(req, res, supabase) {
     const projMap = new Map();
     if (projIds.length > 0) {
       const { data: projs } = await supabase
-        .from("PROJECT").select("ID, ABBR, NAME_LONG").in("ID", projIds);
+        .from("PROJECT").select("ID, ABBR, NAME").in("ID", projIds);
       (projs || []).forEach(p => projMap.set(p.ID, p));
     }
     const contractMap = new Map();
     if (contractIds.length > 0) {
       const { data: cons } = await supabase
-        .from("CONTRACT").select("ID, ABBR, NAME_LONG").in("ID", contractIds);
+        .from("CONTRACT").select("ID, ABBR, NAME").in("ID", contractIds);
       (cons || []).forEach(c => contractMap.set(c.ID, c));
     }
 
@@ -129,10 +129,10 @@ async function seSummary(req, res, supabase) {
       return {
         project_id:        g.project_id,
         project_number:    proj?.ABBR || null,
-        project_name:      proj?.NAME_LONG  || null,
+        project_name:      proj?.NAME  || null,
         contract_id:       g.contract_id,
         contract_number:   con?.ABBR  || null,
-        contract_name:     con?.NAME_LONG   || null,
+        contract_name:     con?.NAME   || null,
         open_sum:          Math.round(g.open_sum     * 100) / 100,
         open_count:        g.open_count,
         released_sum:      Math.round(g.released_sum * 100) / 100,

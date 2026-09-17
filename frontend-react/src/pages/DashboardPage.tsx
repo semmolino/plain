@@ -1412,7 +1412,7 @@ function TopOpenOffersCard() {
               <tbody>
                 {open.map(o => (
                   <tr key={o.ID} className="clickable-row" onClick={() => navigate('/angebote')} title="Zu den Angeboten">
-                    <td>{o.ABBR || o.NAME_LONG || '—'}</td>
+                    <td>{o.ABBR || o.NAME || '—'}</td>
                     <td className="col-hide-mobile" style={{ color: 'var(--text-3)' }}>{o.ADDRESS_NAME || '—'}</td>
                     <td className="num">{money(o.TOTAL_AMOUNT)}</td>
                   </tr>

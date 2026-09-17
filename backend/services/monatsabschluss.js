@@ -81,7 +81,7 @@ async function runMonatsabschluss(supabase, tenantId, { year, month, isTest = fa
   let query = supabase
     .from("VW_REPORT_PROJECT_DETAIL")
     .select([
-      "PROJECT_ID", "ABBR", "NAME_LONG",
+      "PROJECT_ID", "ABBR", "NAME",
       "PROJECT_STATUS_ID", "PROJECT_STATUS_NAME_SHORT",
       "PROJECT_TYPE_ID",   "PROJECT_TYPE_NAME_SHORT",
       "BUDGET_TOTAL_NET", "LEISTUNGSSTAND_PERCENT", "LEISTUNGSSTAND_VALUE",

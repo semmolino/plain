@@ -76,7 +76,7 @@ async function getOfferStatuses(supabase) {
 async function listOffers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from('OFFER')
-    .select('ID, ABBR, NAME_LONG, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID')
+    .select('ID, ABBR, NAME, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID')
     .eq('TENANT_ID', tenantId)
     .order('ID', { ascending: false });
   if (error) throw error;
@@ -135,7 +135,7 @@ async function listOffers(supabase, { tenantId }) {
     return {
       ID:              r.ID,
       ABBR:      r.ABBR,
-      NAME_LONG:       r.NAME_LONG,
+      NAME:       r.NAME,
       PROBABILITY:     r.PROBABILITY,
       CREATED_AT:      r.CREATED_AT,
       OFFER_DATE:      r.OFFER_DATE   ?? null,
@@ -180,8 +180,8 @@ async function getOffer(supabase, { tenantId, offerId }) {
 async function createOffer(supabase, { tenantId, body }) {
   const b = body || {};
 
-  if (!b.name_long || !String(b.name_long).trim()) {
-    throw { status: 400, message: 'Angebotstitel (name_long) ist erforderlich' };
+  if (!b.name || !String(b.name).trim()) {
+    throw { status: 400, message: 'Angebotstitel (name) ist erforderlich' };
   }
   if (!b.offer_status_id) throw { status: 400, message: 'Angebotsstatus ist erforderlich' };
   if (!b.employee_id)     throw { status: 400, message: 'Ansprechpartner ist erforderlich' };
@@ -209,7 +209,7 @@ async function createOffer(supabase, { tenantId, body }) {
     .from('OFFER')
     .insert([{
       ABBR:      numData,
-      NAME_LONG:       String(b.name_long).trim(),
+      NAME:       String(b.name).trim(),
       EMPLOYEE_ID:     parseInt(String(b.employee_id), 10),
       PROBABILITY:     b.probability != null && b.probability !== '' ? Number(b.probability) : null,
       OFFER_TEXT_1:    b.offer_text_1 ? String(b.offer_text_1) : null,
@@ -248,7 +248,7 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
 
     return {
       ABBR:      String(n.ABBR || '').trim(),
-      NAME_LONG:       String(n.NAME_LONG  || '').trim(),
+      NAME:       String(n.NAME  || '').trim(),
       OFFER_ID:        offer.ID,
       BILLING_TYPE_ID: btId,
       FATHER_ID:       null,
@@ -292,7 +292,7 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
 async function updateOffer(supabase, { tenantId, offerId, body }) {
   const b = body || {};
   const patch = {};
-  if (b.name_long       !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
+  if (b.name       !== undefined) patch.NAME       = String(b.name).trim();
   if (b.employee_id     !== undefined) patch.EMPLOYEE_ID     = parseInt(String(b.employee_id), 10);
   if (b.probability     !== undefined) patch.PROBABILITY     = b.probability !== '' && b.probability !== null ? Number(b.probability) : null;
   if (b.offer_text_1    !== undefined) patch.OFFER_TEXT_1    = b.offer_text_1 || null;
@@ -417,7 +417,7 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
     .from('OFFER_STRUCTURE')
     .insert([{
       ABBR:      String(b.abbr || '').trim(),
-      NAME_LONG:       String(b.name_long  || '').trim(),
+      NAME:       String(b.name  || '').trim(),
       OFFER_ID:        offerId,
       BILLING_TYPE_ID: btId,
       FATHER_ID:       fatherId,
@@ -449,7 +449,7 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
   const patch    = {};
 
   if (b.abbr      !== undefined) patch.ABBR      = String(b.abbr).trim();
-  if (b.name_long       !== undefined) patch.NAME_LONG       = String(b.name_long).trim();
+  if (b.name       !== undefined) patch.NAME       = String(b.name).trim();
   if (btId              !== undefined) patch.BILLING_TYPE_ID = btId;
   if (b.extras_percent  !== undefined) patch.EXTRAS_PERCENT  = Number(b.extras_percent) || 0;
   if (b.role_abbr !== undefined) patch.ROLE_ABBR = b.role_abbr || null;
@@ -713,7 +713,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   const offerSurchargesTotal = fmt2(structureSurchargesTotal + offerLevelSurcharges);
   const surchargeSummaryRows = (structRows || []).filter(r => Number(r.SURCHARGES_TOTAL || 0) > 0).map(r => ({
     nameShort:      r.ABBR || '',
-    nameLong:       r.NAME_LONG  || '',
+    nameLong:       r.NAME  || '',
     revenueBasis:   Number(r.REVENUE_BASIS ?? r.REVENUE ?? 0),
     surchargesTotal: Number(r.SURCHARGES_TOTAL || 0),
     s1Label: r.SURCHARGE_1_LABEL || null, s1Pct: Number(r.SURCHARGE_1_PCT || 0), s1Eur: Number(r.SURCHARGE_1_EUR || 0),
@@ -771,7 +771,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       id:              n.ID,
       depth,
       nameShort:       n.ABBR  || '',
-      nameLong:        n.NAME_LONG   || '',
+      nameLong:        n.NAME   || '',
       btId:            Number(n.BILLING_TYPE_ID),
       isHourly:        Number(n.BILLING_TYPE_ID) === 2,
       quantity:        Number(n.QUANTITY       || 0),
@@ -829,7 +829,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
   if (activePhases.length) {
     const phaseIds = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
     if (phaseIds.length) {
-      const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, ABBR, NAME_LONG').in('ID', phaseIds);
+      const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, ABBR, NAME').in('ID', phaseIds);
       phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
     }
   }
@@ -876,7 +876,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
       return {
         ABBR: def.ABBR || `LPH ${r.FEE_PHASE_ID}`,
-        NAME_LONG:  def.NAME_LONG  || null,
+        NAME:  def.NAME  || null,
         REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
         PROJECT_ID: projectId, FATHER_ID: fatherId,
         EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
@@ -906,7 +906,7 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
       return {
         ABBR: b.NAME || 'BL',
-        NAME_LONG:  b.NAME || null,
+        NAME:  b.NAME || null,
         REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100), COSTS: 0,
         PROJECT_ID: projectId, FATHER_ID: fatherId,
         EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
@@ -968,7 +968,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
   const phaseIds = [...new Set(activePhases.map(r => r.FEE_PHASE_ID).filter(Boolean))];
   let phaseMap = new Map();
   if (phaseIds.length) {
-    const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, ABBR, NAME_LONG').in('ID', phaseIds);
+    const { data: phaseDefs } = await supabase.from('FEE_PHASE').select('ID, ABBR, NAME').in('ID', phaseIds);
     phaseMap = new Map((phaseDefs || []).map(r => [r.ID, r]));
   }
 
@@ -1018,7 +1018,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
       const rev  = fmt2((Number(r.PHASE_REVENUE) || 0) + (lphAlloc[r.ID] || 0));
       return {
         ABBR:     def.ABBR || `LPH ${r.FEE_PHASE_ID}`,
-        NAME_LONG:      def.NAME_LONG  || null,
+        NAME:      def.NAME  || null,
         OFFER_ID:       offerId, FATHER_ID: fatherId,
         BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
         REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
@@ -1036,7 +1036,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
       const rev = fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0));
       return {
         ABBR:      b.NAME || b.ABBR || 'BL',
-        NAME_LONG:       b.NAME || null,
+        NAME:       b.NAME || null,
         OFFER_ID:        offerId, FATHER_ID: fatherId,
         BILLING_TYPE_ID: 1, EXTRAS_PERCENT: extrasPercent,
         REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
@@ -1096,7 +1096,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   // Insert PROJECT — also copy root-level (offer-level) surcharges
   const projectRow = {
     ABBR:         num,
-    NAME_LONG:          offer.NAME_LONG,
+    NAME:          offer.NAME,
     COMPANY_ID:         companyId,
     PROJECT_STATUS_ID:  parseInt(String(b.project_status_id), 10),
     PROJECT_TYPE_ID:    b.project_type_id  ? parseInt(String(b.project_type_id), 10)  : null,
@@ -1124,7 +1124,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   let project = null;
   {
     const r = await supabase.from('PROJECT').insert([projectRow])
-      .select('ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
+      .select('ID, ABBR, NAME, ADDRESS_ID, CONTACT_ID, TENANT_ID')
       .single();
     if (r.error) {
       const msg = String(r.error.message || '');
@@ -1140,7 +1140,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         delete row2.SURCHARGES_TOTAL;
       }
       const r2 = await supabase.from('PROJECT').insert([row2])
-        .select('ID, ABBR, NAME_LONG, ADDRESS_ID, CONTACT_ID, TENANT_ID')
+        .select('ID, ABBR, NAME, ADDRESS_ID, CONTACT_ID, TENANT_ID')
         .single();
       if (r2.error) throw { status: 500, message: r2.error.message };
       project = r2.data;
@@ -1182,7 +1182,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       const isBt1 = btId === 1;
       return {
       ABBR:       String(n.ABBR || '').trim(),
-      NAME_LONG:        String(n.NAME_LONG  || '').trim(),
+      NAME:        String(n.NAME  || '').trim(),
       PROJECT_ID:       project.ID,
       BILLING_TYPE_ID:  btId,
       FATHER_ID:        null,
@@ -1280,7 +1280,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 
   const contractRow = {
     ABBR:         project.ABBR,
-    NAME_LONG:          project.NAME_LONG,
+    NAME:          project.NAME,
     PROJECT_ID:         project.ID,
     INVOICE_ADDRESS_ID: project.ADDRESS_ID,
     INVOICE_CONTACT_ID: project.CONTACT_ID,
@@ -1305,7 +1305,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   try {
     const { data: feeCalcs } = await supabase
       .from('FEE_CALCULATION_MASTER')
-      .select('ID, ABBR, NAME_LONG, ATTACH_TO_OFFER_STRUCTURE_ID')
+      .select('ID, ABBR, NAME, ATTACH_TO_OFFER_STRUCTURE_ID')
       .eq('OFFER_ID', offerId)
       .eq('TENANT_ID', tenantId);
 
@@ -1325,7 +1325,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
         if (!fatherId) {
           const { data: rootNode } = await supabase.from('PROJECT_STRUCTURE').insert([{
             ABBR:        calc.ABBR || 'Honorar',
-            NAME_LONG:         calc.NAME_LONG  || null,
+            NAME:         calc.NAME  || null,
             PROJECT_ID:        project.ID, BILLING_TYPE_ID: 1, FATHER_ID: null,
             REVENUE: 0, EXTRAS: 0, COSTS: 0, EXTRAS_PERCENT: 0,
             REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
@@ -1373,7 +1373,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
             if (missingBls.length) {
               console.log('[convertOffer] creating %d missing BL structure rows for calcMasterId=%d', missingBls.length, calc.ID);
               const blRows = missingBls.map(b => ({
-                ABBR: b.NAME || 'BL', NAME_LONG: b.NAME || null,
+                ABBR: b.NAME || 'BL', NAME: b.NAME || null,
                 REVENUE: Number(b.AMOUNT) || 0, EXTRAS: 0, COSTS: 0,
                 PROJECT_ID: project.ID, FATHER_ID: fatherId, EXTRAS_PERCENT: 0,
                 BILLING_TYPE_ID: 1, TENANT_ID: tenantId,
@@ -1449,7 +1449,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
   // Copy FEE_CALCULATION_MASTER + phases + BL + surcharges
   const { data: feeCalcs } = await supabase
     .from('FEE_CALCULATION_MASTER')
-    .select('ID, ABBR, NAME_LONG, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, ATTACH_TO_OFFER_STRUCTURE_ID')
+    .select('ID, ABBR, NAME, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, ATTACH_TO_OFFER_STRUCTURE_ID')
     .eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId);
 
   for (const calc of (feeCalcs || [])) {
@@ -1458,7 +1458,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
     const { data: newCalc, error: calcInsErr } = await supabase
       .from('FEE_CALCULATION_MASTER')
       .insert([{
-        ABBR: calc.ABBR, NAME_LONG: calc.NAME_LONG,
+        ABBR: calc.ABBR, NAME: calc.NAME,
         FEE_MASTER_ID: calc.FEE_MASTER_ID, ZONE_ID: calc.ZONE_ID, ZONE_PERCENT: calc.ZONE_PERCENT,
         CONSTRUCTION_COSTS_K0: calc.CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1: calc.CONSTRUCTION_COSTS_K1,
         CONSTRUCTION_COSTS_K2: calc.CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3: calc.CONSTRUCTION_COSTS_K3,
@@ -1487,7 +1487,7 @@ async function copyOffer(supabase, { offerId, tenantId }) {
     }
 
     const { data: surcharges } = await supabase.from('FEE_CALCULATION_SURCHARGES')
-      .select('FEE_SURCHARGE_ID, ABBR, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, INCLUDE_BL, LPH_FILTER, BL_FILTER')
+      .select('FEE_SURCHARGE_ID, ABBR, NAME, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, INCLUDE_BL, LPH_FILTER, BL_FILTER')
       .eq('FEE_CALC_MASTER_ID', calc.ID).eq('TENANT_ID', tenantId);
     if (surcharges?.length) {
       const surRows = surcharges.map(s => {

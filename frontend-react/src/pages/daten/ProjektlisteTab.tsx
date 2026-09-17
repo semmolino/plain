@@ -578,7 +578,7 @@ export function ProjektlisteTab() {
       const q = search.toLowerCase()
       rows = rows.filter(r =>
         r.ABBR.toLowerCase().includes(q) ||
-        (r.NAME_LONG ?? '').toLowerCase().includes(q) ||
+        (r.NAME ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_STATUS_NAME_SHORT ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_MANAGER_DISPLAY ?? '').toLowerCase().includes(q) ||
         (r.ADDRESS_NAME ?? '').toLowerCase().includes(q) ||
@@ -736,7 +736,7 @@ export function ProjektlisteTab() {
                   >
                     <td>
                       <strong>{r.ABBR}</strong>
-                      {r.NAME_LONG && <span className="tree-name-long"> – {r.NAME_LONG}</span>}
+                      {r.NAME && <span className="tree-name-long"> – {r.NAME}</span>}
                     </td>
                     {visibleCols.map(c => (
                       <td key={c.key} className={c.className}>{c.render(r, cpiT)}</td>

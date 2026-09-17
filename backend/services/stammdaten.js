@@ -247,7 +247,7 @@ async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
   const phaseIds = Array.from(new Set((phaseRows || []).map((r) => r.FEE_PHASE_ID).filter(Boolean)));
   let phaseMap = new Map();
   if (phaseIds.length) {
-    const { data: phases, error: phaseErr } = await supabase.from("FEE_PHASE").select("ID, ABBR, NAME_LONG, FEE_PERCENT, SORT_ORDER").in("ID", phaseIds);
+    const { data: phases, error: phaseErr } = await supabase.from("FEE_PHASE").select("ID, ABBR, NAME, FEE_PERCENT, SORT_ORDER").in("ID", phaseIds);
     if (phaseErr) throw new Error(phaseErr.message);
     phaseMap = new Map((phases || []).map((p) => [p.ID, p]));
   }
@@ -257,7 +257,7 @@ async function loadPhaseRowsWithLabels(supabase, calcMasterId) {
       const phase = phaseMap.get(row.FEE_PHASE_ID) || {};
       return {
         ...row,
-        PHASE_LABEL: `${phase.ABBR || ""}: ${phase.NAME_LONG || ""}`.replace(/:\s*$/, ""),
+        PHASE_LABEL: `${phase.ABBR || ""}: ${phase.NAME || ""}`.replace(/:\s*$/, ""),
         FEE_PERCENT_BASE: row.FEE_PERCENT_BASE ?? phase.FEE_PERCENT ?? null,
       };
     })

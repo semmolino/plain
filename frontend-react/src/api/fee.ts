@@ -1,9 +1,9 @@
 import { apiClient, openPdfWithAuth } from './client'
 
-export interface FeeGroup  { ID: number; ABBR: string; NAME_LONG: string }
+export interface FeeGroup  { ID: number; ABBR: string; NAME: string }
 export type FeeBaseType = 'cost_eur' | 'area_ha' | 'verrechnungseinheiten' | 'percent_of_baukosten' | 'flaechenaequivalent_brandschutz'
-export interface FeeMaster { ID: number; ABBR: string; NAME_LONG: string; BASE_TYPE?: FeeBaseType; SUPPORTS_ZONE_SPLIT?: boolean }
-export interface FeeZone   { ID: number; ABBR: string; NAME_LONG: string }
+export interface FeeMaster { ID: number; ABBR: string; NAME: string; BASE_TYPE?: FeeBaseType; SUPPORTS_ZONE_SPLIT?: boolean }
+export interface FeeZone   { ID: number; ABBR: string; NAME: string }
 
 // Bewertungsmerkmal des Honorarzonen-Punktesystems (§ 5 Abs. 2 HOAI):
 // je Merkmal werden 0..MAX_POINTS vergeben, die Summe bestimmt die Zone.
@@ -40,7 +40,7 @@ export interface FeeZoneLookupRow {
 export interface FeeCalcMaster {
   ID:                          number
   ABBR:                  string | null
-  NAME_LONG:                   string | null
+  NAME:                   string | null
   PROJECT_ID:                  number | null
   OFFER_ID:                    number | null
   ATTACH_TO_OFFER_STRUCTURE_ID: number | null
@@ -84,7 +84,7 @@ export interface FeePhaseRow {
 export interface FeeSurchargeGlobal {
   ID:              number
   ABBR:      string
-  NAME_LONG:       string | null
+  NAME:       string | null
   SURCHARGE_TYPE:  string | null
   /** Vorschlagswert beim Hinzufügen; negativ bei Minderungen (§ 11 Abs. 3). */
   DEFAULT_PERCENT?: number | null
@@ -99,7 +99,7 @@ export interface FeeCalcSurcharge {
   FEE_CALC_MASTER_ID: number
   FEE_SURCHARGE_ID:   number | null
   ABBR:         string | null
-  NAME_LONG:          string | null
+  NAME:          string | null
   PERCENT:            number | null
   BASE_AMOUNT:        number | null
   AMOUNT:             number | null
@@ -116,7 +116,7 @@ export interface FeeCalcBl {
   ID?:                number
   FEE_CALC_MASTER_ID: number
   ABBR:         string | null
-  NAME:               string           // NAME_LONG
+  NAME:               string           // NAME
   LPH_REF:            string | null    // legacy text label, kept for compat
   LPH_PHASE_ID:       number | null    // FK to FEE_CALCULATION_PHASE
   AMOUNT_TYPE:        BlAmountType

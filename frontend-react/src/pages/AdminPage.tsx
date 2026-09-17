@@ -195,7 +195,7 @@ function StammdatenSection() {
 
   function startEditRolle(r: Rolle) {
     setEditingRolleId(r.ID)
-    setEditingRolleForm({ short: r.ABBR, long: r.NAME_LONG ?? '', spRate: r.HOURLY_RATE != null ? String(r.HOURLY_RATE) : '' })
+    setEditingRolleForm({ short: r.ABBR, long: r.NAME ?? '', spRate: r.HOURLY_RATE != null ? String(r.HOURLY_RATE) : '' })
   }
 
   const { data: deptData  } = useQuery({ queryKey: ['departments'],   queryFn: fetchDepartments })
@@ -308,7 +308,7 @@ function StammdatenSection() {
                         <input className="tbl-input num" type="number" step="0.01" min="0" style={{ width: 70 }} value={editingRolleForm.spRate} onChange={e => setEditingRolleForm(f => ({ ...f, spRate: e.target.value }))} placeholder="0.00" />
                       </td>
                       <td style={{ padding: '3px 0 3px 6px', whiteSpace: 'nowrap' }}>
-                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updRolleMut.isPending} onClick={() => updRolleMut.mutate({ id: r.ID, body: { abbr: editingRolleForm.short, name_long: editingRolleForm.long, hourly_rate: editingRolleForm.spRate } })}>
+                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={updRolleMut.isPending} onClick={() => updRolleMut.mutate({ id: r.ID, body: { abbr: editingRolleForm.short, name: editingRolleForm.long, hourly_rate: editingRolleForm.spRate } })}>
                           {updRolleMut.isPending ? '…' : '✓'}
                         </button>
                         <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingRolleId(null)}>✗</button>
@@ -317,7 +317,7 @@ function StammdatenSection() {
                   ) : (
                     <>
                       <td style={{ padding: '3px 6px 3px 0', fontWeight: 600 }}>{r.ABBR}</td>
-                      <td style={{ padding: '3px 6px 3px 0', color: 'var(--text-2)' }}>{r.NAME_LONG ?? '—'}</td>
+                      <td style={{ padding: '3px 6px 3px 0', color: 'var(--text-2)' }}>{r.NAME ?? '—'}</td>
                       <td style={{ padding: '3px 0 3px 6px', textAlign: 'right', color: 'var(--text-2)' }}>
                         {r.HOURLY_RATE != null ? `${r.HOURLY_RATE} €/h` : '—'}
                       </td>
@@ -831,7 +831,7 @@ function UnternehmenSection() {
           <label htmlFor="uco">Land</label>
           <select id="uco" value={form.country_id} onChange={set('country_id')}>
             <option value="">Bitte wählen …</option>
-            {countries.map(c => <option key={c.ID} value={c.ID}>{c.ABBR}: {c.NAME_LONG}</option>)}
+            {countries.map(c => <option key={c.ID} value={c.ID}>{c.ABBR}: {c.NAME}</option>)}
           </select>
         </div>
         <FormField label="Steuernummer"                    id="utn"   value={form.tax_number}      onChange={set('tax_number')} />
@@ -1196,7 +1196,7 @@ function VorbelegungenSection() {
               <label htmlFor="def-country">Land</label>
               <select id="def-country" value={countryId} onChange={e => setCountryId(e.target.value)}>
                 <option value="">— keine Vorbelegung —</option>
-                {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME_LONG || c.ABBR}</option>)}
+                {countries.map(c => <option key={c.ID} value={c.ID}>{c.NAME || c.ABBR}</option>)}
               </select>
             </div>
             <p className="admin-section-hint">Land, mit dem eine neue Adresse startet.</p>

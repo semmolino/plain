@@ -53,7 +53,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
   const [companyId,    setCompanyId]    = useState<number | null>(null)
   const [contractId,   setContractId]   = useState<number | null>(null)
   const [contractLabel, setContractLabel] = useState('')
-  const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; ABBR: string; NAME_LONG: string }>>([])
+  const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; ABBR: string; NAME: string }>>([])
   const [employeeId,   setEmployeeId]   = useState(() => String(useAuthStore.getState().employeeId ?? ''))
   const invType: InvoiceType = invoiceType
 
@@ -167,7 +167,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
       })
       if (list.length === 1) {
         setContractId(list[0].ID)
-        setContractLabel(`${list[0].ABBR} – ${list[0].NAME_LONG}`)
+        setContractLabel(`${list[0].ABBR} – ${list[0].NAME}`)
         // Sicherheitseinbehalt wird in der "Rechnung" (Einzelrechnung) nicht
         // genutzt — siehe Buchen-Schritt. State bleibt false, alle se_*-Felder
         // werden mit null gepatcht, kein SE-Abzug.
@@ -408,7 +408,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
             search={async q => {
               const res = await searchProjectsApi(q)
               res.data.forEach(p => projectResultsRef.current.set(p.ID, p.COMPANY_ID ?? null))
-              return res.data.map(p => ({ id: p.ID, label: `${p.ABBR} – ${p.NAME_LONG}` }))
+              return res.data.map(p => ({ id: p.ID, label: `${p.ABBR} – ${p.NAME}` }))
             }}
             placeholder="Projekt suchen …"
           />
@@ -443,7 +443,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
                     basis:   (c.SE_BASIS === 'NETTO' ? 'NETTO' : 'BRUTTO') as 'BRUTTO' | 'NETTO',
                   })
                 })
-                return res.data.map(c => ({ id: c.ID, label: `${c.ABBR} – ${c.NAME_LONG}` }))
+                return res.data.map(c => ({ id: c.ID, label: `${c.ABBR} – ${c.NAME}` }))
               }}
               placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
             />

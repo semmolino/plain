@@ -296,7 +296,7 @@ describe("buildAutoMapping (project)", () => {
   it("maps project headers and aliases", () => {
     const map = buildAutoMapping(["Projektnummer", "Projektname", "Status", "Projektleiter (Kürzel)", "Bauherr/Auftraggeber"], "project");
     expect(map.project_number).toBe("Projektnummer");
-    expect(map.name_long).toBe("Projektname");
+    expect(map.name).toBe("Projektname");
     expect(map.manager).toBe("Projektleiter (Kürzel)");
     expect(map.client).toBe("Bauherr/Auftraggeber");
   });
@@ -306,7 +306,7 @@ describe("buildProjectEntry", () => {
   const ctx = makeProjCtx();
 
   it("keeps the project number, resolves FKs and sets company", () => {
-    const e = buildProjectEntry({ project_number: "P-2024-012", name_long: "Neubau Kita", status: "in Bearbeitung", project_type: "Neubau", manager: "MMu", client: "Stadt Musterhausen" }, ctx);
+    const e = buildProjectEntry({ project_number: "P-2024-012", name: "Neubau Kita", status: "in Bearbeitung", project_type: "Neubau", manager: "MMu", client: "Stadt Musterhausen" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.dbRow.ABBR).toBe("P-2024-012");
     expect(e.dbRow.COMPANY_ID).toBe(7);
@@ -317,19 +317,19 @@ describe("buildProjectEntry", () => {
   });
 
   it("flags missing required fields as errors (number, name, status, manager, client)", () => {
-    const e = buildProjectEntry({ project_number: "", name_long: "" }, ctx);
+    const e = buildProjectEntry({ project_number: "", name: "" }, ctx);
     expect(e.ok).toBe(false);
     expect(e.messages.filter(m => m.level === "error").length).toBeGreaterThanOrEqual(2);
   });
 
   it("errors (not warns) when a required FK is provided but unresolvable", () => {
-    const e = buildProjectEntry({ project_number: "P-9", name_long: "X", status: "Phantasie", manager: "ZZZ", client: "Unbekannt" }, ctx);
+    const e = buildProjectEntry({ project_number: "P-9", name: "X", status: "Phantasie", manager: "ZZZ", client: "Unbekannt" }, ctx);
     expect(e.ok).toBe(false);
     expect(e.messages.filter(m => m.level === "error").length).toBe(3); // status, manager, client
   });
 
   it("treats project_type as optional (warning, still importable)", () => {
-    const e = buildProjectEntry({ project_number: "P-9", name_long: "X", status: "in Bearbeitung", manager: "MMu", client: "Stadt Musterhausen", project_type: "Phantasie" }, ctx);
+    const e = buildProjectEntry({ project_number: "P-9", name: "X", status: "in Bearbeitung", manager: "MMu", client: "Stadt Musterhausen", project_type: "Phantasie" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.dbRow.PROJECT_TYPE_ID).toBeNull();
     expect(e.messages.some(m => m.level === "warn")).toBe(true);

@@ -21,7 +21,7 @@ import { fmtEur, money } from '@/utils/money'
 
 type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string; hours: string; rate: string }
 type AddForm = {
-  ABBR: string; NAME_LONG: string; BILLING_TYPE_ID: string; FATHER_ID: string
+  ABBR: string; NAME: string; BILLING_TYPE_ID: string; FATHER_ID: string
   REVENUE: string; EXTRAS_PERCENT: string
   // Aufwandsschätzung (BILLING_TYPE_ID=2): Menge/Stunden × Rolle/Satz
   QUANTITY: string; HOURLY_RATE: string; ROLE_ID: string; ROLE_ABBR: string; ROLE_NAME: string
@@ -34,7 +34,7 @@ type SurchargeEdit = {
 
 function emptyAdd(): AddForm {
   return {
-    ABBR: '', NAME_LONG: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '',
+    ABBR: '', NAME: '', BILLING_TYPE_ID: '', FATHER_ID: '', REVENUE: '', EXTRAS_PERCENT: '',
     QUANTITY: '', HOURLY_RATE: '', ROLE_ID: '', ROLE_ABBR: '', ROLE_NAME: '',
   }
 }
@@ -101,7 +101,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   useEffect(() => {
     if (oid && offers.length > 0) {
       const o = offers.find(x => x.ID === oid)
-      if (o) setOfferInput(o.ABBR + (o.NAME_LONG ? ` – ${o.NAME_LONG}` : ''))
+      if (o) setOfferInput(o.ABBR + (o.NAME ? ` – ${o.NAME}` : ''))
     } else if (!oid) {
       setOfferInput('')
     }
@@ -115,7 +115,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
         setOfferDropdownOpen(false)
         if (oid) {
           const o = offers.find(x => x.ID === oid)
-          if (o) setOfferInput(o.ABBR + (o.NAME_LONG ? ` – ${o.NAME_LONG}` : ''))
+          if (o) setOfferInput(o.ABBR + (o.NAME ? ` – ${o.NAME}` : ''))
         }
       }
     }
@@ -182,7 +182,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     if (!sq) return offers
     return offers.filter(o =>
       (o.ABBR?.toLowerCase().includes(sq)) ||
-      (o.NAME_LONG?.toLowerCase().includes(sq))
+      (o.NAME?.toLowerCase().includes(sq))
     )
   }, [offers, offerInput, offerDropdownOpen])
 
@@ -192,7 +192,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     const matchIds = new Set(
       flatTree.filter(({ node }) =>
         (node.ABBR?.toLowerCase().includes(sq)) ||
-        (node.NAME_LONG?.toLowerCase().includes(sq))
+        (node.NAME?.toLowerCase().includes(sq))
       ).map(({ node }) => (node as unknown as OfferStructureNode).ID)
     )
     for (const id of [...matchIds]) {
@@ -249,7 +249,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       for (const r of rows) {
         const body: Record<string, unknown> = {}
         if (r.changed.nameShort)     body.abbr      = r.nameShort
-        if (r.changed.nameLong)      body.name_long       = r.nameLong
+        if (r.changed.nameLong)      body.name       = r.nameLong
         if (r.changed.billingTypeId) body.billing_type_id = Number(r.billingTypeId)
         if (r.changed.nk)            body.extras_percent  = r.nk
         if (r.changed.budget)        body.revenue         = r.budget
@@ -335,7 +335,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       const isHourly = Number(f.BILLING_TYPE_ID) === 2
       return addOfferStructureNode(oid!, {
         abbr:      f.ABBR.trim(),
-        name_long:       f.NAME_LONG.trim() || undefined,
+        name:       f.NAME.trim() || undefined,
         billing_type_id: Number(f.BILLING_TYPE_ID),
         father_id:       f.FATHER_ID ? Number(f.FATHER_ID) : null,
         extras_percent:  f.EXTRAS_PERCENT !== '' ? Number(f.EXTRAS_PERCENT) : undefined,
@@ -386,7 +386,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     const isHourly = Number(node?.BILLING_TYPE_ID) === 2
     return {
       nameShort:    node?.ABBR ?? '',
-      nameLong:     node?.NAME_LONG  ?? '',
+      nameLong:     node?.NAME  ?? '',
       billingTypeId: String(node?.BILLING_TYPE_ID ?? ''),
       nk:     String(node?.EXTRAS_PERCENT ?? 0),
       budget: isHourly ? '' : String(node?.REVENUE_BASIS ?? node?.REVENUE ?? 0),
@@ -410,7 +410,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       const id   = Number(idStr)
       const node = structure.find(n => n.ID === id)
       const origNS  = node?.ABBR    ?? ''
-      const origNL  = node?.NAME_LONG     ?? ''
+      const origNL  = node?.NAME     ?? ''
       const origBT  = String(node?.BILLING_TYPE_ID ?? '')
       const origNk  = node?.EXTRAS_PERCENT ?? 0
       const origBudget = node?.REVENUE_BASIS ?? node?.REVENUE ?? 0
@@ -604,12 +604,12 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 <div key={o.ID} className="project-ac-option"
                   onMouseDown={e => {
                     e.preventDefault()
-                    setOfferInput(o.ABBR + (o.NAME_LONG ? ` – ${o.NAME_LONG}` : ''))
+                    setOfferInput(o.ABBR + (o.NAME ? ` – ${o.NAME}` : ''))
                     setOfferDropdownOpen(false)
                     onOfferChange?.(o.ID)
                   }}>
                   <span className="project-ac-short">{o.ABBR}</span>
-                  {o.NAME_LONG && <span className="project-ac-long">{o.NAME_LONG}</span>}
+                  {o.NAME && <span className="project-ac-long">{o.NAME}</span>}
                 </div>
               ))}
             </div>
@@ -763,7 +763,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                     const isDragOver = dragOverId === n.ID
 
                     const nameShort    = edit?.nameShort     ?? (n.ABBR ?? '')
-                    const nameLong     = edit?.nameLong      ?? (n.NAME_LONG  ?? '')
+                    const nameLong     = edit?.nameLong      ?? (n.NAME  ?? '')
                     const btId         = edit?.billingTypeId ?? String(n.BILLING_TYPE_ID ?? '')
                     const nkVal        = edit?.nk            ?? String(n.EXTRAS_PERCENT ?? 0)
                     const budgetVal    = edit?.budget        ?? String(n.REVENUE_BASIS ?? n.REVENUE ?? 0)
@@ -970,15 +970,15 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label style={{ fontSize: 11 }}>Bezeichnung</label>
-              <input style={{ width: 160 }} value={addForm.NAME_LONG}
-                onChange={e => setAddForm(f => f && { ...f, NAME_LONG: e.target.value })} />
+              <input style={{ width: 160 }} value={addForm.NAME}
+                onChange={e => setAddForm(f => f && { ...f, NAME: e.target.value })} />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
               <label style={{ fontSize: 11 }}>Abrechnungsart*</label>
               <select style={{ fontSize: 12 }} value={addForm.BILLING_TYPE_ID}
                 onChange={e => setAddForm(f => f && { ...f, BILLING_TYPE_ID: e.target.value })}>
                 <option value="">Bitte wählen …</option>
-                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}{b.NAME_LONG ? ' – ' + b.NAME_LONG : ''}</option>)}
+                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}{b.NAME ? ' – ' + b.NAME : ''}</option>)}
               </select>
             </div>
             {Number(addForm.BILLING_TYPE_ID) === 2 ? (
@@ -993,7 +993,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         ...f,
                         ROLE_ID: rid,
                         ROLE_ABBR: role?.ABBR ?? f.ROLE_ABBR,
-                        ROLE_NAME:  role?.NAME_LONG  ?? f.ROLE_NAME,
+                        ROLE_NAME:  role?.NAME  ?? f.ROLE_NAME,
                         HOURLY_RATE: role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.HOURLY_RATE,
                       })
                     }}>
@@ -1048,7 +1048,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 <option value="">Projektlevel</option>
                 {flatTree.map(({ node }) => {
                   const n = node as unknown as OfferStructureNode
-                  return <option key={n.ID} value={n.ID}>{n.ABBR}{n.NAME_LONG ? ' – ' + n.NAME_LONG : ''}</option>
+                  return <option key={n.ID} value={n.ID}>{n.ABBR}{n.NAME ? ' – ' + n.NAME : ''}</option>
                 })}
               </select>
             </div>

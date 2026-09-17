@@ -12,7 +12,7 @@ export interface DashboardKpis {
 export interface DashboardProject {
   PROJECT_ID:                number | null
   ABBR:                string | null
-  NAME_LONG:                 string | null
+  NAME:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null
   PROJECT_MANAGER_ID:        number | null
@@ -59,7 +59,7 @@ export interface DashboardOpenSe {
   byProject: Array<{
     project_id: number
     abbr?: string
-    name_long?:  string
+    name?:  string
     total:      number
     count:      number
   }>
@@ -94,7 +94,7 @@ export const fetchDashboardByStatus = () =>
 export interface ProjectReportHeader {
   PROJECT_ID:                number
   ABBR:                string
-  NAME_LONG:                 string
+  NAME:                 string
   PROJECT_STATUS_NAME_SHORT: string | null
   PROJECT_MANAGER_DISPLAY:   string | null
   COMPANY_NAME:              string | null
@@ -117,7 +117,7 @@ export interface ProjectReportStructure {
   STRUCTURE_ID:           number
   PARENT_STRUCTURE_ID:    number | null
   ABBR:             string
-  NAME_LONG:              string | null
+  NAME:              string | null
   IS_LEAF:                boolean
   HOURS_TOTAL:            number
   COST_TOTAL:             number
@@ -148,7 +148,7 @@ function buildDateParams(f: DateFilter): string {
 export interface ProjectListRow {
   PROJECT_ID:                number
   ABBR:                string
-  NAME_LONG:                 string | null
+  NAME:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null
   PROJECT_TYPE_ID:           number | null
@@ -195,7 +195,7 @@ export const fetchProjectReportStructure = (projectId: number, filter: DateFilte
 export interface PhaseReportRow {
   PHASE_STRUCTURE_ID:     number | null
   ABBR:             string
-  NAME_LONG:              string | null
+  NAME:              string | null
   IS_UNASSIGNED:          boolean
   SORT_KEY:               number
   HONORAR_NET:            number
@@ -248,7 +248,7 @@ export interface PhaseCell {
 export interface PhaseMatrixProject {
   PROJECT_ID: number
   ABBR: string
-  NAME_LONG:  string | null
+  NAME:  string | null
   cells:      Record<number, PhaseCell>
   total:      PhaseCell
 }
@@ -356,7 +356,7 @@ export const fetchTeamUtilization = () =>
 export interface RiskProject {
   PROJECT_ID:                number
   ABBR:                string
-  NAME_LONG:                 string | null
+  NAME:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null
   PROJECT_MANAGER_ID:        number | null
@@ -378,7 +378,7 @@ export interface RiskProject {
 export interface BillingProject {
   PROJECT_ID:              number
   ABBR:              string
-  NAME_LONG:               string | null
+  NAME:               string | null
   PROJECT_MANAGER_DISPLAY: string | null
   OPEN_NET_TOTAL:          number
 }
@@ -540,7 +540,7 @@ export type WipMethod = 'hk' | 'erloes'
 export interface WipRow {
   PROJECT_ID:                number
   ABBR:                string | null
-  NAME_LONG:                 string | null
+  NAME:                 string | null
   PROJECT_STATUS_ID:         number | null
   PROJECT_STATUS_NAME_SHORT: string | null
   PROJECT_TYPE_ID:           number | null

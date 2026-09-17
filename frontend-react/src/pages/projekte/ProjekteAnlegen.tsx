@@ -19,7 +19,7 @@ import { useFeature } from '@/store/licenseStore'
 // ── Wizard state ──────────────────────────────────────────────────────────────
 
 interface BasicForm {
-  name_long:           string
+  name:           string
   company_id:          string
   project_status_id:   string
   project_type_id:     string
@@ -34,7 +34,7 @@ interface E2PState {
 }
 
 function emptyBasic(): BasicForm {
-  return { name_long: '', company_id: '', project_status_id: '', project_type_id: '', department_id: '', project_manager_id: '', address_id: '', contact_id: '' }
+  return { name: '', company_id: '', project_status_id: '', project_type_id: '', department_id: '', project_manager_id: '', address_id: '', contact_id: '' }
 }
 
 // ── Sub-wizard components ─────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
         ...prev[empId],
         role_id:         roleId,
         role_abbr: role?.ABBR ?? '',
-        role_name:  role?.NAME_LONG  ?? '',
+        role_name:  role?.NAME  ?? '',
         hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : (prev[empId]?.hourly_rate ?? ''),
       },
     }))
@@ -155,7 +155,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   function validateStep1() {
     const missing: string[] = []
     if (companies.length > 1 && !basic.company_id) missing.push('Firma')
-    if (!basic.name_long)          missing.push('Projektname')
+    if (!basic.name)          missing.push('Projektname')
     if (!basic.project_status_id)  missing.push('Status')
     if (!basic.project_manager_id) missing.push('Projektleitung')
     if (!basic.address_id)         missing.push('Rechnungsadresse')
@@ -190,7 +190,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
       .filter(r => r.hourly_rate !== undefined || r.cost_rate !== undefined)
 
     createMut.mutate({
-      name_long:          basic.name_long,
+      name:          basic.name,
       company_id:         basic.company_id || 0,
       project_status_id:  Number(basic.project_status_id),
       project_type_id:    basic.project_type_id ? Number(basic.project_type_id) : undefined,
@@ -243,7 +243,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
           )}
           <div className="form-group">
             <label>Projektname*</label>
-            <input value={basic.name_long} onChange={e => setB('name_long')(e.target.value)} placeholder="Langer Projektname" />
+            <input value={basic.name} onChange={e => setB('name')(e.target.value)} placeholder="Langer Projektname" />
           </div>
           <div className="form-group">
             <label>Status*</label>
@@ -264,7 +264,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
             <select value={basic.department_id} onChange={e => setB('department_id')(e.target.value)}>
               <option value="">—</option>
               {departments.map(d => (
-                <option key={d.ID} value={d.ID}>{d.ABBR}: {d.NAME_LONG}</option>
+                <option key={d.ID} value={d.ID}>{d.ABBR}: {d.NAME}</option>
               ))}
             </select>
           </div>
@@ -363,7 +363,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                         <td>
                           <select className="tbl-select" value={row.role_id} onChange={e => applyRolePreset(empId, e.target.value)}>
                             <option value="">—</option>
-                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME_LONG ? ' – ' + r.NAME_LONG : ''}</option>)}
+                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME ? ' – ' + r.NAME : ''}</option>)}
                           </select>
                         </td>
                         <td><input className="tbl-input" style={{ width: 80 }} value={row.role_abbr} onChange={e => setE2pField(empId, 'role_abbr', e.target.value)} /></td>
@@ -398,7 +398,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
                     {bookingTypes.map(t => (
                       <tr key={t.ID}>
                         <td style={{ fontSize: 12, color: 'var(--text-3, var(--text-3))' }}>{BOOKING_KIND_LABEL[t.KIND]}</td>
-                        <td>{t.ABBR}{t.NAME_LONG ? <span style={{ color: 'var(--text-3, var(--text-3))' }}> – {t.NAME_LONG}</span> : null}</td>
+                        <td>{t.ABBR}{t.NAME ? <span style={{ color: 'var(--text-3, var(--text-3))' }}> – {t.NAME}</span> : null}</td>
                         <td style={{ fontVariantNumeric: 'tabular-nums' }}>{t.DEFAULT_SP_RATE != null ? `${t.DEFAULT_SP_RATE} €` : '—'}</td>
                         <td><input className="tbl-input" style={{ width: 80 }} type="number" step="0.01" placeholder="Standard"
                           value={bookingPrices[t.ID]?.sp ?? ''} onChange={e => setPrice(t.ID, 'sp', e.target.value)} /></td>

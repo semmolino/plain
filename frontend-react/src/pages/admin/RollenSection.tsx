@@ -157,8 +157,8 @@ function RoleRow({ role, onEdit, onDelete, onDuplicate }: { role: UserRole; onEd
             </span>
           )}
         </div>
-        {role.NAME_LONG && (
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{role.NAME_LONG}</div>
+        {role.NAME && (
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{role.NAME}</div>
         )}
       </div>
       <span style={{ fontSize: 12, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
@@ -196,8 +196,8 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
     enabled:  !isCreate,
   })
 
-  const [form, setForm] = useState<{ abbr: string; name_long: string; color: string; is_default: boolean }>({
-    abbr: '', name_long: '', color: 'var(--accent)', is_default: false,
+  const [form, setForm] = useState<{ abbr: string; name: string; color: string; is_default: boolean }>({
+    abbr: '', name: '', color: 'var(--accent)', is_default: false,
   })
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null)
@@ -208,7 +208,7 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
     const d = roleData.data
     setForm({
       abbr: d.ABBR,
-      name_long:  d.NAME_LONG  || '',
+      name:  d.NAME  || '',
       color:      d.COLOR      || '#2563eb',
       is_default: d.IS_DEFAULT,
     })
@@ -252,14 +252,14 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
       if (isCreate) {
         return createRole({
           abbr:     form.abbr.trim(),
-          name_long:      form.name_long.trim() || null,
+          name:      form.name.trim() || null,
           color:          form.color || null,
           permission_ids: Array.from(selected),
         })
       } else {
         return patchRole(roleId!, {
           abbr:     isSystem ? undefined : form.abbr.trim(),
-          name_long:      form.name_long.trim() || null,
+          name:      form.name.trim() || null,
           color:          form.color || null,
           is_default:     isSystem ? undefined : form.is_default,
           permission_ids: Array.from(selected),
@@ -287,8 +287,8 @@ function RoleEditModal({ roleId, permissions, onClose, onSaved }: {
             <FormField label="Name *" id="role-name" value={form.abbr}
               onChange={e => setForm(f => ({ ...f, abbr: e.target.value }))}
               disabled={isSystem} />
-            <FormField label="Beschreibung" id="role-long" value={form.name_long}
-              onChange={e => setForm(f => ({ ...f, name_long: e.target.value }))} />
+            <FormField label="Beschreibung" id="role-long" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
             <div className="form-group">
               <label>Farbe</label>
               <input type="color" value={form.color}

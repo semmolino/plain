@@ -93,7 +93,7 @@ async function postDepartment(req, res, supabase) {
 // GET /api/stammdaten/countries
 // ---------------------------------------------------------------------------
 async function getCountries(req, res, supabase) {
-  const { data, error } = await supabase.from("COUNTRY").select("ID, ABBR, NAME_LONG").order("NAME_LONG", { ascending: true, nullsFirst: false });
+  const { data, error } = await supabase.from("COUNTRY").select("ID, ABBR, NAME").order("NAME", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -104,7 +104,7 @@ async function getCountries(req, res, supabase) {
 async function getBillingTypes(req, res, supabase) {
   const { data, error } = await supabase.from("BILLING_TYPE").select("ID, BILLING_TYPE").order("BILLING_TYPE", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
-  const mapped = (data || []).map(r => ({ ID: r.ID, ABBR: r.BILLING_TYPE, NAME_LONG: null }));
+  const mapped = (data || []).map(r => ({ ID: r.ID, ABBR: r.BILLING_TYPE, NAME: null }));
   res.json({ data: mapped });
 }
 
@@ -112,7 +112,7 @@ async function getBillingTypes(req, res, supabase) {
 // GET /api/stammdaten/fee-groups
 // ---------------------------------------------------------------------------
 async function getFeeGroups(req, res, supabase) {
-  const { data, error } = await supabase.from("FEE_GROUPS").select("ID, ABBR, NAME_LONG").order("ABBR", { ascending: true, nullsFirst: false });
+  const { data, error } = await supabase.from("FEE_GROUPS").select("ID, ABBR, NAME").order("ABBR", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -130,9 +130,9 @@ async function getFeeMasters(req, res, supabase) {
   // den Minimalsatz würde bei „0054 gelaufen, 0128 noch nicht" auch BASE_TYPE
   // verlieren — Flächenplanung erschiene dann als Baukosten-Leistungsbild.
   const COLUMN_SETS = [
-    "ID, ABBR, NAME_LONG, FEE_GROUP_ID, BASE_TYPE, SUPPORTS_ZONE_SPLIT",
-    "ID, ABBR, NAME_LONG, FEE_GROUP_ID, BASE_TYPE",
-    "ID, ABBR, NAME_LONG, FEE_GROUP_ID",
+    "ID, ABBR, NAME, FEE_GROUP_ID, BASE_TYPE, SUPPORTS_ZONE_SPLIT",
+    "ID, ABBR, NAME, FEE_GROUP_ID, BASE_TYPE",
+    "ID, ABBR, NAME, FEE_GROUP_ID",
   ];
   let data = null, lastError = null;
   for (const cols of COLUMN_SETS) {
@@ -161,7 +161,7 @@ async function getFeeZones(req, res, supabase) {
   const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
   if (!feeMasterId) return res.status(400).json({ error: "fee_master_id is required" });
 
-  const { data, error } = await supabase.from("FEE_ZONES").select("ID, ABBR, NAME_LONG, FEE_MASTER_ID").eq("FEE_MASTER_ID", feeMasterId).order("ABBR", { ascending: true, nullsFirst: false });
+  const { data, error } = await supabase.from("FEE_ZONES").select("ID, ABBR, NAME, FEE_MASTER_ID").eq("FEE_MASTER_ID", feeMasterId).order("ABBR", { ascending: true, nullsFirst: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data: data || [] });
 }
@@ -237,7 +237,7 @@ async function postFeeCalcMasterInit(req, res, supabase) {
   const feeMasterId = feeMasterIdRaw ? Number.parseInt(feeMasterIdRaw, 10) : null;
   if (!feeMasterId) return res.status(400).json({ error: "fee_master_id is required" });
 
-  const { data: feeMaster, error: fmErr } = await supabase.from("FEE_MASTERS").select("ID, ABBR, NAME_LONG").eq("ID", feeMasterId).single();
+  const { data: feeMaster, error: fmErr } = await supabase.from("FEE_MASTERS").select("ID, ABBR, NAME").eq("ID", feeMasterId).single();
   if (fmErr) return res.status(500).json({ error: fmErr.message });
   if (!feeMaster) return res.status(404).json({ error: "FEE_MASTER not found" });
 
@@ -257,7 +257,7 @@ async function postFeeCalcMasterInit(req, res, supabase) {
     .insert([{
       FEE_MASTER_ID: feeMasterId,
       ABBR:    feeMaster.ABBR || null,
-      NAME_LONG:     feeMaster.NAME_LONG  || null,
+      NAME:     feeMaster.NAME  || null,
       TENANT_ID:     req.tenantId ?? null,
       ...(offerId   ? { OFFER_ID:   offerId   } : {}),
       ...(projectId ? { PROJECT_ID: projectId } : {}),
@@ -321,7 +321,7 @@ async function patchFeeCalcMasterBasis(req, res, supabase) {
       .from("FEE_CALCULATION_MASTER")
       .update({
         ...('ABBR'                   in body ? { ABBR:                   body.ABBR                   ?? null } : {}),
-        ...('NAME_LONG'                    in body ? { NAME_LONG:                    body.NAME_LONG                    ?? null } : {}),
+        ...('NAME'                    in body ? { NAME:                    body.NAME                    ?? null } : {}),
         ...('PROJECT_ID'                   in body ? { PROJECT_ID:                   body.PROJECT_ID                   ?? null } : {}),
         ...('OFFER_ID'                     in body ? { OFFER_ID:                     body.OFFER_ID                     ?? null } : {}),
         ...('ATTACH_TO_OFFER_STRUCTURE_ID' in body ? { ATTACH_TO_OFFER_STRUCTURE_ID: body.ATTACH_TO_OFFER_STRUCTURE_ID ?? null } : {}),
@@ -388,7 +388,7 @@ async function postFeeCalcPhasesInit(req, res, supabase) {
     if (existingErr) return res.status(500).json({ error: existingErr.message });
 
     if (!existingRows || existingRows.length === 0) {
-      const { data: feePhases, error: feePhaseErr } = await supabase.from("FEE_PHASE").select("ID, ABBR, NAME_LONG, FEE_PERCENT").eq("FEE_MASTER_ID", calcMaster.FEE_MASTER_ID).order("ID", { ascending: true });
+      const { data: feePhases, error: feePhaseErr } = await supabase.from("FEE_PHASE").select("ID, ABBR, NAME, FEE_PERCENT").eq("FEE_MASTER_ID", calcMaster.FEE_MASTER_ID).order("ID", { ascending: true });
       if (feePhaseErr) return res.status(500).json({ error: feePhaseErr.message });
 
       const revenueBase = svc.getRevenueByKx(calcMaster, "K0");
@@ -548,7 +548,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
       { data: calcPhases, error: calcPhasesErr },
     ] = await Promise.all([
       supabase.from("PROJECT").select("ID, TENANT_ID").eq("ID", calcMaster.PROJECT_ID).single(),
-      supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, ABBR, NAME_LONG, EXTRAS_PERCENT").eq("ID", fatherId).single(),
+      supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, ABBR, NAME, EXTRAS_PERCENT").eq("ID", fatherId).single(),
       supabase.from("FEE_CALCULATION_PHASE").select("ID, FEE_PHASE_ID, FEE_PERCENT, PHASE_REVENUE").eq("FEE_MASTER_ID", id).order("FEE_PHASE_ID", { ascending: true }),
     ]);
     if (fatherErr) return res.status(500).json({ error: fatherErr.message });
@@ -574,7 +574,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     if (activePhases.length === 0) return res.status(400).json({ error: "Alle Leistungsphasen haben 0 % und 0 € — bitte Honorarwerte eintragen." });
 
     const phaseIds = Array.from(new Set(activePhases.map((row) => row.FEE_PHASE_ID).filter(Boolean)));
-    const { data: phaseDefs, error: phaseDefsErr } = await supabase.from("FEE_PHASE").select("ID, ABBR, NAME_LONG, SORT_ORDER").in("ID", phaseIds);
+    const { data: phaseDefs, error: phaseDefsErr } = await supabase.from("FEE_PHASE").select("ID, ABBR, NAME, SORT_ORDER").in("ID", phaseIds);
     if (phaseDefsErr) return res.status(500).json({ error: phaseDefsErr.message });
     const phaseMap = new Map((phaseDefs || []).map((row) => [row.ID, row]));
 
@@ -617,7 +617,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
       const extras  = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
       return {
         ABBR: phaseDef.ABBR || `LPH ${row.FEE_PHASE_ID}`,
-        NAME_LONG: phaseDef.NAME_LONG || null,
+        NAME: phaseDef.NAME || null,
         REVENUE: revenue, EXTRAS: extras, COSTS: 0,
         PROJECT_ID: calcMaster.PROJECT_ID, FATHER_ID: fatherId,
         EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
@@ -643,12 +643,12 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
           if (existingBlStructMap.has(bl.ID)) {
             const existingId = existingBlStructMap.get(bl.ID);
             await supabase.from("PROJECT_STRUCTURE")
-              .update({ REVENUE: blRevenue, EXTRAS: extras, ABBR: bl.ABBR || null, NAME_LONG: bl.NAME || null })
+              .update({ REVENUE: blRevenue, EXTRAS: extras, ABBR: bl.ABBR || null, NAME: bl.NAME || null })
               .eq("ID", existingId).eq("TENANT_ID", project.TENANT_ID);
           } else {
             blToInsert.push({
               ABBR: bl.ABBR || null,
-              NAME_LONG: bl.NAME || null,
+              NAME: bl.NAME || null,
               REVENUE: blRevenue, EXTRAS: extras, COSTS: 0,
               PROJECT_ID: calcMaster.PROJECT_ID, FATHER_ID: fatherId,
               EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,
@@ -692,7 +692,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
       movedTecCount = Array.isArray(movedTecRows) ? movedTecRows.length : 0;
       if (movedTecCount > 0) {
         await Promise.all([svc.recomputeStructureAggregates(supabase, fatherId), svc.recomputeStructureAggregates(supabase, firstCreated.ID)]);
-        movedToName = [firstCreated.ABBR, firstCreated.NAME_LONG].filter(Boolean).join(": ");
+        movedToName = [firstCreated.ABBR, firstCreated.NAME].filter(Boolean).join(": ");
       }
     }
 
@@ -705,7 +705,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
       await require('../services/projekte').propagateUpwards(supabase, { structureId: firstCreated.ID });
     }
 
-    const fatherName = [father.ABBR, father.NAME_LONG].filter(Boolean).join(": ");
+    const fatherName = [father.ABBR, father.NAME].filter(Boolean).join(": ");
     const message = movedTecCount > 0
       ? `${createdRows.length} Elemente wurden angelegt. ${movedTecCount} Buchungen wurden von ${fatherName || `#${fatherId}`} nach ${movedToName || `#${firstCreated?.ID}`} verschoben.`
       : `${createdRows.length} Elemente wurden angelegt.`;
@@ -894,12 +894,12 @@ async function postAddress(req, res, supabase) {
 // POST /api/stammdaten/rollen
 // ---------------------------------------------------------------------------
 async function postRollen(req, res, supabase) {
-  const { abbr, name_long, hourly_rate } = req.body || {};
+  const { abbr, name, hourly_rate } = req.body || {};
   if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
 
   const insertRow = {
     ABBR: abbr.trim(),
-    NAME_LONG:  (name_long || "").trim() || null,
+    NAME:  (name || "").trim() || null,
     HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
     TENANT_ID:  req.tenantId ?? null,
     ACTIVE:     1,
@@ -972,10 +972,10 @@ async function listAddresses(req, res, supabase) {
   );
   if (aErr) return res.status(500).json({ error: aErr.message });
 
-  const { data: countries, error: cErr } = await supabase.from("COUNTRY").select("ID, NAME_LONG, ABBR").order("NAME_LONG", { ascending: true }).limit(5000);
+  const { data: countries, error: cErr } = await supabase.from("COUNTRY").select("ID, NAME, ABBR").order("NAME", { ascending: true }).limit(5000);
   if (cErr) return res.status(500).json({ error: cErr.message });
 
-  const countryMap = new Map((countries || []).map((c) => [String(c.ID), (c.NAME_LONG || c.ABBR || "").toString()]));
+  const countryMap = new Map((countries || []).map((c) => [String(c.ID), (c.NAME || c.ABBR || "").toString()]));
   res.json({ data: (addresses || []).map((r) => normalizeAddress(r, countryMap)) });
 }
 
@@ -1002,8 +1002,8 @@ async function patchAddress(req, res, supabase) {
   if (error) return res.status(500).json({ error: error.message });
 
   let countryName = "";
-  const { data: cData } = await supabase.from("COUNTRY").select("NAME_LONG, ABBR").eq("ID", data.COUNTRY_ID).maybeSingle();
-  if (cData) countryName = cData.NAME_LONG || cData.ABBR || "";
+  const { data: cData } = await supabase.from("COUNTRY").select("NAME, ABBR").eq("ID", data.COUNTRY_ID).maybeSingle();
+  if (cData) countryName = cData.NAME || cData.ABBR || "";
 
   res.json({ data: { ...data, TAX_ID: data["TAX-ID"] ?? null, COUNTRY: countryName } });
 }
@@ -1027,8 +1027,8 @@ async function getAddressDetail(req, res, supabase) {
   // Land-Name auflösen
   let countryName = "";
   if (addr.COUNTRY_ID != null) {
-    const { data: cData } = await supabase.from("COUNTRY").select("NAME_LONG, ABBR").eq("ID", addr.COUNTRY_ID).maybeSingle();
-    if (cData) countryName = cData.NAME_LONG || cData.ABBR || "";
+    const { data: cData } = await supabase.from("COUNTRY").select("NAME, ABBR").eq("ID", addr.COUNTRY_ID).maybeSingle();
+    if (cData) countryName = cData.NAME || cData.ABBR || "";
   }
 
   // Verknüpfte Entitäten (nur wenn die jeweilige Tabelle/Spalte existiert — sonst still leer)
@@ -1041,7 +1041,7 @@ async function getAddressDetail(req, res, supabase) {
       (cols) => supabase.from("CONTACTS").select(cols).eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id).order("LAST_NAME", { ascending: true }),
       contactFull, contactBase,
     ),
-    safe(supabase.from("PROJECT").select("ID, ABBR, NAME_LONG").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    safe(supabase.from("PROJECT").select("ID, ABBR, NAME").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
     safe(supabase.from("OFFER").select("ID, ABBR").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
     safe(supabase.from("INVOICE").select("ID, INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
     safe(supabase.from("ADVANCE_INVOICE").select("ID, ADVANCE_INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
@@ -1236,7 +1236,7 @@ async function searchVat(req, res, supabase) {
 async function searchPaymentMeans(req, res, supabase) {
   const q = (req.query.q || "").toString().trim();
   if (!q || q.length < 2) return res.json({ data: [] });
-  const { data, error } = await supabase.from("PAYMENT_MEANS").select("ID, ABBR, NAME_LONG").or(`ABBR.ilike.%${suchwert(q)}%,NAME_LONG.ilike.%${suchwert(q)}%`).order("ABBR", { ascending: true }).limit(20);
+  const { data, error } = await supabase.from("PAYMENT_MEANS").select("ID, ABBR, NAME").or(`ABBR.ilike.%${suchwert(q)}%,NAME.ilike.%${suchwert(q)}%`).order("ABBR", { ascending: true }).limit(20);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -1312,7 +1312,7 @@ async function deleteTyp(req, res, supabase) {
 }
 
 async function getRollen(req, res, supabase) {
-  const { data, error } = await supabase.from("ROLE").select("ID, ABBR, NAME_LONG, HOURLY_RATE")
+  const { data, error } = await supabase.from("ROLE").select("ID, ABBR, NAME, HOURLY_RATE")
     .eq("TENANT_ID", req.tenantId).order("ABBR", { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data: data || [] });
@@ -1352,13 +1352,13 @@ async function patchTyp(req, res, supabase) {
 async function patchRolle(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
-  const { abbr, name_long, hourly_rate } = req.body || {};
+  const { abbr, name, hourly_rate } = req.body || {};
   if (!abbr) return res.status(400).json({ error: "abbr is required" });
   const { data, error } = await supabase.from("ROLE").update({
     ABBR: abbr.trim(),
-    NAME_LONG:  (name_long || "").trim() || null,
+    NAME:  (name || "").trim() || null,
     HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
-  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR, NAME_LONG, HOURLY_RATE").single();
+  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR, NAME, HOURLY_RATE").single();
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -1561,7 +1561,7 @@ async function listFeeCalcMasters(req, res, supabase) {
     const offerId      = offerIdRaw  ? Number.parseInt(offerIdRaw,   10) : null;
 
     let query = supabase.from("FEE_CALCULATION_MASTER")
-      .select("ID, ABBR, NAME_LONG, PROJECT_ID, OFFER_ID, ATTACH_TO_OFFER_STRUCTURE_ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, TENANT_ID")
+      .select("ID, ABBR, NAME, PROJECT_ID, OFFER_ID, ATTACH_TO_OFFER_STRUCTURE_ID, FEE_MASTER_ID, ZONE_ID, ZONE_PERCENT, CONSTRUCTION_COSTS_K0, CONSTRUCTION_COSTS_K1, CONSTRUCTION_COSTS_K2, CONSTRUCTION_COSTS_K3, CONSTRUCTION_COSTS_K4, REVENUE_K0, REVENUE_K1, REVENUE_K2, REVENUE_K3, REVENUE_K4, TENANT_ID")
       .eq("TENANT_ID", req.tenantId)
       .order("ID", { ascending: false });
     if (projectId) query = query.eq("PROJECT_ID", projectId);
@@ -1575,8 +1575,8 @@ async function listFeeCalcMasters(req, res, supabase) {
     const [{ data: phases }, { data: surcharges }, { data: projects }, { data: offers }] = await Promise.all([
       supabase.from("FEE_CALCULATION_PHASE").select("FEE_MASTER_ID, PHASE_REVENUE").in("FEE_MASTER_ID", masterIds),
       supabase.from("FEE_CALCULATION_SURCHARGES").select("FEE_CALC_MASTER_ID, AMOUNT").in("FEE_CALC_MASTER_ID", masterIds),
-      supabase.from("PROJECT").select("ID, ABBR, NAME_LONG").eq("TENANT_ID", req.tenantId),
-      supabase.from("OFFER").select("ID, ABBR, NAME_LONG").eq("TENANT_ID", req.tenantId),
+      supabase.from("PROJECT").select("ID, ABBR, NAME").eq("TENANT_ID", req.tenantId),
+      supabase.from("OFFER").select("ID, ABBR, NAME").eq("TENANT_ID", req.tenantId),
     ]);
 
     const phaseSum = {};
@@ -1591,8 +1591,8 @@ async function listFeeCalcMasters(req, res, supabase) {
       const offer = m.OFFER_ID   ? offerMap.get(m.OFFER_ID)     : null;
       return {
         ...m,
-        projectLabel: proj  ? `${proj.ABBR  || ""} – ${proj.NAME_LONG  || ""}`.replace(/ – $/, "") : null,
-        offerLabel:   offer ? `${offer.ABBR || ""} – ${offer.NAME_LONG || ""}`.replace(/ – $/, "") : null,
+        projectLabel: proj  ? `${proj.ABBR  || ""} – ${proj.NAME  || ""}`.replace(/ – $/, "") : null,
+        offerLabel:   offer ? `${offer.ABBR || ""} – ${offer.NAME || ""}`.replace(/ – $/, "") : null,
         grundhonorar:  phaseSum[m.ID]     || 0,
         zuschlaegeSum: surchargeSum[m.ID] || 0,
         gesamthonorar: (phaseSum[m.ID] || 0) + (surchargeSum[m.ID] || 0),
@@ -1632,11 +1632,11 @@ async function listFeeSurchargesGlobal(req, res, supabase) {
       if (linkErr) return res.json({ data: [] }); // table may not exist
       const ids = (links || []).map(r => r.FEE_SURCHARGE_ID).filter(Boolean);
       if (!ids.length) return res.json({ data: [] });
-      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, ABBR, NAME_LONG, SURCHARGE_TYPE, DEFAULT_PERCENT, MAX_PERCENT, LEGAL_REF").in("ID", ids);
+      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, ABBR, NAME, SURCHARGE_TYPE, DEFAULT_PERCENT, MAX_PERCENT, LEGAL_REF").in("ID", ids);
       if (error) return res.json({ data: [] });
       return res.json({ data: data || [] });
     } else {
-      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, ABBR, NAME_LONG, SURCHARGE_TYPE, DEFAULT_PERCENT, MAX_PERCENT, LEGAL_REF").order("ID");
+      const { data, error } = await supabase.from("FEE_SURCHARGES").select("ID, ABBR, NAME, SURCHARGE_TYPE, DEFAULT_PERCENT, MAX_PERCENT, LEGAL_REF").order("ID");
       if (error) return res.json({ data: [] });
       return res.json({ data: data || [] });
     }
@@ -1651,7 +1651,7 @@ async function listFeeCalcSurcharges(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "id is required" });
   const { data, error } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, ABBR, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL, BL_FILTER")
+    .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, ABBR, NAME, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL, BL_FILTER")
     .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
     .order("SORT_ORDER", { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
@@ -1684,7 +1684,7 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
           FEE_CALC_MASTER_ID: id,
           FEE_SURCHARGE_ID:   r.FEE_SURCHARGE_ID ?? null,
           ABBR:         r.ABBR ?? null,
-          NAME_LONG:          r.NAME_LONG ?? null,
+          NAME:          r.NAME ?? null,
           PERCENT:            pct,
           BASE_AMOUNT:        base,
           AMOUNT:             Math.round((pct / 100) * base * 100) / 100,
@@ -1700,7 +1700,7 @@ async function saveFeeCalcSurcharges(req, res, supabase) {
     }
 
     const { data: saved } = await supabase.from("FEE_CALCULATION_SURCHARGES")
-      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, ABBR, NAME_LONG, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL, BL_FILTER")
+      .select("ID, FEE_CALC_MASTER_ID, FEE_SURCHARGE_ID, ABBR, NAME, PERCENT, BASE_AMOUNT, AMOUNT, SORT_ORDER, LPH_FILTER, CALC_MODE, INCLUDE_BL, BL_FILTER")
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId)
       .order("SORT_ORDER", { ascending: true });
     res.json({ data: saved || [] });
@@ -2005,7 +2005,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
           const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
           return {
             ABBR: bl.ABBR || null,
-            NAME_LONG: bl.NAME || null,
+            NAME: bl.NAME || null,
             REVENUE: revenue, EXTRAS: extras, COSTS: 0,
             PROJECT_ID: master.PROJECT_ID, FATHER_ID: fatherIdForBl,
             EXTRAS_PERCENT: extrasPercent, BILLING_TYPE_ID: 1,

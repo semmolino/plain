@@ -51,7 +51,7 @@ function LeafPicker({
         onChange={e => { onProjectId(e.target.value ? Number(e.target.value) : null); onStructureId(null, '') }}
       >
         <option value="">— Projekt wählen —</option>
-        {projects.map(p => <option key={p.ID} value={p.ID}>{p.ABBR} – {p.NAME_LONG}</option>)}
+        {projects.map(p => <option key={p.ID} value={p.ID}>{p.ABBR} – {p.NAME}</option>)}
       </select>
       {projectId && (
         <select
@@ -66,7 +66,7 @@ function LeafPicker({
           <option value="">— Leistung wählen —</option>
           {leaves.map(({ node, depth }) => (
             <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
-              {'  '.repeat(depth)}{node.ABBR}{node.NAME_LONG ? ` – ${node.NAME_LONG}` : ''}
+              {'  '.repeat(depth)}{node.ABBR}{node.NAME ? ` – ${node.NAME}` : ''}
             </option>
           ))}
         </select>
