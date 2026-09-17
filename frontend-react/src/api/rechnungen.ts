@@ -91,7 +91,7 @@ export interface PartialPayment {
   CONTACT_MAIL:                 string | null
   ADDRESS_NAME_1:               string | null
   COMMENT:                      string | null
-  CANCELS_PARTIAL_PAYMENT_ID:   number | null
+  CANCELS_ADVANCE_INVOICE_ID:   number | null
   TOTAL_DISCOUNTS:              number | null
   CASH_DISCOUNT:                number | null
   DISCOUNT_1_PERCENT:           number | null

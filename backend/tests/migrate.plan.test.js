@@ -151,6 +151,8 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0147_05_advance_invoice.sql",
       "0148_05_advance_invoice_sql_objects.sql",
       "0149_05_advance_invoice_values.sql",
+      "0150_05b_advance_invoice_rest.sql",
+      "0151_05b_advance_invoice_rest_sql_objects.sql",
     ]);
   });
 

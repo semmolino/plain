@@ -1245,9 +1245,9 @@ module.exports = (supabase) => {
         const ids = rows.map(r => r.ID);
         const { data: stornos } = await supabase
           .from("ADVANCE_INVOICE")
-          .select("CANCELS_PARTIAL_PAYMENT_ID")
-          .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
-        const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+          .select("CANCELS_ADVANCE_INVOICE_ID")
+          .in("CANCELS_ADVANCE_INVOICE_ID", ids);
+        const cancelled = new Set((stornos || []).map(s => s.CANCELS_ADVANCE_INVOICE_ID));
         rows = rows.filter(r => !cancelled.has(r.ID));
       }
 
@@ -1419,7 +1419,7 @@ module.exports = (supabase) => {
         supabase.from("ADVANCE_INVOICE")
           .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
-          .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+          .is("CANCELS_ADVANCE_INVOICE_ID", null),
       ]);
       if (ie) throw ie;
       if (pe) throw pe;
@@ -1487,7 +1487,7 @@ module.exports = (supabase) => {
         supabase.from("ADVANCE_INVOICE").select("AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .gte("ADVANCE_INVOICE_DATE", from).lte("ADVANCE_INVOICE_DATE", to)
-          .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+          .is("CANCELS_ADVANCE_INVOICE_ID", null),
         supabase.from("TEC").select("EMPLOYEE_ID, QUANTITY_INT, COST_TOTAL")
           .eq("TENANT_ID", tenantId).gte("DATE_VOUCHER", from).lte("DATE_VOUCHER", to),
         supabase.from("EMPLOYEE").select("ID")
@@ -1696,7 +1696,7 @@ module.exports = (supabase) => {
           .eq("STATUS_ID", 2)
           .gte("ADVANCE_INVOICE_DATE", periodStart)
           .lte("ADVANCE_INVOICE_DATE", periodEnd)
-          .is("CANCELS_PARTIAL_PAYMENT_ID", null),
+          .is("CANCELS_ADVANCE_INVOICE_ID", null),
 
         // TEC: all entries in year (employee_id, hours, costs)
         supabase.from("TEC")
@@ -1869,7 +1869,7 @@ module.exports = (supabase) => {
           .select("ADVANCE_INVOICE_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
-          .is("CANCELS_PARTIAL_PAYMENT_ID", null)
+          .is("CANCELS_ADVANCE_INVOICE_ID", null)
           .gte("ADVANCE_INVOICE_DATE", dateFrom)
           .lte("ADVANCE_INVOICE_DATE", overallEnd),
         supabase.from("PAYMENT")
@@ -1893,7 +1893,7 @@ module.exports = (supabase) => {
           .select("ADVANCE_INVOICE_DATE, AMOUNT_NET, AMOUNT_EXTRAS_NET")
           .eq("TENANT_ID", tenantId)
           .eq("STATUS_ID", 2)
-          .is("CANCELS_PARTIAL_PAYMENT_ID", null)
+          .is("CANCELS_ADVANCE_INVOICE_ID", null)
           .lte("ADVANCE_INVOICE_DATE", overallEnd),
       ]);
 

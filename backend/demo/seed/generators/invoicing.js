@@ -229,7 +229,7 @@ async function makePartialPayment({ supabase, md, project, tl, dateISO, prevDate
     // 7) Buchen (ohne PDF/XML)
     const { data: ppRow } = await supabase
       .from("ADVANCE_INVOICE")
-      .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, ADVANCE_INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID, TENANT_ID, CANCELS_PARTIAL_PAYMENT_ID")
+      .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, ADVANCE_INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID, TENANT_ID, CANCELS_ADVANCE_INVOICE_ID")
       .eq("ID", id)
       .maybeSingle();
     await pp.bookPartialPayment(supabase, { id, pp: ppRow, tenantId: md.tenantId, force: true, skipDocuments: cfg.invoicing.skipDocuments });

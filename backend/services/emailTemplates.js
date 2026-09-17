@@ -211,7 +211,7 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
   const dateCol   = isInvoice ? "INVOICE_DATE"   : "ADVANCE_INVOICE_DATE";
   // Storno erkennt man je Belegart anders: bei Rechnungen am INVOICE_TYPE, bei
   // Abschlagsrechnungen an der Verweisspalte auf den stornierten Beleg.
-  const typeCols  = isInvoice ? ", INVOICE_TYPE" : ", CANCELS_PARTIAL_PAYMENT_ID";
+  const typeCols  = isInvoice ? ", INVOICE_TYPE" : ", CANCELS_ADVANCE_INVOICE_ID";
 
   const { data: doc, error } = await supabase
     .from(table)
@@ -259,7 +259,7 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
 
   const isStorno = isInvoice
     ? String(doc.INVOICE_TYPE || "").toLowerCase() === "stornorechnung"
-    : doc.CANCELS_PARTIAL_PAYMENT_ID != null;
+    : doc.CANCELS_ADVANCE_INVOICE_ID != null;
 
   const belegart = isInvoice
     ? (INVOICE_TYPE_LABELS[String(doc.INVOICE_TYPE || "").toLowerCase()] || "Rechnung")

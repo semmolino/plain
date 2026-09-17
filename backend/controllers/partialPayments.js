@@ -48,9 +48,9 @@ async function listOpenSeForProject(req, res, supabase) {
     if (ids.length > 0) {
       const { data: stornos } = await supabase
         .from("ADVANCE_INVOICE")
-        .select("CANCELS_PARTIAL_PAYMENT_ID")
-        .in("CANCELS_PARTIAL_PAYMENT_ID", ids);
-      const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+        .select("CANCELS_ADVANCE_INVOICE_ID")
+        .in("CANCELS_ADVANCE_INVOICE_ID", ids);
+      const cancelled = new Set((stornos || []).map(s => s.CANCELS_ADVANCE_INVOICE_ID));
       const filtered = (data || []).filter(r => !cancelled.has(r.ID));
       return res.json({ data: filtered });
     }
@@ -84,9 +84,9 @@ async function seSummary(req, res, supabase) {
     const allIds = pps.map(p => p.ID);
     const { data: stornos } = await supabase
       .from("ADVANCE_INVOICE")
-      .select("CANCELS_PARTIAL_PAYMENT_ID")
-      .in("CANCELS_PARTIAL_PAYMENT_ID", allIds);
-    const cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+      .select("CANCELS_ADVANCE_INVOICE_ID")
+      .in("CANCELS_ADVANCE_INVOICE_ID", allIds);
+    const cancelled = new Set((stornos || []).map(s => s.CANCELS_ADVANCE_INVOICE_ID));
 
     // Gruppieren nach (PROJECT_ID, CONTRACT_ID)
     const groups = new Map();
@@ -210,9 +210,9 @@ async function seOverviewForProject(req, res, supabase) {
     if (allIds.length > 0) {
       const { data: stornos } = await supabase
         .from("ADVANCE_INVOICE")
-        .select("CANCELS_PARTIAL_PAYMENT_ID")
-        .in("CANCELS_PARTIAL_PAYMENT_ID", allIds);
-      cancelled = new Set((stornos || []).map(s => s.CANCELS_PARTIAL_PAYMENT_ID));
+        .select("CANCELS_ADVANCE_INVOICE_ID")
+        .in("CANCELS_ADVANCE_INVOICE_ID", allIds);
+      cancelled = new Set((stornos || []).map(s => s.CANCELS_ADVANCE_INVOICE_ID));
     }
 
     const result = pps.map(p => {
