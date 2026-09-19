@@ -217,6 +217,21 @@ es nicht), `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRU
 
 **BILLING_TYPE_ID**: `1` = fixed-fee (Pauschal), `2` = hourly (Stunden, nach Aufwand).
 
+**Eindeutigkeit gehört mandantenweit gedacht — oder gar nicht.** Eine
+`UNIQUE`-Regel wirkt **vor** den Policies und kennt keine Mandanten. Steht sie
+auf einem Wert, den der Mandant selbst vergibt, sperrt sie fremde Büros aus
+*und* verrät sie: `ADDRESS_NAME_1` war so belegt, und der Fehler
+„duplicate key" sagte einem Mandanten, dass ein anderer diesen Kunden führt
+(Migration `0164`). RLS verbirgt die Zeile, der Index nicht.
+
+Zulässig ist so eine Regel nur, wenn der Wert **nicht** dem Mandanten gehört:
+weil sie an einem Fremdschlüssel hängt, der schon zu genau einem Mandanten
+führt (`UNIQUE (INVOICE_ID)` ist damit automatisch mandantenweit), oder weil
+der Wert von Natur aus global eindeutig ist (`PUSH_SUBSCRIPTION.ENDPOINT`).
+Sonst gehört `TENANT_ID` in die Spaltenliste — und wenn das Produkt Dubletten
+ausdrücklich zulässt (wie beim Adressimport: „trotzdem neu anlegen"), gehört
+die Prüfung ganz in die Anwendung, wo sie fragen kann statt nur abzuweisen.
+
 **Globale Kataloge tragen keinen Mandanten**: `CURRENCY`, `VAT`, `COUNTRY`,
 `PROJECT_STATUS`, `OFFER_STATUS`, `PAYMENT_MEANS`. Sie werden **ohne**
 `.eq("TENANT_ID", …)` gelesen — ein Filter darauf liefert nicht etwa alles,

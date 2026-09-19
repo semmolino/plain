@@ -138,6 +138,8 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // den Mandanten nur ueber einen Fremdschluessel tragen; 0161 entfernt
     // PROJECT_HOURLY_RATES, die seit langem von niemandem mehr gelesen wird, 0162 PUSH_TOKEN (nativer Push, nie begonnen).
     // 0163 macht PAYMENT_MEANS zum globalen, schreibgeschuetzten Katalog.
+    // 0164 entfernt die Unique-Regel auf ADDRESS.ADDRESS_NAME_1, die ueber alle
+    // Mandanten hinweg galt und den Adressimport abbrechen liess.
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -170,6 +172,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0161_drop_project_hourly_rates.sql",
       "0162_drop_push_token.sql",
       "0163_payment_means_global.sql",
+      "0164_address_name_unique_weg.sql",
     ]);
   });
 
