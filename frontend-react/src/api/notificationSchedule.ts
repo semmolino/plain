@@ -48,4 +48,4 @@ export const upsertNotificationSchedule = (typeKey: string, body: UpsertNotifica
   apiClient.put<{ data: NotificationSchedule }>(`/notification-schedule/${encodeURIComponent(typeKey)}`, body)
 
 export const runNotificationScheduleNow = (typeKey: string) =>
-  apiClient.post<{ ok: boolean; created: number }>(`/notification-schedule/${encodeURIComponent(typeKey)}/run-now`, {})
+  apiClient.post<{ ok: boolean; created: number; bereitsHeute: number }>(`/notification-schedule/${encodeURIComponent(typeKey)}/run-now`, {})

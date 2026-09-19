@@ -49,8 +49,11 @@ async function lauf({ projects, cfg }) {
     NOTIFICATION: [],
     NOTIFICATION_TYPE: [],
   });
-  const created = await checker.runNowForTenant(db, TENANT);
-  return { created, notifs: db._tables.NOTIFICATION, db };
+  // runNowForTenant meldet seit 09/2026 { created, bereitsHeute }: eine Null
+  // allein sagt nicht, ob es nichts zu erinnern gab oder ob die Tagessperre
+  // gegriffen hat.
+  const { created, bereitsHeute } = await checker.runNowForTenant(db, TENANT);
+  return { created, bereitsHeute, notifs: db._tables.NOTIFICATION, db };
 }
 
 describe("Leistungsstand-Reminder — eine je Projekt (Vorgabe)", () => {
@@ -135,6 +138,36 @@ describe("Leistungsstand-Reminder — eine insgesamt", () => {
     delete cfg.PM_NOTIFY_MODE;
     const { created } = await lauf({ projects: [projekt(1, 7), projekt(2, 7)], cfg });
     expect(created).toBe(2);
+  });
+});
+
+describe("Leistungsstand-Reminder — warum nichts passiert ist", () => {
+  // Der Fall, in dem der Knopf scheinbar wirkungslos bleibt: fuer heute wurde
+  // schon erinnert. Ohne bereitsHeute meldete die Oberflaeche dazu ein gruenes
+  // "0 Notification(s)" und liess offen, ob die Sperre griff oder ob es nichts
+  // zu erinnern gab. Aus Nutzersicht: "es kommt gar nichts mehr".
+  test("zweiter Lauf am selben Tag: created 0, aber bereitsHeute nennt den Grund", async () => {
+    const db = makeFakeSupabase({
+      NOTIFICATION_SCHEDULE_CONFIG: [konfig()],
+      PROJECT: [projekt(1, 7), projekt(2, 7)],
+      EMPLOYEE: [],
+      NOTIFICATION: [],
+      NOTIFICATION_TYPE: [],
+    });
+
+    const ersterLauf = await checker.runNowForTenant(db, TENANT);
+    expect(ersterLauf.created).toBe(2);
+    expect(ersterLauf.bereitsHeute).toBe(0);   // nichts zu melden, es lief ja
+
+    const zweiterLauf = await checker.runNowForTenant(db, TENANT);
+    expect(zweiterLauf.created).toBe(0);
+    expect(zweiterLauf.bereitsHeute).toBe(2);  // DAS ist die Auskunft
+  });
+
+  test("nichts zu erinnern ist etwas anderes als gesperrt", async () => {
+    const { created, bereitsHeute } = await lauf({ projects: [], cfg: konfig() });
+    expect(created).toBe(0);
+    expect(bereitsHeute).toBe(0);              // keine Sperre, schlicht nichts da
   });
 });
 

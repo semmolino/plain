@@ -3331,6 +3331,14 @@ function ZustellungDiagnoseBlock() {
                     : 'noch nicht gelaufen'}
                   {c.gesehen  != null && <> · {c.gesehen} geprüft</>}
                   {c.erstellt != null && <> · {c.erstellt} erstellt</>}
+                  {/* Die zeitplangesteuerten Checker prüfen minütlich. Der letzte
+                      Lauf ist deshalb fast immer ein leerer — ohne diese Angabe
+                      stünde hier dauerhaft „0 erstellt", auch eine Minute nachdem
+                      Erinnerungen rausgingen. */}
+                  {c.zuletztErstelltUm && (
+                    <> · zuletzt {c.zuletztErstellt} erzeugt am{' '}
+                      {c.zuletztErstelltUm.slice(0, 16).replace('T', ' ')} UTC</>
+                  )}
                   {c.fehler && <> · <Befund gut={false} text={c.fehler} /></>}
                 </span>
               </div>
@@ -3484,7 +3492,19 @@ function LeistungsstandReminderBlock() {
     mutationFn: () => runNotificationScheduleNow(TYPE_KEY),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
-      toast.success(`Erinnerungen ausgeloest: ${r.created} Notification(s)`)
+      if (r.created > 0) {
+        toast.success(`Erinnerungen ausgelöst: ${r.created} Benachrichtigung(en)`)
+      } else if (r.bereitsHeute > 0) {
+        // Null ist hier kein Erfolg, sondern eine Sperre: für heute wurde
+        // bereits erinnert. Ohne diesen Hinweis tut der Knopf scheinbar nichts.
+        toast.info(
+          `Nichts zu tun — für heute wurden bereits ${r.bereitsHeute} Benachrichtigung(en) ` +
+          `erzeugt. Damit niemand dieselbe Erinnerung zweimal bekommt, bleibt es dabei ` +
+          `bis Mitternacht.`,
+        )
+      } else {
+        toast.info(`Nichts zu erinnern — es gibt derzeit keine passenden Einträge.`)
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   })
@@ -3777,7 +3797,19 @@ function HoursBookingReminderBlock() {
     mutationFn: () => runNotificationScheduleNow(TYPE_KEY),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['notification-schedule', TYPE_KEY] })
-      toast.success(`Erinnerungen ausgeloest: ${r.created} Notification(s)`)
+      if (r.created > 0) {
+        toast.success(`Erinnerungen ausgelöst: ${r.created} Benachrichtigung(en)`)
+      } else if (r.bereitsHeute > 0) {
+        // Null ist hier kein Erfolg, sondern eine Sperre: für heute wurde
+        // bereits erinnert. Ohne diesen Hinweis tut der Knopf scheinbar nichts.
+        toast.info(
+          `Nichts zu tun — für heute wurden bereits ${r.bereitsHeute} Benachrichtigung(en) ` +
+          `erzeugt. Damit niemand dieselbe Erinnerung zweimal bekommt, bleibt es dabei ` +
+          `bis Mitternacht.`,
+        )
+      } else {
+        toast.info(`Nichts zu erinnern — es gibt derzeit keine passenden Einträge.`)
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   })

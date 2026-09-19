@@ -56,6 +56,10 @@ export interface CheckerHealth {
   gesehen:   number | null
   /** Wie viele Benachrichtigungen er geschrieben hat. */
   erstellt:  number | null
+  /** Der letzte Lauf MIT Wirkung — die zeitplangesteuerten Checker prüfen
+   *  minütlich, der letzte Lauf ist deshalb fast immer ein leerer. */
+  zuletztErstellt:   number | null
+  zuletztErstelltUm: string | null
   fehler:    string | null
   laeufe:    number
 }

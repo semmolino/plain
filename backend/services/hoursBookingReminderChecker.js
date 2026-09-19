@@ -171,14 +171,35 @@ async function runNowForTenant(supabase, tenantId) {
   if (error) throw error;
   if (!data) throw { status: 404, message: "Keine Konfiguration vorhanden" };
   if (!data.ENABLED) throw { status: 400, message: "Schedule ist deaktiviert" };
-  return fireForTenant(supabase, data, todayStr);
+
+  const created = await fireForTenant(supabase, data, todayStr);
+
+  // Siehe leistungsstandReminderChecker: eine Null sagt nicht, ob es nichts zu
+  // erinnern gab oder ob fuer heute schon erinnert wurde. Die Gegenprobe
+  // laeuft nur im Nullfall und kostet eine Abfrage.
+  let bereitsHeute = 0;
+  if (created === 0) {
+    const { data: heute } = await supabase
+      .from("NOTIFICATION")
+      .select("ID")
+      .eq("TENANT_ID", tenantId)
+      .eq("TYPE", TYPE_KEY)
+      .eq("METADATA->>ref_date", todayStr);
+    bereitsHeute = Array.isArray(heute) ? heute.length : 0;
+  }
+  return { created, bereitsHeute };
 }
 
-// Boot: 5 Min nach Startup, dann stuendlich (damit eine 09:00-Schwelle
-// nicht erst um 12:00 anschlaegt).
+// Boot: 5 Min nach Startup, dann MINUETLICH.
+//
+// Bis 09/2026 stuendlich — und damit zu grob fuer einen Zeitplan, der eine
+// Uhrzeit auf die Minute genau annimmt. Das Raster hing zudem am Prozessstart
+// und verschob sich nach jedem Deploy. Begruendung und Messung stehen in
+// leistungsstandReminderChecker.js; hier gilt sie genauso, denn beide feuern
+// ueber dieselbe Zeitplan-Pruefung.
 function startHoursBookingReminderChecker(supabase) {
   const RUN_AFTER_MS = 5 * 60 * 1000;
-  const INTERVAL_MS  = 60 * 60 * 1000;
+  const INTERVAL_MS  = 60 * 1000;
   setTimeout(async () => {
     console.log("[HOURS_BOOKING_REMINDER] Initial-Lauf …");
     await health.laufe(TYPE_KEY, () => checkHoursBookingReminders(supabase)).catch(e =>

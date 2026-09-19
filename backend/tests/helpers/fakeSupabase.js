@@ -66,8 +66,32 @@ function makeFakeSupabase(initial = {}, opts = {}) {
     let countMode = null;   // select("ID", { count: "exact", head: true })
     let headOnly = false;
 
+    // PostgREST erlaubt, in eine jsonb-Spalte hineinzufiltern: "METADATA->>key"
+    // liest den Schluessel als TEXT. Genau darauf beruht die Sperre gegen
+    // doppelte Benachrichtigungen (METADATA->>ref_date = heute).
+    //
+    // Der Fake kannte diese Form nicht und suchte eine Spalte, die woertlich
+    // "METADATA->>ref_date" heisst — die es nie gibt. Der Filter lief damit
+    // ins Leere, jeder Lauf erzeugte erneut Benachrichtigungen, und die Sperre
+    // war schlicht nicht pruefbar. Seit die zeitplangesteuerten Checker
+    // minuetlich laufen, ist sie die kritische Stelle: greift sie nicht,
+    // entstehen 1.440 Erinnerungen am Tag statt einer.
+    const wert = (r, col) => {
+      const pfeil = col.indexOf("->>");
+      if (pfeil < 0) return r[col];
+      const spalte = col.slice(0, pfeil);
+      const schluessel = col.slice(pfeil + 3);
+      const inhalt = r[spalte];
+      if (!inhalt || typeof inhalt !== "object") return undefined;
+      const roh = inhalt[schluessel];
+      // ->> liefert TEXT, auch fuer Zahlen — sonst schlaegt der Vergleich mit
+      // String(id) fehl und der Fake waere wieder nachsichtiger als die
+      // Datenbank.
+      return roh === null || roh === undefined ? undefined : String(roh);
+    };
+
     const applyFilters = (rows) => rows.filter(r => filters.every(f => {
-      const v = r[f.col];
+      const v = wert(r, f.col);
       switch (f.op) {
         case "eq":  return v === f.val;
         case "neq": return v !== f.val;

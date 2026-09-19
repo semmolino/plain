@@ -50,8 +50,12 @@ async function runNow(req, res, supabase) {
     if (!runner) {
       return res.status(400).json({ error: `Manueller Trigger fuer ${typeKey} nicht unterstuetzt` });
     }
-    const created = await runner(supabase, req.tenantId);
-    res.json({ ok: true, created });
+    // Die Runner melden { created, bereitsHeute }. bereitsHeute ist der
+    // Unterschied zwischen "es gab nichts zu erinnern" und "fuer heute wurde
+    // bereits erinnert" — zwei Zustaende, die in der Oberflaeche bisher beide
+    // als gruenes "0 Notification(s)" erschienen.
+    const { created, bereitsHeute } = await runner(supabase, req.tenantId);
+    res.json({ ok: true, created, bereitsHeute });
   } catch (e) { res.status(e.status || 500).json({ error: e.message || String(e) }); }
 }
 

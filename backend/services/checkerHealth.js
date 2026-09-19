@@ -27,6 +27,7 @@ function eintrag(name) {
     protokoll.set(name, {
       zuletztUm: null, dauerMs: null,
       gesehen: null, erstellt: null,
+      zuletztErstellt: null, zuletztErstelltUm: null,
       fehler: null, laeufe: 0,
     });
   }
@@ -42,6 +43,17 @@ function melde(name, { gesehen = null, erstellt = null, fehler = null } = {}) {
   if (gesehen  !== null) e.gesehen  = gesehen;
   if (erstellt !== null) e.erstellt = erstellt;
   if (fehler   !== null) e.fehler   = String(fehler);
+
+  // Der letzte Lauf MIT Wirkung, getrennt vom letzten Lauf ueberhaupt.
+  //
+  // Seit die zeitplangesteuerten Checker minuetlich pruefen (statt stuendlich),
+  // ist der letzte Lauf fast immer ein leerer — "0 erstellt" waere die Antwort
+  // auf jede Frage, auch eine Minute nachdem drei Erinnerungen rausgingen.
+  // Diese beiden Felder bewahren, was sonst im Takt untergeht.
+  if (erstellt !== null && erstellt > 0) {
+    e.zuletztErstellt   = erstellt;
+    e.zuletztErstelltUm = new Date().toISOString();
+  }
 }
 
 // Umschliesst einen Checker-Lauf: Zeitstempel, Dauer und unerwartete Fehler.

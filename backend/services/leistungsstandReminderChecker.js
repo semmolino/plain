@@ -247,13 +247,30 @@ function todayLocal() {
   return schedule.localDateStr();
 }
 
-// Boot: 5 Min nach Startup ersten Lauf, danach stuendlich — damit eine auf
-// 09:00 gestellte Erinnerung auch um 09:xx rausgeht und nicht erst, wenn ein
-// grober Takt den Tag zufaellig trifft. Mehrfachlaeufe sind unschaedlich:
-// LAST_FIRED_DATE und die ref_date-Pruefung machen den Lauf idempotent.
+// Boot: 5 Min nach Startup ersten Lauf, danach MINUETLICH.
+//
+// WARUM NICHT STUENDLICH (bis 09/2026)
+//   Der Zeitplan laesst eine Uhrzeit auf die Minute genau einstellen. Ein
+//   stuendlicher Takt kann dieses Versprechen nicht halten: er trifft die
+//   eingestellte Zeit nur zufaellig. Schlimmer noch, das Raster haengt am
+//   PROZESSSTART — nach jedem Deploy liegt es woanders.
+//
+//   Gemessen am 2026-09-17: Prozessstart 17:32 UTC, erster Lauf also 17:37,
+//   danach 18:37, 19:37 … Der Zeitplan stand auf 19:38 Ortszeit (17:38 UTC).
+//   Der Lauf um 17:37 kam eine Minute zu frueh, der naechste eine Stunde zu
+//   spaet. Aus Nutzersicht: "die Erinnerung kommt nicht" — dabei kam sie 59
+//   Minuten spaeter, und am Vortag zu einer anderen Zeit.
+//
+//   Der Takt muss feiner sein als die Genauigkeit, die die Oberflaeche
+//   verspricht. Eine Minute ist billig: ein Lauf laedt die Zeitplaene mit
+//   EINER Abfrage und bricht ab, wenn keiner faellig ist. Was Arbeit kostet,
+//   passiert nur an dem einen Lauf des Tages, der wirklich feuert.
+//
+// Mehrfachlaeufe sind unschaedlich: LAST_FIRED_DATE und die ref_date-Pruefung
+// machen den Lauf idempotent.
 function startLeistungsstandReminderChecker(supabase) {
   const RUN_AFTER_MS = 5 * 60 * 1000;
-  const INTERVAL_MS  = 60 * 60 * 1000;
+  const INTERVAL_MS  = 60 * 1000;
 
   setTimeout(async () => {
     console.log("[LEISTUNGSSTAND_REMINDER] Initial-Lauf …");
@@ -285,7 +302,25 @@ async function runNowForTenant(supabase, tenantId) {
   if (error) throw error;
   if (!data) throw { status: 404, message: "Keine Konfiguration vorhanden" };
   if (!data.ENABLED) throw { status: 400, message: "Schedule ist deaktiviert" };
-  return fireForTenant(supabase, data);
+
+  const created = await fireForTenant(supabase, data);
+
+  // Null erzeugte Benachrichtigungen haben zwei sehr verschiedene Gruende:
+  // entweder gibt es gerade nichts zu erinnern, oder fuer heute wurde bereits
+  // erinnert und die ref_date-Sperre greift. In der Oberflaeche sahen beide
+  // gleich aus — "Erinnerungen ausgeloest: 0", gruen. Wer kurz zuvor getestet
+  // hatte, stand damit vor einem Knopf, der nichts tat und nichts sagte.
+  let bereitsHeute = 0;
+  if (created === 0) {
+    const { data: heute } = await supabase
+      .from("NOTIFICATION")
+      .select("ID")
+      .eq("TENANT_ID", tenantId)
+      .eq("TYPE", TYPE_KEY)
+      .eq("METADATA->>ref_date", todayLocal());
+    bereitsHeute = Array.isArray(heute) ? heute.length : 0;
+  }
+  return { created, bereitsHeute };
 }
 
 module.exports = {
