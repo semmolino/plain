@@ -299,7 +299,10 @@ export function ImportSection() {
       {done && !preview && (
         <Message text={`Import abgeschlossen: ${done.inserted} Datensätze angelegt. Du kannst eine weitere Datei importieren.`} type="success" />
       )}
-      {err && <Message text={err} type="error" />}
+      {/* Bei offener Vorschau steht die Meldung unten an der Aktionsleiste —
+          hier oben wäre sie außerhalb des Blickfelds. Genau daran sah ein
+          fehlgeschlagener Import aus wie "nichts passiert". */}
+      {err && !preview && <Message text={err} type="error" />}
 
       {/* ── Schritt 2: Zuordnung + Vorschau ─────────────────────────────── */}
       {preview && (
@@ -478,6 +481,8 @@ export function ImportSection() {
                 </label>
               </div>
             )}
+
+            {err && <div style={{ marginTop: 12 }}><Message text={err} type="error" /></div>}
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 12 }}>
               <button type="button" className="btn-primary" disabled={commitMut.isPending || previewMut.isPending || importableCount === 0}

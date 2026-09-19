@@ -70,6 +70,24 @@ throw { status: 400, message: 'Pflichtfeld fehlt' }
 }
 ```
 
+**Datei-Uploads: multer braucht `keepScope`.** `tenantScope` spannt den
+Mandanten mit `als.run()` auf — das trägt durch Promises und Timer, aber nicht
+durch einen Handler, der seine Fortsetzung aus einem **Stream-Ereignis** heraus
+aufruft. Genau das tut multer: busboy liest den multipart-Rumpf, die
+`data`/`end`-Ereignisse löst der HTTP-Parser im Kontext des Servers aus. Alles
+hinter `upload.single(…)` lief deshalb **ohne Mandanten-Claim**. Jeder
+multer-Handler gehört in `keepScope(…)` aus `db.js`; geprüft von
+`tests/uploadScope.test.js` (der Wächter dort findet auch eine neue
+Upload-Route ohne Brücke).
+
+Der Schaden war lange unsichtbar, weil **Lesen und Schreiben verschieden
+scheitern**: der Import-Vorschau fehlte der Bestand, sie meldete „0 Dubletten"
+statt eines Fehlers — plausibel aussehend und falsch. Erst der Schreibzugriff
+fiel auf (`new row violates row-level security policy for table "IMPORT_BATCH"`).
+**Ein fehlender Claim ist beim Lesen kein Fehler, sondern ein falsches
+Ergebnis** — deshalb warnt `db.js` beim claimlosen Zugriff jetzt je
+Aufrufstelle und je Minute samt Stapel, statt einmal je Prozessleben.
+
 **Dateiablage — nie `fs.*`**: Dateien laufen ausschließlich über
 `services/objectStorage.js` (`put` / `getBuffer` / `getStream` / `exists` /
 `remove`), geschlüsselt über `STORAGE_KEY`. Auf Scalingo gibt es kein

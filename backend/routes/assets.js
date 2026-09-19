@@ -2,6 +2,7 @@ const express = require("express");
 const path = require("path");
 const crypto = require("crypto");
 const multer = require("multer");
+const { keepScope } = require("../db");
 const { checkStorageLimit } = require("../middleware/limits");
 const objectStorage = require("../services/objectStorage");
 const { sendeDateiSicher } = require("../services/fileResponse");
@@ -97,7 +98,7 @@ module.exports = (supabase) => {
   // multipart-Body und ist vorher schlicht nicht lesbar. Die Datei liegt dann
   // im Arbeitsspeicher (memoryStorage), nicht auf der Platte — ein abgelehnter
   // Upload hinterlaesst also nichts.
-  router.post("/upload", upload.single("file"), uploadGuard, async (req, res) => {
+  router.post("/upload", keepScope(upload.single("file")), uploadGuard, async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ error: "file is required" });
 

@@ -4,6 +4,7 @@ const express = require("express");
 const multer = require("multer");
 const ctrl = require("../controllers/importController");
 const { requirePermission } = require("../middleware/permissions");
+const { keepScope } = require("../db");
 
 // Datei im Speicher halten (kein Schreiben auf Platte); 5 MB Limit; nur Tabellen.
 const upload = multer({
@@ -17,6 +18,12 @@ const upload = multer({
 
 const GUARD = requirePermission("import.manage");
 
+// multer liest den Rumpf aus Stream-Ereignissen und verliert dabei den
+// Mandanten-Kontext (siehe keepScope in db.js). Ohne die Bruecke laeuft der
+// gesamte Import claimlos: die Vorschau sieht keinen Bestand, der Commit wird
+// von RLS abgewiesen.
+const DATEI = keepScope(upload.single("file"));
+
 module.exports = (supabase) => {
   const router = express.Router();
 
@@ -25,9 +32,9 @@ module.exports = (supabase) => {
   router.post("/batches/:id/rollback", GUARD, (req, res) => ctrl.postRollback(req, res, supabase));
   router.get("/project_structure/prefill", GUARD, (req, res) => ctrl.getStructurePrefill(req, res, supabase));
   router.get("/:domain/template",     GUARD, (req, res) => ctrl.getTemplate(req, res, supabase));
-  router.post("/:domain/preview",     GUARD, upload.single("file"), (req, res) => ctrl.postPreview(req, res, supabase));
-  router.post("/:domain/commit",      GUARD, upload.single("file"), (req, res) => ctrl.postCommit(req, res, supabase));
-  router.post("/:domain/errors",      GUARD, upload.single("file"), (req, res) => ctrl.postErrorReport(req, res, supabase));
+  router.post("/:domain/preview",     GUARD, DATEI, (req, res) => ctrl.postPreview(req, res, supabase));
+  router.post("/:domain/commit",      GUARD, DATEI, (req, res) => ctrl.postCommit(req, res, supabase));
+  router.post("/:domain/errors",      GUARD, DATEI, (req, res) => ctrl.postErrorReport(req, res, supabase));
 
   return router;
 };

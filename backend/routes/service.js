@@ -2,6 +2,7 @@
 const express = require("express");
 const crypto = require("crypto");
 const multer = require("multer");
+const { keepScope } = require("../db");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 const { sendMail } = require("../services/emailService");
 const { stripImageMetadata } = require("../services/imageStrip");
@@ -585,8 +586,14 @@ module.exports = (supabase) => {
     },
   });
   // Multer-Fehler (z. B. zu groß / falscher Typ) sauber als 400 zurückgeben.
+  //
+  // keepScope ist hier kein Beiwerk: multer ruft seine Fortsetzung aus einem
+  // Stream-Ereignis heraus auf und verliert dabei den Mandanten-Kontext
+  // (Begründung in db.js). Ohne die Brücke läuft der Handler claimlos — er
+  // fände den Eltern-Datensatz nicht und könnte den Anhang nicht schreiben.
+  const attDatei = keepScope(attUpload.single("file"));
   function withUpload(handler) {
-    return (req, res) => attUpload.single("file")(req, res, (err) => {
+    return (req, res) => attDatei(req, res, (err) => {
       if (err) return res.status(err.status || 400).json({ error: err.message || "Upload fehlgeschlagen" });
       handler(req, res).catch((e) => res.status(e?.status || 500).json({ error: e?.message || String(e) }));
     });

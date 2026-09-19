@@ -34,7 +34,7 @@
 //   damit eine Umgebungsvariable — und der Rueckweg auch.
 // ============================================================================
 
-const { AsyncLocalStorage } = require("node:async_hooks");
+const { AsyncLocalStorage, AsyncResource } = require("node:async_hooks");
 const jwt = require("jsonwebtoken");
 const { createClient } = require("@supabase/supabase-js");
 
@@ -194,15 +194,31 @@ const systemScopeOf = () =>
 // Marker macht ausserdem im Log erkennbar, woher die Abfrage kam.
 const anonymerClient = () => scopedClient("anon", mitRolle({ scope: "none" }));
 
-let warnungGezeigt = false;
+// Die Warnung war frueher auf EINE Zeile je Prozessleben gedrosselt. Das war zu
+// wenig: der Kontextverlust hinter multer (siehe keepScope) hat genau eine
+// Zeile erzeugt, danach schwieg der Prozess tagelang weiter — waehrend jeder
+// Datei-Upload ohne Mandanten lief. Ein stiller Ausfall braucht ein Signal, das
+// nicht nach dem ersten Mal verstummt.
+//
+// Drosselung deshalb je AUFRUFSTELLE und je Minute, und mit dem Stapel dabei:
+// ohne ihn steht im Log nur, DASS der Kontext fehlt, nicht wo.
+const warnungZuletzt = new Map();
+const WARNUNG_ABSTAND_MS = 60_000;
+
 function ohneKontext() {
-  if (!warnungGezeigt) {
-    warnungGezeigt = true;
+  // Die eigenen Rahmen (Error, ohneKontext, aktuellerClient, Proxy) ueberspringen.
+  const stapel = (new Error().stack || "").split("\n").slice(4, 7).map((z) => z.trim());
+  const stelle = stapel[0] || "unbekannt";
+  const jetzt = Date.now();
+  const zuletzt = warnungZuletzt.get(stelle);
+  if (zuletzt == null || zuletzt <= jetzt - WARNUNG_ABSTAND_MS) {
+    warnungZuletzt.set(stelle, jetzt);
     console.warn(
       "[db] Datenbankzugriff ausserhalb eines Request- oder Systemkontexts. " +
       "Die Abfrage laeuft ohne Mandanten-Claim und liefert daher keine Zeilen. " +
-      "Ursache suchen: fehlt tenantScope in der Kette, oder ein Hintergrunddienst " +
-      "ohne runAsSystem?"
+      "Ursache suchen: fehlt tenantScope in der Kette, ein Hintergrunddienst " +
+      "ohne runAsSystem, oder ein kontextverlierender Handler ohne keepScope " +
+      "(z. B. multer)?\n       " + stapel.join("\n       ")
     );
   }
   return anonymerClient();
@@ -271,6 +287,36 @@ function systemScope(_req, _res, next) {
   als.run(systemScopeOf(), next);
 }
 
+// ── Kontextverlierende Handler ueberbruecken ────────────────────────────────
+//
+// tenantScope setzt den Mandanten mit als.run(scope, next). Das traegt durch
+// jede Kette von Promises und Timern — aber NICHT durch einen Handler, der
+// seine Fortsetzung aus einem Stream-Ereignis heraus aufruft.
+//
+// Genau das tut multer: es liest den multipart-Rumpf ueber busboy vom
+// Request-Stream. Dessen 'data'/'end'-Ereignisse werden vom HTTP-Parser
+// ausgeloest, also aus dem Kontext des SERVERS — und der kennt den Mandanten
+// nicht. Alles hinter upload.single(...) lief damit im claimlosen Rueckfall:
+//
+//   • POST /import/:domain/preview  las 0 Bestandsadressen und meldete deshalb
+//     0 Dubletten — falsch, aber ohne Fehlermeldung
+//   • POST /import/:domain/commit   scheiterte beim ersten Schreibzugriff mit
+//     "new row violates row-level security policy for table IMPORT_BATCH"
+//   • POST /assets/upload           fand kein Unternehmen zum Mandanten
+//
+// AsyncResource.bind merkt sich den Kontext, der beim Umhuellen gilt (hier: der
+// des Requests, denn keepScope laeuft als Middleware hinter tenantScope), und
+// stellt ihn beim Aufruf wieder her. Die Bruecke gehoert um JEDEN multer-Handler.
+//
+// Warum nicht stattdessen in tenantScope: dort ist der Stream noch gar nicht
+// gelesen. Der Kontext geht nicht beim Setzen verloren, sondern beim Wechsel
+// vom Request in das Stream-Ereignis — und der findet hier statt.
+function keepScope(mw) {
+  return function (req, res, next) {
+    return mw(req, res, AsyncResource.bind(next));
+  };
+}
+
 function assertConfigured() {
   if (!AKTIV) return;
   const fehlend = ["PGRST_JWT_SECRET"].filter((v) => !process.env[v]);
@@ -293,10 +339,11 @@ module.exports = {
   tenantScope,
   systemScope,
   runAsSystem,
+  keepScope,
   assertConfigured,
   mode: () => (AKTIV ? "postgrest" : "supabase"),
   // nur fuer Tests
   _pfadKorrigieren: pfadKorrigieren,
   _als: als,
-  _resetForTests: () => { clients.clear(); legacy = null; warnungGezeigt = false; },
+  _resetForTests: () => { clients.clear(); legacy = null; warnungZuletzt.clear(); },
 };
