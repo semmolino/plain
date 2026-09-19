@@ -1,3 +1,6 @@
 node_modules/
 .env
 *.log
+
+# Lokales PostgREST samt libpq und die Laufzeitdatei von scripts/start.js
+bin/

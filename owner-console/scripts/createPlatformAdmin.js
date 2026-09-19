@@ -9,11 +9,19 @@
  *   npm run create-admin -- <email> <passwort>
  *   (oder ADMIN_EMAIL / ADMIN_PASSWORD als Env)
  *
- * Voraussetzung: Migration 0070 ist eingespielt (Tabelle PLATFORM_ADMIN) und
- * SUPABASE_URL / SUPABASE_SERVICE_KEY in .env gesetzt.
+ * Voraussetzung: die Konsole laeuft (npm start) — dieses Skript benutzt deren
+ * Tunnel und PostgREST mit. Ohne laufenden Stapel bricht es ab, statt auf eine
+ * andere Datenbank auszuweichen.
  */
 
 require("dotenv").config();
+
+const laufzeit = require("./laufzeit");
+if (!laufzeit.anwenden()) {
+  console.error(laufzeit.HINWEIS);
+  process.exit(1);
+}
+
 const bcrypt = require("bcryptjs");
 const { authenticator } = require("otplib");
 const { supabase } = require("../services/db");

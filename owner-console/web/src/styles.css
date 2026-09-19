@@ -105,6 +105,17 @@ button.primary:disabled { opacity: 0.6; cursor: default; }
 .topbar .brand span { color: #6ea8fe; }
 .topbar .spacer { flex: 1; }
 .topbar .email { color: #aeb6c9; font-size: 13px; }
+/* Datenquelle: leise, aber immer da. Sie beantwortet die Frage, die man sich
+   sonst erst stellt, wenn die Zahlen schon komisch aussahen. */
+.topbar .quelle {
+  color: #8b93a7;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 3px 10px;
+  margin-right: 10px;
+  white-space: nowrap;
+}
 .tabs { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .tab-slot { display: inline-flex; align-items: center; gap: 4px; }
 .tab-sep { width: 1px; height: 20px; background: rgba(255, 255, 255, 0.18); margin: 0 6px; }
@@ -126,7 +137,7 @@ button.link.danger { color: var(--danger); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 @media (max-width: 720px) {
   .topbar { flex-wrap: wrap; }
-  .topbar .email { display: none; }
+  .topbar .email, .topbar .quelle { display: none; }
 }
 
 .content { padding: 24px; max-width: 1280px; margin: 0 auto; }

@@ -3,7 +3,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const { authenticator } = require("otplib");
-const { supabase } = require("../services/db");
+const { supabase, datenquelle } = require("../services/db");
 const { issueConsoleToken, consoleAuth, invalidateAdminCache } = require("../middleware/consoleAuth");
 const { loginLimiter } = require("../middleware/rateLimit");
 const { writeChangeLog } = require("../services/audit");
@@ -72,6 +72,8 @@ router.get("/me", consoleAuth, async (req, res) => {
     totp_enabled: !!(data && data.TOTP_SECRET),
     require_totp: REQUIRE_TOTP,
     last_login_at: data?.LAST_LOGIN_AT ?? null,
+    // Damit in der Kopfzeile steht, welche Datenbank man gerade vor sich hat.
+    datenquelle: datenquelle(),
   });
 });
 

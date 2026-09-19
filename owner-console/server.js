@@ -8,6 +8,10 @@ const cors = require("cors");
 const helmet = require("helmet");
 const { consoleAuth } = require("./middleware/consoleAuth");
 const { writeLimiter } = require("./middleware/rateLimit");
+// Laedt den Datenbankzugang und bricht ab, wenn er nicht auf die
+// Scalingo-Datenbank zeigt (services/db.js erklaert, warum das ein Abbruch
+// und keine Warnung ist).
+const { datenquelle } = require("./services/db");
 
 const app = express();
 const port = process.env.CONSOLE_PORT || 4000;
@@ -33,7 +37,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.get("/health", (_req, res) => res.json({ ok: true, service: "owner-console" }));
+app.get("/health", (_req, res) => res.json({ ok: true, service: "owner-console", db: datenquelle() }));
 
 // Öffentlich: nur Login
 app.use("/api/console/auth", require("./routes/auth"));
@@ -61,4 +65,10 @@ if (fs.existsSync(path.join(WEB_DIST, "index.html"))) {
   console.warn("[owner-console] web/dist fehlt — UI nicht gebaut. Nur API verfügbar.");
 }
 
-app.listen(port, () => console.log(`✅ Owner-Konsole läuft auf http://localhost:${port}`));
+app.listen(port, () => {
+  console.log(`✅ Owner-Konsole läuft auf http://localhost:${port}`);
+  // Welche Datenbank dahinter steckt, gehört ins Startprotokoll: die Konsole
+  // zeigt Zahlen über alle Mandanten, und monatelang waren es die einer
+  // abgehängten Instanz, ohne dass irgendwo etwas davon stand.
+  console.log(`🗄  Datenquelle: ${datenquelle().herkunft}`);
+});

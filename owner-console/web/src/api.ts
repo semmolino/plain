@@ -419,6 +419,7 @@ export const api = {
       totp_enabled?: boolean
       require_totp?: boolean
       last_login_at?: string | null
+      datenquelle?: { art: string; herkunft: string }
     }>('/auth/me'),
   totpSetup: () => req<{ secret: string; otpauth: string }>('/auth/totp/setup', { method: 'POST', body: '{}' }),
   totpConfirm: (code: string) =>

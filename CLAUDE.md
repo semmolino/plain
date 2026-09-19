@@ -212,7 +212,8 @@ pauschal alles aus `MODULE IN (…, "reports", …)`. Eine neue Permission in ei
 dieser Module fällt also automatisch an den Projektleiter — wenn das nicht
 gewollt ist, in `nichtFuerProjektleiter` eintragen.
 
-**Key tables**: `TENANT`, `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `ADVANCE_INVOICE`, `BOOKING`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`, `WIP_CLOSING`/`WIP_CLOSING_LINE`.
+**Key tables**: `TENANTS` (die Mandantentabelle heisst im Plural — `TENANT` gibt
+es nicht), `COMPANY`, `EMPLOYEE`, `ADDRESS`, `CONTACT`, `PROJECT`, `PROJECT_STRUCTURE`, `PROJECT_PROGRESS`, `EMPLOYEE2PROJECT`, `CONTRACT`, `INVOICE`, `ADVANCE_INVOICE`, `BOOKING`, `OFFER`, `OFFER_STRUCTURE`, `BILLING_TYPE`, `ROLE`, `VAT`, `TENANT_SETTINGS`, `WIP_CLOSING`/`WIP_CLOSING_LINE`.
 
 **BILLING_TYPE_ID**: `1` = fixed-fee (Pauschal), `2` = hourly (Stunden, nach Aufwand).
 
@@ -411,6 +412,36 @@ geplante Benachrichtigung (weder Push noch in-app). Es war ausschließlich für 
 Parallelbetrieb gedacht, als Scalingo und Railway gleichzeitig auf dieselbe Supabase
 zeigten. Läuft nur noch eine Instanz, muss es weg. Prüfbar in der Oberfläche unter
 Einstellungen → Benachrichtigungen → „Zustellung prüfen".
+
+---
+
+## Owner-Konsole — läuft auf dem Arbeitsplatz, liest die Scalingo-Datenbank
+
+`owner-console/` ist eine eigenständige App (eigene Auth, eigenes Secret, TOTP)
+und wird **nicht deployt**. Sie startet mit `npm start` bzw. `start-konsole.cmd`
+— und das startet drei Dinge: `scalingo db-tunnel`, ein **lokales PostgREST**
+davor und dann erst `server.js` (`owner-console/scripts/start.js`). Nötig ist
+der Umweg, weil PostgREST im Scalingo-Container nur auf `127.0.0.1` lauscht.
+Die Konsole trägt dabei den `sys`-Claim — sie ist neben Signup und den
+Hintergrund-Checkern der dritte Träger.
+
+**`node server.js` allein geht nicht mehr, und das ist Absicht.** Bis 09/2026
+hatte die Konsole einen eigenen Supabase-Client und ist beim Umzug nicht
+mitgegangen: sie las danach monatelang die abgehängte Supabase und zeigte deren
+Datenstand an, ohne das irgendwo zu sagen. Aufgefallen ist es erst, als die
+Lizenz-Inbox den heutigen Code gegen ein Schema von vor den Umbenennungen hielt
+(`TEC` statt `BOOKING`, 112 statt 114 Permissions) und 37 Befunde meldete, von
+denen 12 reine Artefakte waren. Ohne `POSTGREST_URL` bricht sie deshalb ab,
+statt zurückzufallen; **welche Datenbank dahintersteckt, steht im
+Startprotokoll, unter `/health` und in der Kopfzeile der Oberfläche.**
+
+Die Anwendung selbst kennt denselben Rückfall (`backend/db.js` ohne
+`POSTGREST_URL` → alter Supabase-Client). Sie protokolliert ihn beim Start
+(`🗄 Datenbankweg: …`), bricht aber nicht ab — auf Scalingo stehen
+`SUPABASE_URL`/`SUPABASE_SERVICE_KEY` weiterhin in der Umgebung.
+
+Einrichtung, Stellschrauben und Fallstricke (SSH-Schlüssel, `libpq` unter
+Windows): `owner-console/README.md`.
 
 ---
 

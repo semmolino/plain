@@ -5,7 +5,8 @@
   "description": "PlaIn Lizenz-/Owner-Konsole (Control-Plane, strikt getrennt von der Tenant-App)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node scripts/start.js",
+    "postgrest": "node scripts/postgrestHolen.js",
     "create-admin": "node scripts/createPlatformAdmin.js"
   },
   "dependencies": {

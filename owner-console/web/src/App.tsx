@@ -17,7 +17,7 @@ import { SecurityView } from './pages/Security'
 import { EmailSettingsView } from './pages/EmailSettings'
 
 type Tab =
-  | 'inbox' | 'matrix' | 'plans' | 'tenants' | 'functions' | 'catalog' | 'overrides'
+  | 'inbox' | 'matrix' | 'plans' | 'tenants' | 'signups' | 'functions' | 'catalog' | 'overrides'
   | 'audit' | 'suggestions' | 'requests' | 'analytics' | 'email'
 
 interface TabDef { id: Tab; label: string; group: 'license' | 'service' }
@@ -57,6 +57,10 @@ export function App() {
   const [checking, setChecking] = useState<boolean>(!!getToken())
   const [showSecurity, setShowSecurity] = useState(false)
   const [totpEnabled, setTotpEnabled] = useState<boolean | null>(null)
+  // Woher die Zahlen stammen. Die Konsole hat monatelang eine abgehängte
+  // Datenbank angezeigt, ohne das irgendwo zu sagen — deshalb steht es jetzt
+  // in der Kopfzeile.
+  const [datenquelle, setDatenquelle] = useState<string | null>(null)
 
   // Tab-Zustand in der URL (Reload-fest, Deep-Links aus der Inbox).
   useEffect(() => {
@@ -81,6 +85,7 @@ export function App() {
       .then((me) => {
         setEmail(me.email)
         setTotpEnabled(!!me.totp_enabled)
+        setDatenquelle(me.datenquelle?.herkunft ?? null)
         setAuthed(true)
       })
       .catch((e: unknown) => {
@@ -109,7 +114,13 @@ export function App() {
         onSuccess={(em) => {
           setEmail(em)
           setShowSecurity(false)
-          api.me().then((me) => setTotpEnabled(!!me.totp_enabled)).catch(() => {})
+          api
+            .me()
+            .then((me) => {
+              setTotpEnabled(!!me.totp_enabled)
+              setDatenquelle(me.datenquelle?.herkunft ?? null)
+            })
+            .catch(() => {})
           setAuthed(true)
         }}
       />
@@ -139,6 +150,11 @@ export function App() {
           })}
         </nav>
         <div className="spacer" />
+        {datenquelle && (
+          <span className="muted quelle" title={`Datenquelle: ${datenquelle}`}>
+            {datenquelle}
+          </span>
+        )}
         <span className="muted email">{email}</span>
         <button className="link" onClick={() => setShowSecurity(true)} title="Konto & Sicherheit">
           Konto{totpEnabled === false ? ' ⚠' : ''}
