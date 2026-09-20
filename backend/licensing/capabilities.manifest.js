@@ -131,7 +131,13 @@ const capabilities = [
   { key: "employees.management", module: "employees", labelDe: "Mitarbeiterverwaltung", type: "boolean",
     permissions: ["employees.view", "employees.create", "employees.edit", "employees.delete",
       "employees.role.assign", "employees.password.set", "employees.bookings.view_all"], since: SINCE },
-  { key: "employees.salary", module: "employees", labelDe: "Gehaltsdaten", type: "boolean",
+  // Der Schluessel heisst "salary", gated wird aber der KOSTENSATZ in EUR/h
+  // (EMPLOYEE_COST_RATE) — kein Gehalt. Die alte Bezeichnung "Gehaltsdaten"
+  // liess im Tarifvergleich an Lohnabrechnung denken und war nicht von
+  // cost_rate.calculator zu unterscheiden; genau diese Verwechslung hat bei
+  // der wiko-Uebernahme eine Stunde Fehlersuche gekostet. Der Schluessel
+  // bleibt, damit bestehende Tarif-Zuordnungen nicht brechen.
+  { key: "employees.salary", module: "employees", labelDe: "Individuelle Kostensätze je Mitarbeiter", type: "boolean",
     permissions: ["employees.salary.view", "employees.salary.edit"], since: SINCE },
   { key: "employees.month_close", module: "employees", labelDe: "Monatsabschluss", type: "boolean",
     permissions: ["employees.month_close.edit", "settings.monthly_close.edit"], since: SINCE },

@@ -140,6 +140,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0163 macht PAYMENT_MEANS zum globalen, schreibgeschuetzten Katalog.
     // 0164 entfernt die Unique-Regel auf ADDRESS.ADDRESS_NAME_1, die ueber alle
     // Mandanten hinweg galt und den Adressimport abbrechen liess.
+    // 0166 benennt die Kostensatz-Rechte um (hiessen "Gehalt").
     // 0165 ergaenzt Geburtstag, Notiz und Vorgesetzter am Mitarbeiter und die
     // Stapel-Kennung auf den vier Nebentabellen des Mitarbeiter-Imports.
     expect(offen).toEqual([
@@ -176,6 +177,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0163_payment_means_global.sql",
       "0164_address_name_unique_weg.sql",
       "0165_employee_import_felder.sql",
+      "0166_kostensatz_rechte_benennen.sql",
     ]);
   });
 

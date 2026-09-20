@@ -51,20 +51,36 @@ function build() {
   // Module
   L.push('-- 1. Module');
   L.push('INSERT INTO "LICENSE_MODULE" ("KEY","LABEL_DE","POSITION") VALUES');
+  // DO UPDATE, nicht DO NOTHING: das Manifest ist die Quelle der Wahrheit.
+  // Mit DO NOTHING erreichte eine geaenderte Bezeichnung die Datenbank nie —
+  // die Datei wurde zwar neu erzeugt und ihr Hash aenderte sich, der
+  // wiederholte Lauf tat dann aber nichts. Und der Drift-Pruefer vergleicht
+  // nur, WELCHE Capabilities es gibt, nicht wie sie heissen: ein veralteter
+  // Text faellt also nirgends auf.
   L.push(
     modules.map((m) => `  (${q(m.key)}, ${q(m.labelDe)}, ${m.position || 0})`).join(",\n") + "\n" +
-    'ON CONFLICT ("KEY") DO NOTHING;'
+    'ON CONFLICT ("KEY") DO UPDATE SET\n' +
+    '  "LABEL_DE" = EXCLUDED."LABEL_DE",\n' +
+    '  "POSITION" = EXCLUDED."POSITION";'
   );
   L.push("");
 
   // Capabilities
   L.push('-- 2. Capabilities');
   L.push('INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","POSITION") VALUES');
+  // Gleiche Begruendung wie bei den Modulen. Mitgezogen werden nur die
+  // beschreibenden Felder samt Modul und Einheit — der KEY bleibt der
+  // Anker, an dem die Tarif-Zuordnungen (PLAN_CAPABILITY) haengen.
   L.push(
     caps.map((c, i) =>
       `  (${q(c.key)}, ${q(c.module)}, ${q(c.labelDe)}, ${q(c.type)}, ${qn(c.unit || null)}, ${(i + 1) * 10})`
     ).join(",\n") + "\n" +
-    'ON CONFLICT ("KEY") DO NOTHING;'
+    'ON CONFLICT ("KEY") DO UPDATE SET\n' +
+    '  "MODULE_KEY" = EXCLUDED."MODULE_KEY",\n' +
+    '  "LABEL_DE"   = EXCLUDED."LABEL_DE",\n' +
+    '  "TYPE"       = EXCLUDED."TYPE",\n' +
+    '  "UNIT"       = EXCLUDED."UNIT",\n' +
+    '  "POSITION"   = EXCLUDED."POSITION";'
   );
   L.push("");
 

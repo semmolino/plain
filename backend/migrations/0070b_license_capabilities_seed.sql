@@ -29,7 +29,9 @@ INSERT INTO "LICENSE_MODULE" ("KEY","LABEL_DE","POSITION") VALUES
   ('settings', 'Einstellungen', 90),
   ('enterprise', 'Enterprise', 100),
   ('limits', 'Mengen-Limits', 110)
-ON CONFLICT ("KEY") DO NOTHING;
+ON CONFLICT ("KEY") DO UPDATE SET
+  "LABEL_DE" = EXCLUDED."LABEL_DE",
+  "POSITION" = EXCLUDED."POSITION";
 
 -- 2. Capabilities
 INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","POSITION") VALUES
@@ -59,7 +61,7 @@ INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","P
   ('reports.standard', 'reports', 'Standard-Reports', 'boolean', NULL, 240),
   ('reports.advanced', 'reports', 'Erweiterte Auswertungen & Export', 'boolean', NULL, 250),
   ('employees.management', 'employees', 'Mitarbeiterverwaltung', 'boolean', NULL, 260),
-  ('employees.salary', 'employees', 'Gehaltsdaten', 'boolean', NULL, 270),
+  ('employees.salary', 'employees', 'Individuelle Kostensätze je Mitarbeiter', 'boolean', NULL, 270),
   ('employees.month_close', 'employees', 'Monatsabschluss', 'boolean', NULL, 280),
   ('employees.absence', 'employees', 'Abwesenheiten & Urlaub', 'boolean', NULL, 290),
   ('settings.core', 'settings', 'Stammdaten, Unternehmen, Nummernkreise', 'boolean', NULL, 300),
@@ -79,7 +81,12 @@ INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","P
   ('enterprise.priority_support', 'enterprise', 'Priority Support (SLA)', 'boolean', NULL, 440),
   ('limits.employees', 'limits', 'Maximale Mitarbeiterzahl', 'metered', 'Mitarbeiter', 450),
   ('limits.storage_mb', 'limits', 'Speicherplatz', 'metered', 'MB', 460)
-ON CONFLICT ("KEY") DO NOTHING;
+ON CONFLICT ("KEY") DO UPDATE SET
+  "MODULE_KEY" = EXCLUDED."MODULE_KEY",
+  "LABEL_DE"   = EXCLUDED."LABEL_DE",
+  "TYPE"       = EXCLUDED."TYPE",
+  "UNIT"       = EXCLUDED."UNIT",
+  "POSITION"   = EXCLUDED."POSITION";
 
 -- 3. Capability → Permission (Layer-Verknüpfung)
 INSERT INTO "CAPABILITY_PERMISSION" ("CAPABILITY_KEY","PERMISSION_KEY") VALUES

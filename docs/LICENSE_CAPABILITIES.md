@@ -83,7 +83,7 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 | Capability | Typ | Enthaltene Funktionen |
 |---|---|---|
 | **Mitarbeiterverwaltung**<br>`employees.management` | boolean | Mitarbeiter sehen; Mitarbeiter anlegen; Mitarbeiter bearbeiten; Mitarbeiter löschen; Rollen zuweisen; Passwörter setzen; Buchungen aller Mitarbeiter |
-| **Gehaltsdaten**<br>`employees.salary` | boolean | Gehalt sehen; Gehalt bearbeiten |
+| **Individuelle Kostensätze je Mitarbeiter**<br>`employees.salary` | boolean | Gehalt sehen; Gehalt bearbeiten |
 | **Monatsabschluss**<br>`employees.month_close` | boolean | Monatsabschluss bearbeiten; Monatsabschluss-Einstellungen |
 | **Abwesenheiten & Urlaub**<br>`employees.absence` | boolean | Abwesenheiten ansehen; Abwesenheit beantragen; Abwesenheiten genehmigen; Abwesenheiten verwalten |
 
