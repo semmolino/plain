@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useFeature } from '@/store/licenseStore'
 import { Download, Upload, RotateCcw, CheckCircle2, AlertTriangle, Copy, XCircle } from 'lucide-react'
 import { Message } from '@/components/ui/Message'
 import { InfoHint } from '@/components/ui/InfoHint'
@@ -53,6 +54,10 @@ export function ImportSection() {
   // In der Vorschau abgewaehlte Zeilen (Zeilennummern der Datei).
   const [excluded, setExcluded] = useState<Set<number>>(new Set())
 
+  // Kostensätze hängen an der Lizenz-Capability "employees.salary". Ohne sie
+  // wird die Spalte zwar importiert, ist danach aber nirgends sichtbar — und
+  // das sieht aus, als wäre der Import fehlgeschlagen. Lieber vorher sagen.
+  const hatGehaltFeature = useFeature('employees.salary')
   const { data: batchesData } = useQuery({ queryKey: ['import-batches'], queryFn: fetchImportBatches })
   const batches = batchesData?.data ?? []
 
@@ -485,6 +490,15 @@ export function ImportSection() {
                   <input type="radio" name="structmode" checked={structureMode === 'hoai'} onChange={() => setStructureMode('hoai')} />
                   HOAI-Leistungsphasen LP1–9 — Summe nach §34-Standardprozenten verteilt
                 </label>
+              </div>
+            )}
+
+            {domainKey === 'employee' && !hatGehaltFeature && (
+              <div style={{ marginTop: 12 }}>
+                <Message
+                  type="info"
+                  text={'Hinweis: Die Spalte „Kostensatz" wird mit importiert, ist in deinem Tarif aber nicht einsehbar. Die Werte bleiben gespeichert und erscheinen, sobald der Tarif „Gehalt & Kostensätze" umfasst.'}
+                />
               </div>
             )}
 

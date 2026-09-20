@@ -562,6 +562,12 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
 }) {
   const qc = useQueryClient()
   const canAssignRoles = usePermission('employees.role.assign')
+  // Kostensätze hängen an der Lizenz-Capability "employees.salary" (Tarife
+  // Pro/Full/Enterprise). Fehlt sie, antwortet /cp-rates mit 402 — und der
+  // Reiter zeigte dann "Noch kein Verlauf erfasst". Das ist schlicht falsch:
+  // die Sätze sind gespeichert, nur nicht einsehbar. Genau daran ist bei der
+  // wiko-Übernahme eine Stunde Fehlersuche draufgegangen.
+  const hatGehaltFeature = useFeature('employees.salary')
   // Der Mitarbeiter selbst steht nicht zur Wahl — niemand ist sein eigener
   // Vorgesetzter. Eine Kette A→B→A verhindert das nicht; das wäre erst mit
   // einer Prüfung über die ganze Kette zu haben und ist hier bewusst offen.
@@ -616,7 +622,9 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     enabled:  section === 'zugang',
   })
 
-  const { data: cpRatesRes }    = useQuery({ queryKey: ['emp-cp-rates',    employee.ID], queryFn: () => fetchEmployeeCpRates(employee.ID)   })
+  // Ohne Capability gar nicht erst fragen: sonst feuert bei jedem Öffnen
+  // eines Mitarbeiters ein 402 samt Upgrade-Meldung.
+  const { data: cpRatesRes }    = useQuery({ queryKey: ['emp-cp-rates',    employee.ID], queryFn: () => fetchEmployeeCpRates(employee.ID), enabled: hatGehaltFeature })
   const { data: workModelsRes } = useQuery({ queryKey: ['emp-work-models', employee.ID], queryFn: () => fetchEmployeeWorkModels(employee.ID) })
   const cpRates:   EmployeeCpRate[]    = cpRatesRes?.data   ?? []
   const empWmList: EmployeeWorkModel[] = workModelsRes?.data ?? []
@@ -783,7 +791,9 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Kostensatz</div>
             <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
-              {currentCpRate != null ? `${currentCpRate.toFixed(2)} €/h` : '—'}
+              {!hatGehaltFeature
+                ? <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-3)' }}>nicht im Tarif</span>
+                : currentCpRate != null ? `${currentCpRate.toFixed(2)} €/h` : NO_VALUE}
             </div>
           </div>
           {canViewBookings && (
@@ -890,7 +900,14 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
         </form>
       )}
 
-      {section === 'kostensatz' && (
+      {section === 'kostensatz' && !hatGehaltFeature && (
+        <Message
+          type="info"
+          text={'Kostensätze sind in deinem Tarif nicht enthalten. Bereits erfasste oder importierte Sätze bleiben gespeichert — sichtbar und bearbeitbar werden sie mit einem Tarif, der „Gehalt & Kostensätze" umfasst.'}
+        />
+      )}
+
+      {section === 'kostensatz' && hatGehaltFeature && (
         <div>
           <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
             Gilt ab dem angegebenen Datum. Der aktuell gültige Satz ist der mit dem neuesten Datum.
