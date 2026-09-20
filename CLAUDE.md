@@ -406,6 +406,24 @@ beziehen sich auf diesen früheren Stand.
      oder schreibt, muss `SET request.jwt.claims` selbst setzen (siehe Database
      conventions). Daran ist `0136` gescheitert, nicht am Einspielweg.
 
+   **PostgREST kennt eine neue Spalte nicht von selbst.** Es liest das Schema
+   einmal beim Start — und der Web-Container startet **vor** dem
+   postdeploy-Hook. Eine Spalte, die derselbe Deploy anlegt *und* benutzt, ist
+   danach in der Datenbank, aber nicht im Cache; PostgREST antwortet mit
+   `Could not find the 'X' column of 'Y' in the schema cache`, also mit einem
+   Fehler, der wie ein vergessenes Feld aussieht und nicht wie ein Cache. Genau
+   daran scheiterte der Mitarbeiter-Import nach Migration `0165`. Tückisch
+   war die Zufälligkeit: beim nächsten Container-Neustart löste es sich von
+   selbst, wer einen Tag später importierte, sah nichts.
+
+   Der Runner schickt deshalb am Ende jedes Laufs `NOTIFY pgrst, 'reload
+   schema'` — PostgREST lauscht auf diesem Kanal, ein Neustart ist nicht nötig,
+   und es funktioniert aus dem One-off-Container heraus, weil die Nachricht über
+   die Datenbank läuft. Schlägt es fehl, gibt es eine Warnung, aber keinen
+   Deploy-Abbruch: die Migration ist zu dem Zeitpunkt bereits eingespielt.
+   Von Hand geht dasselbe:
+   `scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -c "NOTIFY pgrst, '"'"'reload schema'"'"'"'`
+
    Notbremse: `MIGRATE_ON_DEPLOY=false` → der Hook berichtet nur und ändert nichts.
    Von Hand geht weiterhin:
    `scalingo --app planandsimple run 'psql "$SCALINGO_POSTGRESQL_URL" -f backend/migrations/0139_….sql'`

@@ -315,14 +315,63 @@ async function main() {
       );
       for (const file of repeatableTodo) await applyFile(client, file, { repeatable: true });
     }
+
+    await schemaCacheNeuLaden(client);
     console.log("\nFertig.\n");
   } finally {
     await client.end();
   }
 }
 
+/**
+ * PostgREST seinen Schema-Cache neu laden lassen.
+ *
+ * WARUM DAS SEIN MUSS
+ *   PostgREST liest das Schema EINMAL beim Start und beantwortet danach jede
+ *   Anfrage aus diesem Cache. Auf Scalingo startet der Web-Container aber VOR
+ *   dem postdeploy-Hook — die Reihenfolge ist:
+ *
+ *       neuer Container startet  ->  PostgREST liest das Schema
+ *       postdeploy-Hook laeuft   ->  Migrationen aendern das Schema
+ *
+ *   Eine Spalte, die derselbe Deploy anlegt UND benutzt, existiert danach in
+ *   der Datenbank, aber nicht im Cache. PostgREST antwortet dann mit
+ *       Could not find the 'BIRTH_DATE' column of 'EMPLOYEE' in the schema cache
+ *   also mit einem Fehler, der wie ein vergessenes Feld aussieht und nicht wie
+ *   ein Cache. Genau daran ist der Mitarbeiter-Import nach Migration 0165
+ *   gescheitert (2026-09-20) — die Spalte war laengst da.
+ *
+ *   Bis dahin loeste sich das nur zufaellig: beim naechsten Neustart des
+ *   Containers. Wer direkt nach dem Deploy importierte, sah den Fehler; wer
+ *   einen Tag spaeter kam, nicht. Eine unzuverlaessige Reihenfolge ist
+ *   schlimmer als eine kaputte, weil sie niemand nachstellt.
+ *
+ * WIE
+ *   PostgREST lauscht auf dem LISTEN-Kanal "pgrst" (siehe Startprotokoll:
+ *   'listening for database notifications on the "pgrst" channel'). Ein NOTIFY
+ *   darauf genuegt — es braucht weder SIGUSR1 noch einen Neustart, und es geht
+ *   aus dem One-off-Container, weil die Benachrichtigung ueber die DATENBANK
+ *   laeuft und nicht ueber den Prozess.
+ *
+ *   Schlaegt es fehl, ist das kein Grund, den Deploy scheitern zu lassen: die
+ *   Migration ist eingespielt, nur der Cache haengt hinterher. Deshalb nur eine
+ *   Warnung — aber eine sichtbare.
+ */
+async function schemaCacheNeuLaden(client) {
+  try {
+    await client.query("NOTIFY pgrst, 'reload schema'");
+    console.log("🔄  PostgREST: Schema-Cache-Neuladen angestossen (NOTIFY pgrst).");
+  } catch (e) {
+    console.warn(
+      "⚠  Schema-Cache konnte nicht angestossen werden: " + (e?.message || e) +
+      "\n   Neue Spalten sind in der Datenbank, aber PostgREST kennt sie erst " +
+      "nach einem Neustart des Containers."
+    );
+  }
+}
+
 // Die Planung ist als reine Funktion pruefbar (tests/migrate.plan.test.js).
-module.exports = { plan, sha256, REPEATABLE_MARKER };
+module.exports = { plan, sha256, REPEATABLE_MARKER, schemaCacheNeuLaden };
 
 // Nur beim direkten Aufruf verbinden — ein `require()` im Test darf keine
 // Datenbankverbindung aufbauen.

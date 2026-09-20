@@ -194,3 +194,35 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     expect(nurSql).not.toMatch(/\b(DELETE\s+FROM|TRUNCATE)\b/i);
   });
 });
+
+// ── Schema-Cache ─────────────────────────────────────────────────────────────
+// PostgREST liest das Schema einmal beim Start. Auf Scalingo startet der
+// Web-Container VOR dem postdeploy-Hook — eine Spalte, die derselbe Deploy
+// anlegt und benutzt, ist danach in der Datenbank, aber nicht im Cache. Der
+// Mitarbeiter-Import ist nach Migration 0165 genau daran gescheitert
+// ("Could not find the 'BIRTH_DATE' column of 'EMPLOYEE' in the schema cache"),
+// obwohl die Spalte laengst da war.
+describe("Schema-Cache anstossen", () => {
+  const { schemaCacheNeuLaden } = require("../scripts/migrate.js");
+
+  it("schickt ein NOTIFY auf den Kanal, auf dem PostgREST lauscht", async () => {
+    const abgesetzt = [];
+    await schemaCacheNeuLaden({ query: async (sql) => { abgesetzt.push(sql); } });
+    expect(abgesetzt).toHaveLength(1);
+    // Der Kanalname ist nicht frei waehlbar — PostgREST lauscht auf "pgrst".
+    expect(abgesetzt[0]).toMatch(/NOTIFY\s+pgrst/i);
+    expect(abgesetzt[0]).toMatch(/reload schema/i);
+  });
+
+  // Die Migration ist zu diesem Zeitpunkt eingespielt. Am Cache zu scheitern
+  // darf den Deploy nicht umwerfen — sonst bliebe die alte Version online,
+  // obwohl das Schema schon neu ist.
+  it("laesst den Deploy nicht scheitern, wenn das NOTIFY nicht durchgeht", async () => {
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(schemaCacheNeuLaden({
+      query: async () => { throw new Error("Verbindung weg"); },
+    })).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
