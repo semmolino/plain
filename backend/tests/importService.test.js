@@ -278,9 +278,19 @@ describe("buildEmployeeEntry", () => {
   });
 
   // ── Status (Pflicht seit 09/2026) ─────────────────────────────────────────
-  it("uebernimmt Aktiv/Inaktiv nach ACTIVE", () => {
+  // 2 ist das Inaktiv, nicht 0. Das ganze Produkt prueft auf ACTIVE === 2 bzw.
+  // neq("ACTIVE", 2) — Login, Sitzungswaechter, Lizenzplaetze, Oberflaeche.
+  // Mit einer 0 haetten sich Ausgeschiedene weiter anmelden koennen.
+  it("uebernimmt Aktiv/Inaktiv nach ACTIVE — inaktiv ist die 2", () => {
     expect(buildEmployeeEntry({ ...EMP_BASIS, status: "Aktiv" }, ctx).dbRow.ACTIVE).toBe(1);
-    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "Inaktiv" }, ctx).dbRow.ACTIVE).toBe(0);
+    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "Inaktiv" }, ctx).dbRow.ACTIVE).toBe(2);
+    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "ausgeschieden" }, ctx).dbRow.ACTIVE).toBe(2);
+    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "nein" }, ctx).dbRow.ACTIVE).toBe(2);
+  });
+
+  it("zeigt den Status in der Vorschau im Klartext", () => {
+    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "Inaktiv" }, ctx).display.status).toBe("Inaktiv");
+    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "Aktiv" }, ctx).display.status).toBe("Aktiv");
   });
 
   it("weist eine Zeile ohne Status ab", () => {

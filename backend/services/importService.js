@@ -14,6 +14,8 @@
 
 const ExcelJS = require("exceljs");
 const { readTable } = require("./spreadsheet");
+// Rollenwechsel beendet laufende Sitzungen — siehe Sicherheitsmodell.
+const { revokeSessions } = require("../middleware/sessionGuard");
 const { contractDefaults } = require("./contractDefaults");
 // Phase 3: Anfangsbestände werden über die bewährten Beleg-Services gebucht
 // (init → Struktur → book(skipDocuments)) statt von Hand geschrieben.
@@ -247,12 +249,29 @@ const EMPLOYEE_FIELDS = [
   { key: "notes",            header: "Notiz",                 required: false, example: "",                  aliases: ["notiz", "notizen", "bemerkung", "bemerkungen", "anmerkung", "kommentar", "notes"] },
 ];
 
-/** „Aktiv"/„Inaktiv" → 1/0. Unbekanntes bleibt null und wird zum Fehler. */
+/**
+ * „Aktiv"/„Inaktiv" → EMPLOYEE.ACTIVE. Unbekanntes bleibt null → Fehlerzeile.
+ *
+ * ACHTUNG, 2 IST DAS INAKTIV — NICHT 0.
+ *   Das ganze Produkt prüft auf `ACTIVE === 2` bzw. `neq("ACTIVE", 2)`:
+ *   Login (routes/auth.js), Sitzungswächter (middleware/sessionGuard.js),
+ *   Lizenzplätze (middleware/limits.js) und die Oberfläche. Alles andere —
+ *   auch die 0 und auch NULL — gilt als aktiv, denn Altdaten ohne gesetztes
+ *   ACTIVE sollen benutzbar bleiben.
+ *
+ *   Die erste Fassung dieses Imports schrieb 0 für „Inaktiv". Das sah in der
+ *   Liste nur nach einem hässlichen Dropdown aus, war aber mehr: die
+ *   Ausgeschiedenen hätten sich weiter anmelden können und Lizenzplätze
+ *   belegt (wiko-Übernahme 09/2026).
+ */
+const EMP_AKTIV = 1;
+const EMP_INAKTIV = 2;
+
 function parseEmployeeStatus(v) {
   const t = norm(v);
   if (!t) return null;
-  if (["aktiv", "active", "ja", "j", "1", "wahr", "true", "x", "beschaeftigt", "angestellt"].includes(t)) return 1;
-  if (["inaktiv", "nichtaktiv", "inactive", "nein", "n", "0", "falsch", "false", "ausgeschieden", "gesperrt"].includes(t)) return 0;
+  if (["aktiv", "active", "ja", "j", "1", "wahr", "true", "x", "beschaeftigt", "angestellt"].includes(t)) return EMP_AKTIV;
+  if (["inaktiv", "nichtaktiv", "inactive", "nein", "n", "0", "2", "falsch", "false", "ausgeschieden", "gesperrt"].includes(t)) return EMP_INAKTIV;
   return null;
 }
 async function loadEmployeeContext(supabase, tenantId) {
@@ -286,11 +305,15 @@ async function loadEmployeeContext(supabase, tenantId) {
   // Abteilungen, Arbeitszeitmodelle und Berechtigungsrollen. Alle drei werden
   // über ihren NAMEN aus der Datei aufgelöst — deshalb hier einmal laden statt
   // je Zeile zu fragen (999 Zeilen = 999 Abfragen).
-  const [empsRes, deptRes, wtmRes, roleRes] = await Promise.all([
+  const [empsRes, deptRes, wtmRes, roleRes, empRoleRes] = await Promise.all([
     supabase.from("EMPLOYEE").select("ID, ABBR, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("DEPARTMENT").select("ID, ABBR, NAME").eq("TENANT_ID", tenantId).limit(10000),
     supabase.from("WORKING_TIME_MODEL").select("ID, NAME").eq("TENANT_ID", tenantId).limit(10000),
     supabase.from("USER_ROLE").select("ID, ABBR, NAME").eq("TENANT_ID", tenantId).limit(10000),
+    // Bestehende Zuordnungen. EMPLOYEE_ROLE hat einen zusammengesetzten
+    // Primärschlüssel (EMPLOYEE_ID, ROLE_ID) — beim Zusammenführen würde ein
+    // erneutes Einfügen derselben Paarung den ganzen Import abbrechen lassen.
+    supabase.from("EMPLOYEE_ROLE").select("EMPLOYEE_ID, ROLE_ID").limit(100000),
   ]);
 
   for (const e of empsRes.data || []) {
@@ -315,8 +338,11 @@ async function loadEmployeeContext(supabase, tenantId) {
     return m;
   };
 
+  const vorhandeneRollen = new Set((empRoleRes.data || []).map((r) => r.EMPLOYEE_ID + ":" + r.ROLE_ID));
+
   return {
     genders: { byName, byId, default: def },
+    vorhandeneRollen,
     departments: nachNamen(deptRes.data, ["NAME", "ABBR"]),
     workModels:  nachNamen(wtmRes.data,  ["NAME"]),
     userRoles:   nachNamen(roleRes.data, ["ABBR", "NAME"]),
@@ -446,7 +472,7 @@ function buildEmployeeEntry(mapped, ctx) {
     BIRTH_DATE:       birth.value,
     NOTES:            s(mapped.notes) || null,
     DEPARTMENT_ID:    departmentId,
-    ACTIVE:           active === null ? 1 : active,
+    ACTIVE:           active === null ? EMP_AKTIV : active,
   };
 
   const matchKey = [];
@@ -457,7 +483,7 @@ function buildEmployeeEntry(mapped, ctx) {
   const display = {
     abbr: short, first_name: first, last_name: last,
     gender: genderId != null ? (ctx.genders.byId.get(genderId) || gin) : gin, mail: email,
-    status: active === null ? statusIn : (active ? "Aktiv" : "Inaktiv"),
+    status: active === null ? statusIn : (active === EMP_INAKTIV ? "Inaktiv" : "Aktiv"),
     department: deptIn || null,
     supervisor: supervisorAbbr,
     cost_rate: costRate ? `${costRate.value} € ab ${costRate.from}` : null,
@@ -564,6 +590,7 @@ async function commitEmployeeRows(rows, { supabase, tenantId, batchId, ctx, opti
   }
 
   let merged = 0, undo = [];
+  const zusammengefuehrteIds = new Set();
   if (zusammen.length) {
     const r = await mergeExistingRows(zusammen, { supabase, tenantId, def: DOMAINS.employee, ctx });
     merged = r.merged; undo = r.undo;
@@ -571,6 +598,7 @@ async function commitEmployeeRows(rows, { supabase, tenantId, batchId, ctx, opti
       const id = findExistingId(ctx, z);
       if (id != null) {
         zeilenMitId.push({ row: z, id });
+        zusammengefuehrteIds.add(id);
         const a = norm(z._dbRow?.ABBR);
         if (a) idNachAbbr.set(a, id);
       }
@@ -590,12 +618,22 @@ async function commitEmployeeRows(rows, { supabase, tenantId, batchId, ctx, opti
 
   // ── 4. Kostensatz, Arbeitszeitmodell, Berechtigungsrolle ──────────────────
   const kostensaetze = [], modelle = [], rollen = [];
+  // Wer beim Zusammenführen eine neue Rolle bekommt, hat womöglich eine
+  // laufende Sitzung mit den alten Rechten. Die muss enden — dieselbe Regel
+  // wie bei der Rollenvergabe in der Oberfläche (controllers/roles.js).
+  // Neu angelegte Mitarbeiter haben noch keine Sitzung.
+  const rollenWechsel = new Set();
   for (const { row, id } of zeilenMitId) {
     const ex = row._extra;
     if (!ex) continue;
     if (ex.costRate) kostensaetze.push({ TENANT_ID: tenantId, EMPLOYEE_ID: id, COST_RATE: ex.costRate.value, VALID_FROM: ex.costRate.from, IMPORT_BATCH_ID: batchId });
     if (ex.workModel) modelle.push({ TENANT_ID: tenantId, EMPLOYEE_ID: id, MODEL_ID: ex.workModel.modelId, VALID_FROM: ex.workModel.from, IMPORT_BATCH_ID: batchId });
-    if (ex.roleId != null) rollen.push({ EMPLOYEE_ID: id, ROLE_ID: ex.roleId, IMPORT_BATCH_ID: batchId });
+    // Hat der Mitarbeiter die Rolle schon, wird nichts geschrieben: der
+    // zusammengesetzte Primärschlüssel würde sonst den ganzen Lauf abbrechen.
+    if (ex.roleId != null && !ctx.vorhandeneRollen.has(id + ":" + ex.roleId)) {
+      rollen.push({ EMPLOYEE_ID: id, ROLE_ID: ex.roleId, IMPORT_BATCH_ID: batchId });
+      if (zusammengefuehrteIds.has(id)) rollenWechsel.add(id);
+    }
   }
 
   const schreibe = async (tabelle, zeilen, was) => {
@@ -607,6 +645,8 @@ async function commitEmployeeRows(rows, { supabase, tenantId, batchId, ctx, opti
   await schreibe("EMPLOYEE_COST_RATE",  kostensaetze, "Kostensatz");
   await schreibe("EMPLOYEE_WORK_MODEL", modelle,      "Arbeitszeitmodell-Zuordnung");
   await schreibe("EMPLOYEE_ROLE",       rollen,       "Berechtigungsrolle");
+
+  for (const id of rollenWechsel) await revokeSessions(supabase, id);
 
   return { inserted, merged, undo };
 }

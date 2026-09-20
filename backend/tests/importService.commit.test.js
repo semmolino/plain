@@ -521,6 +521,77 @@ describe("commit (employee)", () => {
     expect(supabase._tables.DEPARTMENT).toHaveLength(0);
   });
 
+  it("schreibt fuer Inaktive die 2 — nicht die 0", async () => {
+    const supabase = seed();
+    const buffer = await fileOf([
+      ["Kürzel *", "Vorname *", "Nachname *", "Geschlecht *", "Status (Aktiv/Inaktiv)"],
+      ["SB", "Stefanie", "Berghaus", "weiblich", "Inaktiv"],
+      ["AW", "Ansgar", "Woermann", "männlich", "Aktiv"],
+    ]);
+    await run("employee", buffer, supabase);
+
+    // Login, Sitzungswaechter und Lizenzplaetze pruefen auf genau die 2.
+    // Eine 0 waere fuer sie "nicht inaktiv" — der Ausgeschiedene koennte sich
+    // weiter anmelden und belegte einen Platz.
+    expect(supabase._tables.EMPLOYEE.find(e => e.ABBR === "SB").ACTIVE).toBe(2);
+    expect(supabase._tables.EMPLOYEE.find(e => e.ABBR === "AW").ACTIVE).toBe(1);
+  });
+
+  it("vergibt die Berechtigungsrolle ueber ihren Namen", async () => {
+    const supabase = seed();
+    const buffer = await fileOf([
+      ["Kürzel *", "Vorname *", "Nachname *", "Geschlecht *", "Status (Aktiv/Inaktiv)", "Berechtigungsrolle"],
+      ["AW", "Ansgar", "Woermann", "männlich", "Aktiv", "Projektleitung"],   // ueber NAME
+      ["SF", "Simon", "Feldhaus", "männlich", "Aktiv", "projektleiter"],     // ueber ABBR, Klein
+    ]);
+    await run("employee", buffer, supabase);
+    expect(supabase._tables.EMPLOYEE_ROLE).toHaveLength(2);
+    expect(supabase._tables.EMPLOYEE_ROLE.every(r => r.ROLE_ID === 30)).toBe(true);
+  });
+
+  // EMPLOYEE_ROLE hat einen zusammengesetzten Primaerschluessel. Ohne die
+  // Vorpruefung riss eine schon vorhandene Paarung den ganzen Lauf mit.
+  it("legt eine bereits vorhandene Rollenzuordnung nicht doppelt an", async () => {
+    const supabase = makeFakeSupabase({
+      GENDER: [{ ID: 1, GENDER: "männlich" }],
+      EMPLOYEE: [{ ID: 77, TENANT_ID: TENANT, ABBR: "AW", FIRST_NAME: "Ansgar", LAST_NAME: "Woermann", MAIL: null, GENDER_ID: 1, ACTIVE: 1 }],
+      EMPLOYEE_ROLE: [{ EMPLOYEE_ID: 77, ROLE_ID: 30, IMPORT_BATCH_ID: null }],
+      USER_ROLE: [{ ID: 30, TENANT_ID: TENANT, ABBR: "Projektleiter", NAME: "Projektleitung" }],
+      WORKING_TIME_MODEL: [], DEPARTMENT: [], EMPLOYEE_COST_RATE: [], EMPLOYEE_WORK_MODEL: [],
+    });
+    const buffer = await fileOf([
+      ["Kürzel *", "Vorname *", "Nachname *", "Geschlecht *", "Status (Aktiv/Inaktiv)", "Berechtigungsrolle"],
+      ["AW", "Ansgar", "Woermann", "männlich", "Aktiv", "Projektleiter"],
+    ]);
+    const res = await run("employee", buffer, supabase, { duplicateMode: "merge" });
+
+    expect(res.merged).toBe(1);
+    expect(supabase._tables.EMPLOYEE_ROLE).toHaveLength(1);
+    // Die vorhandene Zuordnung bleibt unangetastet — auch ohne Stapel-Kennung,
+    // damit ein Zuruecksetzen sie nicht mitnimmt.
+    expect(supabase._tables.EMPLOYEE_ROLE[0].IMPORT_BATCH_ID).toBe(null);
+  });
+
+  // Rollenwechsel beendet laufende Sitzungen — dieselbe Regel wie bei der
+  // Vergabe in der Oberflaeche. Neu angelegte Mitarbeiter haben keine Sitzung.
+  it("beendet die Sitzung, wenn ein bestehender Mitarbeiter eine Rolle bekommt", async () => {
+    const supabase = makeFakeSupabase({
+      GENDER: [{ ID: 1, GENDER: "männlich" }],
+      EMPLOYEE: [{ ID: 77, TENANT_ID: TENANT, ABBR: "AW", FIRST_NAME: "Ansgar", LAST_NAME: "Woermann", MAIL: null, GENDER_ID: 1, ACTIVE: 1, SESSION_EPOCH: null }],
+      EMPLOYEE_ROLE: [],
+      USER_ROLE: [{ ID: 30, TENANT_ID: TENANT, ABBR: "Projektleiter", NAME: "Projektleitung" }],
+      WORKING_TIME_MODEL: [], DEPARTMENT: [], EMPLOYEE_COST_RATE: [], EMPLOYEE_WORK_MODEL: [],
+    });
+    const buffer = await fileOf([
+      ["Kürzel *", "Vorname *", "Nachname *", "Geschlecht *", "Status (Aktiv/Inaktiv)", "Berechtigungsrolle"],
+      ["AW", "Ansgar", "Woermann", "männlich", "Aktiv", "Projektleiter"],
+    ]);
+    await run("employee", buffer, supabase, { duplicateMode: "merge" });
+
+    expect(supabase._tables.EMPLOYEE_ROLE).toHaveLength(1);
+    expect(supabase._tables.EMPLOYEE[0].SESSION_EPOCH).toBeTruthy();
+  });
+
   // Beim Zusammenfuehren gehoert die ALTE Kostensatz-Historie nicht dem Stapel.
   // Sie darf beim Zuruecksetzen deshalb nicht verschwinden — genau dafuer steht
   // die Stapel-Kennung auf den Nebentabellen.
