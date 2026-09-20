@@ -25,6 +25,9 @@ export interface Employee {
   ACTIVE:              number | null
   CURRENT_MODEL_ID:    number | null
   CURRENT_MODEL_NAME:  string
+  /** Heute gültiger Kostensatz. null = keiner gepflegt ODER kein Recht darauf. */
+  CURRENT_COST_RATE:      number | null
+  CURRENT_COST_RATE_FROM: string | null
   DASHBOARD_ROLE:      string | null
 }
 

@@ -481,14 +481,39 @@ router.get("/", async (req, res) => {
     if (empErr) return res.status(500).json({ error: empErr.message });
 
     const today = new Date().toISOString().slice(0, 10);
-    const [genderRes, deptRes, wmaRes] = await Promise.all([
+
+    // Der Kostensatz ist sensibel — er kommt nur mit, wenn der Anfragende ihn
+    // auch im Mitarbeiter sehen duerfte (dort haengt derselbe Schluessel am
+    // /cp-rates-Endpunkt). Ohne das Recht ist die Spalte gar nicht erst da,
+    // statt leer zu erscheinen und Neugier zu wecken.
+    const darfGehalt = typeof req.hasPermission === "function"
+      ? req.hasPermission("employees.salary.view")
+      : false;
+
+    const [genderRes, deptRes, wmaRes, rateRes] = await Promise.all([
       supabase.from("GENDER").select("ID, GENDER"),
-      supabase.from("PROJECT_DEPARTMENT").select("ID, ABBR").eq("TENANT_ID", req.tenantId),
+      // Die Tabelle heisst DEPARTMENT. Hier stand PROJECT_DEPARTMENT — die gibt
+      // es nicht, und weil der Fehler nicht geprueft wurde, blieb deptMap
+      // einfach leer: die Spalte "Abteilung" war seit jeher fuer JEDEN
+      // Mitarbeiter leer, ohne eine einzige Fehlermeldung. Gefunden bei der
+      // wiko-Uebernahme 09/2026, als die importierten Abteilungen nicht
+      // auftauchten.
+      supabase.from("DEPARTMENT").select("ID, ABBR").eq("TENANT_ID", req.tenantId),
       supabase.from("EMPLOYEE_WORK_MODEL").select("EMPLOYEE_ID, MODEL_ID, VALID_FROM")
         .eq("TENANT_ID", req.tenantId).lte("VALID_FROM", today),
+      darfGehalt
+        ? supabase.from("EMPLOYEE_COST_RATE").select("EMPLOYEE_ID, COST_RATE, VALID_FROM")
+            .eq("TENANT_ID", req.tenantId).lte("VALID_FROM", today)
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (genderRes.error) return res.status(500).json({ error: genderRes.error.message });
+    // Lookups, die stillschweigend scheitern, erzeugen leere Spalten statt
+    // Fehlern — genau so blieb die Abteilung jahrelang unsichtbar. Deshalb
+    // wenigstens eine Zeile im Protokoll.
+    for (const [name, r] of [["DEPARTMENT", deptRes], ["EMPLOYEE_WORK_MODEL", wmaRes], ["EMPLOYEE_COST_RATE", rateRes]]) {
+      if (r.error) console.warn(`[mitarbeiter/list] ${name} nicht lesbar: ${r.error.message}`);
+    }
 
     const genMap  = new Map((genderRes.data  || []).map(g => [String(g.ID), g.GENDER]));
     const deptMap = new Map((deptRes.data    || []).map(d => [String(d.ID), d.ABBR]));
@@ -510,6 +535,14 @@ router.get("/", async (req, res) => {
       wtmMap = new Map((wtms || []).map(m => [m.ID, m.NAME]));
     }
 
+    // Aktuell gueltiger Kostensatz = juengstes VALID_FROM <= heute. Gleiche
+    // Regel wie im Mitarbeiter-Reiter, damit Liste und Detail dasselbe sagen.
+    const currentRateByEmp = new Map();
+    for (const cr of rateRes.data || []) {
+      const vorhanden = currentRateByEmp.get(cr.EMPLOYEE_ID);
+      if (!vorhanden || cr.VALID_FROM > vorhanden.VALID_FROM) currentRateByEmp.set(cr.EMPLOYEE_ID, cr);
+    }
+
     const normalized = (employees || []).map(e => ({
       ...e,
       GENDER:              genMap.get(String(e.GENDER_ID)) || "",
@@ -517,6 +550,10 @@ router.get("/", async (req, res) => {
       NAME:                `${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`.trim(),
       CURRENT_MODEL_ID:    currentModelByEmp.get(e.ID)?.MODEL_ID ?? null,
       CURRENT_MODEL_NAME:  wtmMap.get(currentModelByEmp.get(e.ID)?.MODEL_ID) ?? "",
+      // null heisst "kein Satz gepflegt" — nicht "0 €/h". Die Oberflaeche
+      // zeigt dafuer einen Gedankenstrich.
+      CURRENT_COST_RATE:      darfGehalt ? (currentRateByEmp.get(e.ID)?.COST_RATE ?? null) : null,
+      CURRENT_COST_RATE_FROM: darfGehalt ? (currentRateByEmp.get(e.ID)?.VALID_FROM ?? null) : null,
     }));
 
     res.json({ data: normalized });

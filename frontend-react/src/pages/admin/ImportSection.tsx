@@ -68,6 +68,12 @@ export function ImportSection() {
   function invalidateAffected() {
     void qc.invalidateQueries({ queryKey: ['import-batches'] })
     void qc.invalidateQueries({ queryKey: ['addresses'] })
+    void qc.invalidateQueries({ queryKey: ['contacts'] })
+    // Ohne das zeigte die Mitarbeiterliste nach einem Import noch den alten
+    // Stand, bis der Nutzer die Seite neu lud - und ein frisch importierter
+    // Kostensatz sah aus, als waere er nicht angekommen.
+    void qc.invalidateQueries({ queryKey: ['employees'] })
+    void qc.invalidateQueries({ queryKey: ['projects'] })
     void qc.invalidateQueries({ queryKey: ['setup-progress'] })
   }
 

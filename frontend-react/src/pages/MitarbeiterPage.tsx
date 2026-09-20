@@ -46,7 +46,7 @@ import {
   createAbsence, decideAbsence, clarifyAbsence, cancelAbsence, deleteAbsence,
   type Absence, type AbsenceStatus,
 } from '@/api/abwesenheit'
-import { fmtEur } from '@/utils/money'
+import { fmtEur, NO_VALUE } from '@/utils/money'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -2900,6 +2900,9 @@ export function MitarbeiterPage() {
   const canViewEmployees = usePermission('employees.view')
   const { data: listData,   isLoading } = useQuery({ queryKey: ['employees'],           queryFn: fetchEmployeeList,      enabled: canViewEmployees })
   const { data: genData }               = useQuery({ queryKey: ['emp-genders'],         queryFn: fetchEmployeeGenders,   enabled: canViewEmployees })
+  // Der Kostensatz ist sensibel: dasselbe Recht wie am /cp-rates-Endpunkt.
+  // Ohne es liefert das Backend die Spalte gar nicht erst mit.
+  const canViewSalary = usePermission('employees.salary.view')
   const { data: deptData }              = useQuery({ queryKey: ['departments'],         queryFn: fetchDepartments,       enabled: canViewEmployees })
   const { data: wtmData }               = useQuery({ queryKey: ['working-time-models'], queryFn: fetchWorkingTimeModels, enabled: canViewEmployees })
   const { data: rolesData }             = useQuery({ queryKey: ['user-roles'],          queryFn: fetchRoles,             enabled: canViewEmployees })
@@ -3141,6 +3144,9 @@ export function MitarbeiterPage() {
                       <SortTh label="E-Mail"      column="MAIL"             {...sortProps} />
                       <th scope="col">Abteilung</th>
                       <th scope="col">Modell</th>
+                      {canViewSalary && (
+                        <th scope="col" className="num">Kostensatz<HelpHint id="mitarbeiter.kostensatz_liste" align="right" /></th>
+                      )}
                       {canViewBookings && (
                         <th scope="col" className="num">Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
                       )}
@@ -3168,6 +3174,15 @@ export function MitarbeiterPage() {
                           />
                         </td>
                         <td>{r.CURRENT_MODEL_NAME || <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
+                        {canViewSalary && (
+                          <td className="num" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {r.CURRENT_COST_RATE != null
+                              ? <span title={r.CURRENT_COST_RATE_FROM ? `gültig ab ${r.CURRENT_COST_RATE_FROM}` : undefined}>
+                                  {fmtEur(Number(r.CURRENT_COST_RATE))}/h
+                                </span>
+                              : <span style={{ color: 'var(--text-3)' }}>{NO_VALUE}</span>}
+                          </td>
+                        )}
                         {canViewBookings && (() => {
                           const bal = balByEmp.get(r.ID)
                           const run = bal?.RUNNING_BALANCE ?? 0

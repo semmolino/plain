@@ -952,6 +952,20 @@ export const HELP = {
   },
 
   // ── Mitarbeiter / Arbeitszeit ────────────────────────────────────────────
+  'mitarbeiter.kostensatz_liste': {
+    title: 'Kostensatz',
+    body: (
+      <>
+        Der heute gültige Satz — also der Eintrag mit dem jüngsten
+        Gültigkeitsdatum, das nicht in der Zukunft liegt. Die vollständige
+        Historie steht im Mitarbeiter unter „Kostensatz“.
+        <br /><br />
+        „—“ heißt: für diesen Mitarbeiter ist kein Satz gepflegt. Das ist etwas
+        anderes als 0 €/h — ohne Satz bleiben seine Stunden in der
+        Kostenauswertung unbewertet.
+      </>
+    ),
+  },
   'mitarbeiter.vorgesetzter': {
     title: 'Vorgesetzter',
     body: (

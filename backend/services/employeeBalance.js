@@ -450,8 +450,12 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
 
   const empIds = employees.map(e => e.ID);
 
-  const { data: depts } = await supabase.from('PROJECT_DEPARTMENT')
+  // DEPARTMENT, nicht PROJECT_DEPARTMENT — letztere gibt es nicht, und der
+  // verschluckte Fehler liess die Abteilung im Report leer (siehe
+  // routes/mitarbeiter.js, gleicher Befund).
+  const { data: depts, error: deptErr } = await supabase.from('DEPARTMENT')
     .select('ID, ABBR').eq('TENANT_ID', tenantId);
+  if (deptErr) console.warn('[employeeBalance] DEPARTMENT nicht lesbar: ' + deptErr.message);
   const deptMap = new Map((depts || []).map(d => [d.ID, d.ABBR]));
 
   // Bulk BOOKING (CONFIRMED only)
