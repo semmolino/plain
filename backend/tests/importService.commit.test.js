@@ -432,3 +432,121 @@ describe("commit ohne importierbare Zeilen", () => {
     expect(supabase._tables.IMPORT_BATCH).toBeUndefined();
   });
 });
+
+
+// ── Mitarbeiter: eine Zeile, bis zu fuenf Tabellen ───────────────────────────
+// Der Mitarbeiter-Import ist der einzige, der neben seiner eigenen Tabelle noch
+// Kostensatz, Arbeitszeitmodell, Berechtigungsrolle und ggf. eine neue
+// Abteilung schreibt — und der einen Verweis innerhalb derselben Datei aufloest
+// (Vorgesetzter). Genau das pruefen die folgenden Tests.
+describe("commit (employee)", () => {
+  const KOPF = [
+    "Kürzel *", "Vorname *", "Nachname *", "Geschlecht *", "Status (Aktiv/Inaktiv)",
+    "Vorgesetzter", "Abteilung", "Gültigkeitsdatum Kostensatz", "Kostensatz",
+    "Gültigkeitsdatum Arbeitszeitmodell", "Arbeitszeitmodell", "Berechtigungsrolle",
+    "Telefon", "Mobil", "Geburtstag", "Notiz",
+  ];
+
+  const seed = () => makeFakeSupabase({
+    GENDER: [{ ID: 1, GENDER: "männlich" }, { ID: 2, GENDER: "weiblich" }, { ID: 3, GENDER: "divers" }],
+    EMPLOYEE: [],
+    // Modell und Rolle gibt es, eine Abteilung nicht — sie soll entstehen.
+    WORKING_TIME_MODEL: [{ ID: 20, TENANT_ID: TENANT, NAME: "40h-Woche" }],
+    USER_ROLE: [{ ID: 30, TENANT_ID: TENANT, ABBR: "Projektleiter", NAME: "Projektleitung" }],
+    DEPARTMENT: [],
+    EMPLOYEE_COST_RATE: [],
+    EMPLOYEE_WORK_MODEL: [],
+    EMPLOYEE_ROLE: [],
+  });
+
+  // Der Vorgesetzte steht absichtlich UNTER dem Mitarbeiter, der auf ihn zeigt.
+  const datei = () => fileOf([
+    KOPF,
+    ["AW", "Ansgar", "Woermann", "männlich", "Aktiv", "SF", "Tiefbau",
+     "01.01.2023", "150,91", "01.02.2020", "40h-Woche", "Projektleiter",
+     "+49 251 111", "+49 170 222", "23.04.1985", "Teilzeit ab Herbst"],
+    ["SF", "Simon", "Feldhaus", "männlich", "Aktiv", "", "",
+     "01.01.2023", "125,13", "", "", "",
+     "", "", "", ""],
+  ]);
+
+  it("legt Mitarbeiter samt Nebenzeilen an und loest den Vorgesetzten aus derselben Datei auf", async () => {
+    const supabase = seed();
+    const res = await run("employee", await datei(), supabase);
+
+    expect(res.inserted).toBe(2);
+    const emps = supabase._tables.EMPLOYEE;
+    const aw = emps.find(e => e.ABBR === "AW");
+    const sf = emps.find(e => e.ABBR === "SF");
+
+    // Vorgesetzter: zweiter Durchgang, sonst waere SF beim Schreiben von AW
+    // noch gar nicht angelegt gewesen.
+    expect(aw.SUPERVISOR_ID).toBe(sf.ID);
+    expect(sf.SUPERVISOR_ID ?? null).toBe(null);
+
+    // Neue Felder
+    expect(aw.PHONE).toBe("+49 251 111");
+    expect(aw.MOBILE).toBe("+49 170 222");
+    expect(aw.BIRTH_DATE).toBe("1985-04-23");
+    expect(aw.NOTES).toBe("Teilzeit ab Herbst");
+    expect(aw.ACTIVE).toBe(1);
+
+    // Abteilung wurde angelegt und zugeordnet — mit Stapel-Kennung.
+    const dept = supabase._tables.DEPARTMENT.find(d => d.NAME === "Tiefbau");
+    expect(dept).toBeTruthy();
+    expect(dept.IMPORT_BATCH_ID).toBe(res.batchId);
+    expect(aw.DEPARTMENT_ID).toBe(dept.ID);
+
+    // Kostensatz fuer beide, Modell und Rolle nur fuer AW.
+    expect(supabase._tables.EMPLOYEE_COST_RATE).toHaveLength(2);
+    expect(supabase._tables.EMPLOYEE_COST_RATE.find(r => r.EMPLOYEE_ID === aw.ID))
+      .toMatchObject({ COST_RATE: 150.91, VALID_FROM: "2023-01-01", IMPORT_BATCH_ID: res.batchId });
+    expect(supabase._tables.EMPLOYEE_WORK_MODEL)
+      .toEqual([expect.objectContaining({ EMPLOYEE_ID: aw.ID, MODEL_ID: 20, VALID_FROM: "2020-02-01" })]);
+    expect(supabase._tables.EMPLOYEE_ROLE)
+      .toEqual([expect.objectContaining({ EMPLOYEE_ID: aw.ID, ROLE_ID: 30 })]);
+  });
+
+  it("nimmt beim Zuruecksetzen alles mit, auch die angelegte Abteilung", async () => {
+    const supabase = seed();
+    const res = await run("employee", await datei(), supabase);
+
+    const r = await rollback({ batchId: res.batchId, supabase, tenantId: TENANT });
+    expect(r.rolledBack).toBe(true);
+    expect(r.deleted).toBe(2);
+    expect(supabase._tables.EMPLOYEE).toHaveLength(0);
+    expect(supabase._tables.EMPLOYEE_COST_RATE).toHaveLength(0);
+    expect(supabase._tables.EMPLOYEE_WORK_MODEL).toHaveLength(0);
+    expect(supabase._tables.EMPLOYEE_ROLE).toHaveLength(0);
+    expect(supabase._tables.DEPARTMENT).toHaveLength(0);
+  });
+
+  // Beim Zusammenfuehren gehoert die ALTE Kostensatz-Historie nicht dem Stapel.
+  // Sie darf beim Zuruecksetzen deshalb nicht verschwinden — genau dafuer steht
+  // die Stapel-Kennung auf den Nebentabellen.
+  it("laesst die Kostensatz-Historie eines zusammengefuehrten Mitarbeiters stehen", async () => {
+    const supabase = makeFakeSupabase({
+      GENDER: [{ ID: 1, GENDER: "männlich" }],
+      EMPLOYEE: [{ ID: 77, TENANT_ID: TENANT, ABBR: "AW", FIRST_NAME: "Ansgar", LAST_NAME: "Woermann", MAIL: null, GENDER_ID: 1, ACTIVE: 1 }],
+      EMPLOYEE_COST_RATE: [{ ID: 5, TENANT_ID: TENANT, EMPLOYEE_ID: 77, COST_RATE: 99, VALID_FROM: "2019-01-01", IMPORT_BATCH_ID: null }],
+      WORKING_TIME_MODEL: [], USER_ROLE: [], DEPARTMENT: [], EMPLOYEE_WORK_MODEL: [], EMPLOYEE_ROLE: [],
+    });
+
+    const buffer = await fileOf([
+      ["Kürzel *", "Vorname *", "Nachname *", "Geschlecht *", "Status (Aktiv/Inaktiv)", "Gültigkeitsdatum Kostensatz", "Kostensatz"],
+      ["AW", "Ansgar", "Woermann", "männlich", "Aktiv", "01.01.2023", "150,91"],
+    ]);
+    const res = await run("employee", buffer, supabase, { duplicateMode: "merge" });
+
+    expect(res.merged).toBe(1);
+    expect(res.inserted).toBe(0);
+    expect(supabase._tables.EMPLOYEE).toHaveLength(1);
+    expect(supabase._tables.EMPLOYEE_COST_RATE).toHaveLength(2);
+
+    await rollback({ batchId: res.batchId, supabase, tenantId: TENANT });
+    // Der Mitarbeiter bleibt (er wurde nicht angelegt), der alte Satz auch —
+    // nur der vom Stapel geschriebene ist weg.
+    expect(supabase._tables.EMPLOYEE).toHaveLength(1);
+    expect(supabase._tables.EMPLOYEE_COST_RATE).toEqual([expect.objectContaining({ ID: 5, COST_RATE: 99 })]);
+  });
+});

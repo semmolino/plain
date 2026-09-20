@@ -72,7 +72,7 @@ function fmtBalance(n: number) {
 }
 
 function emptyCreateForm(personnelNumber = '', entryDate = ''): CreateEmployeePayload {
-  return { abbr: '', title: '', first_name: '', last_name: '', email: '', mobile: '', personnel_number: personnelNumber, gender_id: '', department_id: null, entry_date: entryDate }
+  return { abbr: '', title: '', first_name: '', last_name: '', email: '', phone: '', mobile: '', personnel_number: personnelNumber, gender_id: '', department_id: null, entry_date: entryDate, birth_date: '', notes: '', supervisor_id: null }
 }
 
 // Inline-Status-Optionen (Liste). Aktiv=1, Inaktiv=2.
@@ -90,8 +90,12 @@ function employeeRowToPayload(r: Employee, override: Partial<UpdateEmployeePaylo
     first_name:       r.FIRST_NAME,
     last_name:        r.LAST_NAME,
     mail:             r.MAIL ?? '',
+    phone:            r.PHONE ?? '',
     mobile:           r.MOBILE ?? '',
     personnel_number: r.PERSONNEL_NUMBER ?? '',
+    birth_date:       r.BIRTH_DATE ?? '',
+    notes:            r.NOTES ?? '',
+    supervisor_id:    r.SUPERVISOR_ID ?? null,
     gender_id:        r.GENDER_ID ?? 0,
     department_id:    r.DEPARTMENT_ID ?? null,
     entry_date:       r.ENTRY_DATE ?? '',
@@ -544,7 +548,7 @@ function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
 
 // ── Employee Edit Modal ───────────────────────────────────────────────────────
 
-function EmployeeEditModal({ employee, onClose, genders, departments, workModels, roles, mapping, initialSection = 'stammdaten' }: {
+function EmployeeEditModal({ employee, onClose, genders, departments, workModels, roles, mapping, alleMitarbeiter, initialSection = 'stammdaten' }: {
   employee:    Employee
   onClose:     () => void
   genders:     Array<{ ID: number; GENDER: string }>
@@ -552,10 +556,18 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
   workModels:  WorkingTimeModel[]
   roles:       UserRole[]
   mapping:     EmployeeRoleMapping[]
+  /** Für die Vorgesetzten-Auswahl — der Verweis zeigt auf einen Mitarbeiter. */
+  alleMitarbeiter: Employee[]
   initialSection?: EmpSection
 }) {
   const qc = useQueryClient()
   const canAssignRoles = usePermission('employees.role.assign')
+  // Der Mitarbeiter selbst steht nicht zur Wahl — niemand ist sein eigener
+  // Vorgesetzter. Eine Kette A→B→A verhindert das nicht; das wäre erst mit
+  // einer Prüfung über die ganze Kette zu haben und ist hier bewusst offen.
+  const vorgesetzteAuswahl = alleMitarbeiter
+    .filter(m => m.ID !== employee.ID)
+    .sort((a, b) => (a.ABBR || '').localeCompare(b.ABBR || '', 'de'))
   const canViewBookings = usePermission('employees.bookings.view_all')
   const canViewAbsence = usePermission('absence.view')
   const [section,  setSection]  = useState<EmpSection>(initialSection)
@@ -565,8 +577,12 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
     first_name:       employee.FIRST_NAME ?? '',
     last_name:        employee.LAST_NAME ?? '',
     mail:             employee.MAIL ?? '',
+    phone:            employee.PHONE ?? '',
     mobile:           employee.MOBILE ?? '',
     personnel_number: employee.PERSONNEL_NUMBER ?? '',
+    birth_date:       employee.BIRTH_DATE ?? '',
+    notes:            employee.NOTES ?? '',
+    supervisor_id:    employee.SUPERVISOR_ID ?? null,
     gender_id:        employee.GENDER_ID ?? 0,
     department_id:    employee.DEPARTMENT_ID ?? null,
     entry_date:       employee.ENTRY_DATE ?? '',
@@ -793,7 +809,10 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
             <FormField label="Nachname*"  id="eln" value={editForm.last_name}           onChange={setE('last_name')} required />
           </div>
           <FormField label="E-Mail"       id="eem" value={editForm.mail ?? ''}          onChange={setE('mail')} type="email" />
-          <FormField label="Mobil"        id="emo" value={editForm.mobile ?? ''}        onChange={setE('mobile')} />
+          <div className="form-row">
+            <FormField label="Telefon"    id="eph" value={editForm.phone ?? ''}         onChange={setE('phone')} />
+            <FormField label="Mobil"      id="emo" value={editForm.mobile ?? ''}        onChange={setE('mobile')} />
+          </div>
           <FormField label="Personalnr."  id="epn" value={editForm.personnel_number ?? ''} onChange={setE('personnel_number')} />
           <div className="form-group">
             <label htmlFor="ege">Geschlecht*</label>
@@ -818,6 +837,31 @@ function EmployeeEditModal({ employee, onClose, genders, departments, workModels
               <label htmlFor="eexit">Austrittsdatum</label>
               <input id="eexit" type="date" value={editForm.exit_date ?? ''} onChange={setE('exit_date')} />
             </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="ebirth">Geburtstag</label>
+              <input id="ebirth" type="date" value={editForm.birth_date ?? ''} onChange={setE('birth_date')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="esup" style={{ display: 'inline-flex', alignItems: 'center' }}>
+                Vorgesetzter
+                <HelpHint id="mitarbeiter.vorgesetzter" />
+              </label>
+              {/* Auswahl statt Freitext: der Verweis muss auf einen echten
+                  Mitarbeiter zeigen. Der Mitarbeiter selbst steht nicht in der
+                  Liste — niemand ist sein eigener Vorgesetzter. */}
+              <select id="esup" value={editForm.supervisor_id ?? ''}
+                onChange={e => setEditForm(f => ({ ...f, supervisor_id: e.target.value ? Number(e.target.value) : null }))}>
+                <option value="">— keiner —</option>
+                {vorgesetzteAuswahl.map(m => <option key={m.ID} value={m.ID}>{m.ABBR} · {m.FIRST_NAME} {m.LAST_NAME}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group">
+            <label htmlFor="enotes">Notiz</label>
+            <textarea id="enotes" rows={3} value={editForm.notes ?? ''}
+              onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
           <div className="form-group">
             <label htmlFor="edashrole">Dashboard-Rolle</label>
@@ -3218,6 +3262,7 @@ export function MitarbeiterPage() {
             workModels={workModels}
             roles={userRoles}
             mapping={empRoleMap}
+            alleMitarbeiter={employees}
             initialSection={editInitialSection}
           />
         )}
@@ -3232,11 +3277,20 @@ export function MitarbeiterPage() {
             <FormField label="Nachname*" id="mln" value={form.last_name}           onChange={setF('last_name')} required />
           </div>
           <FormField label="E-Mail"      id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
-          <FormField label="Mobil"       id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
+          <div className="form-row">
+            <FormField label="Telefon"   id="mph" value={form.phone ?? ''}          onChange={setF('phone')} />
+            <FormField label="Mobil"     id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
+          </div>
           <FormField label="Personalnr." id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
-          <div className="form-group">
-            <label htmlFor="mentry">Eintrittsdatum</label>
-            <input id="mentry" type="date" value={form.entry_date ?? ''} onChange={setF('entry_date')} />
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="mentry">Eintrittsdatum</label>
+              <input id="mentry" type="date" value={form.entry_date ?? ''} onChange={setF('entry_date')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="mbirth">Geburtstag</label>
+              <input id="mbirth" type="date" value={form.birth_date ?? ''} onChange={setF('birth_date')} />
+            </div>
           </div>
           <div className="mitarbeiter-zugang-hinweis">
             <KeyRound size={14} strokeWidth={2} />

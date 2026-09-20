@@ -190,6 +190,21 @@ describe("parseDateISO", () => {
     expect(parseDateISO("").value).toBeNull();
     expect(parseDateISO("foo").invalid).toBe(true);
   });
+
+  // Altsystem-Exporte liefern Datumswerte als TEXT mit angehaengter Uhrzeit.
+  // Ohne den Schnitt fiel jede solche Zelle als "nicht erkannt" durch — und
+  // der Import legte Mitarbeiter ohne Eintrittsdatum an, mit einer Warnung,
+  // die in 999 Zeilen niemand liest.
+  it("schneidet eine mitgelieferte Uhrzeit ab", () => {
+    expect(parseDateISO("2000-01-01 00:00:00.000").value).toBe("2000-01-01");
+    expect(parseDateISO("2019-01-01 00:00:00").value).toBe("2019-01-01");
+    expect(parseDateISO("2020-02-01T00:00:00Z").value).toBe("2020-02-01");
+    expect(parseDateISO("01.02.2020 08:30").value).toBe("2020-02-01");
+  });
+
+  it("haelt Muell auch mit Uhrzeit-Anhang fuer Muell", () => {
+    expect(parseDateISO("irgendwann 08:30").invalid).toBe(true);
+  });
 });
 
 // ── Mitarbeiter ───────────────────────────────────────────────────────────────
@@ -204,9 +219,17 @@ function makeEmpCtx() {
       byId: new Map([[1, "weiblich"], [2, "männlich"], [3, "divers"]]),
       default: 3,
     },
+    // Die drei Kataloge, die der Mitarbeiter-Import ueber ihren NAMEN aufloest.
+    departments: new Map([["hochbau", 10]]),
+    workModels:  new Map([["40hwoche", 20]]),
+    userRoles:   new Map([["projektleiter", 30]]),
+    empIdByAbbr: new Map([["chef", 99]]),
     existingKeys: new Set(["mail:alt@buero.de", "short:abc"]),
   };
 }
+
+/** Pflichtfelder einer Mitarbeiterzeile, damit ein Test nur sein Thema setzt. */
+const EMP_BASIS = { abbr: "MMu", first_name: "Maria", last_name: "Muster", gender: "weiblich", status: "Aktiv" };
 
 describe("buildAutoMapping (employee)", () => {
   it("maps employee headers and aliases", () => {
@@ -223,7 +246,7 @@ describe("buildEmployeeEntry", () => {
   const ctx = makeEmpCtx();
 
   it("accepts a valid row and resolves gender + date", () => {
-    const e = buildEmployeeEntry({ abbr: "MMu", first_name: "Maria", last_name: "Muster", gender: "weiblich", entry_date: "01.03.2022" }, ctx);
+    const e = buildEmployeeEntry({ ...EMP_BASIS, entry_date: "01.03.2022" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.dbRow.GENDER_ID).toBe(1);
     expect(e.dbRow.ENTRY_DATE).toBe("2022-03-01");
@@ -232,37 +255,163 @@ describe("buildEmployeeEntry", () => {
   });
 
   it("defaults gender when blank (neutral default present)", () => {
-    const e = buildEmployeeEntry({ abbr: "X", first_name: "A", last_name: "B", gender: "" }, ctx);
+    const e = buildEmployeeEntry({ ...EMP_BASIS, abbr: "X", gender: "" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.dbRow.GENDER_ID).toBe(3);
   });
 
   it("flags missing required fields", () => {
-    const e = buildEmployeeEntry({ abbr: "", first_name: "", last_name: "B", gender: "w" }, ctx);
+    const e = buildEmployeeEntry({ ...EMP_BASIS, abbr: "", first_name: "", gender: "w" }, ctx);
     expect(e.ok).toBe(false);
     expect(e.messages.filter(m => m.level === "error").length).toBeGreaterThanOrEqual(2);
   });
 
   it("flags an unknown gender", () => {
-    const e = buildEmployeeEntry({ abbr: "Y", first_name: "A", last_name: "B", gender: "Hamster" }, ctx);
+    const e = buildEmployeeEntry({ ...EMP_BASIS, abbr: "Y", gender: "Hamster" }, ctx);
     expect(e.ok).toBe(false);
   });
 
   it("warns (not errors) on invalid date and bad email", () => {
-    const e = buildEmployeeEntry({ abbr: "Z", first_name: "A", last_name: "B", gender: "m", email: "noatsign", entry_date: "kaputt" }, ctx);
+    const e = buildEmployeeEntry({ ...EMP_BASIS, abbr: "Z", gender: "m", email: "noatsign", entry_date: "kaputt" }, ctx);
     expect(e.ok).toBe(true);
     expect(e.messages.some(m => m.level === "warn")).toBe(true);
+  });
+
+  // ── Status (Pflicht seit 09/2026) ─────────────────────────────────────────
+  it("uebernimmt Aktiv/Inaktiv nach ACTIVE", () => {
+    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "Aktiv" }, ctx).dbRow.ACTIVE).toBe(1);
+    expect(buildEmployeeEntry({ ...EMP_BASIS, status: "Inaktiv" }, ctx).dbRow.ACTIVE).toBe(0);
+  });
+
+  it("weist eine Zeile ohne Status ab", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, status: "" }, ctx);
+    expect(e.ok).toBe(false);
+    expect(e.messages.some(m => m.level === "error" && /Status fehlt/.test(m.text))).toBe(true);
+  });
+
+  // ── Geschlecht: nur die drei gepflegten Werte ─────────────────────────────
+  // In plan&simple ist GENDER.ID 1 = maennlich, im wiko-Export bedeutet die 1
+  // "weiblich". Wer Zahlen durchliesse, drehte jede Anrede um.
+  it("weist Zahlencodes als Geschlecht ab und sagt warum", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, gender: "1" }, ctx);
+    expect(e.ok).toBe(false);
+    expect(e.messages.some(m => /Zahlencode/.test(m.text))).toBe(true);
+  });
+
+  // ── Abteilung / Modell / Rolle ────────────────────────────────────────────
+  it("loest eine bekannte Abteilung auf", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, department: "Hochbau" }, ctx);
+    expect(e.dbRow.DEPARTMENT_ID).toBe(10);
+    expect(e.extra.departmentNew).toBe(null);
+  });
+
+  it("merkt eine unbekannte Abteilung zum Anlegen vor", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, department: "Tiefbau" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.dbRow.DEPARTMENT_ID).toBe(null);
+    expect(e.extra.departmentNew).toBe("Tiefbau");
+  });
+
+  it("legt ein unbekanntes Arbeitszeitmodell NICHT an, sondern warnt", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, work_model: "Gleitzeit", work_model_valid_from: "01.01.2024" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.extra.workModel).toBe(null);
+    expect(e.messages.some(m => m.level === "warn" && /Arbeitszeitmodell/.test(m.text))).toBe(true);
+  });
+
+  it("ordnet ein bekanntes Arbeitszeitmodell mit Stichtag zu", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, work_model: "40h-Woche", work_model_valid_from: "01.02.2020" }, ctx);
+    expect(e.extra.workModel).toEqual({ modelId: 20, from: "2020-02-01" });
+  });
+
+  it("verwirft eine unbekannte Berechtigungsrolle mit Warnung", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, role: "Chefetage" }, ctx);
+    expect(e.ok).toBe(true);
+    expect(e.extra.roleId).toBe(null);
+    expect(e.messages.some(m => m.level === "warn" && /Berechtigungsrolle/.test(m.text))).toBe(true);
+  });
+
+  // ── Kostensatz: Betrag UND Stichtag ───────────────────────────────────────
+  it("uebernimmt den Kostensatz nur mit Gueltigkeitsdatum", () => {
+    const mit = buildEmployeeEntry({ ...EMP_BASIS, cost_rate: "150,91", cost_rate_valid_from: "01.01.2023" }, ctx);
+    expect(mit.extra.costRate).toEqual({ value: 150.91, from: "2023-01-01" });
+
+    const ohne = buildEmployeeEntry({ ...EMP_BASIS, cost_rate: "150,91" }, ctx);
+    expect(ohne.extra.costRate).toBe(null);
+    expect(ohne.messages.some(m => /ohne Gültigkeitsdatum/.test(m.text))).toBe(true);
+  });
+
+  // ── Telefon und Mobil sind zwei Felder ────────────────────────────────────
+  it("schreibt Telefon und Mobil in getrennte Spalten", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, phone: "+49 30 1234567", mobile: "+49 170 1234567" }, ctx);
+    expect(e.dbRow.PHONE).toBe("+49 30 1234567");
+    expect(e.dbRow.MOBILE).toBe("+49 170 1234567");
+  });
+
+  it("uebernimmt Geburtstag und Notiz", () => {
+    const e = buildEmployeeEntry({ ...EMP_BASIS, birth_date: "23.04.1985", notes: "Teilzeit ab Herbst" }, ctx);
+    expect(e.dbRow.BIRTH_DATE).toBe("1985-04-23");
+    expect(e.dbRow.NOTES).toBe("Teilzeit ab Herbst");
+  });
+});
+
+// ── Vorgesetzter: darf weiter unten in derselben Datei stehen ───────────────
+// Genau deshalb entscheidet finalizeRows und nicht buildEntry: eine einzelne
+// Zeile kann nicht wissen, ob das Kuerzel spaeter noch kommt.
+describe("Vorgesetzter (zeilenuebergreifend)", () => {
+  const ctx = makeEmpCtx();
+  const headers = ["Kürzel", "Vorname", "Nachname", "Geschlecht", "Status (Aktiv/Inaktiv)", "Vorgesetzter (Kürzel)"];
+
+  function preview(dataRows) {
+    const parsed = {
+      headers,
+      rows: dataRows.map(r => ({
+        "Kürzel": r[0], "Vorname": r[1], "Nachname": r[2], "Geschlecht": r[3],
+        "Status (Aktiv/Inaktiv)": "Aktiv", "Vorgesetzter (Kürzel)": r[4] ?? "",
+      })),
+    };
+    return buildPreview({ domainKey: "employee", parsed, mapping: null, ctx });
+  }
+
+  it("akzeptiert einen Vorgesetzten, der erst spaeter in der Datei steht", () => {
+    const pv = preview([
+      ["AW", "Ansgar", "Woermann", "m", "SF"],
+      ["SF", "Simon", "Feldhaus", "m", ""],
+    ]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[0]._extra.supervisorAbbr).toBe("SF");
+  });
+
+  it("akzeptiert einen Vorgesetzten aus dem Bestand", () => {
+    const pv = preview([["AW", "Ansgar", "Woermann", "m", "CHEF"]]);
+    expect(pv.rows[0]._extra.supervisorAbbr).toBe("CHEF");
+  });
+
+  it("warnt bei einem unbekannten Vorgesetzten und laesst das Feld leer", () => {
+    const pv = preview([["AW", "Ansgar", "Woermann", "m", "NIEMAND"]]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[0]._extra.supervisorAbbr).toBe(null);
+    expect(pv.rows[0].messages.some(m => /nicht gefunden/.test(m.text))).toBe(true);
+  });
+
+  it("laesst niemanden sein eigener Vorgesetzter sein", () => {
+    const pv = preview([["AW", "Ansgar", "Woermann", "m", "AW"]]);
+    expect(pv.rows[0]._extra.supervisorAbbr).toBe(null);
+    expect(pv.rows[0].messages.some(m => /selbst/.test(m.text))).toBe(true);
   });
 });
 
 describe("buildPreview (employee, multi-key dedup)", () => {
   const ctx = makeEmpCtx();
-  const headers = ["Kürzel", "Vorname", "Nachname", "Geschlecht", "E-Mail"];
+  const headers = ["Kürzel", "Vorname", "Nachname", "Geschlecht", "E-Mail", "Status (Aktiv/Inaktiv)"];
 
   function preview(dataRows) {
     const parsed = {
       headers,
-      rows: dataRows.map(r => ({ "Kürzel": r[0], "Vorname": r[1], "Nachname": r[2], "Geschlecht": r[3], "E-Mail": r[4] ?? "" })),
+      rows: dataRows.map(r => ({
+        "Kürzel": r[0], "Vorname": r[1], "Nachname": r[2], "Geschlecht": r[3],
+        "E-Mail": r[4] ?? "", "Status (Aktiv/Inaktiv)": "Aktiv",
+      })),
     };
     return buildPreview({ domainKey: "employee", parsed, mapping: null, ctx });
   }

@@ -94,7 +94,7 @@ module.exports = (supabase) => {
   router.get("/me", async (req, res) => {
     const { data, error } = await supabase
       .from("EMPLOYEE")
-      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE, DASHBOARD_ROLE")
+      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, PHONE, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ACTIVE, DASHBOARD_ROLE, BIRTH_DATE, NOTES, SUPERVISOR_ID")
       .eq("ID", req.employeeId)
       .eq("TENANT_ID", req.tenantId)
       .maybeSingle();
@@ -306,8 +306,17 @@ module.exports = (supabase) => {
         "LAST_NAME": body.last_name,
         "PASSWORD": null,
         "MAIL": body.email,
+        "PHONE": body.phone || null,
         "MOBILE": body.mobile,
         "PERSONNEL_NUMBER": body.personnel_number,
+        "BIRTH_DATE": body.birth_date || null,
+        "NOTES": body.notes || null,
+        // Vorgesetzter: ein anderer Mitarbeiter desselben Mandanten. Die
+        // Mandantengrenze haelt hier der Fremdschluessel NICHT — er zeigt nur
+        // auf EMPLOYEE.ID. Dass eine fremde ID nicht durchgeht, sorgt die
+        // RLS-Policy beim spaeteren Lesen; gepruefte Auswahl liefert die
+        // Oberflaeche aus der eigenen Mitarbeiterliste.
+        "SUPERVISOR_ID": body.supervisor_id != null && body.supervisor_id !== '' ? Number(body.supervisor_id) : null,
         "GENDER_ID": body.gender_id,
         "DEPARTMENT_ID": body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
         "ENTRY_DATE": body.entry_date || null,
@@ -464,7 +473,7 @@ router.get("/", async (req, res) => {
 
     const { data: employees, error: empErr } = await supabase
       .from("EMPLOYEE")
-      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ENTRY_DATE, EXIT_DATE, ACTIVE, DASHBOARD_ROLE")
+      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, PHONE, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DEPARTMENT_ID, ENTRY_DATE, EXIT_DATE, ACTIVE, DASHBOARD_ROLE, BIRTH_DATE, NOTES, SUPERVISOR_ID")
       .eq("TENANT_ID", req.tenantId)
       .order("ABBR", { ascending: true })
       .limit(limit);
@@ -550,8 +559,14 @@ router.get("/", async (req, res) => {
       FIRST_NAME:       body.first_name,
       LAST_NAME:        body.last_name,
       MAIL:             body.mail || null,
+      PHONE:            body.phone !== undefined ? (body.phone || null) : undefined,
       MOBILE:           body.mobile || null,
       PERSONNEL_NUMBER: body.personnel_number || null,
+      BIRTH_DATE:       body.birth_date !== undefined ? (body.birth_date || null) : undefined,
+      NOTES:            body.notes !== undefined ? (body.notes || null) : undefined,
+      SUPERVISOR_ID:    body.supervisor_id !== undefined
+                          ? (body.supervisor_id === '' || body.supervisor_id == null ? null : Number(body.supervisor_id))
+                          : undefined,
       GENDER_ID:        body.gender_id,
       DEPARTMENT_ID:  body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
       ENTRY_DATE:     body.entry_date !== undefined ? (body.entry_date || null) : undefined,
@@ -565,7 +580,7 @@ router.get("/", async (req, res) => {
       .update(updateObj)
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
-      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DASHBOARD_ROLE")
+      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, PHONE, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DASHBOARD_ROLE, BIRTH_DATE, NOTES, SUPERVISOR_ID")
       .single();
 
     if (updErr) return res.status(500).json({ error: updErr.message });

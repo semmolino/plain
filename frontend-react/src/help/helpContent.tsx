@@ -952,6 +952,70 @@ export const HELP = {
   },
 
   // ── Mitarbeiter / Arbeitszeit ────────────────────────────────────────────
+  'mitarbeiter.vorgesetzter': {
+    title: 'Vorgesetzter',
+    body: (
+      <>
+        Ein anderer Mitarbeiter desselben Büros. Die Angabe ist freiwillig und
+        beschreibt die Organisation — sie vergibt <strong>keine Rechte</strong>.
+        Wer was darf, steht allein in der Berechtigungsrolle.
+        <br /><br />
+        Beim Import genügt das Kürzel. Der Vorgesetzte darf dort auch weiter
+        unten in derselben Datei stehen — er muss nicht vorher angelegt sein.
+      </>
+    ),
+  },
+  'mitarbeiter.import_status': {
+    title: 'Status (Aktiv/Inaktiv)',
+    body: (
+      <>
+        <strong>Aktiv</strong> heißt: der Mitarbeiter arbeitet mit — er kann
+        sich anmelden, Stunden buchen und Projekten zugeordnet werden.
+        <br /><br />
+        <strong>Inaktiv</strong> ist für Ausgeschiedene gedacht. Der Datensatz
+        bleibt samt aller gebuchten Stunden erhalten (die Auswertungen
+        vergangener Jahre brauchen ihn), aber eine Anmeldung ist nicht mehr
+        möglich. Beim Import ist die Spalte deshalb <strong>Pflicht</strong>:
+        ein stiller Vorgabewert würde entweder Ausgeschiedene wiederbeleben
+        oder aktive Kollegen aussperren.
+      </>
+    ),
+  },
+  'mitarbeiter.import_kostensatz': {
+    title: 'Kostensatz mit Gültigkeitsdatum',
+    body: (
+      <>
+        Der Kostensatz ist keine einzelne Zahl, sondern eine Historie: Jeder
+        Wert gilt <strong>ab</strong> einem Stichtag, und eine alte Buchung
+        rechnet weiterhin mit dem Satz, der damals galt.
+        <br /><br />
+        Deshalb übernimmt der Import einen Kostensatz nur zusammen mit seinem
+        Gültigkeitsdatum. Fehlt das Datum, bleibt der Satz außen vor und die
+        Zeile bekommt einen Hinweis — ein erfundener Stichtag würde später
+        stillschweigend falsche Projektkosten rechnen.
+      </>
+    ),
+  },
+  'mitarbeiter.import_kataloge': {
+    title: 'Abteilung, Arbeitszeitmodell, Berechtigungsrolle',
+    body: (
+      <>
+        Diese drei Spalten verweisen auf Einträge, die es im Büro schon geben
+        muss — verglichen wird über den Namen, Groß-/Kleinschreibung und
+        Bindestriche spielen dabei keine Rolle.
+        <br /><br />
+        <strong>Abteilung:</strong> Ist sie unbekannt, legt der Import sie an.
+        Eine Abteilung ist nur eine Bezeichnung.
+        <br /><br />
+        <strong>Arbeitszeitmodell und Berechtigungsrolle</strong> entstehen
+        dagegen <em>nicht</em> automatisch: das eine trägt arbeitszeitrechtliche
+        Regeln, das andere Rechte. Beides gehört vorher angelegt (Einstellungen
+        → Arbeitszeit bzw. → Rollen). Bis dahin wird der Mitarbeiter trotzdem
+        importiert, nur eben ohne diese Zuordnung — mit einem Hinweis in der
+        Vorschau.
+      </>
+    ),
+  },
   'mitarbeiter.saldo': {
     title: 'Gleitzeitsaldo',
     body: (

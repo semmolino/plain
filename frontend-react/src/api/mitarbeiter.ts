@@ -7,8 +7,14 @@ export interface Employee {
   FIRST_NAME:          string
   LAST_NAME:           string
   MAIL:                string | null
+  /** Festnetz. MOBILE ist die Mobilnummer — bis 09/2026 gab es nur eine Spalte. */
+  PHONE:               string | null
   MOBILE:              string | null
   PERSONNEL_NUMBER:    string | null
+  BIRTH_DATE:          string | null
+  NOTES:               string | null
+  /** Vorgesetzter — ein anderer Mitarbeiter desselben Mandanten. */
+  SUPERVISOR_ID:       number | null
   GENDER_ID:           number | null
   GENDER:              string
   NAME:                string
@@ -30,12 +36,16 @@ export interface CreateEmployeePayload {
   first_name:        string
   last_name:         string
   email?:            string
+  phone?:            string
   mobile?:           string
   personnel_number?: string
   gender_id:         string | number
   department_id?:    number | null
   entry_date?:       string | null
   exit_date?:        string | null
+  birth_date?:       string | null
+  notes?:            string | null
+  supervisor_id?:    number | null
 }
 
 /**
@@ -53,12 +63,16 @@ export interface UpdateEmployeePayload {
   first_name:        string
   last_name:         string
   mail?:             string
+  phone?:            string
   mobile?:           string
   personnel_number?: string
   gender_id:         number
   department_id?:    number | null
   entry_date?:       string | null
   exit_date?:        string | null
+  birth_date?:       string | null
+  notes?:            string | null
+  supervisor_id?:    number | null
   active?:           number
   dashboard_role?:   string | null
 }

@@ -34,14 +34,37 @@ function s(v) {
 function norm(v) {
   return s(v).toLowerCase().replace(/\s+/g, " ").trim();
 }
+/**
+ * Schlüssel für den Abgleich eines Katalog-NAMENS (Abteilung,
+ * Arbeitszeitmodell, Berechtigungsrolle) zwischen Datei und Bestand.
+ *
+ * Bewusst unempfindlich gegen Satzzeichen und Leerraum: gepflegt ist
+ * "40h-Woche", in der Datei steht "40 h Woche" — fachlich dasselbe, und ein
+ * "gibt es nicht" wäre hier nur formale Strenge. Für Dubletten-Schlüssel gilt
+ * das NICHT, dort bleibt es bei norm(): zwei Adressen dürfen sich in einem
+ * Bindestrich unterscheiden.
+ */
+function katalogKey(v) {
+  return s(v).toLowerCase().replace(/[^a-z0-9äöüß]/gi, "");
+}
 /** Spaltenüberschrift normalisieren (nur Buchstaben/Ziffern) für Auto-Mapping. */
 function normHeader(h) {
   return s(h).toLowerCase().replace(/[^a-z0-9]/gi, "");
 }
 /** Datum aus DE-/ISO-Schreibweise → 'YYYY-MM-DD'. {invalid:true} wenn nicht parsebar. */
 function parseDateISO(v) {
-  const t = s(v);
+  let t = s(v);
   if (!t) return { value: null };
+  // Exporte aus Altsystemen liefern Datumswerte oft als TEXT mit Uhrzeit
+  // ("2000-01-01 00:00:00.000", "01.02.2020 00:00", "2020-02-01T00:00:00Z").
+  // Die Uhrzeit ist dabei ohne Aussage — sie steht auf Mitternacht, weil die
+  // Quelle einen Zeitstempel-Typ benutzt. Echte Excel-Datumszellen kommen
+  // bereits als reiner ISO-Text an (spreadsheet.js), Textzellen nicht.
+  //
+  // Ohne diesen Schnitt fiel jede solche Zelle als "nicht erkannt" durch: der
+  // Import legte Mitarbeiter ohne Eintrittsdatum an und sagte es nur als
+  // Warnung, die in 999 Zeilen niemand liest (wiko-Uebernahme 09/2026).
+  t = t.replace(/[T ]\d{1,2}:\d{2}(:\d{2})?([.,]\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/i, "").trim();
   let m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) return { value: `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}` };
   m = t.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
@@ -197,19 +220,41 @@ function buildAddressEntry(mapped, ctx) {
 }
 
 // ── Domäne: Mitarbeiter ──────────────────────────────────────────────────────
+// Reihenfolge = Spaltenreihenfolge der Vorlage. Telefon steht VOR Mobil: in
+// einer Altdatei mit der alten Sammelspalte „Telefon/Mobil" greift deren Alias
+// auf dem Mobil-Feld, eine reine „Telefon"-Spalte landet dagegen im Festnetz.
 const EMPLOYEE_FIELDS = [
-  { key: "abbr",       header: "Kürzel",         required: true,  example: "MMu",               aliases: ["kuerzel", "kurzzeichen", "shortname", "initialen", "krzl"] },
-  { key: "first_name",       header: "Vorname",        required: true,  example: "Maria",             aliases: ["vorname", "firstname"] },
-  { key: "last_name",        header: "Nachname",       required: true,  example: "Muster",            aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
-  { key: "gender",           header: "Geschlecht",     required: true,  example: "weiblich",          aliases: ["geschlecht", "gender"] , list: "gender" },
-  { key: "title",            header: "Titel",          required: false, example: "Dipl.-Ing.",        aliases: ["titel", "title"] },
-  { key: "email",            header: "E-Mail",         required: false, example: "m.muster@buero.de", aliases: ["email", "mail", "emailadresse", "mailadresse"] },
-  { key: "mobile",           header: "Telefon/Mobil",  required: false, example: "+49 170 1234567",   aliases: ["mobil", "telefon", "mobile", "phone", "tel", "handy", "telefonnummer"] , type: "text" },
-  { key: "personnel_number", header: "Personalnummer", required: false, example: "P-001",             aliases: ["personalnummer", "persnr", "personalnr", "personnelnumber", "mitarbeiternummer", "pnr"] , type: "text" },
-  { key: "entry_date",       header: "Eintrittsdatum", required: false, example: "2022-03-01",        aliases: ["eintritt", "eintrittsdatum", "entrydate", "startdatum", "eingestelltam"] , type: "date" },
-  { key: "exit_date",        header: "Austrittsdatum", required: false, example: "",                  aliases: ["austritt", "austrittsdatum", "exitdate"] , type: "date" },
+  { key: "abbr",             header: "Kürzel",                required: true,  example: "MMu",               aliases: ["kuerzel", "kurzzeichen", "shortname", "initialen", "krzl"] },
+  { key: "first_name",       header: "Vorname",               required: true,  example: "Maria",             aliases: ["vorname", "firstname"] },
+  { key: "last_name",        header: "Nachname",              required: true,  example: "Muster",            aliases: ["nachname", "name", "lastname", "familienname", "surname"] },
+  { key: "gender",           header: "Geschlecht",            required: true,  example: "weiblich",          aliases: ["geschlecht", "gender"] , list: "gender" },
+  { key: "title",            header: "Titel",                 required: false, example: "Dipl.-Ing.",        aliases: ["titel", "title"] },
+  { key: "email",            header: "E-Mail",                required: false, example: "m.muster@buero.de", aliases: ["email", "mail", "emailadresse", "mailadresse"] },
+  { key: "phone",            header: "Telefon",               required: false, example: "+49 30 1234567",    aliases: ["telefon", "festnetz", "festnetznummer", "telefonnummer", "tel", "landline"] , type: "text" },
+  { key: "mobile",           header: "Mobil",                 required: false, example: "+49 170 1234567",   aliases: ["mobil", "mobile", "handy", "mobilnummer", "mobiltelefon", "telefonmobil"] , type: "text" },
+  { key: "personnel_number", header: "Personalnummer",        required: false, example: "P-001",             aliases: ["personalnummer", "persnr", "personalnr", "personnelnumber", "mitarbeiternummer", "pnr"] , type: "text" },
+  { key: "supervisor",       header: "Vorgesetzter (Kürzel)", required: false, example: "SF",                aliases: ["vorgesetzter", "vorgesetzte", "vorgesetztekuerzel", "chef", "supervisor", "manager", "leitung", "teamleiter"] , list: "employeeShort" },
+  { key: "entry_date",       header: "Eintrittsdatum",        required: false, example: "2022-03-01",        aliases: ["eintritt", "eintrittsdatum", "entrydate", "startdatum", "eingestelltam"] , type: "date" },
+  { key: "exit_date",        header: "Austrittsdatum",        required: false, example: "",                  aliases: ["austritt", "austrittsdatum", "exitdate"] , type: "date" },
+  { key: "birth_date",       header: "Geburtstag",            required: false, example: "1985-04-23",        aliases: ["geburtstag", "geburtsdatum", "gebdatum", "geburt", "birthday", "birthdate"] , type: "date" },
+  { key: "status",           header: "Status (Aktiv/Inaktiv)", required: true, example: "Aktiv",             aliases: ["status", "aktiv", "aktivinaktiv", "active", "zustand", "beschaeftigungsstatus"] , list: "employeeStatus" },
+  { key: "department",       header: "Abteilung",             required: false, example: "Hochbau",           aliases: ["abteilung", "department", "bereich", "team"] , list: "department" },
+  { key: "cost_rate_valid_from", header: "Gültigkeitsdatum Kostensatz", required: false, example: "2023-01-01", aliases: ["gueltigkeitsdatumkostensatz", "kostensatzgueltigab", "gueltigabkostensatz", "kostensatzdatum", "kostensatzab"] , type: "date" },
+  { key: "cost_rate",        header: "Kostensatz",            required: false, example: "62,50",             aliases: ["kostensatz", "kosten", "cprate", "costrate", "stundenkosten", "kostenstundensatz"] , type: "money" },
+  { key: "work_model_valid_from", header: "Gültigkeitsdatum Arbeitszeitmodell", required: false, example: "2023-01-01", aliases: ["gueltigkeitsdatumarbeitszeitmodell", "arbeitszeitmodellgueltigab", "gueltigabarbeitszeitmodell", "arbeitszeitmodelldatum", "arbeitszeitab"] , type: "date" },
+  { key: "work_model",       header: "Arbeitszeitmodell",     required: false, example: "40h-Woche",         aliases: ["arbeitszeitmodell", "arbeitszeit", "zeitmodell", "workmodel", "wochenmodell"] , list: "workModel" },
+  { key: "role",             header: "Berechtigungsrolle",    required: false, example: "Projektleiter",     aliases: ["berechtigungsrolle", "rolle", "role", "berechtigung", "benutzerrolle", "userrole", "zugriffsrolle"] , list: "userRole" },
+  { key: "notes",            header: "Notiz",                 required: false, example: "",                  aliases: ["notiz", "notizen", "bemerkung", "bemerkungen", "anmerkung", "kommentar", "notes"] },
 ];
 
+/** „Aktiv"/„Inaktiv" → 1/0. Unbekanntes bleibt null und wird zum Fehler. */
+function parseEmployeeStatus(v) {
+  const t = norm(v);
+  if (!t) return null;
+  if (["aktiv", "active", "ja", "j", "1", "wahr", "true", "x", "beschaeftigt", "angestellt"].includes(t)) return 1;
+  if (["inaktiv", "nichtaktiv", "inactive", "nein", "n", "0", "falsch", "false", "ausgeschieden", "gesperrt"].includes(t)) return 0;
+  return null;
+}
 async function loadEmployeeContext(supabase, tenantId) {
   // Geschlecht (global, kein TENANT_ID): Name/Kurzform → ID. Default = neutrales
   // Geschlecht (divers/keine Angabe), falls vorhanden.
@@ -236,16 +281,48 @@ async function loadEmployeeContext(supabase, tenantId) {
   // Bestand für Dubletten: pro Mitarbeiter mehrere Schlüssel (Mail/Kürzel/Pers.-Nr.)
   const existingKeys = new Set();
   const existingIds = new Map();
-  const { data: emps } = await supabase
-    .from("EMPLOYEE").select("ID, ABBR, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000);
-  for (const e of emps || []) {
+  const empIdByAbbr = new Map();          // für den Vorgesetzten aus dem Bestand
+
+  // Abteilungen, Arbeitszeitmodelle und Berechtigungsrollen. Alle drei werden
+  // über ihren NAMEN aus der Datei aufgelöst — deshalb hier einmal laden statt
+  // je Zeile zu fragen (999 Zeilen = 999 Abfragen).
+  const [empsRes, deptRes, wtmRes, roleRes] = await Promise.all([
+    supabase.from("EMPLOYEE").select("ID, ABBR, MAIL, PERSONNEL_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("DEPARTMENT").select("ID, ABBR, NAME").eq("TENANT_ID", tenantId).limit(10000),
+    supabase.from("WORKING_TIME_MODEL").select("ID, NAME").eq("TENANT_ID", tenantId).limit(10000),
+    supabase.from("USER_ROLE").select("ID, ABBR, NAME").eq("TENANT_ID", tenantId).limit(10000),
+  ]);
+
+  for (const e of empsRes.data || []) {
     const keys = [];
     if (e.MAIL) keys.push("mail:" + norm(e.MAIL));
     if (e.ABBR) keys.push("short:" + norm(e.ABBR));
     if (e.PERSONNEL_NUMBER) keys.push("pnr:" + norm(e.PERSONNEL_NUMBER));
     for (const k of keys) { existingKeys.add(k); if (!existingIds.has(k)) existingIds.set(k, e.ID); }
+    if (e.ABBR && !empIdByAbbr.has(norm(e.ABBR))) empIdByAbbr.set(norm(e.ABBR), e.ID);
   }
-  return { genders: { byName, byId, default: def }, existingKeys, existingIds };
+
+  // Kürzel UND Name als Schlüssel: welche Spalte der Kunde in seine Datei
+  // schreibt, ist nicht vorhersagbar — „HB" und „Hochbau" meinen dasselbe.
+  const nachNamen = (rows, spalten) => {
+    const m = new Map();
+    for (const r of rows || []) {
+      for (const sp of spalten) {
+        const k = katalogKey(r[sp]);
+        if (k && !m.has(k)) m.set(k, r.ID);
+      }
+    }
+    return m;
+  };
+
+  return {
+    genders: { byName, byId, default: def },
+    departments: nachNamen(deptRes.data, ["NAME", "ABBR"]),
+    workModels:  nachNamen(wtmRes.data,  ["NAME"]),
+    userRoles:   nachNamen(roleRes.data, ["ABBR", "NAME"]),
+    empIdByAbbr,
+    existingKeys, existingIds,
+  };
 }
 
 function buildEmployeeEntry(mapped, ctx) {
@@ -259,7 +336,11 @@ function buildEmployeeEntry(mapped, ctx) {
   if (!first) { messages.push({ level: "error", text: "Vorname fehlt (Pflichtfeld)" }); ok = false; }
   if (!last)  { messages.push({ level: "error", text: "Nachname fehlt (Pflichtfeld)" }); ok = false; }
 
-  // Geschlecht (Pflicht, FK auf GENDER)
+  // Geschlecht (Pflicht, FK auf GENDER). Nur die drei gepflegten Werte samt
+  // ihrer Kurzformen — KEINE Zahlencodes. Ein Export, der 0/1 liefert, meint
+  // damit seine eigene Nummerierung: in plan&simple ist die 1 "männlich", in
+  // wiko "weiblich". Eine stillschweigende Zuordnung säße danach in jeder
+  // Anrede auf Briefen und Rechnungen, ohne dass es jemand bemerkt.
   let genderId = null;
   const gin = s(mapped.gender);
   if (!gin) {
@@ -268,7 +349,24 @@ function buildEmployeeEntry(mapped, ctx) {
   } else {
     const found = ctx.genders.byName.get(norm(gin));
     if (found != null) genderId = found;
-    else { messages.push({ level: "error", text: `Geschlecht „${gin}“ nicht erkannt (z. B. weiblich/männlich/divers)` }); ok = false; }
+    else {
+      const zahl = /^[0-9]+$/.test(norm(gin));
+      messages.push({ level: "error", text: zahl
+        ? `Geschlecht „${gin}“ ist ein Zahlencode — erlaubt sind nur: männlich, weiblich, divers`
+        : `Geschlecht „${gin}“ nicht erkannt — erlaubt sind: männlich, weiblich, divers` });
+      ok = false;
+    }
+  }
+
+  // Status (Pflicht): steuert EMPLOYEE.ACTIVE. Ein Ausgeschiedener soll sich
+  // nicht mehr anmelden können — deshalb kein stiller Vorgabewert.
+  const statusIn = s(mapped.status);
+  const active = parseEmployeeStatus(statusIn);
+  if (active === null) {
+    messages.push({ level: "error", text: statusIn
+      ? `Status „${statusIn}“ nicht erkannt — erlaubt sind: Aktiv, Inaktiv`
+      : "Status fehlt (Pflichtfeld: Aktiv oder Inaktiv)" });
+    ok = false;
   }
 
   const email = s(mapped.email);
@@ -278,19 +376,77 @@ function buildEmployeeEntry(mapped, ctx) {
   if (entry.invalid) messages.push({ level: "warn", text: "Eintrittsdatum nicht erkannt — übersprungen (Format JJJJ-MM-TT oder TT.MM.JJJJ)" });
   const exit = parseDateISO(mapped.exit_date);
   if (exit.invalid) messages.push({ level: "warn", text: "Austrittsdatum nicht erkannt — übersprungen" });
+  const birth = parseDateISO(mapped.birth_date);
+  if (birth.invalid) messages.push({ level: "warn", text: "Geburtstag nicht erkannt — übersprungen" });
+
+  // ── Abteilung: unbekannte werden beim Import angelegt ─────────────────────
+  // Eine Abteilung ist nur eine Bezeichnung. Arbeitszeitmodell und Rolle sind
+  // es nicht — die tragen Regeln bzw. Rechte und entstehen deshalb nicht
+  // nebenbei aus einer Tabellenzelle.
+  const deptIn = s(mapped.department);
+  let departmentId = null, departmentNew = null;
+  if (deptIn) {
+    const hit = ctx.departments.get(katalogKey(deptIn));
+    if (hit != null) departmentId = hit;
+    else { departmentNew = deptIn; messages.push({ level: "warn", text: `Abteilung „${deptIn}“ gibt es noch nicht — wird angelegt` }); }
+  }
+
+  // ── Kostensatz: Betrag UND Stichtag, sonst gar nicht ──────────────────────
+  // Der Kostensatz ist eine Historie (EMPLOYEE_COST_RATE, gültig ab). Ohne
+  // Datum ließe er sich nur an einem erfundenen Stichtag einhängen — und ein
+  // erfundener Stichtag rechnet später still falsche Projektkosten.
+  const rate = parseAmountDE(mapped.cost_rate);
+  const rateFrom = parseDateISO(mapped.cost_rate_valid_from);
+  let costRate = null;
+  if (rate.invalid) messages.push({ level: "warn", text: "Kostensatz ist keine Zahl — wird nicht übernommen" });
+  else if (rate.value != null && rateFrom.value) costRate = { value: rate.value, from: rateFrom.value };
+  else if (rate.value != null && !rateFrom.value) messages.push({ level: "warn", text: "Kostensatz ohne Gültigkeitsdatum — wird nicht übernommen" });
+  else if (rateFrom.value && rate.value == null) messages.push({ level: "warn", text: "Gültigkeitsdatum ohne Kostensatz — wird nicht übernommen" });
+
+  // ── Arbeitszeitmodell: muss es geben, wird nicht angelegt ─────────────────
+  const wmIn = s(mapped.work_model);
+  const wmFrom = parseDateISO(mapped.work_model_valid_from);
+  let workModel = null;
+  if (wmIn) {
+    const hit = ctx.workModels.get(katalogKey(wmIn));
+    if (hit == null) messages.push({ level: "warn", text: `Arbeitszeitmodell „${wmIn}“ gibt es nicht — keine Zuordnung (anzulegen unter Einstellungen → Arbeitszeit)` });
+    else if (!wmFrom.value) messages.push({ level: "warn", text: "Arbeitszeitmodell ohne Gültigkeitsdatum — keine Zuordnung" });
+    else workModel = { modelId: hit, from: wmFrom.value };
+  } else if (wmFrom.value) {
+    messages.push({ level: "warn", text: "Gültigkeitsdatum ohne Arbeitszeitmodell — keine Zuordnung" });
+  }
+
+  // ── Berechtigungsrolle: muss es geben, wird nicht angelegt ────────────────
+  // Eine Rolle aus dem Nichts hätte keine Rechte und sähe in der Verwaltung
+  // aus wie eine gepflegte — wer sie vergibt, glaubt, er habe etwas erlaubt.
+  const roleIn = s(mapped.role);
+  let roleId = null;
+  if (roleIn) {
+    const hit = ctx.userRoles.get(katalogKey(roleIn));
+    if (hit != null) roleId = hit;
+    else messages.push({ level: "warn", text: `Berechtigungsrolle „${roleIn}“ gibt es nicht — nicht zugeordnet (anzulegen unter Einstellungen → Rollen)` });
+  }
+
+  // Vorgesetzter: hier nur merken. Ob das Kürzel trägt, entscheidet sich erst
+  // über die ganze Datei — er darf weiter unten in derselben Liste stehen.
+  const supervisorAbbr = s(mapped.supervisor) || null;
 
   const dbRow = {
-    ABBR:       short || null,
+    ABBR:             short || null,
     TITLE:            s(mapped.title) || null,
     FIRST_NAME:       first || null,
     LAST_NAME:        last || null,
     MAIL:             email || null,
+    PHONE:            s(mapped.phone) || null,
     MOBILE:           s(mapped.mobile) || null,
     PERSONNEL_NUMBER: s(mapped.personnel_number) || null,
     GENDER_ID:        genderId,
     ENTRY_DATE:       entry.value,
     EXIT_DATE:        exit.value,
-    ACTIVE:           1,
+    BIRTH_DATE:       birth.value,
+    NOTES:            s(mapped.notes) || null,
+    DEPARTMENT_ID:    departmentId,
+    ACTIVE:           active === null ? 1 : active,
   };
 
   const matchKey = [];
@@ -301,8 +457,221 @@ function buildEmployeeEntry(mapped, ctx) {
   const display = {
     abbr: short, first_name: first, last_name: last,
     gender: genderId != null ? (ctx.genders.byId.get(genderId) || gin) : gin, mail: email,
+    status: active === null ? statusIn : (active ? "Aktiv" : "Inaktiv"),
+    department: deptIn || null,
+    supervisor: supervisorAbbr,
+    cost_rate: costRate ? `${costRate.value} € ab ${costRate.from}` : null,
+    work_model: workModel ? `${wmIn} ab ${workModel.from}` : (wmIn || null),
+    role: roleIn || null,
   };
-  return { ok, messages, dbRow, matchKey, display };
+
+  return {
+    ok, messages, dbRow, matchKey, display,
+    extra: { supervisorAbbr, departmentNew, costRate, workModel, roleId },
+  };
+}
+
+/**
+ * Vorgesetzte lassen sich erst beurteilen, wenn die ganze Datei gelesen ist:
+ * das Kürzel darf auf einen Mitarbeiter WEITER UNTEN in derselben Liste zeigen
+ * (ausdrücklicher Wunsch — sonst müsste die Datei nach Hierarchie sortiert
+ * sein). Geschrieben wird die Verknüpfung deshalb erst im zweiten Durchgang
+ * des Commits, wenn alle IDs feststehen — dasselbe Muster wie FATHER_ID beim
+ * Projektbaum.
+ */
+function finalizeEmployeeRows(rows, ctx) {
+  const inDatei = new Set();
+  for (const r of rows) {
+    const a = norm(r._dbRow?.ABBR);
+    if (a) inDatei.add(a);
+  }
+  for (const r of rows) {
+    const ex = r._extra;
+    if (!ex?.supervisorAbbr) continue;
+    const ziel = norm(ex.supervisorAbbr);
+    if (ziel === norm(r._dbRow?.ABBR)) {
+      r.messages.push({ level: "warn", text: "Vorgesetzter ist der Mitarbeiter selbst — bleibt leer" });
+      ex.supervisorAbbr = null;
+    } else if (!inDatei.has(ziel) && !ctx.empIdByAbbr.has(ziel)) {
+      r.messages.push({ level: "warn", text: `Vorgesetzter „${ex.supervisorAbbr}“ nicht gefunden — weder im Bestand noch in dieser Datei; bleibt leer` });
+      ex.supervisorAbbr = null;
+    }
+  }
+}
+/**
+ * Mitarbeiter schreiben — eine Zeile der Datei wird zu bis zu fünf Zeilen in
+ * der Datenbank: der Mitarbeiter selbst, sein Kostensatz, seine
+ * Arbeitszeitmodell-Zuordnung, seine Berechtigungsrolle und ggf. eine neu
+ * angelegte Abteilung.
+ *
+ * Reihenfolge ist nicht beliebig:
+ *   1. Abteilungen — EMPLOYEE.DEPARTMENT_ID zeigt darauf
+ *   2. Mitarbeiter  — anlegen oder (bei "zusammenführen") aktualisieren
+ *   3. Vorgesetzte  — zweiter Durchgang, erst jetzt sind alle IDs bekannt
+ *   4. Nebentabellen
+ *
+ * Alles Angelegte trägt die Stapel-Kennung (Migration 0165). Ohne sie würde
+ * ein Zurücksetzen beim Zusammenführen die ALTE Kostensatz-Historie eines
+ * bestehenden Mitarbeiters mitreißen.
+ */
+async function commitEmployeeRows(rows, { supabase, tenantId, batchId, ctx, options }) {
+  const mode = options?.duplicateMode || "skip";
+
+  // ── 1. Neue Abteilungen ───────────────────────────────────────────────────
+  const abteilungen = new Map(ctx.departments);          // norm(Name) → ID
+  const anzulegen = new Map();                           // norm(Name) → Name
+  for (const r of rows) {
+    const name = r._extra?.departmentNew;
+    if (name && !abteilungen.has(katalogKey(name))) anzulegen.set(katalogKey(name), name);
+  }
+  for (const [key, name] of anzulegen) {
+    const { data, error } = await supabase.from("DEPARTMENT")
+      .insert([{ TENANT_ID: tenantId, NAME: name, ABBR: name.slice(0, 20), IMPORT_BATCH_ID: batchId }])
+      .select("ID").single();
+    if (error) throw { status: 500, message: `Abteilung „${name}“ konnte nicht angelegt werden: ${error.message}` };
+    abteilungen.set(key, data.ID);
+  }
+
+  // ── 2. Mitarbeiter ────────────────────────────────────────────────────────
+  // Dubletten: bei "zusammenführen" den Bestand aktualisieren, sonst anlegen.
+  // Beides liefert am Ende eine ID je Kürzel — die braucht Schritt 3 und 4.
+  const idNachAbbr = new Map(ctx.empIdByAbbr);
+  const zeilenMitId = [];                                // [{ row, id }]
+
+  const zusammen = mode === "merge" ? rows.filter((r) => r.status === "duplicate" && findExistingId(ctx, r) != null) : [];
+  const zusammenSet = new Set(zusammen);
+  const anzulegende = rows.filter((r) => !zusammenSet.has(r));
+
+  // Abteilung nachtragen, bevor geschrieben wird.
+  for (const r of rows) {
+    const neu = r._extra?.departmentNew;
+    if (neu) r._dbRow.DEPARTMENT_ID = abteilungen.get(katalogKey(neu)) ?? null;
+  }
+
+  let inserted = 0;
+  for (let i = 0; i < anzulegende.length; i += 500) {
+    const teil = anzulegende.slice(i, i + 500);
+    const nutzlast = teil.map((r) => ({ ...r._dbRow, TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId }));
+    const { data, error } = await supabase.from("EMPLOYEE").insert(nutzlast).select("ID, ABBR");
+    if (error) throw { status: 500, message: `Mitarbeiter konnten nicht angelegt werden (${inserted} von ${anzulegende.length} geschrieben): ${error.message}` };
+    // PostgREST liefert die Zeilen in der Reihenfolge der Nutzlast zurück.
+    (data || []).forEach((neu, k) => {
+      inserted++;
+      zeilenMitId.push({ row: teil[k], id: neu.ID });
+      const a = norm(neu.ABBR);
+      if (a) idNachAbbr.set(a, neu.ID);
+    });
+  }
+
+  let merged = 0, undo = [];
+  if (zusammen.length) {
+    const r = await mergeExistingRows(zusammen, { supabase, tenantId, def: DOMAINS.employee, ctx });
+    merged = r.merged; undo = r.undo;
+    for (const z of zusammen) {
+      const id = findExistingId(ctx, z);
+      if (id != null) {
+        zeilenMitId.push({ row: z, id });
+        const a = norm(z._dbRow?.ABBR);
+        if (a) idNachAbbr.set(a, id);
+      }
+    }
+  }
+
+  // ── 3. Vorgesetzte (zweiter Durchgang) ────────────────────────────────────
+  for (const { row, id } of zeilenMitId) {
+    const abbr = row._extra?.supervisorAbbr;
+    if (!abbr) continue;
+    const chefId = idNachAbbr.get(norm(abbr));
+    if (chefId == null || chefId === id) continue;
+    const { error } = await supabase.from("EMPLOYEE")
+      .update({ SUPERVISOR_ID: chefId }).eq("ID", id).eq("TENANT_ID", tenantId);
+    if (error) throw { status: 500, message: `Vorgesetzter konnte nicht gesetzt werden: ${error.message}` };
+  }
+
+  // ── 4. Kostensatz, Arbeitszeitmodell, Berechtigungsrolle ──────────────────
+  const kostensaetze = [], modelle = [], rollen = [];
+  for (const { row, id } of zeilenMitId) {
+    const ex = row._extra;
+    if (!ex) continue;
+    if (ex.costRate) kostensaetze.push({ TENANT_ID: tenantId, EMPLOYEE_ID: id, COST_RATE: ex.costRate.value, VALID_FROM: ex.costRate.from, IMPORT_BATCH_ID: batchId });
+    if (ex.workModel) modelle.push({ TENANT_ID: tenantId, EMPLOYEE_ID: id, MODEL_ID: ex.workModel.modelId, VALID_FROM: ex.workModel.from, IMPORT_BATCH_ID: batchId });
+    if (ex.roleId != null) rollen.push({ EMPLOYEE_ID: id, ROLE_ID: ex.roleId, IMPORT_BATCH_ID: batchId });
+  }
+
+  const schreibe = async (tabelle, zeilen, was) => {
+    for (let i = 0; i < zeilen.length; i += 500) {
+      const { error } = await supabase.from(tabelle).insert(zeilen.slice(i, i + 500));
+      if (error) throw { status: 500, message: `${was} konnte nicht geschrieben werden: ${error.message}. Die Mitarbeiter sind angelegt — Stapel #${batchId} zurücksetzen und erneut versuchen.` };
+    }
+  };
+  await schreibe("EMPLOYEE_COST_RATE",  kostensaetze, "Kostensatz");
+  await schreibe("EMPLOYEE_WORK_MODEL", modelle,      "Arbeitszeitmodell-Zuordnung");
+  await schreibe("EMPLOYEE_ROLE",       rollen,       "Berechtigungsrolle");
+
+  return { inserted, merged, undo };
+}
+
+/**
+ * Zurücksetzen: erst die Nebenzeilen dieses Stapels, dann die Mitarbeiter,
+ * zuletzt die vom Stapel angelegten Abteilungen (auf die zeigt EMPLOYEE).
+ *
+ * Der Schutz gegen Live-Daten muss hier selbst stehen — der allgemeine Weg in
+ * rollback() prüft `dependents` nur, wenn die Domäne KEIN rollbackExecute hat.
+ */
+async function rollbackEmployee({ supabase, tenantId, batchId }) {
+  const def = DOMAINS.employee;
+  const { data: idRows, error: idErr } = await supabase
+    .from("EMPLOYEE").select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  if (idErr) throw { status: 500, message: idErr.message };
+  const ids = (idRows || []).map((r) => r.ID);
+
+  const blocker = [];
+  for (const dep of (ids.length ? def.dependents || [] : [])) {
+    const { count, error } = await supabase
+      .from(dep.table).select("ID", { count: "exact", head: true })
+      .eq("TENANT_ID", tenantId).in(dep.column, ids);
+    if (error) {
+      if (/relation .* does not exist|column .* does not exist/i.test(error.message)) continue;
+      throw { status: 500, message: error.message };
+    }
+    if (count > 0) blocker.push(`${count}× ${dep.label}`);
+  }
+  if (blocker.length) {
+    throw { status: 409, message: `Rollback nicht möglich: An importierten Mitarbeitern hängen bereits ${blocker.join(", ")}. Bitte diese zuerst entfernen.` };
+  }
+
+  // EMPLOYEE_ROLE trägt keinen Mandanten — es hängt über EMPLOYEE_ID am
+  // Elternsatz (RLS-Policy aus Migration 0160). Ein .eq("TENANT_ID", …) darauf
+  // wäre ein Spaltenfehler, kein Filter.
+  await supabase.from("EMPLOYEE_ROLE").delete().eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from("EMPLOYEE_COST_RATE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from("EMPLOYEE_WORK_MODEL").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+
+  // Vorgesetzten-Verweise aus dem Bestand auf die gleich gelöschten Zeilen
+  // lösen: der Fremdschlüssel steht auf SET NULL, aber nur die Datenbank weiß
+  // das — ohne diesen Schritt bliebe es der Zufall, ob PostgREST zuerst die
+  // Kinder oder die Eltern anfasst.
+  if (ids.length) {
+    await supabase.from("EMPLOYEE").update({ SUPERVISOR_ID: null })
+      .eq("TENANT_ID", tenantId).in("SUPERVISOR_ID", ids);
+  }
+
+  const { data: del, error: delErr } = await supabase
+    .from("EMPLOYEE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId).select("ID");
+  if (delErr) throw { status: 500, message: delErr.message };
+
+  // Zuletzt die Abteilungen, die dieser Lauf angelegt hat. Hängt inzwischen
+  // ein anderer Mitarbeiter daran, bleibt sie stehen — eine Abteilung zu
+  // entfernen, die jemand benutzt, wäre ein Schaden statt einer Rücknahme.
+  const { data: depts } = await supabase
+    .from("DEPARTMENT").select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  for (const d of depts || []) {
+    const { count } = await supabase.from("EMPLOYEE")
+      .select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).eq("DEPARTMENT_ID", d.ID);
+    if (!count) await supabase.from("DEPARTMENT").delete().eq("ID", d.ID).eq("TENANT_ID", tenantId);
+  }
+
+  return { deleted: (del || []).length };
 }
 
 // ── Domäne: Kontakte (Ansprechpartner) ───────────────────────────────────────
@@ -1820,6 +2189,9 @@ const DOMAINS = {
     ],
     loadContext: loadEmployeeContext,
     buildEntry: buildEmployeeEntry,
+    finalizeRows: finalizeEmployeeRows,
+    commitRows: commitEmployeeRows,
+    rollbackExecute: rollbackEmployee,
   },
   contact: {
     key: "contact",
@@ -2003,7 +2375,11 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
 
     // `_raw` = die Originalzeile der Datei; sie speist das Fehlerprotokoll,
     // das der Nutzer korrigiert und unverändert wieder hochladen kann.
-    rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow, _raw: raw, _matchKey: entry.matchKey });
+    // _extra: was eine Domaene mit eigener Schreiblogik braucht, aber nicht in
+    // die eigene Tabelle gehoert (beim Mitarbeiter: Kostensatz, Arbeitszeit-
+    // modell, Rolle, Vorgesetzter). _dbRow dafuer mitzubenutzen ginge nicht —
+    // dessen Schluessel sind Spaltennamen und gehen so an die Datenbank.
+    rows.push({ row: i + 2, status, messages, display: entry.display, _dbRow: entry.dbRow, _extra: entry.extra || null, _raw: raw, _matchKey: entry.matchKey });
   });
 
   // Zeilenübergreifende Prüfung (Hierarchien): eine Baumzeile lässt sich nicht
@@ -2185,8 +2561,23 @@ async function commit({ domainKey, buffer, filename, mapping, sheetName, duplica
   //     Fortschritt + Vertrag pro Projekt) — alles mit IMPORT_BATCH_ID getaggt.
   if (def.commitRows) {
     try {
-      const { inserted } = await def.commitRows(wanted, { supabase, tenantId, batchId, ctx, options: { structureMode, docType }, employeeId });
-      return { batchId, inserted, summary: pv.summary };
+      // duplicateMode gehoert mit hinein: eine Domaene mit eigener Schreib-
+      // logik bekommt die Dubletten in `wanted` und muss selbst entscheiden,
+      // ob sie sie anlegt oder zusammenfuehrt — der Standardweg weiter unten
+      // kommt hier nicht mehr vorbei.
+      const res = await def.commitRows(wanted, { supabase, tenantId, batchId, ctx, options: { structureMode, docType, duplicateMode: mode }, employeeId });
+      const inserted = res?.inserted || 0;
+      const merged   = res?.merged   || 0;
+      const undo     = Array.isArray(res?.undo) ? res.undo : [];
+      // Zusammengefuehrtes ist nur ruecknehmbar, wenn der vorherige Stand im
+      // Stapel steht — loeschen kann man es nicht, die Zeile gab es vorher.
+      if (merged || undo.length) {
+        await supabase.from("IMPORT_BATCH").update({
+          ROW_OK: inserted + merged,
+          SUMMARY_JSON: { ...pv.summary, structureMode: structureMode || null, docType: docType || null, merged, undo },
+        }).eq("ID", batchId).eq("TENANT_ID", tenantId);
+      }
+      return { batchId, inserted, merged, summary: pv.summary };
     } catch (e) {
       await supabase.from("IMPORT_BATCH").update({ ROW_OK: 0 }).eq("ID", batchId).eq("TENANT_ID", tenantId);
       throw { status: e?.status || 500, message: `${e?.message || e} Stapel #${batchId} kann zurückgesetzt werden.` };
@@ -2368,10 +2759,11 @@ async function rollback({ batchId, supabase, tenantId }) {
 // ── Vorlagen ─────────────────────────────────────────────────────────────────
 // Feste Wertelisten (systemweit, nicht mandantenabhängig).
 const FIXED_LISTS = {
-  addressType: ADDRESS_TYPE_ALIASES.map((t) => t.label),
-  billing:     ["Pauschal", "Stunden"],
-  docType:     ["Abschlag", "Rechnung"],
-  yesNo:       ["ja", "nein"],
+  addressType:    ADDRESS_TYPE_ALIASES.map((t) => t.label),
+  billing:        ["Pauschal", "Stunden"],
+  docType:        ["Abschlag", "Rechnung"],
+  yesNo:          ["ja", "nein"],
+  employeeStatus: ["Aktiv", "Inaktiv"],
 };
 
 const LIST_LABELS = {
@@ -2383,9 +2775,13 @@ const LIST_LABELS = {
   projectType:   "Projekttyp",
   employeeShort: "Mitarbeiter (Kürzel)",
   addressName:   "Adresse/Firma",
-  billing:       "Abrechnungsart",
-  docType:       "Belegart",
-  yesNo:         "ja/nein",
+  billing:        "Abrechnungsart",
+  docType:        "Belegart",
+  yesNo:          "ja/nein",
+  employeeStatus: "Status",
+  department:     "Abteilung",
+  workModel:      "Arbeitszeitmodell",
+  userRole:       "Berechtigungsrolle",
 };
 
 /**
@@ -2400,7 +2796,8 @@ async function loadTemplateLists(supabase, tenantId) {
   const pick = (rows, col) => [...new Set((rows || []).map((r) => s(r[col])).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
   const safe = async (fn) => { try { return await fn(); } catch { return { data: [] }; } };
 
-  const [countries, genders, salutations, statuses, types, employees, addresses] = await Promise.all([
+  const [countries, genders, salutations, statuses, types, employees, addresses,
+         departments, workModels, userRoles] = await Promise.all([
     safe(() => supabase.from("COUNTRY").select("NAME")),
     safe(() => supabase.from("GENDER").select("GENDER")),
     safe(() => supabase.from("SALUTATION").select("SALUTATION")),
@@ -2408,6 +2805,9 @@ async function loadTemplateLists(supabase, tenantId) {
     safe(() => supabase.from("PROJECT_TYPE").select("ABBR").eq("TENANT_ID", tenantId)),
     safe(() => supabase.from("EMPLOYEE").select("ABBR").eq("TENANT_ID", tenantId).limit(2000)),
     safe(() => supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(2000)),
+    safe(() => supabase.from("DEPARTMENT").select("NAME").eq("TENANT_ID", tenantId).limit(2000)),
+    safe(() => supabase.from("WORKING_TIME_MODEL").select("NAME").eq("TENANT_ID", tenantId).limit(2000)),
+    safe(() => supabase.from("USER_ROLE").select("ABBR").eq("TENANT_ID", tenantId).limit(2000)),
   ]);
 
   lists.country       = pick(countries.data, "NAME");
@@ -2417,6 +2817,13 @@ async function loadTemplateLists(supabase, tenantId) {
   lists.projectType   = pick(types.data, "ABBR");
   lists.employeeShort = pick(employees.data, "ABBR");
   lists.addressName   = pick(addresses.data, "ADDRESS_NAME_1");
+  // Abteilung bleibt eine Vorschlagsliste, keine Auswahlpflicht: der Import
+  // legt eine unbekannte Abteilung an. Arbeitszeitmodell und Berechtigungs-
+  // rolle dagegen muessen existieren — steht die Liste leer, ist das der
+  // Hinweis, dass im Mandanten noch nichts gepflegt ist.
+  lists.department    = pick(departments.data, "NAME");
+  lists.workModel     = pick(workModels.data, "NAME");
+  lists.userRole      = pick(userRoles.data, "ABBR");
   return lists;
 }
 
@@ -2437,11 +2844,17 @@ const TEMPLATE_HELP = {
     after: ["Ohne Ansprechpartner lässt sich später kein Beleg erzeugen — mindestens einer je Rechnungsadresse."],
   },
   employee: {
-    intro: "Deine Mitarbeiterinnen und Mitarbeiter als Stammdaten — Grundlage für Projektleitung, Zeiterfassung und Auswertungen.",
-    before: ["Nichts. Mitarbeiter hängen an keinem anderen Bereich."],
+    intro: "Deine Mitarbeiterinnen und Mitarbeiter als Stammdaten — Grundlage für Projektleitung, Zeiterfassung und Auswertungen. Kostensatz, Arbeitszeitmodell und Berechtigungsrolle lassen sich gleich mit übernehmen.",
+    before: [
+      "Nichts, wenn du nur die Stammdaten übernimmst.",
+      "Sollen Arbeitszeitmodell oder Berechtigungsrolle mitkommen, müssen diese vorher angelegt sein (Einstellungen → Arbeitszeit bzw. → Rollen). Unbekannte Namen werden übersprungen, der Mitarbeiter entsteht trotzdem. Eine unbekannte Abteilung legt der Import dagegen selbst an.",
+    ],
     after: [
-      "Wichtig: Importierte Mitarbeiter haben KEINEN Zugang und KEINE Rolle. Login und Berechtigungen vergibst du danach unter Mitarbeiter.",
-      "Ebenfalls danach zu pflegen: Arbeitszeitmodell und Stundensätze — ohne sie bleiben Zeitkonto und Kostenauswertung leer.",
+      "Status ist Pflicht (Aktiv/Inaktiv) — Ausgeschiedene kommen als „Inaktiv“ mit: ihre gebuchten Stunden werden für Auswertungen vergangener Jahre gebraucht.",
+      "Der Vorgesetzte wird über das Kürzel zugeordnet und darf auch weiter unten in derselben Datei stehen.",
+      "Kostensatz und Arbeitszeitmodell brauchen je ein Gültigkeitsdatum — ohne das bleiben sie außen vor, weil beides eine Historie ist und nicht ein einzelner Wert.",
+      "Wichtig: Importierte Mitarbeiter haben KEINEN Zugang. Die Einladung zum Login verschickst du danach unter Mitarbeiter.",
+      "Der Stundensatz (Verkauf) wird hier nicht gesetzt — er hängt an der Projektrolle, nicht am Mitarbeiter.",
     ],
   },
   project: {
@@ -2733,7 +3146,7 @@ function listDomains() {
 
 module.exports = {
   // rein / testbar
-  s, norm, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
+  s, norm, katalogKey, normHeader, parseDateISO, parseAmountDE, parseBuffer, buildAutoMapping, buildPreview,
   buildAddressEntry, buildEmployeeEntry, buildContactEntry, buildProjectEntry, buildProjectFeeEntry, buildProjectStructureEntry, finalizeProjectStructureRows, parseOutline, buildOpeningBalanceEntry, buildOpenItemEntry, finalizeOpenItemRows, buildOpeningCostEntry,
   // orchestriert
   preview, commit, errorReport, listBatches, rollback, buildTemplate, buildStructurePrefill, listDomains, DOMAINS,
