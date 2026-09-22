@@ -1554,7 +1554,8 @@ async function loadProjectFullContext(supabase, tenantId) {
   ]);
 
   const statusByName = new Map();
-  for (const r of statusRes.data || []) if (r.ABBR) statusByName.set(katalogKey(r.ABBR), r.ID);
+  const statusNamen = [];
+  for (const r of statusRes.data || []) if (r.ABBR) { statusByName.set(katalogKey(r.ABBR), r.ID); statusNamen.push(r.ABBR); }
   const typeByName = new Map();
   for (const r of typeRes.data || []) if (r.ABBR) typeByName.set(katalogKey(r.ABBR), r.ID);
   const empByName = new Map();
@@ -1593,7 +1594,7 @@ async function loadProjectFullContext(supabase, tenantId) {
 
   return {
     companyId: companyRes.data?.[0]?.ID ?? null,
-    statusByName, typeByName, empByName, addrByName, existingKeys, defaults,
+    statusByName, statusNamen, typeByName, empByName, addrByName, existingKeys, defaults,
     feeMasterByAbbr, zoneByMaster, phaseByMaster,
     existingIds: new Map(),   // Zusammenführen ist hier nicht vorgesehen
   };
@@ -1626,7 +1627,11 @@ function buildProjectFullEntry(mapped, ctx) {
     if (statusIn) {
       const hit = ctx.statusByName.get(katalogKey(statusIn));
       if (hit != null) statusId = hit;
-      else { messages.push({ level: "error", text: `Status „${statusIn}“ nicht gefunden — Bezeichnung prüfen (Einstellungen → Stammdaten)` }); ok = false; }
+      else {
+        const erlaubt = [...(ctx.statusNamen || [])].join(", ");
+        messages.push({ level: "error", text: `Status „${statusIn}“ gibt es nicht${erlaubt ? ` — erlaubt sind: ${erlaubt}` : ""}` });
+        ok = false;
+      }
     } else {
       // Ohne Angabe die Vorbelegung. Ein Projekt ohne Status wäre in jeder
       // Liste und jedem Filter ein Sonderfall.
@@ -1801,9 +1806,21 @@ function finalizeProjectFullRows(rows, ctx) {
     // ── 2. Genau eine Projektzeile ────────────────────────────────────────
     const projektzeilen = usable.filter((r) => r._dbRow.istProjektzeile);
     if (projektzeilen.length === 0) {
+      // Es gibt zwei sehr verschiedene Gruende dafuer, und sie auseinander zu
+      // halten ist der Unterschied zwischen "deine Datei ist falsch gebaut" und
+      // "ein Wert in dieser einen Zeile stimmt nicht".
+      //
+      // Vorher meldeten beide "hat keine Projektzeile". Bei der wiko-Uebernahme
+      // hiess das fuer 177 Projekte: die Zeile WAR da, nur ihr Status stand
+      // nicht im Katalog — und der Nutzer suchte den Fehler an der falschen
+      // Stelle.
+      const fehlerhafteProjektzeile = group.find((r) => r._dbRow.istProjektzeile);
       for (const r of group) {
+        if (r === fehlerhafteProjektzeile) continue;   // die traegt ihren eigenen Fehler
         r.status = "error";
-        r.messages.push({ level: "error", text: `Projekt „${number}“ hat keine Projektzeile — genau eine Zeile muss die Gliederung leer lassen` });
+        r.messages.push({ level: "error", text: fehlerhafteProjektzeile
+          ? `Projekt „${number}“ wird übersprungen — seine Projektzeile (Zeile ${fehlerhafteProjektzeile.row}) ist fehlerhaft; der Grund steht dort`
+          : `Projekt „${number}“ hat keine Projektzeile — genau eine Zeile muss die Gliederung leer lassen` });
       }
       continue;
     }

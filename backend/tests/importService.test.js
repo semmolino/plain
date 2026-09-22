@@ -902,6 +902,30 @@ describe("buildPreview (project_full)", () => {
     expect(pv.rows[0].messages.some((m) => /keine Projektzeile/.test(m.text))).toBe(true);
   });
 
+  // Die Projektzeile IST da, aber sie hat einen Fehler. Vorher meldete der
+  // Import fuer die ganze Gruppe "hat keine Projektzeile" — bei der
+  // wiko-Uebernahme suchten deshalb 177 Projekte lang alle an der falschen
+  // Stelle, dabei stand nur ein Status nicht im Katalog.
+  it("unterscheidet eine FEHLENDE von einer FEHLERHAFTEN Projektzeile", () => {
+    const pv = preview([
+      ["P-1", "", "Phantasiestatus", "MMu", "", "", "P-1", "Kita", "", "", "", ""],
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "1000", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(2);
+    // Die Projektzeile nennt ihren eigenen Grund …
+    expect(pv.rows[0].messages.some((m) => /Status .* gibt es nicht/.test(m.text))).toBe(true);
+    // … und verweist nicht faelschlich auf eine fehlende Zeile.
+    expect(pv.rows[0].messages.some((m) => /keine Projektzeile/.test(m.text))).toBe(false);
+    // Die Strukturzeile zeigt dorthin, statt einen falschen Grund zu nennen.
+    expect(pv.rows[1].messages.some((m) => m.text.includes("Projektzeile (Zeile 2) ist fehlerhaft"))).toBe(true);
+  });
+
+  it("nennt die erlaubten Statuswerte", () => {
+    const pv = preview([["P-1", "", "Phantasiestatus", "MMu", "", "", "P-1", "Kita", "", "", "", ""]],
+      { ...makeCtx(), statusNamen: ["in Bearbeitung", "abgeschlossen"] });
+    expect(pv.rows[0].messages.some((m) => /erlaubt sind: in Bearbeitung, abgeschlossen/.test(m.text))).toBe(true);
+  });
+
   it("weist zwei Projektzeilen ab", () => {
     const pv = preview([PROJEKT, PROJEKT]);
     expect(pv.summary.error).toBe(2);
