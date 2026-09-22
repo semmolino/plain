@@ -1186,7 +1186,7 @@ function buildProjectStructureEntry(mapped, ctx) {
   const revRaw = s(mapped.revenue);
   const rev = parseAmountDE(mapped.revenue);
   if (revRaw && (rev.invalid || rev.value == null)) { messages.push({ level: "error", text: `Honorar „${revRaw}“ ist keine gültige Zahl` }); ok = false; }
-  else if (rev.value != null && rev.value < 0) { messages.push({ level: "error", text: "Honorar darf nicht negativ sein" }); ok = false; }
+  else if (rev.value != null && rev.value < 0) messages.push({ level: "warn", text: "Honorar ist negativ — als Minderung übernommen; bitte in der Vorschau prüfen" });
 
   const nkRaw = s(mapped.extras_percent);
   const nk = parseAmountDE(mapped.extras_percent);
@@ -1567,7 +1567,7 @@ function buildProjectFullEntry(mapped, ctx) {
   const revRaw = s(mapped.revenue);
   const rev = parseAmountDE(mapped.revenue);
   if (revRaw && (rev.invalid || rev.value == null)) { messages.push({ level: "error", text: `Honorar „${revRaw}“ ist keine gültige Zahl` }); ok = false; }
-  else if (rev.value != null && rev.value < 0) { messages.push({ level: "error", text: "Honorar darf nicht negativ sein" }); ok = false; }
+  else if (rev.value != null && rev.value < 0) messages.push({ level: "warn", text: "Honorar ist negativ — als Minderung übernommen; bitte in der Vorschau prüfen" });
 
   const nk = parseAmountDE(mapped.extras_percent);
   if (s(mapped.extras_percent) && (nk.invalid || nk.value == null)) messages.push({ level: "warn", text: "Nebenkosten % ist keine Zahl — wird als 0 übernommen" });
@@ -1675,9 +1675,22 @@ function finalizeProjectFullRows(rows, ctx) {
       e.key = e.outline.join(".");
       e.parentKey = e.outline.length > 1 ? e.outline.slice(0, -1).join(".") : null;
       e.depth = e.outline.length;
-      if (byKey.has(e.key)) {
-        r.status = "error";
-        r.messages.push({ level: "error", text: `Gliederung „${e.key}“ kommt in diesem Projekt mehrfach vor` });
+      const schon = byKey.get(e.key);
+      if (schon) {
+        const a = schon._dbRow, b = e;
+        const gleich = norm(a.nameShort) === norm(b.nameShort)
+          && a.billingTypeId === b.billingTypeId
+          && num(a.revenue) === num(b.revenue)
+          && num(a.extrasPercent) === num(b.extrasPercent)
+          && num(a.progressPercent) === num(b.progressPercent);
+        if (gleich) {
+          // Dieselbe Position, nur eine weitere Leistungsphase.
+          b.istZusatzzeile = true;
+          a.mehrfachLph = (a.mehrfachLph || 1) + 1;
+        } else {
+          r.status = "error";
+          r.messages.push({ level: "error", text: `Gliederung „${e.key}“ kommt in diesem Projekt mehrfach vor — und die Zeilen widersprechen sich` });
+        }
       } else byKey.set(e.key, r);
     }
     for (const r of knoten) {
@@ -1688,9 +1701,21 @@ function finalizeProjectFullRows(rows, ctx) {
       }
     }
 
-    // ── 4. Blatt oder Knoten ──────────────────────────────────────────────
-    const eltern = new Set(knoten.map((r) => r._dbRow.parentKey).filter(Boolean));
+    // Zusatzzeilen (weitere Leistungsphase desselben Elements) zaehlen ab
+    // hier nicht mehr mit — der Knoten entsteht aus der ersten Zeile.
+    const echte = knoten.filter((r) => !r._dbRow.istZusatzzeile);
     for (const r of knoten) {
+      if (!r._dbRow.istZusatzzeile) continue;
+      r.messages.push({ level: "warn", text: "Weitere Leistungsphase desselben Elements — der Knoten entsteht nur einmal" });
+    }
+    for (const r of echte) {
+      if (!r._dbRow.mehrfachLph) continue;
+      r.messages.push({ level: "warn", text: `Element hängt an ${r._dbRow.mehrfachLph} Leistungsphasen — die Zuordnung bleibt offen und ist nachzupflegen` });
+    }
+
+    // ── 4. Blatt oder Knoten ──────────────────────────────────────────────
+    const eltern = new Set(echte.map((r) => r._dbRow.parentKey).filter(Boolean));
+    for (const r of echte) {
       const e = r._dbRow;
       e.isLeaf = !eltern.has(e.key);
       const einzug = e.depth > 1 ? "›".repeat(e.depth - 1) + " " : "";
@@ -1698,7 +1723,7 @@ function finalizeProjectFullRows(rows, ctx) {
     }
 
     // ── 5. Geld und Abrechnungsart gehören an die Blätter ─────────────────
-    for (const r of knoten) {
+    for (const r of echte) {
       const e = r._dbRow;
       if (!e.isLeaf) {
         if (e.revenue) {
@@ -1725,7 +1750,7 @@ function finalizeProjectFullRows(rows, ctx) {
 
     // ── 7. Geschwisterreihenfolge ─────────────────────────────────────────
     const jeElternteil = new Map();
-    for (const r of knoten) {
+    for (const r of echte) {
       const p = r._dbRow.parentKey || "";
       const n = jeElternteil.get(p) || 0;
       r._dbRow.sortIndex = n;
@@ -1743,7 +1768,7 @@ function finalizeProjectFullRows(rows, ctx) {
       continue;
     }
 
-    if (!knoten.length) {
+    if (!echte.length) {
       projektzeile.messages.push({ level: "warn", text: "Projekt ohne Struktur — es entsteht nur das Projekt samt Vertrag" });
     }
   }
@@ -1797,7 +1822,7 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
     const projektzeile = group.find((r) => r._dbRow.istProjektzeile);
     if (!projektzeile) continue;
     const kopf = projektzeile._dbRow;
-    const knoten = group.filter((r) => !r._dbRow.istProjektzeile);
+    const knoten = group.filter((r) => !r._dbRow.istProjektzeile && !r._dbRow.istZusatzzeile);
 
     try {
       // ── 2. Projekt ────────────────────────────────────────────────────

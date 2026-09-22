@@ -975,6 +975,47 @@ describe("buildPreview (project_full)", () => {
     expect(pv.rows[1]._dbRow.costs).toBe(1500);
   });
 
+  // Eine Honorarminderung ist ein echter Vorgang und steht bei einer
+  // Datenuebernahme als negative Position in der Quelle. Sie abzuweisen hiesse,
+  // vollstaendige Projekte draussen zu lassen, damit eine Zahl schoen bleibt.
+  it("laesst negatives Honorar zu, weist aber darauf hin", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "-2500", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[1]._dbRow.revenue).toBe(-2500);
+    expect(pv.rows[1].messages.some((m) => m.level === "warn" && /negativ/.test(m.text))).toBe(true);
+  });
+
+  // wiko kann EIN Element an mehrere Leistungsphasen haengen — der Export
+  // liefert dann mehrere Zeilen mit derselben Gliederung.
+  it("legt ein Element mit mehreren Leistungsphasen nur einmal an", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "Sammelposition", "Pauschal", "9000", "", ""],
+      ["P-1", "", "", "", "", "1", "A", "Sammelposition", "Pauschal", "9000", "", ""],
+      ["P-1", "", "", "", "", "1", "A", "Sammelposition", "Pauschal", "9000", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[1]._dbRow.istZusatzzeile).toBeFalsy();
+    expect(pv.rows[2]._dbRow.istZusatzzeile).toBe(true);
+    expect(pv.rows[3]._dbRow.istZusatzzeile).toBe(true);
+    expect(pv.rows[1].messages.some((m) => /3 Leistungsphasen/.test(m.text))).toBe(true);
+  });
+
+  // Widersprechen sich die Zeilen dagegen in den Elementdaten, weiss niemand,
+  // welche gilt — das bleibt ein Fehler.
+  it("weist widersprechende Zeilen mit gleicher Gliederung ab", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "9000", "", ""],
+      ["P-1", "", "", "", "", "1", "B", "", "Pauschal", "4000", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(3);
+    expect(pv.rows[2].messages.some((m) => /widersprechen/.test(m.text))).toBe(true);
+  });
+
   it("begrenzt einen Leistungsstand ausserhalb 0-100", () => {
     const pv = preview([
       PROJEKT,
