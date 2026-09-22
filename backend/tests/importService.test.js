@@ -1137,13 +1137,22 @@ describe("buildPreview (project_full)", () => {
 
   // K0..K4 sind die ANRECHENBAREN BAUKOSTEN, aus denen sich das Honorar erst
   // ergibt — nicht das Honorar selbst.
-  // wiko fuehrt den K-Bezug als Ziffer, plan&simple als "K0".."K4". Ohne die
-  // Umsetzung stand im Wizard ueberall K0 — also der falsche Kostenblock.
-  it("bringt den K-Bezug in die Schreibweise der Stammdaten", () => {
-    expect(previewKalk([P_KALK, K_ZEILE()]).rows[1]._dbRow.kalk.kx).toBe("K3");
-    expect(previewKalk([P_KALK, K_ZEILE({ 24: "0" })]).rows[1]._dbRow.kalk.kx).toBe("K0");
-    expect(previewKalk([P_KALK, K_ZEILE({ 24: "K4" })]).rows[1]._dbRow.kalk.kx).toBe("K4");
-    expect(previewKalk([P_KALK, K_ZEILE({ 24: "" })]).rows[1]._dbRow.kalk.kx).toBe(null);
+  // Der K-Bezug kommt aus den DATEN, nicht aus wikos KX: dort standen 535
+  // Zeilen auf KX=3, hatten aber nur K0 gefuellt. Uebernaehme man das, zeigte
+  // die Kalkulation auf einen leeren Block — Basis 0, Honorar 0.
+  it("nimmt den Kostenblock, in dem wirklich etwas steht", () => {
+    // K2 traegt die Kosten, wikos KX sagt 3 (leer) → K2 gewinnt.
+    expect(previewKalk([P_KALK, K_ZEILE()]).rows[1]._dbRow.kalk.kx).toBe("K2");
+    // Zeigt KX auf einen gefuellten Block, gilt KX.
+    expect(previewKalk([P_KALK, K_ZEILE({ 18: "500000", 24: "0" })]).rows[1]._dbRow.kalk.kx).toBe("K0");
+    // Gar keine Kosten → K0 als Vorgabe.
+    expect(previewKalk([P_KALK, K_ZEILE({ 20: "" })]).rows[1]._dbRow.kalk.kx).toBe("K0");
+  });
+
+  it("weist auf mehrere gefuellte Kostenbloecke hin", () => {
+    const pv = previewKalk([P_KALK, K_ZEILE({ 18: "100000" })]);   // K0 und K2
+    expect(pv.rows[1]._dbRow.kalk.kx).toBe("K0");
+    expect(pv.rows[1].messages.some((m) => /mehreren Blöcken/.test(m.text))).toBe(true);
   });
 
   it("merkt sich den Tafelsatz der Leistungsphase", () => {

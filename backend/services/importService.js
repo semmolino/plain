@@ -1786,19 +1786,39 @@ function buildProjectFullEntry(mapped, ctx) {
       if (Number.isFinite(lphNr) && phaseId == null) messages.push({ level: "warn", text: `Leistungsphase ${lphNr} gibt es bei diesem Leistungsbild nicht — bleibt ohne Zuordnung` });
 
       const zahl = (v) => { const p = parseAmountDE(v); return p.value ?? 0; };
+      const kBloecke = [zahl(mapped.k0), zahl(mapped.k1), zahl(mapped.k2), zahl(mapped.k3), zahl(mapped.k4)];
+
+      // Welcher Kostenblock traegt die anrechenbaren Kosten?
+      //
+      // wikos KX taugt als Zeiger nicht: in der Uebernahme standen 535 Zeilen
+      // auf KX=3, hatten aber nur K0 gefuellt. Uebernaehme man das, zeigte die
+      // Kalkulation auf einen leeren Block — Basis 0, Honorar 0, und im Wizard
+      // ueberall Gedankenstriche.
+      //
+      // Deshalb entscheidet der Inhalt: KX wird genommen, WENN es auf einen
+      // gefuellten Block zeigt; sonst der erste gefuellte. Ohne jeden Wert
+      // bleibt es bei K0.
+      const gefuellt = kBloecke.map((v, i) => (v > 0 ? i : -1)).filter((i) => i >= 0);
+      const kxRoh = parseInt(String(s(mapped.kx)).replace(/[^0-9]/g, ""), 10);
+      const kIndex = Number.isFinite(kxRoh) && gefuellt.includes(kxRoh) ? kxRoh
+        : (gefuellt.length ? gefuellt[0] : 0);
+      if (gefuellt.length > 1) {
+        messages.push({ level: "warn", text: `Anrechenbare Kosten stehen in mehreren Blöcken (K${gefuellt.join(", K")}) — die Kalkulation rechnet mit K${kIndex}` });
+      }
+
       kalk = {
         ref: calcRef || `${number}#${lbIn}`,
         feeMasterId, zoneId,
         zonePercent: zahl(mapped.zone_percent),
         // K0..K4 sind die ANRECHENBAREN BAUKOSTEN, aus denen sich das Honorar
         // erst ergibt — nicht das Honorar selbst.
-        k: [zahl(mapped.k0), zahl(mapped.k1), zahl(mapped.k2), zahl(mapped.k3), zahl(mapped.k4)],
+        k: kBloecke,
         abbr: s(mapped.calc_abbr) || lbIn,
         name: s(mapped.calc_name) || s(mapped.calc_abbr) || lbIn,
         // wiko fuehrt den K-Bezug als Ziffer, plan&simple als "K0".."K4" —
         // dieselbe Bedeutung, andere Schreibweise. Ohne die Umsetzung stand im
         // Wizard ueberall K0, also der falsche Kostenblock.
-        phaseId, kx: kxSchreibweise(mapped.kx),
+        phaseId, kx: `K${kIndex}`,
         phasePercent: zahl(mapped.lph_percent),
         // Der Tafelwert der Phase — im Wizard die Spalte "Basis %".
         phasePercentBase: phase?.percent ?? null,
@@ -2208,9 +2228,19 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
     const nachKey = new Map(knoten.map((r) => [r._dbRow.key, r._dbRow]));
     for (const r of knoten) {
       const e = r._dbRow;
-      e.revenueFinal = e.isLeaf && e.billingTypeId === 1 ? fmt2(e.revenue) : 0;
+      // Blatt: Pauschal traegt sein Honorar, Nachweis den Erloes seiner
+      // Buchung — genau die Rechnung, die recomputeStructure nach jeder
+      // Buchung macht. Knoten bekommen ihre Werte gleich von unten.
+      e.revenueFinal = !e.isLeaf ? 0
+        : e.billingTypeId === 1 ? fmt2(e.revenue)
+        : fmt2(e.revenueBooking || 0);
       e.extrasFinal = fmt2(e.revenueFinal * e.extrasPercent / 100);
       e.costsFinal = e.isLeaf ? fmt2(e.costs) : 0;
+      // Bei Nachweis ist das Erbrachte das Gebuchte — also 100 %. Auch das
+      // macht recomputeStructure so; ein abweichender Leistungsstand aus der
+      // Datei waere hier eine Behauptung ueber bereits gebuchte Arbeit.
+      e.progressFinal = e.isLeaf && e.billingTypeId === 2 && e.revenueFinal
+        ? 100 : num(e.progressPercent);
     }
     // Von der tiefsten Ebene nach oben aufsummieren.
     const tiefen = [...new Set(knoten.map((r) => r._dbRow.depth))].sort((a, b) => b - a);
@@ -2220,9 +2250,13 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
         if (!e.parentKey) continue;
         const vater = nachKey.get(e.parentKey);
         if (!vater) continue;
-        vater.revenueFinal = fmt2(num(vater.revenueFinal) + num(e.revenueFinal));
-        vater.extrasFinal  = fmt2(num(vater.extrasFinal)  + num(e.extrasFinal));
-        vater.costsFinal   = fmt2(num(vater.costsFinal)   + num(e.costsFinal));
+        vater.revenueFinal    = fmt2(num(vater.revenueFinal)    + num(e.revenueFinal));
+        vater.extrasFinal     = fmt2(num(vater.extrasFinal)     + num(e.extrasFinal));
+        vater.costsFinal      = fmt2(num(vater.costsFinal)      + num(e.costsFinal));
+        // Der Elternstand ist kein Mittelwert der Kinder, sondern das
+        // Verhaeltnis der erbrachten zu den gesamten Betraegen — sonst zoege
+        // eine kleine, fertige Position eine grosse, offene mit hoch.
+        vater.completionFinal = fmt2(num(vater.completionFinal) + num(e.revenueFinal) * num(e.progressFinal) / 100);
       }
     }
   }
@@ -2243,7 +2277,9 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
     const nutzlast = stufe.map(({ p, r }) => {
       const e = r._dbRow;
       const vaterZeile = e.parentKey ? (p.knoten.find((x) => x._dbRow.key === e.parentKey) ?? null) : null;
-      const anteil = num(e.progressPercent);
+      const anteil = e.isLeaf
+        ? num(e.progressFinal)
+        : (num(e.revenueFinal) > 0 ? fmt2(num(e.completionFinal) * 100 / num(e.revenueFinal)) : 0);
       return {
         ABBR: e.nameShort, NAME: e.nameLong, PROJECT_ID: p.projectId,
         BILLING_TYPE_ID: e.billingTypeId, CONTRACT_ID: p.contractId,

@@ -775,11 +775,12 @@ describe("commit (project_full)", () => {
     expect(kalk.CONSTRUCTION_COSTS_K2).toBe(400000);
 
     const phase = supabase._tables.FEE_CALCULATION_PHASE[0];
-    expect(phase.KX).toBe("K3");               // aus wikos "3"
+    expect(phase.KX).toBe("K2");               // der Block, in dem die Kosten stehen
     expect(phase.FEE_PERCENT_BASE).toBe(7);    // Tafelsatz der LPH 2
     expect(phase.FEE_PERCENT).toBe(7);         // vereinbarter Satz aus der Datei
-    // Basis ist das Honorar des gewaehlten K-Bezugs (hier K3 = 0, weil dort
-    // keine Baukosten stehen) — der Phasenanteil rechnet konsistent darauf.
+    // Basis ist das Honorar des gewaehlten K-Bezugs — hier K2 mit 400.000 EUR
+    // anrechenbar, also ein echter Betrag statt einer Null.
+    expect(phase.REVENUE_BASE).toBeGreaterThan(0);
     expect(phase.PHASE_REVENUE).toBe(fmt2Test(phase.REVENUE_BASE * 7 / 100));
   });
 
@@ -794,7 +795,11 @@ describe("commit (project_full)", () => {
 
     const knoten = supabase._tables.PROJECT_STRUCTURE[0];
     expect(knoten.BILLING_TYPE_ID).toBe(2);
-    expect(knoten.REVENUE).toBe(0);            // Erloes gehoert nicht an den Knoten
+    // Der Knoten traegt den Erloes auch in der Spalte — genau das macht
+    // recomputeStructure nach jeder Buchung. Ohne ihn summieren Elternzeilen
+    // und Projektebene den ganzen Nachweis-Anteil nicht mit.
+    expect(knoten.REVENUE).toBe(2126.25);
+    expect(knoten.REVENUE_COMPLETION_PERCENT).toBe(100);   // Gebuchtes ist Erbrachtes
 
     const erloes = supabase._tables.BOOKING.find((b) => b.BOOKING_KIND === "LUMP_REVENUE");
     expect(erloes).toBeTruthy();
