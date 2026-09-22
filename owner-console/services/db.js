@@ -11,8 +11,9 @@
 //   sagen.
 //
 //   Aufgefallen ist es an der Lizenz-Inbox: die haelt den HEUTIGEN Code gegen
-//   die Datenbank, und die Datenbank war die von vor den Umbenennungen (TEC
-//   statt BOOKING, PERMISSION ohne die Rechte aus 0136/0139). Ergebnis waren
+//   die Datenbank, und die Datenbank war die von vor den Umbenennungen (die
+//   Buchungstabelle noch unter ihrem alten Namen, PERMISSION ohne die Rechte
+//   aus 0136/0139). Ergebnis waren
 //   37 "offene Lizenz-Aufgaben", die es nie gab. Dazu kam, dass die alte
 //   Instanz zeitweise gar nicht mehr antwortete — daher die Meldungen
 //   "TypeError: fetch failed" ueber allen sieben Quellen.
