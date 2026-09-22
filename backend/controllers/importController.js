@@ -75,14 +75,14 @@ async function postCommit(req, res, supabase) {
 
 // Fehlerprotokoll: gleiche Datei + Zuordnung wie in der Vorschau, zurueck kommt
 // eine Excel-Datei mit genau den Zeilen, die nicht importierbar waren.
-async function postErrorReport(req, res, supabase) {
+async function postErrorReport(req, res, supabase, kind = "error") {
   try {
     if (!req.file) throw { status: 400, message: "Keine Datei hochgeladen" };
     const { buffer, filename } = await svc.errorReport({
       domainKey: req.params.domain, buffer: req.file.buffer,
       mapping: parseMapping(req), sheetName: req.body?.sheetName || null,
-      // Dieselbe Auswertung, zwei Sichten: "errors" oder "warnings".
-      kind: req.params.kind === "warnings" ? "warning" : "error",
+      // Dieselbe Auswertung, zwei Sichten — die Route sagt welche.
+      kind,
       supabase, tenantId: req.tenantId,
     });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");

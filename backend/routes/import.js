@@ -34,8 +34,11 @@ module.exports = (supabase) => {
   router.get("/:domain/template",     GUARD, (req, res) => ctrl.getTemplate(req, res, supabase));
   router.post("/:domain/preview",     GUARD, DATEI, (req, res) => ctrl.postPreview(req, res, supabase));
   router.post("/:domain/commit",      GUARD, DATEI, (req, res) => ctrl.postCommit(req, res, supabase));
-  // Zwei Sichten auf denselben Trockenlauf — :kind ist "errors" oder "warnings".
-  router.post("/:domain/:kind(errors|warnings)", GUARD, DATEI, (req, res) => ctrl.postErrorReport(req, res, supabase));
+  // Zwei Sichten auf denselben Trockenlauf. Bewusst zwei Pfade statt eines
+  // Musters: Express 5 kennt ":kind(errors|warnings)" nicht mehr und wirft
+  // schon beim Registrieren — der Container kam damit gar nicht erst hoch.
+  router.post("/:domain/errors",   GUARD, DATEI, (req, res) => ctrl.postErrorReport(req, res, supabase, "error"));
+  router.post("/:domain/warnings", GUARD, DATEI, (req, res) => ctrl.postErrorReport(req, res, supabase, "warning"));
 
   return router;
 };
