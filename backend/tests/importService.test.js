@@ -995,6 +995,33 @@ describe("buildPreview (project_full)", () => {
     expect(pv.summary.error).toBe(1);
   });
 
+  // Die haeufigste Art, eine Zahl zu verlieren: die CSV wird in Excel
+  // geoeffnet, und die deutsche Einstellung liest "10.03" als 10. Maerz.
+  // Gespeichert als .xlsx kommt bei uns eine Datumszelle an. "Keine Zahl" ist
+  // dann zwar richtig, aber unbrauchbar — niemand kommt von da auf Excel.
+  it("nennt ein Datum im Zahlenfeld beim Namen", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "1000", "2026-03-10", ""],
+    ]);
+    const hinweis = pv.rows[1].messages.find((m) => /Leistungsstand/.test(m.text));
+    expect(hinweis).toBeTruthy();
+    expect(hinweis.text).toMatch(/ist ein Datum/);
+    expect(hinweis.text).toMatch(/Excel/);
+    expect(hinweis.text).toMatch(/CSV direkt hochladen|als Text/);
+    // Die Zeile kommt trotzdem — nur ohne Leistungsstand.
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[1]._dbRow.progressPercent).toBe(0);
+  });
+
+  it("laesst eine echte Zahl mit Punkt unangetastet", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "1000", "10.03", ""],
+    ]);
+    expect(pv.rows[1]._dbRow.progressPercent).toBe(10.03);
+  });
+
   it("uebernimmt Leistungsstand und Kosten je Element", () => {
     const pv = preview([
       PROJEKT,

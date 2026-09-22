@@ -93,6 +93,20 @@ function parseDateISO(v) {
   if (m) return { value: `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}` };
   return { value: null, invalid: true };
 }
+// Eine Datumszelle kommt als ISO-Text an (spreadsheet.js wandelt sie so um).
+const ISO_DATUM = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Hinweistext fuer eine Zahl, die als Datum ankam — mit dem Weg hinaus.
+ * Der Wert selbst laesst sich nicht zurueckrechnen: "10.03" und "10.3"
+ * ergeben beide den 10. Maerz, sind als Prozentwert aber verschieden. Raten
+ * waere hier schlimmer als die Luecke, deshalb sagt der Import nur, was
+ * passiert ist.
+ */
+function datumStattZahlHinweis(feld, rohwert) {
+  return `${feld}: „${rohwert}" ist ein Datum. Vermutlich wurde die CSV in Excel geöffnet — dort wird z. B. 10.03 zum 10. März. Lade die CSV direkt hoch (der Import liest sie) oder formatiere die Spalte vor dem Öffnen als Text.`;
+}
+
 /** Währungsbetrag (DE/EN) → Zahl. Komma = Dezimaltrenner; reine 1.234.567-Gruppen = Tausender. */
 function parseAmountDE(v) {
   // Echte Zahlenzelle: unverändert übernehmen. Der Umweg über den Text würde
@@ -100,6 +114,12 @@ function parseAmountDE(v) {
   if (typeof v === "number") return Number.isFinite(v) ? { value: fmt2(v) } : { value: null, invalid: true };
   let t = s(v).replace(/[€\s]/g, "");
   if (!t) return { value: null };
+  // Ein Datum in einem Zahlenfeld ist fast immer dieselbe Geschichte: die CSV
+  // wurde in Excel geoeffnet, und dort liest die deutsche Einstellung "10.03"
+  // als 10. Maerz. Gespeichert als .xlsx kommt bei uns eine Datumszelle an.
+  // Ohne diesen Zweig meldet der Import nur "keine Zahl" — richtig, aber
+  // unbrauchbar: niemand kommt von da auf Excel.
+  if (ISO_DATUM.test(t)) return { value: null, invalid: true, warDatum: true };
   if (t.includes(",")) t = t.replace(/\./g, "").replace(",", ".");
   else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
   const n = Number(t);
@@ -1677,16 +1697,23 @@ function buildProjectFullEntry(mapped, ctx) {
 
   const revRaw = s(mapped.revenue);
   const rev = parseAmountDE(mapped.revenue);
-  if (revRaw && (rev.invalid || rev.value == null)) { messages.push({ level: "error", text: `Honorar „${revRaw}“ ist keine gültige Zahl` }); ok = false; }
-  else if (rev.value != null && rev.value < 0) messages.push({ level: "warn", text: "Honorar ist negativ — als Minderung übernommen; bitte in der Vorschau prüfen" });
+  if (revRaw && (rev.invalid || rev.value == null)) {
+    messages.push({ level: "error", text: rev.warDatum ? datumStattZahlHinweis("Honorar", revRaw) : `Honorar „${revRaw}“ ist keine gültige Zahl` });
+    ok = false;
+  } else if (rev.value != null && rev.value < 0) messages.push({ level: "warn", text: "Honorar ist negativ — als Minderung übernommen; bitte in der Vorschau prüfen" });
 
+  const nkRaw = s(mapped.extras_percent);
   const nk = parseAmountDE(mapped.extras_percent);
-  if (s(mapped.extras_percent) && (nk.invalid || nk.value == null)) messages.push({ level: "warn", text: "Nebenkosten % ist keine Zahl — wird als 0 übernommen" });
+  if (nkRaw && (nk.invalid || nk.value == null)) {
+    messages.push({ level: "warn", text: nk.warDatum ? datumStattZahlHinweis("Nebenkosten %", nkRaw) : "Nebenkosten % ist keine Zahl — wird als 0 übernommen" });
+  }
 
   const standRaw = s(mapped.progress_percent);
   const stand = parseAmountDE(mapped.progress_percent);
   let progress = 0;
-  if (standRaw && (stand.invalid || stand.value == null)) messages.push({ level: "warn", text: "Leistungsstand ist keine Zahl — wird als 0 übernommen" });
+  if (standRaw && (stand.invalid || stand.value == null)) {
+    messages.push({ level: "warn", text: stand.warDatum ? datumStattZahlHinweis("Leistungsstand %", standRaw) : "Leistungsstand ist keine Zahl — wird als 0 übernommen" });
+  }
   else if (stand.value != null) {
     progress = stand.value;
     if (progress < 0 || progress > 100) { messages.push({ level: "warn", text: `Leistungsstand ${progress} % liegt außerhalb 0–100 — wird begrenzt` }); progress = Math.min(100, Math.max(0, progress)); }
@@ -1695,7 +1722,9 @@ function buildProjectFullEntry(mapped, ctx) {
   const kostenRaw = s(mapped.costs);
   const kosten = parseAmountDE(mapped.costs);
   let costs = 0;
-  if (kostenRaw && (kosten.invalid || kosten.value == null)) messages.push({ level: "warn", text: "Kosten sind keine Zahl — werden nicht übernommen" });
+  if (kostenRaw && (kosten.invalid || kosten.value == null)) {
+    messages.push({ level: "warn", text: kosten.warDatum ? datumStattZahlHinweis("Kosten", kostenRaw) : "Kosten sind keine Zahl — werden nicht übernommen" });
+  }
   else if (kosten.value != null) costs = kosten.value;
 
   // ── Kalkulation ───────────────────────────────────────────────────────────
