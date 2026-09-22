@@ -1425,6 +1425,569 @@ async function commitProjectStructureRows(rows, { supabase, tenantId, batchId, c
   return { inserted };
 }
 
+
+// ── Domäne: Projekte inkl. Struktur (kombiniert) ─────────────────────────────
+//
+// Warum es diese Domäne neben "project" und "project_structure" gibt: aus einem
+// Altsystem kommen Projekt UND Leistungsstruktur in EINER Abfrage — sie in zwei
+// Dateien zu zerlegen ist Handarbeit, die nur Fehler einbaut. Die beiden
+// bestehenden Bereiche bleiben unverändert; wer getrennt importieren will,
+// benutzt weiter sie.
+//
+// EINE ZEILE = EIN ELEMENT. Die Zeile mit LEERER Gliederung ist das Projekt
+// selbst; alle übrigen werden zu Knoten seiner Leistungsstruktur. Das ist kein
+// willkürliches Kennzeichen, sondern das, was die Quelle ohnehin hergibt: in
+// wiko trägt die Projektwurzel den Pfad "000", und der wird beim Umsetzen zu
+// einer leeren Gliederung.
+const PROJECT_FULL_FIELDS = [
+  { key: "legacy_ref",       header: "ID Vorsystem",     required: false, example: "138",                  aliases: ["idvorsystem", "altid", "legacyid", "quellid", "fremdid", "vorsystem", "herkunftsid"] , type: "text" },
+  { key: "project_number",   header: "Projekt",          required: true,  example: "2016_099",             aliases: ["projekt", "projektnummer", "projektnr", "nummer", "nameshort", "projectnumber", "projnr"] },
+  { key: "client",           header: "Projektadresse",   required: false, example: "Stadt Musterhausen",   aliases: ["projektadresse", "bauherr", "auftraggeber", "kunde", "adresse", "client"] , list: "addressName" },
+  { key: "status",           header: "Status",           required: false, example: "in Bearbeitung",       aliases: ["status", "projektstatus", "projectstatus"] , list: "projectStatus" },
+  { key: "manager",          header: "PL",               required: false, example: "MMu",                  aliases: ["pl", "projektleiter", "manager", "leiter", "verantwortlich", "projektverantwortlicher"] , list: "employeeShort" },
+  { key: "project_type",     header: "Projekttyp",       required: false, example: "HOAI",                 aliases: ["projekttyp", "typ", "type", "projecttype"] , list: "projectType" },
+  { key: "outline",          header: "Gliederung",       required: false, example: "1.2",                  aliases: ["gliederung", "gliederungsnummer", "position", "pos", "ordnungszahl", "outline", "wbs"] , type: "text" },
+  { key: "abbr",             header: "Kürzel",           required: true,  example: "LP2",                  aliases: ["kuerzel", "kurzzeichen", "shortname", "code", "krzl"] },
+  { key: "name",             header: "Bezeichnung",      required: false, example: "Vorplanung",           aliases: ["bezeichnung", "name", "namelong", "beschreibung", "leistung", "titel"] },
+  { key: "billing",          header: "Abrechnungsart",   required: false, example: "Pauschal",             aliases: ["abrechnungsart", "abrechnung", "billing", "billingtype"] , list: "billing" },
+  { key: "revenue",          header: "Honorar netto",    required: false, example: "27000",                aliases: ["honorar", "honorarnetto", "nettohonorar", "honorarsumme", "betrag", "summe", "revenue"] , type: "money" },
+  { key: "extras_percent",   header: "Nebenkosten %",    required: false, example: "5",                    aliases: ["nebenkosten", "nk", "nkprozent", "nebenkostenprozent", "extras", "extraspercent"] },
+  { key: "progress_percent", header: "Leistungsstand %", required: false, example: "40",                   aliases: ["leistungsstand", "leistungsstandprozent", "fortschritt", "stand", "fertigstellung", "erbracht"] },
+  { key: "costs",            header: "Kosten",           required: false, example: "1500",                 aliases: ["kosten", "kostenanfangsbestand", "istkosten", "aufwand", "kostenblock"] , type: "money" },
+];
+
+async function loadProjectFullContext(supabase, tenantId) {
+  const [companyRes, statusRes, typeRes, empRes, addrRes, projRes, settingsRes] = await Promise.all([
+    supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
+    supabase.from("PROJECT_STATUS").select("ID, ABBR"),                          // global, ohne Mandant
+    supabase.from("PROJECT_TYPE").select("ID, ABBR").eq("TENANT_ID", tenantId),
+    supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT").select("ID, ABBR").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId),
+  ]);
+
+  const statusByName = new Map();
+  for (const r of statusRes.data || []) if (r.ABBR) statusByName.set(katalogKey(r.ABBR), r.ID);
+  const typeByName = new Map();
+  for (const r of typeRes.data || []) if (r.ABBR) typeByName.set(katalogKey(r.ABBR), r.ID);
+  const empByName = new Map();
+  for (const e of empRes.data || []) {
+    if (e.ABBR) empByName.set(norm(e.ABBR), e.ID);
+    const full = norm(`${e.FIRST_NAME || ""} ${e.LAST_NAME || ""}`);
+    if (full) empByName.set(full, e.ID);
+  }
+  const addrByName = new Map();
+  for (const a of addrRes.data || []) if (a.ADDRESS_NAME_1) addrByName.set(norm(a.ADDRESS_NAME_1), a.ID);
+
+  const existingKeys = new Set();
+  for (const p of projRes.data || []) if (p.ABBR) existingKeys.add(norm(p.ABBR));
+
+  const defaults = {};
+  for (const row of settingsRes.data || []) defaults[row.KEY] = row.VALUE;
+
+  return {
+    companyId: companyRes.data?.[0]?.ID ?? null,
+    statusByName, typeByName, empByName, addrByName, existingKeys, defaults,
+    existingIds: new Map(),   // Zusammenführen ist hier nicht vorgesehen
+  };
+}
+
+function buildProjectFullEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const number = s(mapped.project_number);
+  if (!number) { messages.push({ level: "error", text: "Projekt (Nummer) fehlt (Pflichtfeld)" }); ok = false; }
+
+  const nameShort = s(mapped.abbr);
+  if (!nameShort) { messages.push({ level: "error", text: "Kürzel fehlt (Pflichtfeld)" }); ok = false; }
+
+  const outline = parseOutline(mapped.outline);
+  const istProjektzeile = !outline;
+
+  if (outline && outline.length > MAX_STRUCTURE_DEPTH) {
+    messages.push({ level: "error", text: `Gliederung ist ${outline.length} Ebenen tief — maximal ${MAX_STRUCTURE_DEPTH}` });
+    ok = false;
+  }
+
+  // ── Projektweite Felder ───────────────────────────────────────────────────
+  // Sie stehen nur auf der Projektzeile; auf Unterzeilen werden sie ignoriert,
+  // statt sie zu bemängeln — mancher Export wiederholt sie auf jeder Zeile.
+  let statusId = null, managerId = null, typeId = null, typeNew = null, addressId = null;
+  if (istProjektzeile) {
+    const statusIn = s(mapped.status);
+    if (statusIn) {
+      const hit = ctx.statusByName.get(katalogKey(statusIn));
+      if (hit != null) statusId = hit;
+      else { messages.push({ level: "error", text: `Status „${statusIn}“ nicht gefunden — Bezeichnung prüfen (Einstellungen → Stammdaten)` }); ok = false; }
+    } else {
+      // Ohne Angabe die Vorbelegung. Ein Projekt ohne Status wäre in jeder
+      // Liste und jedem Filter ein Sonderfall.
+      const vorbelegung = Number(ctx.defaults?.default_project_status_id);
+      if (Number.isFinite(vorbelegung) && vorbelegung > 0) statusId = vorbelegung;
+      else { messages.push({ level: "error", text: "Status fehlt und es ist keine Vorbelegung gepflegt (Einstellungen → Vorbelegungen)" }); ok = false; }
+    }
+
+    const plIn = s(mapped.manager);
+    if (plIn) {
+      const hit = ctx.empByName.get(norm(plIn));
+      if (hit != null) managerId = hit;
+      else messages.push({ level: "warn", text: `Projektleiter „${plIn}“ nicht gefunden — bleibt leer (zuerst Mitarbeiter importieren)` });
+    }
+
+    // Projekttyp: unbekannte werden angelegt — wie die Abteilung beim
+    // Mitarbeiter. Ein Projekttyp ist eine Bezeichnung, kein Regelwerk.
+    const typIn = s(mapped.project_type);
+    if (typIn) {
+      const hit = ctx.typeByName.get(katalogKey(typIn));
+      if (hit != null) typeId = hit;
+      else { typeNew = typIn; messages.push({ level: "warn", text: `Projekttyp „${typIn}“ gibt es noch nicht — wird angelegt` }); }
+    }
+
+    const kundeIn = s(mapped.client);
+    if (kundeIn) {
+      const hit = ctx.addrByName.get(norm(kundeIn));
+      if (hit != null) addressId = hit;
+      else messages.push({ level: "warn", text: `Bauherr/Adresse „${kundeIn}“ nicht gefunden — bleibt leer (zuerst Adressen importieren)` });
+    }
+  }
+
+  // ── Elementfelder ─────────────────────────────────────────────────────────
+  // „Leistungsstand" ist wikos Name für Pauschal — beide Vokabulare erkennen,
+  // damit dieselbe Datei vor und nach einer Umbenennung funktioniert.
+  const bin = norm(mapped.billing);
+  let billingTypeId = null;
+  if (bin) {
+    const nachAufwand = bin.includes("stund") || bin.includes("zeit") || bin.includes("tec")
+      || bin.includes("nachweis") || bin.includes("aufwand") || bin === "2";
+    billingTypeId = nachAufwand ? 2 : 1;
+  }
+
+  const revRaw = s(mapped.revenue);
+  const rev = parseAmountDE(mapped.revenue);
+  if (revRaw && (rev.invalid || rev.value == null)) { messages.push({ level: "error", text: `Honorar „${revRaw}“ ist keine gültige Zahl` }); ok = false; }
+  else if (rev.value != null && rev.value < 0) { messages.push({ level: "error", text: "Honorar darf nicht negativ sein" }); ok = false; }
+
+  const nk = parseAmountDE(mapped.extras_percent);
+  if (s(mapped.extras_percent) && (nk.invalid || nk.value == null)) messages.push({ level: "warn", text: "Nebenkosten % ist keine Zahl — wird als 0 übernommen" });
+
+  const standRaw = s(mapped.progress_percent);
+  const stand = parseAmountDE(mapped.progress_percent);
+  let progress = 0;
+  if (standRaw && (stand.invalid || stand.value == null)) messages.push({ level: "warn", text: "Leistungsstand ist keine Zahl — wird als 0 übernommen" });
+  else if (stand.value != null) {
+    progress = stand.value;
+    if (progress < 0 || progress > 100) { messages.push({ level: "warn", text: `Leistungsstand ${progress} % liegt außerhalb 0–100 — wird begrenzt` }); progress = Math.min(100, Math.max(0, progress)); }
+  }
+
+  const kostenRaw = s(mapped.costs);
+  const kosten = parseAmountDE(mapped.costs);
+  let costs = 0;
+  if (kostenRaw && (kosten.invalid || kosten.value == null)) messages.push({ level: "warn", text: "Kosten sind keine Zahl — werden nicht übernommen" });
+  else if (kosten.value != null) costs = kosten.value;
+
+  const dbRow = {
+    istProjektzeile, projectNumber: number, legacyRef: s(mapped.legacy_ref) || null,
+    // Projektzeile
+    projectName: s(mapped.name) || nameShort, statusId, managerId, typeId, typeNew, addressId,
+    // Knoten
+    outline, nameShort, nameLong: s(mapped.name) || nameShort,
+    billingTypeId, revenue: rev.value ?? 0, extrasPercent: nk.value ?? 0,
+    progressPercent: progress, costs,
+    // von finalizeRows gesetzt:
+    key: null, parentKey: null, depth: outline ? outline.length : 0, isLeaf: true, sortIndex: 0,
+  };
+
+  const display = {
+    projekt: number,
+    knoten: istProjektzeile ? "PROJEKT" : `${outline.join(".")}  ${nameShort}`,
+    bezeichnung: dbRow.nameLong !== nameShort ? dbRow.nameLong : "",
+    abrechnung: billingTypeId === 2 ? "Stunden" : billingTypeId === 1 ? "Pauschal" : "",
+    honorar: rev.value ? rev.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : "",
+    stand: progress ? progress + " %" : "",
+  };
+
+  // Entdoppelt wird über die Projektnummer — aber nur die Projektzeile trägt
+  // den Schlüssel. Sonst hielte der Assistent jede Strukturzeile für eine
+  // Dublette derselben Nummer.
+  return { ok, messages, dbRow, matchKey: istProjektzeile ? norm(number) : `${norm(number)}#${outline.join(".")}`, display };
+}
+
+
+/**
+ * Zeilenübergreifende Prüfung je Projekt.
+ *
+ * Eine einzelne Zeile kann nicht wissen, ob sie ein Blatt ist, ob ihr Vater
+ * mitgeliefert wurde oder ob die Projektzeile überhaupt existiert. Deshalb
+ * passiert das hier — und zwar ALLES-ODER-NICHTS je Projekt: eine halb
+ * importierte Struktur ist schlimmer als gar keine, weil die Honorarsummen
+ * dann still falsch stehen.
+ */
+function finalizeProjectFullRows(rows, ctx) {
+  const byProject = new Map();
+  for (const r of rows) {
+    const num = r._dbRow?.projectNumber;
+    if (!num) continue;
+    if (!byProject.has(num)) byProject.set(num, []);
+    byProject.get(num).push(r);
+  }
+
+  for (const [number, group] of byProject) {
+    // ── 1. Projekt bereits vorhanden? Dann das GANZE Projekt als Dublette ──
+    // Nur die Projektzeile zu markieren würde die Strukturzeilen heimatlos
+    // zurücklassen: der Assistent überspränge eine Zeile und importierte die
+    // übrigen ins Leere.
+    if (ctx.existingKeys.has(norm(number))) {
+      for (const r of group) {
+        if (r.status === "error") continue;
+        r.status = "duplicate";
+        r.messages.push({ level: "warn", text: `Projekt „${number}“ gibt es bereits — Projekt und Struktur werden übersprungen` });
+      }
+      continue;
+    }
+
+    const usable = group.filter((r) => r.status !== "error");
+    if (!usable.length) continue;
+
+    // ── 2. Genau eine Projektzeile ────────────────────────────────────────
+    const projektzeilen = usable.filter((r) => r._dbRow.istProjektzeile);
+    if (projektzeilen.length === 0) {
+      for (const r of group) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Projekt „${number}“ hat keine Projektzeile — genau eine Zeile muss die Gliederung leer lassen` });
+      }
+      continue;
+    }
+    if (projektzeilen.length > 1) {
+      for (const r of projektzeilen) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Projekt „${number}“ hat ${projektzeilen.length} Zeilen mit leerer Gliederung — es darf nur eine geben` });
+      }
+    }
+
+    const knoten = usable.filter((r) => !r._dbRow.istProjektzeile);
+
+    // ── 3. Schlüssel und Eltern ───────────────────────────────────────────
+    const byKey = new Map();
+    for (const r of knoten) {
+      const e = r._dbRow;
+      e.key = e.outline.join(".");
+      e.parentKey = e.outline.length > 1 ? e.outline.slice(0, -1).join(".") : null;
+      e.depth = e.outline.length;
+      if (byKey.has(e.key)) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Gliederung „${e.key}“ kommt in diesem Projekt mehrfach vor` });
+      } else byKey.set(e.key, r);
+    }
+    for (const r of knoten) {
+      const p = r._dbRow.parentKey;
+      if (p && !byKey.has(p)) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Übergeordnete Zeile „${p}“ fehlt in der Datei` });
+      }
+    }
+
+    // ── 4. Blatt oder Knoten ──────────────────────────────────────────────
+    const eltern = new Set(knoten.map((r) => r._dbRow.parentKey).filter(Boolean));
+    for (const r of knoten) {
+      const e = r._dbRow;
+      e.isLeaf = !eltern.has(e.key);
+      const einzug = e.depth > 1 ? "›".repeat(e.depth - 1) + " " : "";
+      r.display.knoten = `${einzug}${e.key}  ${e.nameShort}`;
+    }
+
+    // ── 5. Geld und Abrechnungsart gehören an die Blätter ─────────────────
+    for (const r of knoten) {
+      const e = r._dbRow;
+      if (!e.isLeaf) {
+        if (e.revenue) {
+          r.messages.push({ level: "warn", text: "Übergeordnete Zeile: Honorar wird aus den Unterzeilen gerechnet und hier ignoriert" });
+          e.revenue = 0;
+        }
+        continue;
+      }
+      if (!e.billingTypeId) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: "Abrechnungsart fehlt (bei unterster Ebene Pflicht: Pauschal oder Stunden)" });
+      } else if (e.billingTypeId === 2 && e.revenue) {
+        r.messages.push({ level: "warn", text: "Stunden-Position: Honorar entsteht aus den Buchungen und wird hier ignoriert" });
+        e.revenue = 0;
+      }
+    }
+
+    // ── 6. Kosten brauchen einen Knoten ───────────────────────────────────
+    const projektzeile = projektzeilen[0];
+    if (projektzeile?._dbRow.costs) {
+      projektzeile.messages.push({ level: "warn", text: "Kosten auf der Projektzeile werden nicht übernommen — sie gehören an ein Element" });
+      projektzeile._dbRow.costs = 0;
+    }
+
+    // ── 7. Geschwisterreihenfolge ─────────────────────────────────────────
+    const jeElternteil = new Map();
+    for (const r of knoten) {
+      const p = r._dbRow.parentKey || "";
+      const n = jeElternteil.get(p) || 0;
+      r._dbRow.sortIndex = n;
+      jeElternteil.set(p, n + 1);
+    }
+
+    // ── 8. Alles-oder-nichts ──────────────────────────────────────────────
+    const kaputt = group.filter((r) => r.status === "error");
+    if (kaputt.length) {
+      for (const r of group) {
+        if (r.status === "error") continue;
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Projekt „${number}“ wird übersprungen — eine andere Zeile dieses Projekts ist fehlerhaft (Zeile ${kaputt[0].row})` });
+      }
+      continue;
+    }
+
+    if (!knoten.length) {
+      projektzeile.messages.push({ level: "warn", text: "Projekt ohne Struktur — es entsteht nur das Projekt samt Vertrag" });
+    }
+  }
+}
+
+
+/**
+ * Schreiben je Projekt. Die Reihenfolge ist nicht beliebig:
+ *
+ *   1. Projekttypen, die es noch nicht gibt   (PROJECT.PROJECT_TYPE_ID zeigt darauf)
+ *   2. PROJECT
+ *   3. CONTRACT aus den Vorbelegungen         (die Knoten tragen seine ID)
+ *   4. EMPLOYEE2PROJECT für die Projektleitung
+ *   5. Knoten flach, dann FATHER_ID im zweiten Durchgang
+ *   6. PROJECT_PROGRESS  — ohne diese Zeilen bleiben Leistungsstand und
+ *      Reporting leer, obwohl die Struktur steht
+ *   7. Kosten als Buchung
+ *   8. Elternwerte von unten nach oben rechnen
+ *
+ * Ein Projekt scheitert als Ganzes oder gar nicht. Die Zeilen sind in
+ * finalizeRows bereits daraufhin geprüft.
+ */
+async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, employeeId }) {
+  const defaults = ctx.defaults || {};
+
+  const byProject = new Map();
+  for (const r of rows) {
+    const num = r._dbRow.projectNumber;
+    if (!byProject.has(num)) byProject.set(num, []);
+    byProject.get(num).push(r);
+  }
+
+  // ── 1. Fehlende Projekttypen einmal für alle anlegen ────────────────────
+  const typen = new Map(ctx.typeByName);
+  const anzulegen = new Map();
+  for (const r of rows) {
+    const t = r._dbRow.typeNew;
+    if (t && !typen.has(katalogKey(t))) anzulegen.set(katalogKey(t), t);
+  }
+  for (const [schluessel, bezeichnung] of anzulegen) {
+    const { data, error } = await supabase.from("PROJECT_TYPE")
+      .insert([{ TENANT_ID: tenantId, ABBR: bezeichnung, IMPORT_BATCH_ID: batchId }])
+      .select("ID").single();
+    if (error) throw { status: 500, message: `Projekttyp „${bezeichnung}“ konnte nicht angelegt werden: ${error.message}` };
+    typen.set(schluessel, data.ID);
+  }
+
+  let inserted = 0;
+
+  for (const [number, group] of byProject) {
+    const projektzeile = group.find((r) => r._dbRow.istProjektzeile);
+    if (!projektzeile) continue;
+    const kopf = projektzeile._dbRow;
+    const knoten = group.filter((r) => !r._dbRow.istProjektzeile);
+
+    try {
+      // ── 2. Projekt ────────────────────────────────────────────────────
+      const projektRow = {
+        ABBR: number, NAME: kopf.projectName,
+        COMPANY_ID: ctx.companyId,
+        PROJECT_STATUS_ID: kopf.statusId,
+        PROJECT_TYPE_ID: kopf.typeId ?? (kopf.typeNew ? typen.get(katalogKey(kopf.typeNew)) ?? null : null),
+        PROJECT_MANAGER_ID: kopf.managerId,
+        ADDRESS_ID: kopf.addressId,
+        LEGACY_REF: kopf.legacyRef,
+        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+      };
+      const { data: proj, error: pErr } = await supabase.from("PROJECT").insert([projektRow]).select("ID").single();
+      if (pErr) throw { status: 500, message: pErr.message };
+      const projectId = proj.ID;
+
+      // ── 3. Vertrag ────────────────────────────────────────────────────
+      // Die kaufmännischen Felder kommen ausschliesslich aus
+      // contractDefaults — vier Stellen legen Verträge an, und genau deren
+      // Driften hatte die Skonto-Vorbelegung wirkungslos gemacht.
+      const { data: cRows, error: cErr } = await supabase.from("CONTRACT").insert([{
+        ABBR: number, NAME: kopf.projectName, PROJECT_ID: projectId,
+        INVOICE_ADDRESS_ID: kopf.addressId, INVOICE_CONTACT_ID: null,
+        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+        ...contractDefaults(defaults),
+      }]).select("ID");
+      if (cErr) throw { status: 500, message: cErr.message };
+      const contractId = cRows?.[0]?.ID ?? null;
+
+      // ── 4. Projektleitung ─────────────────────────────────────────────
+      // Ohne diese Zuordnung taucht der Projektleiter im Projekt nicht auf
+      // und hat dort keinen Stundensatz.
+      if (kopf.managerId) {
+        const { error: eErr } = await supabase.from("EMPLOYEE2PROJECT").insert([{
+          TENANT_ID: tenantId, PROJECT_ID: projectId, EMPLOYEE_ID: kopf.managerId,
+          ROLE_ID: null, HOURLY_RATE: 0,
+        }]);
+        if (eErr) throw { status: 500, message: `Projektleitung konnte nicht zugeordnet werden: ${eErr.message}` };
+      }
+
+      // ── 5. Knoten flach, FATHER_ID im zweiten Durchgang ───────────────
+      const geordnet = [...knoten].sort((a, b) => a._dbRow.depth - b._dbRow.depth || a._dbRow.sortIndex - b._dbRow.sortIndex);
+      let idNachKey = new Map();
+      if (geordnet.length) {
+        const structRows = geordnet.map((r) => {
+          const e = r._dbRow;
+          const revenue = e.billingTypeId === 1 ? fmt2(e.revenue) : 0;
+          const extras = fmt2(revenue * e.extrasPercent / 100);
+          return {
+            ABBR: e.nameShort, NAME: e.nameLong, PROJECT_ID: projectId,
+            BILLING_TYPE_ID: e.billingTypeId, FATHER_ID: null, CONTRACT_ID: contractId,
+            REVENUE: revenue, EXTRAS_PERCENT: e.extrasPercent, EXTRAS: extras, COSTS: 0,
+            REVENUE_COMPLETION_PERCENT: e.progressPercent, EXTRAS_COMPLETION_PERCENT: e.progressPercent,
+            REVENUE_COMPLETION: fmt2(revenue * e.progressPercent / 100),
+            EXTRAS_COMPLETION: fmt2(extras * e.progressPercent / 100),
+            SORT_ORDER: e.sortIndex * 10,
+            LEGACY_REF: e.legacyRef,
+            TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+          };
+        });
+        const { data: created, error: sErr } = await supabase
+          .from("PROJECT_STRUCTURE").insert(structRows).select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT");
+        if (sErr) throw { status: 500, message: sErr.message };
+
+        (created || []).forEach((row, i) => idNachKey.set(geordnet[i]._dbRow.key, row.ID));
+        for (const r of geordnet) {
+          const e = r._dbRow;
+          if (!e.parentKey) continue;
+          const kindId = idNachKey.get(e.key), vaterId = idNachKey.get(e.parentKey);
+          if (!kindId || !vaterId) continue;
+          const { error: uErr } = await supabase.from("PROJECT_STRUCTURE")
+            .update({ FATHER_ID: vaterId }).eq("ID", kindId).eq("TENANT_ID", tenantId);
+          if (uErr) throw { status: 500, message: uErr.message };
+        }
+
+        // ── 6. Fortschrittszeilen ───────────────────────────────────────
+        const progRows = (created || []).map((n) => ({
+          STRUCTURE_ID: n.ID, TENANT_ID: tenantId,
+          REVENUE: n.REVENUE ?? 0, EXTRAS_PERCENT: n.EXTRAS_PERCENT ?? 0, EXTRAS: n.EXTRAS ?? 0,
+          REVENUE_COMPLETION_PERCENT: n.REVENUE_COMPLETION_PERCENT ?? 0,
+          EXTRAS_COMPLETION_PERCENT: n.REVENUE_COMPLETION_PERCENT ?? 0,
+          REVENUE_COMPLETION: fmt2(num(n.REVENUE) * num(n.REVENUE_COMPLETION_PERCENT) / 100),
+          EXTRAS_COMPLETION: fmt2(num(n.EXTRAS) * num(n.REVENUE_COMPLETION_PERCENT) / 100),
+          IMPORT_BATCH_ID: batchId,
+        }));
+        if (progRows.length) {
+          const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert(progRows);
+          if (prErr) throw { status: 500, message: prErr.message };
+        }
+
+        // ── 7. Kosten als Buchung ───────────────────────────────────────
+        const heute = new Date().toISOString().slice(0, 10);
+        const kostenRows = [];
+        for (const r of geordnet) {
+          const e = r._dbRow;
+          if (!e.costs) continue;
+          const sid = idNachKey.get(e.key);
+          if (!sid) continue;
+          kostenRows.push({
+            TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_COST",
+            BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, BOOKING_DATE: heute,
+            QUANTITY_INT: 0, COST_RATE: e.costs, COST_TOTAL: fmt2(e.costs),
+            QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
+            POSTING_DESCRIPTION: `Kosten-Anfangsbestand aus Datenübernahme (${e.nameShort})`,
+            PROJECT_ID: projectId, STRUCTURE_ID: sid, IMPORT_BATCH_ID: batchId,
+          });
+        }
+        if (kostenRows.length) {
+          const { error: bErr } = await supabase.from("BOOKING").insert(kostenRows);
+          if (bErr) throw { status: 500, message: `Kosten konnten nicht gebucht werden: ${bErr.message}` };
+          for (const kr of kostenRows) { try { await recomputeStructure(supabase, kr.STRUCTURE_ID); } catch (_) { /* COSTS-Recompute soft-fail */ } }
+        }
+
+        // ── 8. Elternwerte von unten nach oben ──────────────────────────
+        const elternKeys = [...new Set(geordnet.map((r) => r._dbRow.parentKey).filter(Boolean))]
+          .sort((a, b) => b.split(".").length - a.split(".").length);
+        for (const key of elternKeys) {
+          const vaterId = idNachKey.get(key);
+          if (vaterId) await projekteSvc.recalcParent(supabase, { parentId: vaterId });
+        }
+      }
+
+      inserted += group.length;
+    } catch (err) {
+      throw { status: err?.status || 500, message: `Projekt ${number} fehlgeschlagen: ${err?.message || err}. Stapel #${batchId} kann zurückgesetzt werden.` };
+    }
+  }
+
+  return { inserted };
+}
+
+/**
+ * Zurücksetzen: von den Blättern der Abhängigkeit nach oben. EMPLOYEE2PROJECT
+ * trägt keine Stapel-Kennung — dort wird über die Projekte dieses Stapels
+ * gelöscht, was sicher ist, weil genau diese Projekte gleich mit verschwinden.
+ */
+async function rollbackProjectFull({ supabase, tenantId, batchId }) {
+  const { data: projRows, error: pErr } = await supabase
+    .from("PROJECT").select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  if (pErr) throw { status: 500, message: pErr.message };
+  const projectIds = (projRows || []).map((r) => r.ID);
+
+  // Schutz: hängt an den Projekten inzwischen echte Arbeit?
+  if (projectIds.length) {
+    const blocker = [];
+    for (const dep of [
+      { table: "INVOICE", label: "Rechnung(en)" },
+      { table: "ADVANCE_INVOICE", label: "Abschlagsrechnung(en)" },
+      { table: "OFFER", label: "Angebot(e)" },
+    ]) {
+      const { count, error } = await supabase.from(dep.table)
+        .select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
+      if (error) continue;
+      if (count > 0) blocker.push(`${count}× ${dep.label}`);
+    }
+    // Buchungen dieses Stapels sind die importierten Kosten — die zählen nicht.
+    const { data: fremdeBuchungen } = await supabase.from("BOOKING")
+      .select("ID, IMPORT_BATCH_ID").eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds).limit(100000);
+    const fremd = (fremdeBuchungen || []).filter((b) => b.IMPORT_BATCH_ID !== batchId).length;
+    if (fremd > 0) blocker.push(`${fremd}× Buchung(en)`);
+
+    if (blocker.length) {
+      throw { status: 409, message: `Rollback nicht möglich: An den importierten Projekten hängen bereits ${blocker.join(", ")}. Bitte diese zuerst entfernen.` };
+    }
+  }
+
+  await supabase.from("BOOKING").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from("PROJECT_PROGRESS").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from("PROJECT_STRUCTURE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  await supabase.from("CONTRACT").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  if (projectIds.length) {
+    await supabase.from("EMPLOYEE2PROJECT").delete().eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
+  }
+  const { data: del } = await supabase.from("PROJECT").delete()
+    .eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId).select("ID");
+
+  // Zuletzt die vom Stapel angelegten Projekttypen — aber nur, wenn sie
+  // niemand sonst benutzt.
+  const { data: typen } = await supabase.from("PROJECT_TYPE")
+    .select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  for (const t of typen || []) {
+    const { count } = await supabase.from("PROJECT")
+      .select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).eq("PROJECT_TYPE_ID", t.ID);
+    if (!count) await supabase.from("PROJECT_TYPE").delete().eq("ID", t.ID).eq("TENANT_ID", tenantId);
+  }
+
+  return { deleted: (del || []).length };
+}
+
 // ── Domäne: Anfangsbestände / Altrechnungen ──────────────────────────────────
 // „bereits berechnet“ je Projekt → echter, gebuchter Referenz-Beleg (Abschlags-
 // rechnung ODER Rechnung), damit der Wert das Self-Healing-Recompute überlebt.
@@ -2280,6 +2843,22 @@ const DOMAINS = {
     rollbackTables: ["PROJECT_PROGRESS", "PROJECT_STRUCTURE", "CONTRACT"], // PROGRESS vor STRUCTURE (FK)
     computeBlockers: async ({ supabase, tenantId, batchId }) => structureBatchBlockers({ supabase, tenantId, batchId }),
   },
+  project_full: {
+    key: "project_full",
+    label: "Projekte inkl. Struktur",
+    table: "PROJECT",
+    matchLabel: "Projektnummer",
+    fields: PROJECT_FULL_FIELDS,
+    // Viele Zeilen je Projekt sind der Normalfall — eine wiederkehrende
+    // Projektnummer ist hier keine Dublette. Ob es das Projekt schon GIBT,
+    // entscheidet finalizeRows fuer das ganze Projekt auf einmal.
+    dedupeInFile: false,
+    loadContext: loadProjectFullContext,
+    buildEntry: buildProjectFullEntry,
+    finalizeRows: finalizeProjectFullRows,
+    commitRows: commitProjectFullRows,
+    rollbackExecute: rollbackProjectFull,
+  },
   project_structure: {
     key: "project_structure",
     label: "Projektstruktur (Leistungsbaum)",
@@ -2895,6 +3474,20 @@ const TEMPLATE_HELP = {
       "Kostensatz und Arbeitszeitmodell brauchen je ein Gültigkeitsdatum — ohne das bleiben sie außen vor, weil beides eine Historie ist und nicht ein einzelner Wert.",
       "Wichtig: Importierte Mitarbeiter haben KEINEN Zugang. Die Einladung zum Login verschickst du danach unter Mitarbeiter.",
       "Der Stundensatz (Verkauf) wird hier nicht gesetzt — er hängt an der Projektrolle, nicht am Mitarbeiter.",
+    ],
+  },
+  project_full: {
+    intro: "Projekt UND Leistungsstruktur aus EINER Datei — gedacht für die Übernahme aus einem Altsystem, das beides in einer Abfrage liefert. Eine Zeile je Element. Die Zeile mit LEERER Gliederung ist das Projekt selbst, alle übrigen werden zu Knoten seiner Struktur.",
+    before: [
+      "Mitarbeiter importieren — die Projektleitung wird über das Kürzel zugeordnet.",
+      "Adressen importieren, wenn der Bauherr mitkommen soll. Fehlt er, entsteht das Projekt trotzdem.",
+      "Den Projekt-Nummernkreis (Einstellungen → Nummernkreise) auf einen Zähler oberhalb deiner höchsten übernommenen Nummer setzen.",
+    ],
+    after: [
+      "Die Gliederung ist ein Pfad: 1, 1.1, 1.2, 2 … Honorar und Abrechnungsart gehören an die unterste Ebene; übergeordnete Werte rechnet plan&simple selbst hoch.",
+      "Je Projekt gilt alles oder nichts: ist eine Zeile fehlerhaft, bleibt das ganze Projekt draußen. Eine halbe Struktur wäre schlimmer als keine, weil die Honorarsummen dann still falsch stünden.",
+      "Mit angelegt werden: Vertrag (aus den Vorbelegungen), Fortschrittszeilen, die Zuordnung der Projektleitung und — sofern die Spalte gefüllt ist — die Kosten als Buchung.",
+      "Ein Projekttyp, den es noch nicht gibt, wird angelegt. Ein Projekt, dessen Nummer es schon gibt, wird samt Struktur übersprungen.",
     ],
   },
   project: {

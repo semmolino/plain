@@ -64,6 +64,28 @@ export const HELP = {
       </>
     ),
   },
+  'import.project_full': {
+    title: 'Projekte inkl. Struktur',
+    body: (
+      <>
+        Projekt und Leistungsstruktur in <strong>einer</strong> Datei — gedacht
+        für die Übernahme aus einem Altsystem, das beides in einer Abfrage
+        liefert. Eine Zeile je Element.
+        <br /><br />
+        Die Zeile mit <strong>leerer Gliederung</strong> ist das Projekt selbst;
+        alle übrigen werden zu Knoten seiner Struktur. Die Gliederung ist ein
+        Pfad: <code>1</code>, <code>1.1</code>, <code>1.2</code>, <code>2</code> …
+        <br /><br />
+        Je Projekt gilt <strong>alles oder nichts</strong>: ist eine Zeile
+        fehlerhaft, bleibt das ganze Projekt draußen. Eine halb importierte
+        Struktur wäre schlimmer als gar keine — die Honorarsummen stünden dann
+        still falsch.
+        <br /><br />
+        Wer Projekte und Struktur in getrennten Dateien hat, nimmt weiterhin die
+        Bereiche „Projekte" und „Projektstruktur".
+      </>
+    ),
+  },
   'import.structure_tree': {
     title: 'Leistungsstruktur als Baum importieren',
     body: (

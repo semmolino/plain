@@ -824,3 +824,163 @@ describe("buildPreview (opening_cost)", () => {
     expect(pv.summary.error).toBe(1);
   });
 });
+
+
+// ── Projekte inkl. Struktur (kombiniert) ─────────────────────────────────────
+// Der Bereich liest Projekt UND Leistungsstruktur aus EINER Datei. Die Zeile
+// mit leerer Gliederung ist das Projekt — das ist das einzige Kennzeichen, und
+// entsprechend genau muss es geprueft sein.
+describe("buildPreview (project_full)", () => {
+  const KOPF = ["Projekt", "Projektadresse", "Status", "PL", "Projekttyp", "Gliederung",
+                "Kürzel", "Bezeichnung", "Abrechnungsart", "Honorar netto", "Leistungsstand %", "Kosten"];
+
+  function makeCtx(ueber = {}) {
+    return {
+      companyId: 1,
+      statusByName: new Map([["inbearbeitung", 1], ["abgeschlossen", 2]]),
+      typeByName:   new Map([["neubau", 7]]),
+      empByName:    new Map([["mmu", 10]]),
+      addrByName:   new Map([["stadt musterhausen", 20]]),
+      existingKeys: new Set(),
+      defaults: { default_project_status_id: "1" },
+      existingIds: new Map(),
+      ...ueber,
+    };
+  }
+
+  function preview(zeilen, ctx = makeCtx()) {
+    const rows = zeilen.map((z) => Object.fromEntries(KOPF.map((h, i) => [h, z[i] ?? ""])));
+    return buildPreview({ domainKey: "project_full", parsed: { headers: KOPF, rows }, mapping: null, ctx });
+  }
+
+  const PROJEKT = ["P-1", "Stadt Musterhausen", "in Bearbeitung", "MMu", "Neubau", "", "P-1", "Kita Sonnenschein", "", "", "", ""];
+
+  it("erkennt die Zeile mit leerer Gliederung als Projekt", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1",   "LP1-4", "Vorentwurf",  "Pauschal", "12000", "50", ""],
+      ["P-1", "", "", "", "", "1.1", "LP1",   "Grundlagen",  "Pauschal", "5000",  "80", "300"],
+      ["P-1", "", "", "", "", "1.2", "LP2",   "Vorplanung",  "Pauschal", "7000",  "20", ""],
+    ]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[0]._dbRow.istProjektzeile).toBe(true);
+    expect(pv.rows[0]._dbRow.statusId).toBe(1);
+    expect(pv.rows[0]._dbRow.managerId).toBe(10);
+    expect(pv.rows[0]._dbRow.addressId).toBe(20);
+    expect(pv.rows[1]._dbRow.istProjektzeile).toBe(false);
+  });
+
+  it("baut den Baum ueber die Gliederung und erkennt Blaetter", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1",   "A", "", "Pauschal", "12000", "", ""],
+      ["P-1", "", "", "", "", "1.1", "B", "", "Pauschal", "5000",  "", ""],
+      ["P-1", "", "", "", "", "1.2", "C", "", "Pauschal", "7000",  "", ""],
+    ]);
+    const [, a, b, c] = pv.rows;
+    expect(a._dbRow.parentKey).toBe(null);
+    expect(b._dbRow.parentKey).toBe("1");
+    expect(c._dbRow.parentKey).toBe("1");
+    expect(a._dbRow.isLeaf).toBe(false);
+    expect(b._dbRow.isLeaf).toBe(true);
+    // Honorar am Knoten wird verworfen — plan&simple rechnet von unten hoch.
+    expect(a._dbRow.revenue).toBe(0);
+    expect(b._dbRow.revenue).toBe(5000);
+  });
+
+  it("weist ein Projekt ohne Projektzeile vollstaendig ab", () => {
+    const pv = preview([
+      ["P-9", "", "", "", "", "1",   "A", "", "Pauschal", "1000", "", ""],
+      ["P-9", "", "", "", "", "1.1", "B", "", "Pauschal", "1000", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(2);
+    expect(pv.rows[0].messages.some((m) => /keine Projektzeile/.test(m.text))).toBe(true);
+  });
+
+  it("weist zwei Projektzeilen ab", () => {
+    const pv = preview([PROJEKT, PROJEKT]);
+    expect(pv.summary.error).toBe(2);
+    expect(pv.rows[0].messages.some((m) => /nur eine geben/.test(m.text))).toBe(true);
+  });
+
+  // Nur die Projektzeile zu ueberspringen wuerde die Strukturzeilen heimatlos
+  // zuruecklassen — deshalb wird das GANZE Projekt zur Dublette.
+  it("markiert ein bereits vorhandenes Projekt samt Struktur als Dublette", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "1000", "", ""],
+    ], makeCtx({ existingKeys: new Set(["p-1"]) }));
+    expect(pv.summary.duplicate).toBe(2);
+    expect(pv.summary.ok).toBe(0);
+  });
+
+  it("meldet eine fehlende Elternzeile und kippt das ganze Projekt", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1.1", "B", "", "Pauschal", "1000", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(2);
+    expect(pv.rows[1].messages.some((m) => /fehlt in der Datei/.test(m.text))).toBe(true);
+  });
+
+  it("verlangt die Abrechnungsart nur an Blaettern", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1",   "A", "", "",         "", "", ""],
+      ["P-1", "", "", "", "", "1.1", "B", "", "Pauschal", "1000", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(0);
+  });
+
+  // wiko nennt Pauschal "Leistungsstand" und Stunden "Nachweis".
+  it("erkennt beide Vokabulare der Abrechnungsart", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Leistungsstand", "1000", "", ""],
+      ["P-1", "", "", "", "", "2", "B", "", "Nachweis",       "",     "", ""],
+      ["P-1", "", "", "", "", "3", "C", "", "Stunden",        "",     "", ""],
+    ]);
+    expect(pv.rows[1]._dbRow.billingTypeId).toBe(1);
+    expect(pv.rows[2]._dbRow.billingTypeId).toBe(2);
+    expect(pv.rows[3]._dbRow.billingTypeId).toBe(2);
+  });
+
+  it("merkt einen unbekannten Projekttyp zum Anlegen vor, aber keinen unbekannten Bauherrn", () => {
+    const pv = preview([
+      ["P-2", "Firma Unbekannt", "in Bearbeitung", "MMu", "Umbau", "", "P-2", "Projekt", "", "", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[0]._dbRow.typeNew).toBe("Umbau");
+    expect(pv.rows[0]._dbRow.addressId).toBe(null);
+    expect(pv.rows[0].messages.some((m) => /Bauherr/.test(m.text))).toBe(true);
+  });
+
+  it("nimmt den Status aus der Vorbelegung, wenn die Spalte leer ist", () => {
+    const pv = preview([["P-3", "", "", "MMu", "", "", "P-3", "Projekt", "", "", "", ""]]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[0]._dbRow.statusId).toBe(1);
+  });
+
+  it("weist einen unbekannten Status ab statt still die Vorbelegung zu nehmen", () => {
+    const pv = preview([["P-4", "", "Phantasie", "MMu", "", "", "P-4", "Projekt", "", "", "", ""]]);
+    expect(pv.summary.error).toBe(1);
+  });
+
+  it("uebernimmt Leistungsstand und Kosten je Element", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "10000", "40", "1500"],
+    ]);
+    expect(pv.rows[1]._dbRow.progressPercent).toBe(40);
+    expect(pv.rows[1]._dbRow.costs).toBe(1500);
+  });
+
+  it("begrenzt einen Leistungsstand ausserhalb 0-100", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Pauschal", "10000", "140", ""],
+    ]);
+    expect(pv.rows[1]._dbRow.progressPercent).toBe(100);
+    expect(pv.rows[1].messages.some((m) => /ausserhalb|außerhalb/.test(m.text))).toBe(true);
+  });
+});

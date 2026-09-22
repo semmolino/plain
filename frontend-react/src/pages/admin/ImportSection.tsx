@@ -62,7 +62,9 @@ export function ImportSection() {
   const batches = batchesData?.data ?? []
 
   // Empfohlene Reihenfolge der Bereiche + bereits importierte (für die Schritt-Übersicht).
-  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_fee', 'project_structure', 'opening_balance', 'open_items', 'opening_cost']
+  // project_full steht neben project: es ist der Weg fuer eine Uebernahme aus
+  // einem Altsystem, project/project_structure der fuer getrennte Dateien.
+  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_full', 'project_fee', 'project_structure', 'opening_balance', 'open_items', 'opening_cost']
   const orderedDomains = [...domains].sort((a, b) => {
     const ia = DOMAIN_ORDER.indexOf(a.key), ib = DOMAIN_ORDER.indexOf(b.key)
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)

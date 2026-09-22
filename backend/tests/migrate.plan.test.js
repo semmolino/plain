@@ -142,6 +142,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // Mandanten hinweg galt und den Adressimport abbrechen liess.
     // 0166 benennt die Kostensatz-Rechte um (hiessen "Gehalt").
     // 0167 haelt die Kennung aus dem Vorsystem fest (Datenuebernahme).
+    // 0168 gibt PROJECT_TYPE die Stapel-Kennung (kombinierter Projektimport).
     // 0165 ergaenzt Geburtstag, Notiz und Vorgesetzter am Mitarbeiter und die
     // Stapel-Kennung auf den vier Nebentabellen des Mitarbeiter-Imports.
     expect(offen).toEqual([
@@ -180,6 +181,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0165_employee_import_felder.sql",
       "0166_kostensatz_rechte_benennen.sql",
       "0167_legacy_ref.sql",
+      "0168_project_type_import_batch.sql",
     ]);
   });
 
