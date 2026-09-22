@@ -978,6 +978,24 @@ describe("buildPreview (project_full)", () => {
   // Eine Honorarminderung ist ein echter Vorgang und steht bei einer
   // Datenuebernahme als negative Position in der Quelle. Sie abzuweisen hiesse,
   // vollstaendige Projekte draussen zu lassen, damit eine Zahl schoen bleibt.
+  // SQL Server schreibt eine leere Zelle beim CSV-Export als das WORT "NULL".
+  // Im wiko-Projektexport waren das 78.086 Zellen. Ungefiltert waere eine
+  // Projektzeile ohne Gliederung ein Strukturknoten namens "NULL" — also
+  // genau kein Projekt.
+  it("liest das Wort NULL als leere Zelle", () => {
+    const pv = preview([
+      ["P-1", "NULL", "in Bearbeitung", "MMu", "NULL", "NULL", "P-1", "Kita", "NULL", "NULL", "NULL", "NULL"],
+      ["P-1", "NULL", "NULL", "NULL", "NULL", "1", "A", "NULL", "Pauschal", "1000", "NULL", "NULL"],
+    ]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[0]._dbRow.istProjektzeile).toBe(true);
+    expect(pv.rows[0]._dbRow.addressId).toBe(null);
+    expect(pv.rows[0]._dbRow.typeNew).toBe(null);
+    // Ohne die Behandlung hiesse der Knoten "NULL" statt "A".
+    expect(pv.rows[1]._dbRow.nameLong).toBe("A");
+    expect(pv.rows[1]._dbRow.progressPercent).toBe(0);
+  });
+
   it("laesst negatives Honorar zu, weist aber darauf hin", () => {
     const pv = preview([
       PROJEKT,

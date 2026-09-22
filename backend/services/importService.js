@@ -32,6 +32,26 @@ function s(v) {
   if (v === null || v === undefined) return "";
   return String(v).trim();
 }
+/**
+ * Platzhalter fuer "kein Wert" aus einem Datenbank-Export → leer.
+ *
+ * SQL Server schreibt eine leere Zelle beim CSV-Export als das WORT "NULL".
+ * Im wiko-Projektexport waren das 78.086 Zellen. Ohne diese Stelle hiesse jede
+ * zweite Bezeichnung "NULL", jeder fehlende Status waere ein unbekannter
+ * Status, und eine Projektzeile ohne Gliederung waere ein Strukturknoten
+ * namens "NULL" — also genau kein Projekt.
+ *
+ * Bewusst hier und nicht im CSV-Leser: derselbe Export kommt auch als XLSX,
+ * und dort steht das Wort genauso in der Zelle.
+ *
+ * "NULL" als echten Wert zu verlieren ist der Preis. In den Feldern, um die es
+ * geht (Namen, Kuerzel, Betraege, Datumsangaben), ist das kein Verlust.
+ */
+function leerwert(v) {
+  if (typeof v !== "string") return v;
+  const t = v.trim();
+  return (t === "NULL" || t === "(null)") ? "" : v;
+}
 /** Vergleichs-Normalisierung von Werten (Dubletten-Schlüssel). */
 function norm(v) {
   return s(v).toLowerCase().replace(/\s+/g, " ").trim();
@@ -2989,7 +3009,7 @@ function buildPreview({ domainKey, parsed, mapping, ctx }) {
 
   parsed.rows.forEach((raw, i) => {
     const mapped = {};
-    for (const f of def.fields) mapped[f.key] = map[f.key] != null ? raw[map[f.key]] : "";
+    for (const f of def.fields) mapped[f.key] = leerwert(map[f.key] != null ? raw[map[f.key]] : "");
     // Komplett leere Zeilen überspringen (kein Fehler, kein Import).
     if (def.fields.every((f) => !s(mapped[f.key]))) return;
 
