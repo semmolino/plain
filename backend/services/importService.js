@@ -1474,10 +1474,72 @@ const PROJECT_FULL_FIELDS = [
   { key: "extras_percent",   header: "Nebenkosten %",    required: false, example: "5",                    aliases: ["nebenkosten", "nk", "nkprozent", "nebenkostenprozent", "extras", "extraspercent"] },
   { key: "progress_percent", header: "Leistungsstand %", required: false, example: "40",                   aliases: ["leistungsstand", "leistungsstandprozent", "fortschritt", "stand", "fertigstellung", "erbracht"] },
   { key: "costs",            header: "Kosten",           required: false, example: "1500",                 aliases: ["kosten", "kostenanfangsbestand", "istkosten", "aufwand", "kostenblock"] , type: "money" },
+
+  // ── Kalkulation ────────────────────────────────────────────────────────────
+  // Alles optional: die meisten Projekte haben keine. Im wiko-Beispielexport
+  // trugen 173 von 868 Projekten eine Kalkulation.
+  //
+  // Die Klammer ist die Kennung der Kalkulation, NICHT ihr Name: ein Projekt
+  // kann mehrere haben, und zwei davon dürfen gleich heißen.
+  { key: "calc_ref",         header: "Kalkulation ID Vorsystem", required: false, example: "131",          aliases: ["kalkulationidvorsystem", "kalkulationid", "kalkid", "hoaiid", "kalkulation"] , type: "text" },
+  { key: "fee_master",       header: "Leistungsbild Kürzel",     required: false, example: "34_13_A",      aliases: ["leistungsbildkuerzel", "leistungsbild", "lb", "hoaiparagraph", "paragraph"] },
+  { key: "calc_abbr",        header: "HOAI-Kürzel",              required: false, example: "34_13_A1",     aliases: ["hoaikuerzel", "kalkulationskuerzel", "kalkkuerzel"] },
+  { key: "calc_name",        header: "HOAI-Bezeichnung",         required: false, example: "Gebäude",      aliases: ["hoaibezeichnung", "kalkulationsbezeichnung", "kalkname"] },
+  { key: "zone",             header: "Zone",                     required: false, example: "3",            aliases: ["zone", "honorarzone"] },
+  { key: "zone_percent",     header: "Zone %",                   required: false, example: "50",           aliases: ["zoneprozent", "zonesatz", "satzprozent", "honorarsatz"] },
+  { key: "k0",               header: "K0",                       required: false, example: "",             aliases: ["k0"] , type: "money" },
+  { key: "k1",               header: "K1",                       required: false, example: "",             aliases: ["k1"] , type: "money" },
+  { key: "k2",               header: "K2",                       required: false, example: "81045.92",     aliases: ["k2"] , type: "money" },
+  { key: "k3",               header: "K3",                       required: false, example: "",             aliases: ["k3"] , type: "money" },
+  { key: "k4",               header: "K4",                       required: false, example: "",             aliases: ["k4"] , type: "money" },
+  { key: "lph",              header: "LPH",                      required: false, example: "2",            aliases: ["lph", "leistungsphase", "phase"] , type: "text" },
+  { key: "kx",               header: "KX",                       required: false, example: "3",            aliases: ["kx", "kbezug", "kreferenz"] , type: "text" },
+  { key: "lph_percent",      header: "LPH Prozent",              required: false, example: "7",            aliases: ["lphprozent", "lphsatz", "phasenprozent", "prozentvereinbart"] },
 ];
 
+/**
+ * Leistungsbild-Kürzel aus wiko in das der plan&simple-Stammdaten übersetzen.
+ *
+ * wiko schreibt  <Paragraf>_<Jahr zweistellig>[_<Variante>]   → "34_13_A"
+ * plan&simple    <Jahr vierstellig>_<Paragraf>[_<Variante>]   → "2013_34_A"
+ *
+ * Dieselben Leistungsbilder, andere Reihenfolge. Geprüft an allen sechs
+ * Kürzeln des Beispielexports (34_13_A, 34_21_A, 55_13, 55_21, 51_21, 39_13) —
+ * jedes hat seine Entsprechung im Katalog, und die LPH-Prozentsätze stimmen
+ * überein.
+ *
+ * Es bleibt eine Regel über fremde Schreibweisen, deshalb wird der Originalwert
+ * ebenfalls versucht: passt weder das eine noch das andere, bleibt die
+ * Kalkulation aus und die Zeile sagt es. Das Element entsteht trotzdem.
+ */
+/**
+ * Zonen heißen in plan&simple römisch ("Zone III"), in wiko stehen sie als
+ * Zahl. Beides wird zur Zahl — mehr braucht der Abgleich nicht.
+ */
+function roemischZuZahl(v) {
+  const t = s(v).toUpperCase().replace(/[^IVX0-9]/g, "");
+  if (!t) return null;
+  if (/^[0-9]+$/.test(t)) return parseInt(t, 10);
+  const tabelle = { I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7, VIII: 8, IX: 9, X: 10 };
+  return tabelle[t] ?? null;
+}
+
+function feeMasterKandidaten(kuerzel) {
+  const roh = s(kuerzel).trim();
+  if (!roh) return [];
+  const kandidaten = [roh];
+  const m = roh.match(/^(\d+)_(\d{2})(?:_(.+))?$/);
+  if (m) {
+    const [, paragraf, jahr, variante] = m;
+    const vierstellig = Number(jahr) >= 70 ? "19" + jahr : "20" + jahr;
+    kandidaten.push(variante ? `${vierstellig}_${paragraf}_${variante}` : `${vierstellig}_${paragraf}`);
+  }
+  return kandidaten;
+}
+
 async function loadProjectFullContext(supabase, tenantId) {
-  const [companyRes, statusRes, typeRes, empRes, addrRes, projRes, settingsRes] = await Promise.all([
+  const [companyRes, statusRes, typeRes, empRes, addrRes, projRes, settingsRes,
+         masterRes, zoneRes, phaseRes] = await Promise.all([
     supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
     supabase.from("PROJECT_STATUS").select("ID, ABBR"),                          // global, ohne Mandant
     supabase.from("PROJECT_TYPE").select("ID, ABBR").eq("TENANT_ID", tenantId),
@@ -1485,6 +1547,10 @@ async function loadProjectFullContext(supabase, tenantId) {
     supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("PROJECT").select("ID, ABBR").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId),
+    // Honorar-Stammdaten: global, ohne Mandant (wie VAT und COUNTRY).
+    supabase.from("FEE_MASTERS").select("ID, ABBR").limit(10000),
+    supabase.from("FEE_ZONES").select("ID, FEE_MASTER_ID, ABBR").limit(10000),
+    supabase.from("FEE_PHASE").select("ID, FEE_MASTER_ID, ABBR, SORT_ORDER").limit(10000),
   ]);
 
   const statusByName = new Map();
@@ -1506,9 +1572,29 @@ async function loadProjectFullContext(supabase, tenantId) {
   const defaults = {};
   for (const row of settingsRes.data || []) defaults[row.KEY] = row.VALUE;
 
+  // Leistungsbild über sein Kürzel; Zone und Phase je Leistungsbild, weil
+  // "Zone III" bei §34 und §55 verschiedene Zeilen sind.
+  const feeMasterByAbbr = new Map();
+  for (const m of masterRes.data || []) if (m.ABBR) feeMasterByAbbr.set(katalogKey(m.ABBR), m.ID);
+
+  const zoneByMaster = new Map();     // FEE_MASTER_ID → Map(Nummer → ZONE_ID)
+  for (const z of zoneRes.data || []) {
+    if (!zoneByMaster.has(z.FEE_MASTER_ID)) zoneByMaster.set(z.FEE_MASTER_ID, new Map());
+    const nummer = roemischZuZahl(z.ABBR);
+    if (nummer != null) zoneByMaster.get(z.FEE_MASTER_ID).set(nummer, z.ID);
+  }
+
+  const phaseByMaster = new Map();    // FEE_MASTER_ID → Map(Nummer → FEE_PHASE_ID)
+  for (const p of phaseRes.data || []) {
+    if (!phaseByMaster.has(p.FEE_MASTER_ID)) phaseByMaster.set(p.FEE_MASTER_ID, new Map());
+    const nummer = parseInt(String(p.ABBR || "").replace(/[^0-9]/g, ""), 10);
+    if (Number.isFinite(nummer)) phaseByMaster.get(p.FEE_MASTER_ID).set(nummer, p.ID);
+  }
+
   return {
     companyId: companyRes.data?.[0]?.ID ?? null,
     statusByName, typeByName, empByName, addrByName, existingKeys, defaults,
+    feeMasterByAbbr, zoneByMaster, phaseByMaster,
     existingIds: new Map(),   // Zusammenführen ist hier nicht vorgesehen
   };
 }
@@ -1607,8 +1693,49 @@ function buildProjectFullEntry(mapped, ctx) {
   if (kostenRaw && (kosten.invalid || kosten.value == null)) messages.push({ level: "warn", text: "Kosten sind keine Zahl — werden nicht übernommen" });
   else if (kosten.value != null) costs = kosten.value;
 
+  // ── Kalkulation ───────────────────────────────────────────────────────────
+  // Alles daran ist optional. Fehlt das Leistungsbild oder ist es unbekannt,
+  // bleibt die Kalkulation aus — das ELEMENT entsteht trotzdem. Eine
+  // Honorarermittlung ist eine Zugabe der Übernahme, kein Pflichtteil.
+  let kalk = null;
+  const calcRef = s(mapped.calc_ref);
+  const lbIn = s(mapped.fee_master);
+  if (calcRef || lbIn) {
+    let feeMasterId = null;
+    for (const kandidat of feeMasterKandidaten(lbIn)) {
+      const hit = ctx.feeMasterByAbbr?.get(katalogKey(kandidat));
+      if (hit != null) { feeMasterId = hit; break; }
+    }
+    if (feeMasterId == null) {
+      if (lbIn) messages.push({ level: "warn", text: `Leistungsbild „${lbIn}“ nicht im Honorar-Stammdatensatz gefunden — die Kalkulation bleibt aus` });
+      else messages.push({ level: "warn", text: "Kalkulation ohne Leistungsbild — bleibt aus" });
+    } else {
+      const zoneNr = roemischZuZahl(mapped.zone);
+      const zoneId = zoneNr != null ? (ctx.zoneByMaster?.get(feeMasterId)?.get(zoneNr) ?? null) : null;
+      if (zoneNr != null && zoneId == null) messages.push({ level: "warn", text: `Honorarzone ${zoneNr} gibt es bei diesem Leistungsbild nicht — bleibt leer` });
+
+      const lphNr = parseInt(String(s(mapped.lph)).replace(/[^0-9]/g, ""), 10);
+      const phaseId = Number.isFinite(lphNr) ? (ctx.phaseByMaster?.get(feeMasterId)?.get(lphNr) ?? null) : null;
+      if (Number.isFinite(lphNr) && phaseId == null) messages.push({ level: "warn", text: `Leistungsphase ${lphNr} gibt es bei diesem Leistungsbild nicht — bleibt ohne Zuordnung` });
+
+      const zahl = (v) => { const p = parseAmountDE(v); return p.value ?? 0; };
+      kalk = {
+        ref: calcRef || `${number}#${lbIn}`,
+        feeMasterId, zoneId,
+        zonePercent: zahl(mapped.zone_percent),
+        // K0..K4 sind die ANRECHENBAREN BAUKOSTEN, aus denen sich das Honorar
+        // erst ergibt — nicht das Honorar selbst.
+        k: [zahl(mapped.k0), zahl(mapped.k1), zahl(mapped.k2), zahl(mapped.k3), zahl(mapped.k4)],
+        abbr: s(mapped.calc_abbr) || lbIn,
+        name: s(mapped.calc_name) || s(mapped.calc_abbr) || lbIn,
+        phaseId, kx: s(mapped.kx) || null,
+        phasePercent: zahl(mapped.lph_percent),
+      };
+    }
+  }
+
   const dbRow = {
-    istProjektzeile, projectNumber: number, legacyRef: s(mapped.legacy_ref) || null,
+    istProjektzeile, projectNumber: number, legacyRef: s(mapped.legacy_ref) || null, kalk,
     // Projektzeile
     projectName: s(mapped.name) || nameShort, statusId, managerId, typeId, typeNew, addressId,
     // Knoten
@@ -1626,6 +1753,7 @@ function buildProjectFullEntry(mapped, ctx) {
     abrechnung: billingTypeId === 2 ? "Stunden" : billingTypeId === 1 ? "Pauschal" : "",
     honorar: rev.value ? rev.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : "",
     stand: progress ? progress + " %" : "",
+    kalkulation: kalk ? `${kalk.abbr}${kalk.phaseId ? " · LPH " + s(mapped.lph) : ""}` : "",
   };
 
   // Entdoppelt wird über die Projektnummer — aber nur die Projektzeile trägt
@@ -1730,7 +1858,10 @@ function finalizeProjectFullRows(rows, ctx) {
     }
     for (const r of echte) {
       if (!r._dbRow.mehrfachLph) continue;
-      r.messages.push({ level: "warn", text: `Element hängt an ${r._dbRow.mehrfachLph} Leistungsphasen — die Zuordnung bleibt offen und ist nachzupflegen` });
+      r.messages.push({ level: "warn", text: `Element hängt an ${r._dbRow.mehrfachLph} Leistungsphasen — die Kalkulation wird verknüpft, die Phase bleibt offen und ist nachzupflegen` });
+      // Eine von mehreren Phasen willkürlich zu wählen wäre schlimmer als
+      // keine: die Zahl sähe gepflegt aus und wäre geraten.
+      if (r._dbRow.kalk) r._dbRow.kalk.phaseId = null;
     }
 
     // ── 4. Blatt oder Knoten ──────────────────────────────────────────────
@@ -1884,6 +2015,47 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
         if (eErr) throw { status: 500, message: `Projektleitung konnte nicht zugeordnet werden: ${eErr.message}` };
       }
 
+      // ── 4b. Kalkulationen ─────────────────────────────────────────────
+      // Je Kennung EINE Kalkulation, auch wenn sie an zwanzig Elementen
+      // hängt. Die Stammwerte (Leistungsbild, Zone, anrechenbare Kosten)
+      // stehen in der Quelle auf jeder Zeile — genommen wird die erste, die
+      // sie trägt.
+      const kalkIdNachRef = new Map();
+      const phasenIdNachRef = new Map();   // ref → Map(FEE_PHASE_ID → Zeilen-ID)
+      for (const r of group) {
+        const k = r._dbRow.kalk;
+        if (!k || kalkIdNachRef.has(k.ref)) continue;
+        const { data: km, error: kErr } = await supabase.from("FEE_CALCULATION_MASTER").insert([{
+          TENANT_ID: tenantId, PROJECT_ID: projectId,
+          FEE_MASTER_ID: k.feeMasterId, ABBR: k.abbr, NAME: k.name,
+          ZONE_ID: k.zoneId, ZONE_PERCENT: k.zonePercent,
+          // Anrechenbare Baukosten — das Honorar (REVENUE_K*) rechnet
+          // plan&simple daraus, es wird nicht übernommen.
+          CONSTRUCTION_COSTS_K0: k.k[0], CONSTRUCTION_COSTS_K1: k.k[1],
+          CONSTRUCTION_COSTS_K2: k.k[2], CONSTRUCTION_COSTS_K3: k.k[3],
+          CONSTRUCTION_COSTS_K4: k.k[4],
+        }]).select("ID").single();
+        if (kErr) throw { status: 500, message: `Kalkulation „${k.abbr}“ konnte nicht angelegt werden: ${kErr.message}` };
+        kalkIdNachRef.set(k.ref, km.ID);
+        phasenIdNachRef.set(k.ref, new Map());
+      }
+
+      // Leistungsphasen je Kalkulation — auch sie nur einmal, selbst wenn
+      // mehrere Elemente auf dieselbe Phase zeigen.
+      for (const r of group) {
+        const k = r._dbRow.kalk;
+        if (!k?.phaseId) continue;
+        const kalkId = kalkIdNachRef.get(k.ref);
+        const schon = phasenIdNachRef.get(k.ref);
+        if (!kalkId || !schon || schon.has(k.phaseId)) continue;
+        const { data: ph, error: phErr } = await supabase.from("FEE_CALCULATION_PHASE").insert([{
+          TENANT_ID: tenantId, FEE_MASTER_ID: kalkId,
+          FEE_PHASE_ID: k.phaseId, KX: k.kx, FEE_PERCENT: k.phasePercent,
+        }]).select("ID").single();
+        if (phErr) throw { status: 500, message: `Leistungsphase der Kalkulation „${k.abbr}“ konnte nicht angelegt werden: ${phErr.message}` };
+        schon.set(k.phaseId, ph.ID);
+      }
+
       // ── 5. Knoten flach, FATHER_ID im zweiten Durchgang ───────────────
       const geordnet = [...knoten].sort((a, b) => a._dbRow.depth - b._dbRow.depth || a._dbRow.sortIndex - b._dbRow.sortIndex);
       let idNachKey = new Map();
@@ -1901,6 +2073,13 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
             EXTRAS_COMPLETION: fmt2(extras * e.progressPercent / 100),
             SORT_ORDER: e.sortIndex * 10,
             LEGACY_REF: e.legacyRef,
+            // Verknüpfung zur Kalkulation: der Knoten weiss, aus welcher
+            // Honorarermittlung er stammt. Ohne FEE_CALC_PHASE_ID, wenn das
+            // Element an mehreren Phasen hing (siehe finalizeRows).
+            FEE_CALC_MASTER_ID: e.kalk ? (kalkIdNachRef.get(e.kalk.ref) ?? null) : null,
+            FEE_CALC_PHASE_ID: e.kalk?.phaseId
+              ? (phasenIdNachRef.get(e.kalk.ref)?.get(e.kalk.phaseId) ?? null)
+              : null,
             TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
           };
         });
@@ -2012,6 +2191,19 @@ async function rollbackProjectFull({ supabase, tenantId, batchId }) {
 
   await supabase.from("BOOKING").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
   await supabase.from("PROJECT_PROGRESS").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+
+  // Kalkulationen tragen keine Stapel-Kennung — sie haengen ueber PROJECT_ID
+  // an den Projekten dieses Stapels, und genau die verschwinden gleich mit.
+  // Die Phasen zuerst: sie zeigen auf die Kalkulation.
+  if (projectIds.length) {
+    const { data: kalk } = await supabase.from("FEE_CALCULATION_MASTER")
+      .select("ID").eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
+    const kalkIds = (kalk || []).map((k) => k.ID);
+    if (kalkIds.length) {
+      await supabase.from("FEE_CALCULATION_PHASE").delete().eq("TENANT_ID", tenantId).in("FEE_MASTER_ID", kalkIds);
+      await supabase.from("FEE_CALCULATION_MASTER").delete().eq("TENANT_ID", tenantId).in("ID", kalkIds);
+    }
+  }
   await supabase.from("PROJECT_STRUCTURE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
   await supabase.from("CONTRACT").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
   if (projectIds.length) {

@@ -844,6 +844,11 @@ describe("buildPreview (project_full)", () => {
       existingKeys: new Set(),
       defaults: { default_project_status_id: "1" },
       existingIds: new Map(),
+      // Honorar-Stammdaten: Schluessel wie katalogKey sie bildet (ohne
+      // Unterstriche). 2013_34_A ist §34 HOAI 2013 Anlage A — "Gebaeude".
+      feeMasterByAbbr: new Map([["201334a", 5]]),
+      zoneByMaster: new Map([[5, new Map([[1, 51], [2, 52], [3, 53], [4, 54], [5, 55]])]]),
+      phaseByMaster: new Map([[5, new Map([[1, 501], [2, 502], [3, 503]])]]),
       ...ueber,
     };
   }
@@ -1032,6 +1037,76 @@ describe("buildPreview (project_full)", () => {
     ]);
     expect(pv.summary.error).toBe(3);
     expect(pv.rows[2].messages.some((m) => /widersprechen/.test(m.text))).toBe(true);
+  });
+
+  // ── Kalkulation ───────────────────────────────────────────────────────────
+  // Eigene Kopfzeile: die Kalkulation haengt hinten an den 28 Spalten des
+  // wiko-Exports, die kurze KOPF-Liste oben reicht dafuer nicht.
+  const KOPF_KALK = ["ID Vorsystem", "Projekt", "Projektadresse", "Status", "PL", "Projekttyp",
+    "Gliederung", "Kürzel", "Bezeichnung", "Abrechnungsart", "Honorar netto", "Nebenkosten %",
+    "Kalkulation ID Vorsystem", "Leistungsbild Kürzel", "HOAI-Kürzel", "HOAI-Bezeichnung",
+    "Zone", "Zone %", "K0", "K1", "K2", "K3", "K4", "LPH", "KX", "LPH Prozent",
+    "Leistungsstand %", "Kosten"];
+
+  function previewKalk(zeilen, ctx = makeCtx()) {
+    const rows = zeilen.map((z) => Object.fromEntries(KOPF_KALK.map((h, i) => [h, z[i] ?? ""])));
+    return buildPreview({ domainKey: "project_full", parsed: { headers: KOPF_KALK, rows }, mapping: null, ctx });
+  }
+
+  // Projektzeile und ein Knoten mit Kalkulation, in der Spaltenfolge des Exports.
+  const P_KALK = ["1", "P-1", "", "in Bearbeitung", "MMu", "", "", "P-1", "Kita", "", "", "",
+                  "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""];
+  const K_ZEILE = (ueber = {}) => {
+    const z = ["2", "P-1", "", "", "", "", "1", "A", "Grundlagen", "Pauschal", "10000", "",
+               "131", "34_13_A", "34_13_A1", "Gebäude", "3", "50",
+               "", "", "400000", "", "", "2", "3", "7", "", ""];
+    for (const [i, v] of Object.entries(ueber)) z[i] = v;
+    return z;
+  };
+
+  // wiko schreibt <Paragraf>_<Jahr>[_<Variante>], plan&simple
+  // <Jahr>_<Paragraf>[_<Variante>]. Dieselben Leistungsbilder, andere Folge.
+  it("uebersetzt das wiko-Leistungsbild in den p&s-Katalog", () => {
+    const pv = previewKalk([P_KALK, K_ZEILE()]);
+    const k = pv.rows[1]._dbRow.kalk;
+    expect(k).toBeTruthy();
+    expect(k.feeMasterId).toBe(5);
+    expect(k.zoneId).toBe(53);
+    expect(k.zonePercent).toBe(50);
+    expect(k.phaseId).toBe(502);
+    expect(k.phasePercent).toBe(7);
+    expect(k.ref).toBe("131");
+  });
+
+  // K0..K4 sind die ANRECHENBAREN BAUKOSTEN, aus denen sich das Honorar erst
+  // ergibt — nicht das Honorar selbst.
+  it("liest K0..K4 als anrechenbare Baukosten", () => {
+    const pv = previewKalk([P_KALK, K_ZEILE()]);
+    expect(pv.rows[1]._dbRow.kalk.k).toEqual([0, 0, 400000, 0, 0]);
+  });
+
+  it("laesst die Kalkulation aus, wenn das Leistungsbild unbekannt ist — das Element bleibt", () => {
+    const pv = previewKalk([P_KALK, K_ZEILE({ 13: "99_99_Z" })]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[1]._dbRow.kalk).toBe(null);
+    expect(pv.rows[1]._dbRow.revenue).toBe(10000);
+    expect(pv.rows[1].messages.some((m) => /Leistungsbild/.test(m.text))).toBe(true);
+  });
+
+  it("warnt bei einer Honorarzone, die es beim Leistungsbild nicht gibt", () => {
+    const pv = previewKalk([P_KALK, K_ZEILE({ 16: "9" })]);
+    expect(pv.rows[1]._dbRow.kalk.zoneId).toBe(null);
+    expect(pv.rows[1].messages.some((m) => /Honorarzone/.test(m.text))).toBe(true);
+  });
+
+  // Eine von mehreren Phasen willkuerlich zu waehlen waere schlimmer als
+  // keine: die Zahl saehe gepflegt aus und waere geraten.
+  it("laesst die Phase offen, wenn ein Element an mehreren haengt", () => {
+    const pv = previewKalk([P_KALK, K_ZEILE(), K_ZEILE({ 23: "3" })]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[1]._dbRow.kalk.feeMasterId).toBe(5);   // Kalkulation bleibt
+    expect(pv.rows[1]._dbRow.kalk.phaseId).toBe(null);    // die Phase nicht
+    expect(pv.rows[2]._dbRow.istZusatzzeile).toBe(true);
   });
 
   it("begrenzt einen Leistungsstand ausserhalb 0-100", () => {
