@@ -848,7 +848,13 @@ describe("buildPreview (project_full)", () => {
       // Unterstriche). 2013_34_A ist §34 HOAI 2013 Anlage A — "Gebaeude".
       feeMasterByAbbr: new Map([["201334a", 5]]),
       zoneByMaster: new Map([[5, new Map([[1, 51], [2, 52], [3, 53], [4, 54], [5, 55]])]]),
-      phaseByMaster: new Map([[5, new Map([[1, 501], [2, 502], [3, 503]])]]),
+      // { id, percent } — der Tafelsatz der Phase gehoert dazu (Spalte "Basis %").
+      phaseByMaster: new Map([[5, new Map([[1, { id: 501, percent: 2 }], [2, { id: 502, percent: 7 }], [3, { id: 503, percent: 15 }]])]]),
+      zoneAbbrById: new Map([[53, "III"]]),
+      tafelByMaster: new Map([[5, [
+        { BASE: 300000, ZONE_1: 30000, ZONE_2: 35000, ZONE_3: 40000, ZONE_4: 45000, ZONE_5: 50000, ZONE_TOP: 55000 },
+        { BASE: 500000, ZONE_1: 45000, ZONE_2: 52000, ZONE_3: 60000, ZONE_4: 67000, ZONE_5: 74000, ZONE_TOP: 81000 },
+      ]]]),
       ...ueber,
     };
   }
@@ -1131,6 +1137,20 @@ describe("buildPreview (project_full)", () => {
 
   // K0..K4 sind die ANRECHENBAREN BAUKOSTEN, aus denen sich das Honorar erst
   // ergibt — nicht das Honorar selbst.
+  // wiko fuehrt den K-Bezug als Ziffer, plan&simple als "K0".."K4". Ohne die
+  // Umsetzung stand im Wizard ueberall K0 — also der falsche Kostenblock.
+  it("bringt den K-Bezug in die Schreibweise der Stammdaten", () => {
+    expect(previewKalk([P_KALK, K_ZEILE()]).rows[1]._dbRow.kalk.kx).toBe("K3");
+    expect(previewKalk([P_KALK, K_ZEILE({ 24: "0" })]).rows[1]._dbRow.kalk.kx).toBe("K0");
+    expect(previewKalk([P_KALK, K_ZEILE({ 24: "K4" })]).rows[1]._dbRow.kalk.kx).toBe("K4");
+    expect(previewKalk([P_KALK, K_ZEILE({ 24: "" })]).rows[1]._dbRow.kalk.kx).toBe(null);
+  });
+
+  it("merkt sich den Tafelsatz der Leistungsphase", () => {
+    // LPH 2 steht im Katalog mit 7 % — das ist die Spalte "Basis %".
+    expect(previewKalk([P_KALK, K_ZEILE()]).rows[1]._dbRow.kalk.phasePercentBase).toBe(7);
+  });
+
   it("liest K0..K4 als anrechenbare Baukosten", () => {
     const pv = previewKalk([P_KALK, K_ZEILE()]);
     expect(pv.rows[1]._dbRow.kalk.k).toEqual([0, 0, 400000, 0, 0]);
@@ -1158,6 +1178,20 @@ describe("buildPreview (project_full)", () => {
     expect(pv.rows[1]._dbRow.kalk.feeMasterId).toBe(5);   // Kalkulation bleibt
     expect(pv.rows[1]._dbRow.kalk.phaseId).toBe(null);    // die Phase nicht
     expect(pv.rows[2]._dbRow.istZusatzzeile).toBe(true);
+  });
+
+  // Bei einer Stunden-Position entsteht der Erloes aus Buchungen. Das
+  // mitgelieferte Honorar ist aber der bisher erwirtschaftete Erloes des
+  // Altsystems — ihn wegzuwerfen hiesse, die Position mit 0 zu starten.
+  it("macht aus dem Honorar einer Stunden-Position eine Erloesbuchung", () => {
+    const pv = preview([
+      PROJEKT,
+      ["P-1", "", "", "", "", "1", "A", "", "Stunden", "2126,25", "", ""],
+    ]);
+    expect(pv.summary.error).toBe(0);
+    expect(pv.rows[1]._dbRow.revenue).toBe(0);            // nicht am Knoten …
+    expect(pv.rows[1]._dbRow.revenueBooking).toBe(2126.25); // … sondern als Buchung
+    expect(pv.rows[1].messages.some((m) => /Erlösbuchung/.test(m.text))).toBe(true);
   });
 
   it("begrenzt einen Leistungsstand ausserhalb 0-100", () => {

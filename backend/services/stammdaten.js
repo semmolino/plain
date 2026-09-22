@@ -325,25 +325,25 @@ async function recomputeStructureAggregates(supabase, structureId) {
 // Wiederverwendet die lineare Interpolation der Honorartafel (FEE_TABLES) — dieselbe
 // Logik wie calculateRevenueFields, nur fuer eine Zone und einen Kostenwert.
 // Wird u. a. fuer das TGA-Mischhonorar (§ 54) mehrfach je Zone aufgerufen.
-async function interpolateHonorarForZone(supabase, { feeMasterId, zoneId, zonePercent, cost }) {
+/**
+ * Die eigentliche Rechnung — ohne Datenbank.
+ *
+ * `tafel` sind die FEE_TABLES-Zeilen des Leistungsbildes, aufsteigend nach
+ * BASE und mit allen ZONE_*-Spalten. `zoneAbbr` ist die roemische Zone.
+ *
+ * Getrennt vom Laden, weil eine Datenuebernahme hunderte Kalkulationen rechnet
+ * und die Tafel dabei jedes Mal neu zu holen tausende Rundreisen bedeutet —
+ * dieselbe Falle, die den Projektimport in den 504 getrieben hat.
+ */
+function honorarAusTafel({ zoneAbbr, tafel, zonePercent, cost }) {
   const kx = toNumberOrNull(cost);
-  if (!feeMasterId || !zoneId || kx === null) return null;
+  if (kx === null) return null;
 
-  const { data: zone, error: zoneErr } = await supabase
-    .from("FEE_ZONES").select("ID, ABBR").eq("ID", zoneId).single();
-  if (zoneErr) throw new Error(zoneErr.message);
-  if (!zone) throw new Error("FEE_ZONE not found");
-  const zoneKey = String(zone.ABBR || "").trim().toUpperCase();
+  const zoneKey = String(zoneAbbr || "").trim().toUpperCase();
   const zoneColumns = FEE_ZONE_COLUMN_BY_ROMAN[zoneKey];
-  if (!zoneColumns) throw new Error(`Unsupported FEE_ZONE.ABBR "${zone.ABBR}"`);
+  if (!zoneColumns) throw new Error(`Unsupported FEE_ZONE.ABBR "${zoneAbbr}"`);
 
-  const { data: feeTables, error: tblErr } = await supabase
-    .from("FEE_TABLES")
-    .select(`BASE, ${zoneColumns.min}, ${zoneColumns.max}`)
-    .eq("FEE_MASTER_ID", feeMasterId)
-    .order("BASE", { ascending: true, nullsFirst: false });
-  if (tblErr) throw new Error(tblErr.message);
-  const rows = Array.isArray(feeTables) ? feeTables : [];
+  const rows = Array.isArray(tafel) ? tafel : [];
   if (!rows.length) throw new Error("No FEE_TABLES rows found for selected FEE_MASTER_ID");
 
   const strategy = resolveRevenueStrategy();
@@ -358,12 +358,32 @@ async function interpolateHonorarForZone(supabase, { feeMasterId, zoneId, zonePe
   return hm + ((hh - hm) * (zonePct / 100));
 }
 
+async function interpolateHonorarForZone(supabase, { feeMasterId, zoneId, zonePercent, cost }) {
+  const kx = toNumberOrNull(cost);
+  if (!feeMasterId || !zoneId || kx === null) return null;
+
+  const { data: zone, error: zoneErr } = await supabase
+    .from("FEE_ZONES").select("ID, ABBR").eq("ID", zoneId).single();
+  if (zoneErr) throw new Error(zoneErr.message);
+  if (!zone) throw new Error("FEE_ZONE not found");
+
+  const { data: feeTables, error: tblErr } = await supabase
+    .from("FEE_TABLES")
+    .select("BASE, ZONE_1, ZONE_2, ZONE_3, ZONE_4, ZONE_5, ZONE_TOP")
+    .eq("FEE_MASTER_ID", feeMasterId)
+    .order("BASE", { ascending: true, nullsFirst: false });
+  if (tblErr) throw new Error(tblErr.message);
+
+  return honorarAusTafel({ zoneAbbr: zone.ABBR, tafel: feeTables, zonePercent, cost });
+}
+
 module.exports = {
   toNumberOrNull,
   zonePercentRangeError,
   ZONE_PERCENT_FREE_BASE_TYPES,
   calculateRevenueFields,
   interpolateHonorarForZone,
+  honorarAusTafel,
   getRevenueByKx,
   calculatePhaseRevenue,
   feePhaseSortKey,

@@ -14,6 +14,8 @@
 
 const ExcelJS = require("exceljs");
 const { readTable } = require("./spreadsheet");
+// Honorartafel-Interpolation — dieselbe Rechnung wie im Kalkulations-Wizard.
+const stammdatenSvc = require("./stammdaten");
 // Rollenwechsel beendet laufende Sitzungen — siehe Sicherheitsmodell.
 const { revokeSessions } = require("../middleware/sessionGuard");
 const { contractDefaults } = require("./contractDefaults");
@@ -1536,6 +1538,20 @@ const PROJECT_FULL_FIELDS = [
  * Zonen heißen in plan&simple römisch ("Zone III"), in wiko stehen sie als
  * Zahl. Beides wird zur Zahl — mehr braucht der Abgleich nicht.
  */
+/**
+ * K-Bezug in die Schreibweise der Stammdaten bringen: 3 → "K3".
+ * Steht schon "K3" da, bleibt es. Ohne Angabe null — dann setzt die
+ * Oberflaeche ihren Vorgabewert.
+ */
+function kxSchreibweise(v) {
+  const t = s(v).trim().toUpperCase();
+  if (!t) return null;
+  const ziffer = t.replace(/[^0-9]/g, "");
+  if (!ziffer) return null;
+  const n = parseInt(ziffer, 10);
+  return n >= 0 && n <= 4 ? `K${n}` : null;
+}
+
 function roemischZuZahl(v) {
   const t = s(v).toUpperCase().replace(/[^IVX0-9]/g, "");
   if (!t) return null;
@@ -1559,7 +1575,7 @@ function feeMasterKandidaten(kuerzel) {
 
 async function loadProjectFullContext(supabase, tenantId) {
   const [companyRes, statusRes, typeRes, empRes, addrRes, projRes, settingsRes,
-         masterRes, zoneRes, phaseRes] = await Promise.all([
+         masterRes, zoneRes, phaseRes, tabelleRes] = await Promise.all([
     supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
     supabase.from("PROJECT_STATUS").select("ID, ABBR"),                          // global, ohne Mandant
     supabase.from("PROJECT_TYPE").select("ID, ABBR").eq("TENANT_ID", tenantId),
@@ -1570,7 +1586,11 @@ async function loadProjectFullContext(supabase, tenantId) {
     // Honorar-Stammdaten: global, ohne Mandant (wie VAT und COUNTRY).
     supabase.from("FEE_MASTERS").select("ID, ABBR").limit(10000),
     supabase.from("FEE_ZONES").select("ID, FEE_MASTER_ID, ABBR").limit(10000),
-    supabase.from("FEE_PHASE").select("ID, FEE_MASTER_ID, ABBR, SORT_ORDER").limit(10000),
+    supabase.from("FEE_PHASE").select("ID, FEE_MASTER_ID, ABBR, SORT_ORDER, FEE_PERCENT").limit(10000),
+    // Honorartafeln einmal fuer alle. Die Interpolation je Kalkulation und
+    // K-Wert waere sonst ein Paar Abfragen pro Rechnung — bei hunderten
+    // Kalkulationen wieder der Weg in den Zeitueberlauf.
+    supabase.from("FEE_TABLES").select("FEE_MASTER_ID, BASE, ZONE_1, ZONE_2, ZONE_3, ZONE_4, ZONE_5, ZONE_TOP").limit(100000),
   ]);
 
   const statusByName = new Map();
@@ -1605,17 +1625,29 @@ async function loadProjectFullContext(supabase, tenantId) {
     if (nummer != null) zoneByMaster.get(z.FEE_MASTER_ID).set(nummer, z.ID);
   }
 
-  const phaseByMaster = new Map();    // FEE_MASTER_ID → Map(Nummer → FEE_PHASE_ID)
+  const phaseByMaster = new Map();    // FEE_MASTER_ID → Map(Nummer → { id, percent })
   for (const p of phaseRes.data || []) {
     if (!phaseByMaster.has(p.FEE_MASTER_ID)) phaseByMaster.set(p.FEE_MASTER_ID, new Map());
     const nummer = parseInt(String(p.ABBR || "").replace(/[^0-9]/g, ""), 10);
-    if (Number.isFinite(nummer)) phaseByMaster.get(p.FEE_MASTER_ID).set(nummer, p.ID);
+    if (Number.isFinite(nummer)) phaseByMaster.get(p.FEE_MASTER_ID).set(nummer, { id: p.ID, percent: num(p.FEE_PERCENT) });
   }
+
+  // Zonenkuerzel (roemisch) je Zone-ID — die Honorartafel hat je Zone eine
+  // eigene Spalte, und die Zuordnung laeuft ueber das Kuerzel.
+  const zoneAbbrById = new Map();
+  for (const z of zoneRes.data || []) zoneAbbrById.set(z.ID, z.ABBR);
+
+  const tafelByMaster = new Map();
+  for (const t of tabelleRes.data || []) {
+    if (!tafelByMaster.has(t.FEE_MASTER_ID)) tafelByMaster.set(t.FEE_MASTER_ID, []);
+    tafelByMaster.get(t.FEE_MASTER_ID).push(t);
+  }
+  for (const zeilen of tafelByMaster.values()) zeilen.sort((a, b) => num(a.BASE) - num(b.BASE));
 
   return {
     companyId: companyRes.data?.[0]?.ID ?? null,
     statusByName, statusNamen, typeByName, empByName, addrByName, existingKeys, defaults,
-    feeMasterByAbbr, zoneByMaster, phaseByMaster,
+    feeMasterByAbbr, zoneByMaster, phaseByMaster, zoneAbbrById, tafelByMaster,
     existingIds: new Map(),   // Zusammenführen ist hier nicht vorgesehen
   };
 }
@@ -1749,7 +1781,8 @@ function buildProjectFullEntry(mapped, ctx) {
       if (zoneNr != null && zoneId == null) messages.push({ level: "warn", text: `Honorarzone ${zoneNr} gibt es bei diesem Leistungsbild nicht — bleibt leer` });
 
       const lphNr = parseInt(String(s(mapped.lph)).replace(/[^0-9]/g, ""), 10);
-      const phaseId = Number.isFinite(lphNr) ? (ctx.phaseByMaster?.get(feeMasterId)?.get(lphNr) ?? null) : null;
+      const phase = Number.isFinite(lphNr) ? (ctx.phaseByMaster?.get(feeMasterId)?.get(lphNr) ?? null) : null;
+      const phaseId = phase?.id ?? null;
       if (Number.isFinite(lphNr) && phaseId == null) messages.push({ level: "warn", text: `Leistungsphase ${lphNr} gibt es bei diesem Leistungsbild nicht — bleibt ohne Zuordnung` });
 
       const zahl = (v) => { const p = parseAmountDE(v); return p.value ?? 0; };
@@ -1762,8 +1795,13 @@ function buildProjectFullEntry(mapped, ctx) {
         k: [zahl(mapped.k0), zahl(mapped.k1), zahl(mapped.k2), zahl(mapped.k3), zahl(mapped.k4)],
         abbr: s(mapped.calc_abbr) || lbIn,
         name: s(mapped.calc_name) || s(mapped.calc_abbr) || lbIn,
-        phaseId, kx: s(mapped.kx) || null,
+        // wiko fuehrt den K-Bezug als Ziffer, plan&simple als "K0".."K4" —
+        // dieselbe Bedeutung, andere Schreibweise. Ohne die Umsetzung stand im
+        // Wizard ueberall K0, also der falsche Kostenblock.
+        phaseId, kx: kxSchreibweise(mapped.kx),
         phasePercent: zahl(mapped.lph_percent),
+        // Der Tafelwert der Phase — im Wizard die Spalte "Basis %".
+        phasePercentBase: phase?.percent ?? null,
       };
     }
   }
@@ -1933,7 +1971,16 @@ function finalizeProjectFullRows(rows, ctx) {
         r.status = "error";
         r.messages.push({ level: "error", text: "Abrechnungsart fehlt (bei unterster Ebene Pflicht: Pauschal oder Stunden)" });
       } else if (e.billingTypeId === 2 && e.revenue) {
-        r.messages.push({ level: "warn", text: "Stunden-Position: Honorar entsteht aus den Buchungen und wird hier ignoriert" });
+        // Bei einer Stunden-Position entsteht der Erloes aus Buchungen, nicht
+        // aus einem Feld am Knoten. Das mitgelieferte Honorar ist aber der
+        // bisher erwirtschaftete Erloes des Altsystems — ihn wegzuwerfen hiesse,
+        // die Position mit 0 zu starten und jede Folgerechnung (Leistungsstand,
+        // Nebenkosten) auf einer Null aufzubauen.
+        //
+        // Er wird deshalb zur pauschalen ERLOESBUCHUNG, so wie die Kosten zur
+        // Kostenbuchung werden. Jede weitere Buchung rechnet dann normal weiter.
+        r.messages.push({ level: "warn", text: "Stunden-Position: das Honorar wird als pauschale Erlösbuchung übernommen (der Erlös entsteht hier aus Buchungen)" });
+        e.revenueBooking = e.revenue;
         e.revenue = 0;
       }
     }
@@ -2082,17 +2129,36 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
       if (!k || gesehen.has(k.ref)) continue;
       gesehen.add(k.ref);
       kalkSchluessel.push(k.ref);
+      // Das Honorar je K-Wert aus der Honorartafel — genau die Rechnung, die
+      // der Wizard beim Speichern macht. Ohne sie blieben REVENUE_K0..K4 leer
+      // und die Kalkulation zeigte ueberall Gedankenstriche, obwohl Zone und
+      // Baukosten dastehen.
+      const zoneAbbr = k.zoneId != null ? ctx.zoneAbbrById?.get(k.zoneId) : null;
+      const tafel = ctx.tafelByMaster?.get(k.feeMasterId) || null;
+      const honorar = (kosten) => {
+        if (!zoneAbbr || !tafel || !kosten) return 0;
+        try {
+          return fmt2(stammdatenSvc.honorarAusTafel({ zoneAbbr, tafel, zonePercent: k.zonePercent, cost: kosten }) ?? 0);
+        } catch { return 0; }   // unbekannte Zonenschreibweise — dann eben ohne
+      };
+      k.revenueK = k.k.map(honorar);
+
       kalkZeilen.push({
         TENANT_ID: tenantId, PROJECT_ID: p.projectId,
         FEE_MASTER_ID: k.feeMasterId, ABBR: k.abbr, NAME: k.name,
         ZONE_ID: k.zoneId, ZONE_PERCENT: k.zonePercent,
-        // Anrechenbare Baukosten — das Honorar rechnet plan&simple daraus.
+        // Anrechenbare Baukosten — Eingabe der Rechnung …
         CONSTRUCTION_COSTS_K0: k.k[0], CONSTRUCTION_COSTS_K1: k.k[1],
         CONSTRUCTION_COSTS_K2: k.k[2], CONSTRUCTION_COSTS_K3: k.k[3],
         CONSTRUCTION_COSTS_K4: k.k[4],
+        // … und ihr Ergebnis.
+        REVENUE_K0: k.revenueK[0], REVENUE_K1: k.revenueK[1], REVENUE_K2: k.revenueK[2],
+        REVENUE_K3: k.revenueK[3], REVENUE_K4: k.revenueK[4],
       });
     }
   }
+  const kalkNachRef = new Map();       // ref → der Kalkulationssatz der ersten Zeile
+  for (const r of rows) { const k = r._dbRow.kalk; if (k && !kalkNachRef.has(k.ref)) kalkNachRef.set(k.ref, k); }
   const kalkIdNachRef = new Map();
   if (kalkZeilen.length) {
     const angelegt = await einfuegen("FEE_CALCULATION_MASTER", kalkZeilen, "ID", "Kalkulationen anlegen");
@@ -2106,13 +2172,23 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
       const k = r._dbRow.kalk;
       if (!k?.phaseId) continue;
       const kalkId = kalkIdNachRef.get(k.ref);
+      // revenueK haengt am ERSTEN Satz dieser Kalkulation — dort wurde gerechnet.
+      k.revenueK = k.revenueK || kalkNachRef.get(k.ref)?.revenueK || [];
       const schluessel = `${k.ref}#${k.phaseId}`;
       if (!kalkId || gesehen.has(schluessel)) continue;
       gesehen.add(schluessel);
       phasenSchluessel.push(schluessel);
+      // Basis ist das Honorar des gewaehlten K-Bezugs; der Phasenanteil davon
+      // ist ihr Honorar. Dieselben drei Felder, die der Wizard fuehrt.
+      const kxIndex = k.kx ? parseInt(k.kx.replace(/[^0-9]/g, ""), 10) : 0;
+      const basis = num(k.revenueK?.[Number.isFinite(kxIndex) ? kxIndex : 0]);
       phasenZeilen.push({
         TENANT_ID: tenantId, FEE_MASTER_ID: kalkId,
-        FEE_PHASE_ID: k.phaseId, KX: k.kx, FEE_PERCENT: k.phasePercent,
+        FEE_PHASE_ID: k.phaseId, KX: k.kx || "K0",
+        FEE_PERCENT_BASE: k.phasePercentBase,
+        REVENUE_BASE: basis,
+        FEE_PERCENT: k.phasePercent,
+        PHASE_REVENUE: fmt2(basis * num(k.phasePercent) / 100),
       });
     }
   }
@@ -2213,20 +2289,39 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
   // COSTS steht bereits am Knoten (Schritt 6), die Buchung ist der Beleg dazu —
   // deshalb kein Nachrechnen je Buchung.
   const heute = new Date().toISOString().slice(0, 10);
+  const grundzeile = (p, r, e) => ({
+    TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_TYPE_ID: null,
+    EMPLOYEE_ID: employeeId ?? null, BOOKING_DATE: heute,
+    // QUANTITY_INT bleibt 0: Pauschalen sind keine Stunden und duerfen in
+    // keiner Stundensumme mitzaehlen (siehe services/buchungen.js).
+    QUANTITY_INT: 0,
+    PROJECT_ID: p.projectId, STRUCTURE_ID: r._angelegt.ID, IMPORT_BATCH_ID: batchId,
+  });
+
   const buchungen = [];
   for (const p of projektListe) for (const r of (p.knoten || [])) {
     const e = r._dbRow;
-    if (!e.costs || !r._angelegt) continue;
-    buchungen.push({
-      TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_COST",
-      BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, BOOKING_DATE: heute,
-      QUANTITY_INT: 0, COST_RATE: e.costs, COST_TOTAL: fmt2(e.costs),
-      QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
-      POSTING_DESCRIPTION: `Kosten-Anfangsbestand aus Datenübernahme (${e.nameShort})`,
-      PROJECT_ID: p.projectId, STRUCTURE_ID: r._angelegt.ID, IMPORT_BATCH_ID: batchId,
-    });
+    if (!r._angelegt) continue;
+    if (e.costs) {
+      buchungen.push({
+        ...grundzeile(p, r, e), BOOKING_KIND: "LUMP_COST",
+        COST_RATE: e.costs, COST_TOTAL: fmt2(e.costs),
+        QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
+        POSTING_DESCRIPTION: `Kosten-Anfangsbestand aus Datenübernahme (${e.nameShort})`,
+      });
+    }
+    if (e.revenueBooking) {
+      // QUANTITY_EXT=1 haelt die Invariante HOURLY_RATE_TOTAL = Menge × Satz —
+      // dieselbe Kodierung, die die App fuer LUMP_REVENUE benutzt.
+      buchungen.push({
+        ...grundzeile(p, r, e), BOOKING_KIND: "LUMP_REVENUE",
+        COST_RATE: 0, COST_TOTAL: 0,
+        QUANTITY_EXT: 1, HOURLY_RATE: e.revenueBooking, HOURLY_RATE_TOTAL: fmt2(e.revenueBooking),
+        POSTING_DESCRIPTION: `Erlös-Anfangsbestand aus Datenübernahme (${e.nameShort})`,
+      });
+    }
   }
-  if (buchungen.length) await einfuegen("BOOKING", buchungen, null, "Kosten buchen");
+  if (buchungen.length) await einfuegen("BOOKING", buchungen, null, "Buchungen anlegen");
 
   return { inserted: rows.length };
 }

@@ -28,6 +28,7 @@ const { makeFakeSupabase } = require("./helpers/fakeSupabase");
 const { xlsxBuffer, csvBuffer } = require("./helpers/sheetFixture");
 
 const TENANT = 7;
+const fmt2Test = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const EMPLOYEE = 99;
 
 /** Array-of-Arrays → XLSX-Buffer (simuliert die hochgeladene Datei). */
@@ -671,7 +672,13 @@ describe("commit (project_full)", () => {
     EMPLOYEE2PROJECT: [], BOOKING: [], TENANT_SETTINGS: [],
     FEE_MASTERS: [{ ID: 5, ABBR: "2013_34_A" }],
     FEE_ZONES: [{ ID: 53, FEE_MASTER_ID: 5, ABBR: "III" }],
-    FEE_PHASE: [{ ID: 502, FEE_MASTER_ID: 5, ABBR: "LPH 2", SORT_ORDER: 2 }],
+    FEE_PHASE: [{ ID: 502, FEE_MASTER_ID: 5, ABBR: "LPH 2", SORT_ORDER: 2, FEE_PERCENT: 7 }],
+    // Honorartafel: bei 400.000 EUR anrechenbar liegt Zone III zwischen
+    // 40.000 (Mindestsatz) und 45.000 (Hoechstsatz).
+    FEE_TABLES: [
+      { FEE_MASTER_ID: 5, BASE: 300000, ZONE_1: 30000, ZONE_2: 35000, ZONE_3: 40000, ZONE_4: 45000, ZONE_5: 50000, ZONE_TOP: 55000 },
+      { FEE_MASTER_ID: 5, BASE: 500000, ZONE_1: 45000, ZONE_2: 52000, ZONE_3: 60000, ZONE_4: 67000, ZONE_5: 74000, ZONE_TOP: 81000 },
+    ],
     FEE_CALCULATION_MASTER: [], FEE_CALCULATION_PHASE: [],
   });
 
@@ -753,6 +760,53 @@ describe("commit (project_full)", () => {
     for (const abbr of ["LP1", "LP2"]) {
       expect(st.find((x) => x.ABBR === abbr).FEE_CALC_MASTER_ID).toBe(kalk[0].ID);
     }
+  });
+
+  // Der Wizard fuehrt je Phase drei gerechnete Felder. Blieben sie leer,
+  // zeigte die Kalkulation ueberall Gedankenstriche, obwohl Zone und
+  // Baukosten dastehen.
+  it("rechnet Honorar, Basis und Phasenhonorar aus der Honorartafel", async () => {
+    const supabase = seed();
+    await run("project_full", await datei(), supabase);
+
+    const kalk = supabase._tables.FEE_CALCULATION_MASTER[0];
+    // 400.000 liegt zwischen 300.000 und 500.000; Zone III, Zonenanteil 50 %.
+    expect(kalk.REVENUE_K2).toBeGreaterThan(0);
+    expect(kalk.CONSTRUCTION_COSTS_K2).toBe(400000);
+
+    const phase = supabase._tables.FEE_CALCULATION_PHASE[0];
+    expect(phase.KX).toBe("K3");               // aus wikos "3"
+    expect(phase.FEE_PERCENT_BASE).toBe(7);    // Tafelsatz der LPH 2
+    expect(phase.FEE_PERCENT).toBe(7);         // vereinbarter Satz aus der Datei
+    // Basis ist das Honorar des gewaehlten K-Bezugs (hier K3 = 0, weil dort
+    // keine Baukosten stehen) — der Phasenanteil rechnet konsistent darauf.
+    expect(phase.PHASE_REVENUE).toBe(fmt2Test(phase.REVENUE_BASE * 7 / 100));
+  });
+
+  it("bucht das Honorar einer Stunden-Position als Erloes", async () => {
+    const supabase = seed();
+    const buffer = await fileOf([
+      KOPF,
+      ["201", "P-2", "", "Aktiv", "MMu", "", "", "P-2", "Nachweisprojekt", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+      ["202", "P-2", "", "", "", "", "1", "Std", "Stundensätze", "Stunden", "2126,25", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "480"],
+    ]);
+    const res = await run("project_full", buffer, supabase);
+
+    const knoten = supabase._tables.PROJECT_STRUCTURE[0];
+    expect(knoten.BILLING_TYPE_ID).toBe(2);
+    expect(knoten.REVENUE).toBe(0);            // Erloes gehoert nicht an den Knoten
+
+    const erloes = supabase._tables.BOOKING.find((b) => b.BOOKING_KIND === "LUMP_REVENUE");
+    expect(erloes).toBeTruthy();
+    // Kodierung wie in der App: QUANTITY_INT bleibt 0 (keine Stunden),
+    // QUANTITY_EXT=1 haelt HOURLY_RATE_TOTAL = Menge × Satz.
+    expect(erloes).toMatchObject({
+      QUANTITY_INT: 0, QUANTITY_EXT: 1,
+      HOURLY_RATE: 2126.25, HOURLY_RATE_TOTAL: 2126.25,
+      STRUCTURE_ID: knoten.ID, IMPORT_BATCH_ID: res.batchId,
+    });
+    // Die Kosten daneben bleiben eine eigene Buchung.
+    expect(supabase._tables.BOOKING.filter((b) => b.BOOKING_KIND === "LUMP_COST")).toHaveLength(1);
   });
 
   it("nimmt beim Zuruecksetzen alles mit", async () => {
