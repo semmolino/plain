@@ -9,7 +9,7 @@ import { HelpHint } from '@/components/ui/HelpHint'
 import { Modal } from '@/components/ui/Modal'
 import { useToast } from '@/store/toastStore'
 import {
-  fetchImportDomains, fetchImportBatches, downloadImportTemplate, downloadImportErrors, downloadStructurePrefill,
+  fetchImportDomains, fetchImportBatches, downloadImportTemplate, downloadImportErrors, downloadImportWarnings, downloadStructurePrefill,
   previewImport, commitImport, rollbackImportBatch,
   type ImportPreview, type DuplicateMode, type StructureMode, type DocType, type ImportRowStatus, type ImportBatch,
 } from '@/api/import'
@@ -367,13 +367,22 @@ export function ImportSection() {
               <SummaryChip icon={<Copy size={13} />} label="Dubletten" value={s?.duplicate ?? 0} color="var(--text-2)" bg="var(--surface-2)" />
               <SummaryChip icon={<XCircle size={13} />} label="Fehler" value={s?.error ?? 0} color="var(--danger-strong)" bg="var(--danger-bg)" />
               <span style={{ fontSize: 12, color: 'var(--text-3)', alignSelf: 'center' }}>von {s?.total ?? 0} Zeilen</span>
-              {(s?.error ?? 0) > 0 && file && (
-                <button type="button" className="btn-small btn-secondary"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginLeft: 'auto' }}
-                  onClick={() => void downloadImportErrors(domainKey, file, mapping)}>
-                  <Download size={12} strokeWidth={2} /> Fehlerhafte Zeilen als Excel
-                </button>
-              )}
+              <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, flexWrap: 'wrap' }}>
+                {(s?.warning ?? 0) > 0 && file && (
+                  <button type="button" className="btn-small btn-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                    onClick={() => void downloadImportWarnings(domainKey, file, mapping).catch((e: Error) => setErr(e.message))}>
+                    <Download size={12} strokeWidth={2} /> Zeilen mit Hinweis als Excel
+                  </button>
+                )}
+                {(s?.error ?? 0) > 0 && file && (
+                  <button type="button" className="btn-small btn-secondary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                    onClick={() => void downloadImportErrors(domainKey, file, mapping).catch((e: Error) => setErr(e.message))}>
+                    <Download size={12} strokeWidth={2} /> Fehlerhafte Zeilen als Excel
+                  </button>
+                )}
+              </span>
             </div>
             {(s?.error ?? 0) > 0 && (
               <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px' }}>

@@ -1969,206 +1969,237 @@ async function commitProjectFullRows(rows, { supabase, tenantId, batchId, ctx, e
     byProject.get(num).push(r);
   }
 
-  // ── 1. Fehlende Projekttypen einmal für alle anlegen ────────────────────
+  // Alles geht gebuendelt. Die erste Fassung schrieb je Projekt: ein Insert,
+  // ein Vertrag, eine Zuordnung, ein Struktur-Insert, ein UPDATE je Knoten fuer
+  // FATHER_ID und drei Abfragen je Elternknoten zum Hochrechnen. Bei 868
+  // Projekten mit 4050 Knoten sind das ueber 15.000 Anfragen nacheinander —
+  // der Gateway bricht nach 30 Sekunden mit 504 ab, und der Nutzer sieht einen
+  // halb geschriebenen Stapel.
+  //
+  // Jetzt: eine Handvoll Stapel-Inserts. Die Knoten entstehen EBENENWEISE,
+  // dadurch ist FATHER_ID schon beim Einfuegen bekannt und es braucht kein
+  // zweites Schreiben. Die Elternwerte rechnet JS von unten nach oben — bei
+  // einem frisch angelegten Baum ohne Zuschlaege ist das dieselbe Summe, die
+  // recalcParent bilden wuerde, nur ohne 4800 Rundreisen.
+  const einfuegen = async (tabelle, zeilen, spalten, was) => {
+    const out = [];
+    for (let i = 0; i < zeilen.length; i += 500) {
+      const teil = zeilen.slice(i, i + 500);
+      const abfrage = supabase.from(tabelle).insert(teil);
+      const { data, error } = spalten ? await abfrage.select(spalten) : await abfrage;
+      if (error) throw { status: 500, message: `${was} fehlgeschlagen (${out.length} von ${zeilen.length} geschrieben): ${error.message}. Stapel #${batchId} kann zurückgesetzt werden.` };
+      if (spalten) out.push(...(data || []));
+    }
+    return out;
+  };
+
+  // ── 1. Fehlende Projekttypen ──────────────────────────────────────────────
   const typen = new Map(ctx.typeByName);
-  const anzulegen = new Map();
+  const neueTypen = new Map();
   for (const r of rows) {
     const t = r._dbRow.typeNew;
-    if (t && !typen.has(katalogKey(t))) anzulegen.set(katalogKey(t), t);
+    if (t && !typen.has(katalogKey(t))) neueTypen.set(katalogKey(t), t);
   }
-  for (const [schluessel, bezeichnung] of anzulegen) {
-    const { data, error } = await supabase.from("PROJECT_TYPE")
-      .insert([{ TENANT_ID: tenantId, ABBR: bezeichnung, IMPORT_BATCH_ID: batchId }])
-      .select("ID").single();
-    if (error) throw { status: 500, message: `Projekttyp „${bezeichnung}“ konnte nicht angelegt werden: ${error.message}` };
-    typen.set(schluessel, data.ID);
+  if (neueTypen.size) {
+    const angelegt = await einfuegen("PROJECT_TYPE",
+      [...neueTypen.values()].map((abbr) => ({ TENANT_ID: tenantId, ABBR: abbr, IMPORT_BATCH_ID: batchId })),
+      "ID, ABBR", "Projekttypen anlegen");
+    for (const t of angelegt) typen.set(katalogKey(t.ABBR), t.ID);
   }
 
-  let inserted = 0;
+  // ── 2. Projekte ───────────────────────────────────────────────────────────
+  const projektListe = [...byProject.entries()]
+    .map(([number, group]) => ({ number, group, kopf: group.find((r) => r._dbRow.istProjektzeile)?._dbRow }))
+    .filter((p) => p.kopf);
 
-  for (const [number, group] of byProject) {
-    const projektzeile = group.find((r) => r._dbRow.istProjektzeile);
-    if (!projektzeile) continue;
-    const kopf = projektzeile._dbRow;
-    const knoten = group.filter((r) => !r._dbRow.istProjektzeile && !r._dbRow.istZusatzzeile);
+  const projektIds = await einfuegen("PROJECT", projektListe.map(({ number, kopf }) => ({
+    ABBR: number, NAME: kopf.projectName,
+    COMPANY_ID: ctx.companyId,
+    PROJECT_STATUS_ID: kopf.statusId,
+    PROJECT_TYPE_ID: kopf.typeId ?? (kopf.typeNew ? typen.get(katalogKey(kopf.typeNew)) ?? null : null),
+    PROJECT_MANAGER_ID: kopf.managerId,
+    ADDRESS_ID: kopf.addressId,
+    LEGACY_REF: kopf.legacyRef,
+    TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+  })), "ID", "Projekte anlegen");
+  projektListe.forEach((p, i) => { p.projectId = projektIds[i]?.ID ?? null; });
 
-    try {
-      // ── 2. Projekt ────────────────────────────────────────────────────
-      const projektRow = {
-        ABBR: number, NAME: kopf.projectName,
-        COMPANY_ID: ctx.companyId,
-        PROJECT_STATUS_ID: kopf.statusId,
-        PROJECT_TYPE_ID: kopf.typeId ?? (kopf.typeNew ? typen.get(katalogKey(kopf.typeNew)) ?? null : null),
-        PROJECT_MANAGER_ID: kopf.managerId,
-        ADDRESS_ID: kopf.addressId,
-        LEGACY_REF: kopf.legacyRef,
-        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
-      };
-      const { data: proj, error: pErr } = await supabase.from("PROJECT").insert([projektRow]).select("ID").single();
-      if (pErr) throw { status: 500, message: pErr.message };
-      const projectId = proj.ID;
+  // ── 3. Vertraege ──────────────────────────────────────────────────────────
+  // Die kaufmaennischen Felder ausschliesslich aus contractDefaults — vier
+  // Stellen legen Vertraege an, und genau deren Driften hatte die
+  // Skonto-Vorbelegung wirkungslos gemacht.
+  const vertragsVorlage = contractDefaults(defaults);
+  const vertragIds = await einfuegen("CONTRACT", projektListe.map(({ number, kopf, projectId }) => ({
+    ABBR: number, NAME: kopf.projectName, PROJECT_ID: projectId,
+    INVOICE_ADDRESS_ID: kopf.addressId, INVOICE_CONTACT_ID: null,
+    TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId, ...vertragsVorlage,
+  })), "ID", "Verträge anlegen");
+  projektListe.forEach((p, i) => { p.contractId = vertragIds[i]?.ID ?? null; });
 
-      // ── 3. Vertrag ────────────────────────────────────────────────────
-      // Die kaufmännischen Felder kommen ausschliesslich aus
-      // contractDefaults — vier Stellen legen Verträge an, und genau deren
-      // Driften hatte die Skonto-Vorbelegung wirkungslos gemacht.
-      const { data: cRows, error: cErr } = await supabase.from("CONTRACT").insert([{
-        ABBR: number, NAME: kopf.projectName, PROJECT_ID: projectId,
-        INVOICE_ADDRESS_ID: kopf.addressId, INVOICE_CONTACT_ID: null,
-        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
-        ...contractDefaults(defaults),
-      }]).select("ID");
-      if (cErr) throw { status: 500, message: cErr.message };
-      const contractId = cRows?.[0]?.ID ?? null;
+  // ── 4. Projektleitung ─────────────────────────────────────────────────────
+  const zuordnungen = projektListe.filter((p) => p.kopf.managerId).map((p) => ({
+    TENANT_ID: tenantId, PROJECT_ID: p.projectId, EMPLOYEE_ID: p.kopf.managerId,
+    ROLE_ID: null, HOURLY_RATE: 0,
+  }));
+  if (zuordnungen.length) await einfuegen("EMPLOYEE2PROJECT", zuordnungen, null, "Projektleitung zuordnen");
 
-      // ── 4. Projektleitung ─────────────────────────────────────────────
-      // Ohne diese Zuordnung taucht der Projektleiter im Projekt nicht auf
-      // und hat dort keinen Stundensatz.
-      if (kopf.managerId) {
-        const { error: eErr } = await supabase.from("EMPLOYEE2PROJECT").insert([{
-          TENANT_ID: tenantId, PROJECT_ID: projectId, EMPLOYEE_ID: kopf.managerId,
-          ROLE_ID: null, HOURLY_RATE: 0,
-        }]);
-        if (eErr) throw { status: 500, message: `Projektleitung konnte nicht zugeordnet werden: ${eErr.message}` };
+  // ── 5. Kalkulationen ──────────────────────────────────────────────────────
+  // Je Kennung EINE, auch wenn sie an zwanzig Elementen haengt.
+  const kalkZeilen = [], kalkSchluessel = [];
+  for (const p of projektListe) {
+    const gesehen = new Set();
+    for (const r of p.group) {
+      const k = r._dbRow.kalk;
+      if (!k || gesehen.has(k.ref)) continue;
+      gesehen.add(k.ref);
+      kalkSchluessel.push(k.ref);
+      kalkZeilen.push({
+        TENANT_ID: tenantId, PROJECT_ID: p.projectId,
+        FEE_MASTER_ID: k.feeMasterId, ABBR: k.abbr, NAME: k.name,
+        ZONE_ID: k.zoneId, ZONE_PERCENT: k.zonePercent,
+        // Anrechenbare Baukosten — das Honorar rechnet plan&simple daraus.
+        CONSTRUCTION_COSTS_K0: k.k[0], CONSTRUCTION_COSTS_K1: k.k[1],
+        CONSTRUCTION_COSTS_K2: k.k[2], CONSTRUCTION_COSTS_K3: k.k[3],
+        CONSTRUCTION_COSTS_K4: k.k[4],
+      });
+    }
+  }
+  const kalkIdNachRef = new Map();
+  if (kalkZeilen.length) {
+    const angelegt = await einfuegen("FEE_CALCULATION_MASTER", kalkZeilen, "ID", "Kalkulationen anlegen");
+    kalkSchluessel.forEach((ref, i) => { if (angelegt[i]) kalkIdNachRef.set(ref, angelegt[i].ID); });
+  }
+
+  const phasenZeilen = [], phasenSchluessel = [];
+  {
+    const gesehen = new Set();
+    for (const r of rows) {
+      const k = r._dbRow.kalk;
+      if (!k?.phaseId) continue;
+      const kalkId = kalkIdNachRef.get(k.ref);
+      const schluessel = `${k.ref}#${k.phaseId}`;
+      if (!kalkId || gesehen.has(schluessel)) continue;
+      gesehen.add(schluessel);
+      phasenSchluessel.push(schluessel);
+      phasenZeilen.push({
+        TENANT_ID: tenantId, FEE_MASTER_ID: kalkId,
+        FEE_PHASE_ID: k.phaseId, KX: k.kx, FEE_PERCENT: k.phasePercent,
+      });
+    }
+  }
+  const phasenIdNachSchluessel = new Map();
+  if (phasenZeilen.length) {
+    const angelegt = await einfuegen("FEE_CALCULATION_PHASE", phasenZeilen, "ID", "Leistungsphasen anlegen");
+    phasenSchluessel.forEach((k, i) => { if (angelegt[i]) phasenIdNachSchluessel.set(k, angelegt[i].ID); });
+  }
+
+  // ── 6. Werte von unten nach oben rechnen ──────────────────────────────────
+  // Ein frisch angelegter Baum hat keine Zuschlaege, keine Rechnungen und keine
+  // Zahlungen — der Elternwert ist damit die reine Summe seiner Kinder, genau
+  // das, was recalcParent bilden wuerde.
+  for (const p of projektListe) {
+    const knoten = p.group.filter((r) => !r._dbRow.istProjektzeile && !r._dbRow.istZusatzzeile);
+    p.knoten = knoten;
+    const nachKey = new Map(knoten.map((r) => [r._dbRow.key, r._dbRow]));
+    for (const r of knoten) {
+      const e = r._dbRow;
+      e.revenueFinal = e.isLeaf && e.billingTypeId === 1 ? fmt2(e.revenue) : 0;
+      e.extrasFinal = fmt2(e.revenueFinal * e.extrasPercent / 100);
+      e.costsFinal = e.isLeaf ? fmt2(e.costs) : 0;
+    }
+    // Von der tiefsten Ebene nach oben aufsummieren.
+    const tiefen = [...new Set(knoten.map((r) => r._dbRow.depth))].sort((a, b) => b - a);
+    for (const tiefe of tiefen) {
+      for (const r of knoten.filter((x) => x._dbRow.depth === tiefe)) {
+        const e = r._dbRow;
+        if (!e.parentKey) continue;
+        const vater = nachKey.get(e.parentKey);
+        if (!vater) continue;
+        vater.revenueFinal = fmt2(num(vater.revenueFinal) + num(e.revenueFinal));
+        vater.extrasFinal  = fmt2(num(vater.extrasFinal)  + num(e.extrasFinal));
+        vater.costsFinal   = fmt2(num(vater.costsFinal)   + num(e.costsFinal));
       }
-
-      // ── 4b. Kalkulationen ─────────────────────────────────────────────
-      // Je Kennung EINE Kalkulation, auch wenn sie an zwanzig Elementen
-      // hängt. Die Stammwerte (Leistungsbild, Zone, anrechenbare Kosten)
-      // stehen in der Quelle auf jeder Zeile — genommen wird die erste, die
-      // sie trägt.
-      const kalkIdNachRef = new Map();
-      const phasenIdNachRef = new Map();   // ref → Map(FEE_PHASE_ID → Zeilen-ID)
-      for (const r of group) {
-        const k = r._dbRow.kalk;
-        if (!k || kalkIdNachRef.has(k.ref)) continue;
-        const { data: km, error: kErr } = await supabase.from("FEE_CALCULATION_MASTER").insert([{
-          TENANT_ID: tenantId, PROJECT_ID: projectId,
-          FEE_MASTER_ID: k.feeMasterId, ABBR: k.abbr, NAME: k.name,
-          ZONE_ID: k.zoneId, ZONE_PERCENT: k.zonePercent,
-          // Anrechenbare Baukosten — das Honorar (REVENUE_K*) rechnet
-          // plan&simple daraus, es wird nicht übernommen.
-          CONSTRUCTION_COSTS_K0: k.k[0], CONSTRUCTION_COSTS_K1: k.k[1],
-          CONSTRUCTION_COSTS_K2: k.k[2], CONSTRUCTION_COSTS_K3: k.k[3],
-          CONSTRUCTION_COSTS_K4: k.k[4],
-        }]).select("ID").single();
-        if (kErr) throw { status: 500, message: `Kalkulation „${k.abbr}“ konnte nicht angelegt werden: ${kErr.message}` };
-        kalkIdNachRef.set(k.ref, km.ID);
-        phasenIdNachRef.set(k.ref, new Map());
-      }
-
-      // Leistungsphasen je Kalkulation — auch sie nur einmal, selbst wenn
-      // mehrere Elemente auf dieselbe Phase zeigen.
-      for (const r of group) {
-        const k = r._dbRow.kalk;
-        if (!k?.phaseId) continue;
-        const kalkId = kalkIdNachRef.get(k.ref);
-        const schon = phasenIdNachRef.get(k.ref);
-        if (!kalkId || !schon || schon.has(k.phaseId)) continue;
-        const { data: ph, error: phErr } = await supabase.from("FEE_CALCULATION_PHASE").insert([{
-          TENANT_ID: tenantId, FEE_MASTER_ID: kalkId,
-          FEE_PHASE_ID: k.phaseId, KX: k.kx, FEE_PERCENT: k.phasePercent,
-        }]).select("ID").single();
-        if (phErr) throw { status: 500, message: `Leistungsphase der Kalkulation „${k.abbr}“ konnte nicht angelegt werden: ${phErr.message}` };
-        schon.set(k.phaseId, ph.ID);
-      }
-
-      // ── 5. Knoten flach, FATHER_ID im zweiten Durchgang ───────────────
-      const geordnet = [...knoten].sort((a, b) => a._dbRow.depth - b._dbRow.depth || a._dbRow.sortIndex - b._dbRow.sortIndex);
-      let idNachKey = new Map();
-      if (geordnet.length) {
-        const structRows = geordnet.map((r) => {
-          const e = r._dbRow;
-          const revenue = e.billingTypeId === 1 ? fmt2(e.revenue) : 0;
-          const extras = fmt2(revenue * e.extrasPercent / 100);
-          return {
-            ABBR: e.nameShort, NAME: e.nameLong, PROJECT_ID: projectId,
-            BILLING_TYPE_ID: e.billingTypeId, FATHER_ID: null, CONTRACT_ID: contractId,
-            REVENUE: revenue, EXTRAS_PERCENT: e.extrasPercent, EXTRAS: extras, COSTS: 0,
-            REVENUE_COMPLETION_PERCENT: e.progressPercent, EXTRAS_COMPLETION_PERCENT: e.progressPercent,
-            REVENUE_COMPLETION: fmt2(revenue * e.progressPercent / 100),
-            EXTRAS_COMPLETION: fmt2(extras * e.progressPercent / 100),
-            SORT_ORDER: e.sortIndex * 10,
-            LEGACY_REF: e.legacyRef,
-            // Verknüpfung zur Kalkulation: der Knoten weiss, aus welcher
-            // Honorarermittlung er stammt. Ohne FEE_CALC_PHASE_ID, wenn das
-            // Element an mehreren Phasen hing (siehe finalizeRows).
-            FEE_CALC_MASTER_ID: e.kalk ? (kalkIdNachRef.get(e.kalk.ref) ?? null) : null,
-            FEE_CALC_PHASE_ID: e.kalk?.phaseId
-              ? (phasenIdNachRef.get(e.kalk.ref)?.get(e.kalk.phaseId) ?? null)
-              : null,
-            TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
-          };
-        });
-        const { data: created, error: sErr } = await supabase
-          .from("PROJECT_STRUCTURE").insert(structRows).select("ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT");
-        if (sErr) throw { status: 500, message: sErr.message };
-
-        (created || []).forEach((row, i) => idNachKey.set(geordnet[i]._dbRow.key, row.ID));
-        for (const r of geordnet) {
-          const e = r._dbRow;
-          if (!e.parentKey) continue;
-          const kindId = idNachKey.get(e.key), vaterId = idNachKey.get(e.parentKey);
-          if (!kindId || !vaterId) continue;
-          const { error: uErr } = await supabase.from("PROJECT_STRUCTURE")
-            .update({ FATHER_ID: vaterId }).eq("ID", kindId).eq("TENANT_ID", tenantId);
-          if (uErr) throw { status: 500, message: uErr.message };
-        }
-
-        // ── 6. Fortschrittszeilen ───────────────────────────────────────
-        const progRows = (created || []).map((n) => ({
-          STRUCTURE_ID: n.ID, TENANT_ID: tenantId,
-          REVENUE: n.REVENUE ?? 0, EXTRAS_PERCENT: n.EXTRAS_PERCENT ?? 0, EXTRAS: n.EXTRAS ?? 0,
-          REVENUE_COMPLETION_PERCENT: n.REVENUE_COMPLETION_PERCENT ?? 0,
-          EXTRAS_COMPLETION_PERCENT: n.REVENUE_COMPLETION_PERCENT ?? 0,
-          REVENUE_COMPLETION: fmt2(num(n.REVENUE) * num(n.REVENUE_COMPLETION_PERCENT) / 100),
-          EXTRAS_COMPLETION: fmt2(num(n.EXTRAS) * num(n.REVENUE_COMPLETION_PERCENT) / 100),
-          IMPORT_BATCH_ID: batchId,
-        }));
-        if (progRows.length) {
-          const { error: prErr } = await supabase.from("PROJECT_PROGRESS").insert(progRows);
-          if (prErr) throw { status: 500, message: prErr.message };
-        }
-
-        // ── 7. Kosten als Buchung ───────────────────────────────────────
-        const heute = new Date().toISOString().slice(0, 10);
-        const kostenRows = [];
-        for (const r of geordnet) {
-          const e = r._dbRow;
-          if (!e.costs) continue;
-          const sid = idNachKey.get(e.key);
-          if (!sid) continue;
-          kostenRows.push({
-            TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_COST",
-            BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, BOOKING_DATE: heute,
-            QUANTITY_INT: 0, COST_RATE: e.costs, COST_TOTAL: fmt2(e.costs),
-            QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
-            POSTING_DESCRIPTION: `Kosten-Anfangsbestand aus Datenübernahme (${e.nameShort})`,
-            PROJECT_ID: projectId, STRUCTURE_ID: sid, IMPORT_BATCH_ID: batchId,
-          });
-        }
-        if (kostenRows.length) {
-          const { error: bErr } = await supabase.from("BOOKING").insert(kostenRows);
-          if (bErr) throw { status: 500, message: `Kosten konnten nicht gebucht werden: ${bErr.message}` };
-          for (const kr of kostenRows) { try { await recomputeStructure(supabase, kr.STRUCTURE_ID); } catch (_) { /* COSTS-Recompute soft-fail */ } }
-        }
-
-        // ── 8. Elternwerte von unten nach oben ──────────────────────────
-        const elternKeys = [...new Set(geordnet.map((r) => r._dbRow.parentKey).filter(Boolean))]
-          .sort((a, b) => b.split(".").length - a.split(".").length);
-        for (const key of elternKeys) {
-          const vaterId = idNachKey.get(key);
-          if (vaterId) await projekteSvc.recalcParent(supabase, { parentId: vaterId });
-        }
-      }
-
-      inserted += group.length;
-    } catch (err) {
-      throw { status: err?.status || 500, message: `Projekt ${number} fehlgeschlagen: ${err?.message || err}. Stapel #${batchId} kann zurückgesetzt werden.` };
     }
   }
 
-  return { inserted };
+  // ── 7. Knoten ebenenweise ─────────────────────────────────────────────────
+  const idNachKnoten = new Map();      // Zeilenobjekt → ID
+  const maxTiefe = Math.max(0, ...rows.map((r) => r._dbRow.depth || 0));
+  for (let tiefe = 1; tiefe <= maxTiefe; tiefe++) {
+    const stufe = [];
+    for (const p of projektListe) {
+      for (const r of (p.knoten || [])) {
+        if (r._dbRow.depth !== tiefe) continue;
+        stufe.push({ p, r });
+      }
+    }
+    if (!stufe.length) continue;
+
+    const nutzlast = stufe.map(({ p, r }) => {
+      const e = r._dbRow;
+      const vaterZeile = e.parentKey ? (p.knoten.find((x) => x._dbRow.key === e.parentKey) ?? null) : null;
+      const anteil = num(e.progressPercent);
+      return {
+        ABBR: e.nameShort, NAME: e.nameLong, PROJECT_ID: p.projectId,
+        BILLING_TYPE_ID: e.billingTypeId, CONTRACT_ID: p.contractId,
+        FATHER_ID: vaterZeile ? (idNachKnoten.get(vaterZeile) ?? null) : null,
+        REVENUE: e.revenueFinal, EXTRAS_PERCENT: e.extrasPercent, EXTRAS: e.extrasFinal,
+        COSTS: e.costsFinal,
+        REVENUE_COMPLETION_PERCENT: anteil, EXTRAS_COMPLETION_PERCENT: anteil,
+        REVENUE_COMPLETION: fmt2(e.revenueFinal * anteil / 100),
+        EXTRAS_COMPLETION: fmt2(e.extrasFinal * anteil / 100),
+        SORT_ORDER: e.sortIndex * 10,
+        LEGACY_REF: e.legacyRef,
+        FEE_CALC_MASTER_ID: e.kalk ? (kalkIdNachRef.get(e.kalk.ref) ?? null) : null,
+        FEE_CALC_PHASE_ID: e.kalk?.phaseId ? (phasenIdNachSchluessel.get(`${e.kalk.ref}#${e.kalk.phaseId}`) ?? null) : null,
+        TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
+      };
+    });
+
+    const angelegt = await einfuegen("PROJECT_STRUCTURE", nutzlast,
+      "ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION",
+      `Leistungsstruktur (Ebene ${tiefe})`);
+    stufe.forEach(({ r }, i) => { if (angelegt[i]) { idNachKnoten.set(r, angelegt[i].ID); r._angelegt = angelegt[i]; } });
+  }
+
+  // ── 8. Fortschrittszeilen ─────────────────────────────────────────────────
+  // Ohne sie bleiben Leistungsstand und Reporting leer, obwohl die Struktur steht.
+  const fortschritt = [];
+  for (const p of projektListe) for (const r of (p.knoten || [])) {
+    const n = r._angelegt;
+    if (!n) continue;
+    fortschritt.push({
+      STRUCTURE_ID: n.ID, TENANT_ID: tenantId,
+      REVENUE: n.REVENUE ?? 0, EXTRAS_PERCENT: n.EXTRAS_PERCENT ?? 0, EXTRAS: n.EXTRAS ?? 0,
+      REVENUE_COMPLETION_PERCENT: n.REVENUE_COMPLETION_PERCENT ?? 0,
+      EXTRAS_COMPLETION_PERCENT: n.REVENUE_COMPLETION_PERCENT ?? 0,
+      REVENUE_COMPLETION: n.REVENUE_COMPLETION ?? 0,
+      EXTRAS_COMPLETION: n.EXTRAS_COMPLETION ?? 0,
+      IMPORT_BATCH_ID: batchId,
+    });
+  }
+  if (fortschritt.length) await einfuegen("PROJECT_PROGRESS", fortschritt, null, "Fortschrittszeilen anlegen");
+
+  // ── 9. Kosten als Buchung ─────────────────────────────────────────────────
+  // COSTS steht bereits am Knoten (Schritt 6), die Buchung ist der Beleg dazu —
+  // deshalb kein Nachrechnen je Buchung.
+  const heute = new Date().toISOString().slice(0, 10);
+  const buchungen = [];
+  for (const p of projektListe) for (const r of (p.knoten || [])) {
+    const e = r._dbRow;
+    if (!e.costs || !r._angelegt) continue;
+    buchungen.push({
+      TENANT_ID: tenantId, STATUS: "CONFIRMED", BOOKING_KIND: "LUMP_COST",
+      BOOKING_TYPE_ID: null, EMPLOYEE_ID: employeeId ?? null, BOOKING_DATE: heute,
+      QUANTITY_INT: 0, COST_RATE: e.costs, COST_TOTAL: fmt2(e.costs),
+      QUANTITY_EXT: 0, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
+      POSTING_DESCRIPTION: `Kosten-Anfangsbestand aus Datenübernahme (${e.nameShort})`,
+      PROJECT_ID: p.projectId, STRUCTURE_ID: r._angelegt.ID, IMPORT_BATCH_ID: batchId,
+    });
+  }
+  if (buchungen.length) await einfuegen("BOOKING", buchungen, null, "Kosten buchen");
+
+  return { inserted: rows.length };
 }
 
 /**
@@ -3498,16 +3529,27 @@ async function commit({ domainKey, buffer, filename, mapping, sheetName, duplica
  * und lädt sie erneut hoch; die beiden Zusatzspalten stören dabei nicht, weil
  * die Zuordnung unbekannte Überschriften ignoriert.
  */
-async function errorReport({ domainKey, buffer, mapping, sheetName, supabase, tenantId }) {
+async function errorReport({ domainKey, buffer, mapping, sheetName, supabase, tenantId, kind = "error" }) {
   const def = getDomain(domainKey);
   const parsed = await parseBuffer(buffer, sheetName);
   const ctx = await def.loadContext(supabase, tenantId);
   const pv = buildPreview({ domainKey, parsed, mapping, ctx });
 
-  const bad = pv.rows.filter((r) => r.status === "error");
-  if (!bad.length) throw { status: 400, message: "Keine fehlerhaften Zeilen — es gibt nichts zu korrigieren." };
+  // Zwei Sichten auf denselben Trockenlauf. Warnungen getrennt, weil sie etwas
+  // anderes bedeuten: die Zeile KOMMT, aber nicht ganz so, wie sie dasteht.
+  // Bei einer Übernahme mit 2000 Hinweisen will man die durchsehen können,
+  // ohne sie mit den Zeilen zu vermischen, die gar nicht ankommen.
+  const istWarnung = kind === "warning";
+  const bad = istWarnung
+    ? pv.rows.filter((r) => r.status !== "error" && r.messages.some((m) => m.level === "warn"))
+    : pv.rows.filter((r) => r.status === "error");
+  if (!bad.length) {
+    throw { status: 400, message: istWarnung
+      ? "Keine Zeilen mit Hinweis — es gibt nichts durchzusehen."
+      : "Keine fehlerhaften Zeilen — es gibt nichts zu korrigieren." };
+  }
 
-  const headers = [...parsed.headers, "Zeile", "Fehler"];
+  const headers = [...parsed.headers, "Zeile", istWarnung ? "Hinweis" : "Fehler"];
   const wb = new ExcelJS.Workbook();
   wb.creator = "plan&simple";
   const ws = wb.addWorksheet("Daten");
@@ -3516,7 +3558,7 @@ async function errorReport({ domainKey, buffer, mapping, sheetName, supabase, te
   for (const r of bad) {
     const values = parsed.headers.map((h) => r._raw?.[h] ?? "");
     values.push(r.row);
-    values.push(r.messages.filter((m) => m.level === "error").map((m) => m.text).join(" · "));
+    values.push(r.messages.filter((m) => m.level === (istWarnung ? "warn" : "error")).map((m) => m.text).join(" · "));
     ws.addRow(values);
   }
 
@@ -3533,7 +3575,7 @@ async function errorReport({ domainKey, buffer, mapping, sheetName, supabase, te
   const out = await wb.xlsx.writeBuffer();
   return {
     buffer: Buffer.from(out),
-    filename: `plan-und-simple_Fehler_${def.key}.xlsx`,
+    filename: `plan-und-simple_${istWarnung ? "Hinweise" : "Fehler"}_${def.key}.xlsx`,
     count: bad.length,
   };
 }

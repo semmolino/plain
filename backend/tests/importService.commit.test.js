@@ -412,6 +412,32 @@ describe("errorReport", () => {
     expect(supabase._tables.ADDRESS[0].ADDRESS_NAME_1).toBe("Jetzt Richtig GmbH");
   });
 
+  // Hinweise getrennt: ein Hinweis heisst, die Zeile KOMMT — nur nicht ganz
+  // so, wie sie dasteht. Bei einer Uebernahme mit tausenden davon will man sie
+  // durchsehen koennen, ohne sie mit den Zeilen zu vermischen, die gar nicht
+  // ankommen.
+  it("liefert die Zeilen mit Hinweis als eigene Datei", async () => {
+    const buffer = await fileOf([
+      ["Name 1 (Firma/Nachname) *", "PLZ", "Kategorie"],
+      ["Mit Hinweis GmbH", "10117", "Phantasiekategorie"],   // Warnung, kommt trotzdem
+      ["", "10118", ""],                                     // Fehler, kommt nicht
+    ]);
+    const r = await errorReport({ domainKey: "address", buffer, mapping: null, kind: "warning", supabase: seed(), tenantId: TENANT });
+    expect(r.filename).toContain("Hinweise");
+    expect(r.count).toBe(1);
+
+    const parsed = await parseBuffer(r.buffer);
+    expect(parsed.headers).toContain("Hinweis");
+    expect(parsed.rows[0]["Name 1 (Firma/Nachname) *"]).toBe("Mit Hinweis GmbH");
+    expect(String(parsed.rows[0]["Hinweis"])).toMatch(/Kategorie/);
+  });
+
+  it("sagt Bescheid, wenn es keine Hinweise gibt", async () => {
+    const buffer = await fileOf([["Name 1 (Firma/Nachname) *", "PLZ"], ["Sauber GmbH", "10117"]]);
+    await expect(errorReport({ domainKey: "address", buffer, mapping: null, kind: "warning", supabase: seed(), tenantId: TENANT }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining("Keine Zeilen mit Hinweis") });
+  });
+
   it("sagt Bescheid, wenn es nichts zu korrigieren gibt", async () => {
     const buffer = await fileOf([
       ["Name 1 (Firma/Nachname) *", "PLZ"],
@@ -619,5 +645,127 @@ describe("commit (employee)", () => {
     // nur der vom Stapel geschriebene ist weg.
     expect(supabase._tables.EMPLOYEE).toHaveLength(1);
     expect(supabase._tables.EMPLOYEE_COST_RATE).toEqual([expect.objectContaining({ ID: 5, COST_RATE: 99 })]);
+  });
+});
+
+
+// ── Projekte inkl. Struktur ──────────────────────────────────────────────────
+// Der Schreibweg laeuft gebuendelt: die Knoten entstehen EBENENWEISE, damit
+// FATHER_ID schon beim Einfuegen feststeht, und die Elternwerte rechnet JS von
+// unten nach oben. Die erste Fassung schrieb je Projekt einzeln und brauchte
+// fuer 868 Projekte ueber 15.000 Anfragen — der Gateway brach mit 504 ab.
+describe("commit (project_full)", () => {
+  const KOPF = ["ID Vorsystem", "Projekt", "Projektadresse", "Status", "PL", "Projekttyp",
+    "Gliederung", "Kürzel", "Bezeichnung", "Abrechnungsart", "Honorar netto", "Nebenkosten %",
+    "Kalkulation ID Vorsystem", "Leistungsbild Kürzel", "HOAI-Kürzel", "HOAI-Bezeichnung",
+    "Zone", "Zone %", "K0", "K1", "K2", "K3", "K4", "LPH", "KX", "LPH Prozent",
+    "Leistungsstand %", "Kosten"];
+
+  const seed = () => makeFakeSupabase({
+    COMPANY: [{ ID: 1, TENANT_ID: TENANT }],
+    PROJECT_STATUS: [{ ID: 2, ABBR: "Aktiv" }],
+    PROJECT_TYPE: [],
+    EMPLOYEE: [{ ID: 10, TENANT_ID: TENANT, ABBR: "MMu", FIRST_NAME: "Maria", LAST_NAME: "Muster" }],
+    ADDRESS: [{ ID: 20, TENANT_ID: TENANT, ADDRESS_NAME_1: "Stadt Musterhausen" }],
+    PROJECT: [], PROJECT_STRUCTURE: [], PROJECT_PROGRESS: [], CONTRACT: [],
+    EMPLOYEE2PROJECT: [], BOOKING: [], TENANT_SETTINGS: [],
+    FEE_MASTERS: [{ ID: 5, ABBR: "2013_34_A" }],
+    FEE_ZONES: [{ ID: 53, FEE_MASTER_ID: 5, ABBR: "III" }],
+    FEE_PHASE: [{ ID: 502, FEE_MASTER_ID: 5, ABBR: "LPH 2", SORT_ORDER: 2 }],
+    FEE_CALCULATION_MASTER: [], FEE_CALCULATION_PHASE: [],
+  });
+
+  // Ein Projekt, ein Knoten der Ebene 1, zwei Blaetter darunter.
+  const datei = () => fileOf([
+    KOPF,
+    ["101", "P-1", "Stadt Musterhausen", "Aktiv", "MMu", "Neubau", "", "P-1", "Kita Sonnenschein", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""],
+    ["102", "P-1", "", "", "", "", "1",   "LP1-4", "Planung",     "Pauschal", "",      "5", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",   ""],
+    ["103", "P-1", "", "", "", "", "1.1", "LP1",   "Grundlagen",  "Pauschal", "4000",  "5", "131", "34_13_A", "34_13_A1", "Gebäude", "3", "50", "", "", "400000", "", "", "2", "3", "7", "50", "300"],
+    ["104", "P-1", "", "", "", "", "1.2", "LP2",   "Vorplanung",  "Pauschal", "6000",  "5", "131", "34_13_A", "34_13_A1", "Gebäude", "3", "50", "", "", "400000", "", "", "2", "3", "7", "0",  ""],
+  ]);
+
+  it("legt Projekt, Vertrag, Projektleitung und den Baum an", async () => {
+    const supabase = seed();
+    const res = await run("project_full", await datei(), supabase);
+    expect(res.inserted).toBe(4);
+
+    const proj = supabase._tables.PROJECT;
+    expect(proj).toHaveLength(1);
+    expect(proj[0]).toMatchObject({ ABBR: "P-1", NAME: "Kita Sonnenschein", PROJECT_STATUS_ID: 2, PROJECT_MANAGER_ID: 10, ADDRESS_ID: 20, LEGACY_REF: "101" });
+
+    // Projekttyp wurde angelegt und zugeordnet.
+    const typ = supabase._tables.PROJECT_TYPE.find((t) => t.ABBR === "Neubau");
+    expect(typ).toBeTruthy();
+    expect(proj[0].PROJECT_TYPE_ID).toBe(typ.ID);
+
+    expect(supabase._tables.CONTRACT).toHaveLength(1);
+    expect(supabase._tables.EMPLOYEE2PROJECT).toEqual([expect.objectContaining({ EMPLOYEE_ID: 10, PROJECT_ID: proj[0].ID })]);
+
+    const st = supabase._tables.PROJECT_STRUCTURE;
+    expect(st).toHaveLength(3);
+    const knoten = st.find((x) => x.ABBR === "LP1-4");
+    const lp1 = st.find((x) => x.ABBR === "LP1");
+    const lp2 = st.find((x) => x.ABBR === "LP2");
+    // FATHER_ID steht schon beim Einfuegen — kein zweites Schreiben.
+    expect(knoten.FATHER_ID).toBe(null);
+    expect(lp1.FATHER_ID).toBe(knoten.ID);
+    expect(lp2.FATHER_ID).toBe(knoten.ID);
+    expect(lp1.CONTRACT_ID).toBe(supabase._tables.CONTRACT[0].ID);
+  });
+
+  it("rechnet die Elternwerte von unten nach oben", async () => {
+    const supabase = seed();
+    await run("project_full", await datei(), supabase);
+    const st = supabase._tables.PROJECT_STRUCTURE;
+    const knoten = st.find((x) => x.ABBR === "LP1-4");
+
+    // 4000 + 6000; Nebenkosten 5 % darauf; Kosten nur am Blatt (300).
+    expect(knoten.REVENUE).toBe(10000);
+    expect(knoten.EXTRAS).toBe(500);
+    expect(knoten.COSTS).toBe(300);
+    // Leistungsstand: 50 % auf 4000 = 2000, das zweite Blatt 0.
+    expect(st.find((x) => x.ABBR === "LP1").REVENUE_COMPLETION).toBe(2000);
+    expect(st.find((x) => x.ABBR === "LP2").REVENUE_COMPLETION).toBe(0);
+  });
+
+  it("schreibt Fortschrittszeilen und die Kostenbuchung", async () => {
+    const supabase = seed();
+    const res = await run("project_full", await datei(), supabase);
+    expect(supabase._tables.PROJECT_PROGRESS).toHaveLength(3);
+    expect(supabase._tables.BOOKING).toEqual([expect.objectContaining({
+      BOOKING_KIND: "LUMP_COST", COST_TOTAL: 300, IMPORT_BATCH_ID: res.batchId,
+    })]);
+  });
+
+  it("legt die Kalkulation einmal an und verknuepft beide Blaetter damit", async () => {
+    const supabase = seed();
+    await run("project_full", await datei(), supabase);
+
+    const kalk = supabase._tables.FEE_CALCULATION_MASTER;
+    expect(kalk).toHaveLength(1);
+    expect(kalk[0]).toMatchObject({
+      FEE_MASTER_ID: 5, ZONE_ID: 53, ZONE_PERCENT: 50,
+      CONSTRUCTION_COSTS_K2: 400000,   // anrechenbare Baukosten, nicht Honorar
+    });
+    expect(supabase._tables.FEE_CALCULATION_PHASE).toHaveLength(1);
+
+    const st = supabase._tables.PROJECT_STRUCTURE;
+    for (const abbr of ["LP1", "LP2"]) {
+      expect(st.find((x) => x.ABBR === abbr).FEE_CALC_MASTER_ID).toBe(kalk[0].ID);
+    }
+  });
+
+  it("nimmt beim Zuruecksetzen alles mit", async () => {
+    const supabase = seed();
+    const res = await run("project_full", await datei(), supabase);
+
+    const r = await rollback({ batchId: res.batchId, supabase, tenantId: TENANT });
+    expect(r.rolledBack).toBe(true);
+    expect(r.deleted).toBe(1);
+    for (const t of ["PROJECT", "PROJECT_STRUCTURE", "PROJECT_PROGRESS", "CONTRACT",
+                     "EMPLOYEE2PROJECT", "BOOKING", "FEE_CALCULATION_MASTER",
+                     "FEE_CALCULATION_PHASE", "PROJECT_TYPE"]) {
+      expect(supabase._tables[t]).toHaveLength(0);
+    }
   });
 });

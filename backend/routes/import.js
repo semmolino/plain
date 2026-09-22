@@ -34,7 +34,8 @@ module.exports = (supabase) => {
   router.get("/:domain/template",     GUARD, (req, res) => ctrl.getTemplate(req, res, supabase));
   router.post("/:domain/preview",     GUARD, DATEI, (req, res) => ctrl.postPreview(req, res, supabase));
   router.post("/:domain/commit",      GUARD, DATEI, (req, res) => ctrl.postCommit(req, res, supabase));
-  router.post("/:domain/errors",      GUARD, DATEI, (req, res) => ctrl.postErrorReport(req, res, supabase));
+  // Zwei Sichten auf denselben Trockenlauf — :kind ist "errors" oder "warnings".
+  router.post("/:domain/:kind(errors|warnings)", GUARD, DATEI, (req, res) => ctrl.postErrorReport(req, res, supabase));
 
   return router;
 };

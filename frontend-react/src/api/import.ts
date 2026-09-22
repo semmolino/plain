@@ -110,6 +110,15 @@ export const commitImport = (domain: string, file: File, mapping: Record<string,
 export const downloadStructurePrefill = () =>
   downloadWithAuth('/import/project_structure/prefill', 'plan-und-simple_Vorlage_project_structure_vorbefuellt.xlsx')
 
+/**
+ * Zeilen mit Hinweis als Excel. Bewusst getrennt von den Fehlern: ein Hinweis
+ * heißt, die Zeile kommt — nur nicht ganz so, wie sie dasteht. Bei einer
+ * Übernahme mit tausenden Hinweisen will man die durchsehen können, ohne sie
+ * mit den Zeilen zu vermischen, die gar nicht ankommen.
+ */
+export const downloadImportWarnings = (domain: string, file: File, mapping: Record<string, string>) =>
+  downloadWithAuth(`/import/${domain}/warnings`, `plan-und-simple_Hinweise_${domain}.xlsx`, buildForm(file, mapping))
+
 /** Nicht importierbare Zeilen als Excel — zum Korrigieren und erneut Hochladen. */
 export const downloadImportErrors = (domain: string, file: File, mapping: Record<string, string>) =>
   downloadWithAuth(`/import/${domain}/errors`, `plan-und-simple_Fehler_${domain}.xlsx`, buildForm(file, mapping))

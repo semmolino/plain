@@ -81,6 +81,8 @@ async function postErrorReport(req, res, supabase) {
     const { buffer, filename } = await svc.errorReport({
       domainKey: req.params.domain, buffer: req.file.buffer,
       mapping: parseMapping(req), sheetName: req.body?.sheetName || null,
+      // Dieselbe Auswertung, zwei Sichten: "errors" oder "warnings".
+      kind: req.params.kind === "warnings" ? "warning" : "error",
       supabase, tenantId: req.tenantId,
     });
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
