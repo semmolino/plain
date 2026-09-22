@@ -83,6 +83,20 @@ async function recomputeStructure(supabase, structureId) {
 
   const { error: psErr } = await supabase.from("PROJECT_STRUCTURE").update(structureUpdate).eq("ID", structureId);
   if (psErr) throw new Error("Fehler beim Aktualisieren der Projektstruktur: " + psErr.message);
+
+  // Und dann nach oben. Ohne diesen Schritt blieb der gebuchte Wert am Blatt
+  // stehen: die Elternzeilen und die Projektebene zeigten weiter den Stand von
+  // vor der Buchung. Am deutlichsten bei Nachweis-Positionen, wo der Erloes
+  // ueberhaupt erst aus Buchungen entsteht — dort stand oben dauerhaft 0.
+  //
+  // Angelegt und geaendert wird eine Struktur laengst so (stammdaten-Controller,
+  // Nachtraege); nur der Buchungsweg hat es nie getan.
+  //
+  // Der require steht bewusst hier drin und nicht oben: projekte.js ist gross
+  // und zieht seinerseits Dienste nach; ein Verweis auf Modulebene waere eine
+  // Ladereihenfolge, auf die sich niemand verlassen sollte.
+  const { propagateUpwards } = require("./projekte");
+  await propagateUpwards(supabase, { structureId });
 }
 
 // ---------------------------------------------------------------------------
