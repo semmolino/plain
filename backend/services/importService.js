@@ -27,6 +27,8 @@ const { insertProgressSnapshot } = require("./projectProgress");
 const { recomputeStructure } = require("./buchungen");
 // recalcParent: Elternwerte aus den Kindern — dieselbe Rechnung wie im Wizard.
 const projekteSvc = require("./projekte");
+const { belegSummen } = require("./belegRechnung");
+const { bumpNumberRanges } = require("./numberRangeBump");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 /** String-Wert sicher trimmen (null/undefined → ""). */
@@ -2653,7 +2655,7 @@ async function bookReferenceDocument(supabase, { tenantId, batchId, employeeId, 
   const svc = isInvoice ? invSvc : ppSvc;
 
   const { id } = isInvoice
-    ? await svc.initInvoice(supabase, { companyId: doc.companyId, employeeId, projectId: doc.projectId, contractId: doc.contractId, invoiceType: null, tenantId })
+    ? await svc.initInvoice(supabase, { companyId: doc.companyId, employeeId, projectId: doc.projectId, contractId: doc.contractId, invoiceType: doc.invoiceType ?? null, tenantId })
     : await svc.initPartialPayment(supabase, { companyId: doc.companyId, employeeId, projectId: doc.projectId, contractId: doc.contractId, tenantId });
 
   const table = isInvoice ? "INVOICE" : "ADVANCE_INVOICE";
@@ -2666,18 +2668,62 @@ async function bookReferenceDocument(supabase, { tenantId, batchId, employeeId, 
   // einen anderen Satz tragen als der heute gültige.
   if (doc.vatPercent != null) upd.VAT_PERCENT = doc.vatPercent;
   if (doc.comment) upd.COMMENT = doc.comment;
+
+  // Kennung des Vorsystems: die einzige Spur, die einen importierten Beleg
+  // spaeter noch mit seiner Quelle verbindet — und der Weg, ueber den der
+  // Zahlungsimport ihn wiederfindet.
+  if (doc.legacyRef) upd.LEGACY_REF = doc.legacyRef;
+  if (doc.text1) upd.TEXT_1 = doc.text1;
+  if (doc.text2) upd.TEXT_2 = doc.text2;
+  if (doc.buyerReference) upd.BUYER_REFERENCE = doc.buyerReference;
+  if (doc.periodStart) upd.BILLING_PERIOD_START = doc.periodStart;
+  if (doc.periodEnd) upd.BILLING_PERIOD_FINISH = doc.periodEnd;
+  if (doc.cashDiscountPercent != null) upd.CASH_DISCOUNT_PERCENT = doc.cashDiscountPercent;
+  if (doc.cashDiscountDays != null) upd.CASH_DISCOUNT_DAYS = doc.cashDiscountDays;
+  // Den Storno-Bezug VOR dem Buchen setzen: bookInvoice/bookPartialPayment
+  // setzen daraufhin das Original auf STATUS_ID 3. Ohne den Bezug bliebe es
+  // auf 2 stehen, und jede Rueckrechnung zaehlte seinen Betrag doppelt.
+  if (doc.cancelsId != null) upd[isInvoice ? "CANCELS_INVOICE_ID" : "CANCELS_ADVANCE_INVOICE_ID"] = doc.cancelsId;
   await supabase.from(table).update(upd).eq("ID", id).eq("TENANT_ID", tenantId);
 
   const structRows = doc.positions.map((d) => ({
     [isInvoice ? "INVOICE_ID" : "ADVANCE_INVOICE_ID"]: id,
-    STRUCTURE_ID: d.id, AMOUNT_NET: d.amt, AMOUNT_EXTRAS_NET: fmt2(d.amt * num(d.extrasPercent) / 100),
+    STRUCTURE_ID: d.id, AMOUNT_NET: d.amt,
+    // Nebenkosten aus der Datei schlagen den Prozentsatz des Knotens — ein
+    // Altbeleg traegt den Betrag, mit dem er tatsaechlich gestellt wurde.
+    AMOUNT_EXTRAS_NET: d.extrasAmt != null ? d.extrasAmt : fmt2(d.amt * num(d.extrasPercent) / 100),
     TENANT_ID: tenantId, IMPORT_BATCH_ID: batchId,
   }));
   const structureIds = doc.positions.map((d) => d.id);
 
   if (isInvoice) {
     await invSvc.writeInvoiceStructureRows(supabase, { invoiceId: id, rows: structRows, deleteStructureIds: structureIds });
+
+    // Die Abzugskette VOR dem Summenlauf: die Schlussrechnung schuldet nur,
+    // was nach Abzug der bereits gestellten Abschlaege uebrig bleibt.
+    if (doc.abzuege && doc.abzuege.length) {
+      await supabase.from("INVOICE_DEDUCTION").insert(doc.abzuege.map((d) => ({
+        TENANT_ID: tenantId, INVOICE_ID: id,
+        ADVANCE_INVOICE_ID: d.advanceId, DEDUCTION_AMOUNT_NET: d.betrag,
+        IMPORT_BATCH_ID: batchId,
+      })));
+    }
     await invSvc.recomputeInvoiceTotals(supabase, id);
+
+    // recomputeInvoiceTotals kennt die Abzuege nicht — sie stehen in einer
+    // eigenen Tabelle, und nur finalInvoices.recomputeTotal liest sie. Statt
+    // dessen Weg mit seinen PDF- und Pruefpflichten zu gehen, wird die Summe
+    // hier nachgezogen: dieselbe Formel, eine Stelle (services/belegRechnung).
+    if (doc.abzuege && doc.abzuege.length) {
+      const abzugSumme = fmt2(doc.abzuege.reduce((a, d) => a + num(d.betrag), 0));
+      const { data: stand } = await supabase
+        .from("INVOICE").select("AMOUNT_NET, AMOUNT_EXTRAS_NET, VAT_PERCENT").eq("ID", id).maybeSingle();
+      await supabase.from("INVOICE").update(belegSummen({
+        positionen: [{ AMOUNT_NET: num(stand?.AMOUNT_NET), AMOUNT_EXTRAS_NET: num(stand?.AMOUNT_EXTRAS_NET) }],
+        vatPercent: num(stand?.VAT_PERCENT),
+        abzuege: abzugSumme,
+      })).eq("ID", id).eq("TENANT_ID", tenantId);
+    }
   } else {
     await ppSvc.writePpsRows(supabase, { partialPaymentId: id, structureIds, rows: structRows });
     await ppSvc.recomputePartialPaymentTotals(supabase, id);
@@ -2686,6 +2732,24 @@ async function bookReferenceDocument(supabase, { tenantId, batchId, employeeId, 
   const { data: row } = await supabase.from(table).select("*").eq("ID", id).single();
   if (isInvoice) await invSvc.bookInvoice(supabase, { id, inv: row, tenantId, force: true, skipDocuments: true });
   else await ppSvc.bookPartialPayment(supabase, { id, pp: row, tenantId, force: true, skipDocuments: true });
+
+  // NACH dem Buchen, weil bookInvoice das Stornodatum des Originals auf HEUTE
+  // setzt. Ein Altstorno von 2019 traegt sonst den Importtag. Auf der
+  // Abschlagsseite setzt die Anwendung gar keines — hier schon.
+  if (doc.cancelsId != null && doc.cancellationDate) {
+    await supabase.from(table)
+      .update({ CANCELLATION_DATE: doc.cancellationDate })
+      .eq("ID", doc.cancelsId).eq("TENANT_ID", tenantId);
+  }
+
+  // Schlussrechnung: die abgerechneten Knoten schliessen. Ohne das haelt der
+  // Schlussrechnungs-Assistent sie fuer offen und schlaegt sie erneut vor —
+  // ein falscher Vorschlag mit unmittelbarer Geldfolge.
+  if (isInvoice && doc.closesProject && structureIds.length) {
+    await supabase.from("PROJECT_STRUCTURE")
+      .update({ CLOSED_BY_INVOICE_ID: id })
+      .in("ID", structureIds).eq("TENANT_ID", tenantId);
+  }
 
   return { docId: id, vatPercent: num(row?.VAT_PERCENT) };
 }
@@ -2943,6 +3007,32 @@ async function loadOpenItemContext(supabase, tenantId) {
   for (const r of ppRes.data || []) merke("advance", r.ID, r.ADVANCE_INVOICE_NUMBER, r);
   for (const r of invRes.data || []) merke("invoice", r.ID, r.INVOICE_NUMBER, r);
 
+  // Welche Abschlaege eine Schlussrechnung bereits angerechnet hat. Ohne das
+  // zieht ein Import denselben Abschlag ein zweites Mal ab, und die
+  // Restforderung des Projekts faellt zu niedrig aus.
+  //
+  // Ein Anspruch aus einer STORNIERTEN Schlussrechnung zaehlt nicht — der
+  // Abschlag ist dann wieder frei. Genau so liest es getDeductions.
+  const stornierteRechnungen = new Set(
+    (invRes.data || []).filter((r) => Number(r.STATUS_ID) === 3).map((r) => r.ID)
+  );
+  const { data: abzugRes } = await supabase
+    .from("INVOICE_DEDUCTION")
+    .select("INVOICE_ID, ADVANCE_INVOICE_ID")
+    .eq("TENANT_ID", tenantId)
+    .limit(100000);
+  const beanspruchteAbschlaege = new Map();   // advanceId -> invoiceId
+  for (const a of abzugRes || []) {
+    if (stornierteRechnungen.has(a.INVOICE_ID)) continue;
+    beanspruchteAbschlaege.set(a.ADVANCE_INVOICE_ID, a.INVOICE_ID);
+  }
+
+  // Welche Belege schon einen Storno tragen — ein zweiter waere eine doppelte
+  // Gutschrift.
+  const bereitsStorniert = new Set();
+  for (const r of invRes.data || []) if (r.STATUS_ID === 3) bereitsStorniert.add(`invoice|${r.ID}`);
+  for (const r of ppRes.data || []) if (r.STATUS_ID === 3) bereitsStorniert.add(`advance|${r.ID}`);
+
   const projectsByNumber = new Map();
   for (const p of projRes.data || []) {
     if (!p.ABBR) continue;
@@ -2955,7 +3045,11 @@ async function loadOpenItemContext(supabase, tenantId) {
   }
 
   // Dubletten laufen hier über die Belegnummer (Fehler, nicht „überspringen").
-  return { projectsByNumber, takenNumbers, docsByNumber, docsByLegacy, existingKeys: new Set() };
+  return {
+    projectsByNumber, takenNumbers, docsByNumber, docsByLegacy,
+    beanspruchteAbschlaege, bereitsStorniert,
+    existingKeys: new Set(),
+  };
 }
 
 function buildOpenItemEntry(mapped, ctx) {
@@ -3219,7 +3313,10 @@ function finalizeOpenItemRows(rows, ctx) {
     if (alive.length) {
       const total = alive.reduce((a, r) => a + num(r._dbRow.amount), 0);
       const paidTotal = alive.reduce((a, r) => a + num(r._dbRow.paid), 0);
-      if (paidTotal > total + 0.01) {
+      // Nur bei einer Forderung. Eine Gutschrift und ein Storno tragen einen
+      // negativen Betrag — dort waere jede Zahlung von 0 "hoeher als der
+      // Betrag", und der Beleg fiele mit einer sinnlosen Meldung durch.
+      if (total > 0 && paidTotal > total + 0.01) {
         for (const r of alive) {
           r.status = "error";
           r.messages.push({ level: "error", text: `Beleg „${head.docNumber}“: bezahlt (${paidTotal.toFixed(2)}) übersteigt den Betrag (${total.toFixed(2)})` });
@@ -3238,9 +3335,180 @@ function finalizeOpenItemRows(rows, ctx) {
       }
     }
   }
+
+  verknuepfeBelege(byDoc, ctx);
 }
 
-async function commitOpenItemRows(rows, { supabase, tenantId, batchId, employeeId }) {
+// Wieviele Belege ein Lauf hoechstens traegt. Der gebuendelte Schreibweg
+// schafft mehr, aber jenseits davon wird die Antwortzeit unhoeflich und ein
+// Abbruch teuer. Die Grenze ist eine ehrliche Meldung wert — ein Gateway-
+// Timeout nach 30 Sekunden ist keine.
+const BELEG_OBERGRENZE = 6000;
+
+/**
+ * Was sich erst zeigt, wenn man alle Belege nebeneinander legt: die Abzuege
+ * einer Schlussrechnung, der Bezug eines Stornos, die Pruefsumme und die
+ * Reihenfolge, in der geschrieben werden muss.
+ *
+ * Das gehoert in die VORSCHAU und nicht in den Commit: nur hier kann der
+ * Nutzer den Fehler sehen, bevor ein Beleg gebucht ist.
+ */
+function verknuepfeBelege(byDoc, ctx) {
+  const fehlerAmBeleg = (group, text) => {
+    for (const r of group) {
+      r.status = "error";
+      r.messages.push({ level: "error", text });
+    }
+  };
+
+  if (byDoc.size > BELEG_OBERGRENZE) {
+    for (const [, group] of byDoc) {
+      fehlerAmBeleg(group, `Diese Datei enthält ${byDoc.size} Belege. Bitte in Läufe von höchstens ${BELEG_OBERGRENZE} teilen (zum Beispiel nach Jahrgang) — jeder Lauf ist ein eigener Stapel und einzeln rücknehmbar.`);
+    }
+    return;
+  }
+
+  /** Einen Belegbezug aufloesen: erst in dieser Datei, dann im Bestand. */
+  const findeBeleg = (nummer) => {
+    const key = norm(nummer);
+    const inDatei = byDoc.get(key);
+    if (inDatei && inDatei.length) {
+      const e = inDatei[0]._dbRow;
+      return {
+        quelle: "datei", kind: e.docType === "invoice" ? "invoice" : "advance",
+        projectId: e.projectId, invoiceType: e.invoiceType,
+        totalNet: inDatei.reduce((a, r) => a + num(r._dbRow.amount) + num(r._dbRow.extrasAmount), 0),
+        gruppe: inDatei, istStorno: e.istStorno,
+      };
+    }
+    const imBestand = ctx.docsByNumber?.get(key);
+    if (imBestand) return { quelle: "bestand", ...imBestand };
+    return null;
+  };
+
+  // Ein Abschlag darf nur EINMAL angerechnet werden — auch innerhalb dieser
+  // Datei. Der Bestand bringt seine eigenen Ansprueche mit.
+  const beansprucht = new Map();   // normalisierte Nummer -> Belegnummer, die ihn zieht
+
+  for (const [, group] of byDoc) {
+    const lebendig = group.filter((r) => r.status !== "error");
+    if (!lebendig.length) continue;
+    const head = lebendig[0]._dbRow;
+
+    // ── Pruefsumme ─────────────────────────────────────────────────────────
+    // Geschrieben werden die POSITIONEN. Weicht ihre Summe von der Kopfsumme
+    // ab, waere der Beleg eine falsche Forderung — deshalb Fehler, nicht
+    // Warnung.
+    if (head.kopfsumme != null) {
+      const summe = fmt2(lebendig.reduce((a, r) => a + num(r._dbRow.amount) + num(r._dbRow.extrasAmount), 0));
+      if (Math.abs(summe - fmt2(head.kopfsumme)) > 0.01) {
+        fehlerAmBeleg(lebendig, `Beleg „${head.docNumber}“: die Positionen ergeben ${summe.toFixed(2)} €, die Kopfsumme sagt ${fmt2(head.kopfsumme).toFixed(2)} €`);
+        continue;
+      }
+    }
+
+    // ── Storno ─────────────────────────────────────────────────────────────
+    if (head.istStorno) {
+      const ziel = findeBeleg(head.stornoZu);
+      if (!ziel) {
+        fehlerAmBeleg(lebendig, `Storno „${head.docNumber}“: der Beleg „${head.stornoZu}“ steht weder in dieser Datei noch im System`);
+        continue;
+      }
+      if (ziel.mehrdeutig) {
+        fehlerAmBeleg(lebendig, `Storno „${head.docNumber}“: die Nummer „${head.stornoZu}“ gibt es mehrfach — bitte die Kennung aus dem Altsystem angeben`);
+        continue;
+      }
+      if (ziel.istStorno || ziel.invoiceType === "stornorechnung") {
+        fehlerAmBeleg(lebendig, `Storno „${head.docNumber}“: „${head.stornoZu}“ ist selbst ein Storno`);
+        continue;
+      }
+      if (ziel.projectId != null && head.projectId != null && String(ziel.projectId) !== String(head.projectId)) {
+        fehlerAmBeleg(lebendig, `Storno „${head.docNumber}“ gehört zu einem anderen Projekt als „${head.stornoZu}“`);
+        continue;
+      }
+      if (ziel.quelle === "bestand" && ctx.bereitsStorniert?.has(`${ziel.kind}|${ziel.id}`)) {
+        fehlerAmBeleg(lebendig, `Storno „${head.docNumber}“: „${head.stornoZu}“ ist bereits storniert`);
+        continue;
+      }
+      // Erst jetzt steht das Ziel des Stornos fest: es folgt dem Beleg, den es
+      // aufhebt — eine Storno-Abschlagsrechnung gehoert in ADVANCE_INVOICE.
+      const docType = ziel.kind === "invoice" ? "invoice" : "partial";
+      for (const r of group) {
+        r._dbRow.docType = docType;
+        r._dbRow.stornoZiel = ziel;
+      }
+    }
+
+    // ── Abzuege der Schlussrechnung ────────────────────────────────────────
+    const istSchluss = head.invoiceType === "schlussrechnung" || head.invoiceType === "teilschlussrechnung";
+    const abzuege = [];
+    if (head.deductsRaw) {
+      if (!istSchluss) {
+        for (const r of lebendig) {
+          r.messages.push({ level: "warn", text: `Beleg „${head.docNumber}“ nennt Abzüge, ist aber keine Schlussrechnung — die Abzüge werden ignoriert` });
+        }
+      } else {
+        for (const teil of head.deductsRaw.split(/[;,]/).map((t) => t.trim()).filter(Boolean)) {
+          const [nummerRoh, betragRoh] = teil.split(":").map((t) => (t || "").trim());
+          const ziel = findeBeleg(nummerRoh);
+          if (!ziel) {
+            fehlerAmBeleg(lebendig, `Schlussrechnung „${head.docNumber}“: der Abschlag „${nummerRoh}“ steht weder in dieser Datei noch im System`);
+            break;
+          }
+          if (ziel.kind !== "advance") {
+            fehlerAmBeleg(lebendig, `Schlussrechnung „${head.docNumber}“: „${nummerRoh}“ ist keine Abschlagsrechnung`);
+            break;
+          }
+          if (ziel.projectId != null && head.projectId != null && String(ziel.projectId) !== String(head.projectId)) {
+            fehlerAmBeleg(lebendig, `Schlussrechnung „${head.docNumber}“: der Abschlag „${nummerRoh}“ gehört zu einem anderen Projekt`);
+            break;
+          }
+          const key = norm(nummerRoh);
+          if (beansprucht.has(key)) {
+            fehlerAmBeleg(lebendig, `Der Abschlag „${nummerRoh}“ wird in dieser Datei von zwei Belegen abgezogen (auch von „${beansprucht.get(key)}“)`);
+            break;
+          }
+          if (ziel.quelle === "bestand" && ctx.beanspruchteAbschlaege?.has(ziel.id)) {
+            fehlerAmBeleg(lebendig, `Der Abschlag „${nummerRoh}“ ist bereits von einer gebuchten Schlussrechnung angerechnet`);
+            break;
+          }
+          const betrag = betragRoh ? parseAmountDE(betragRoh).value : Math.abs(ziel.totalNet);
+          if (betrag == null) {
+            fehlerAmBeleg(lebendig, `Schlussrechnung „${head.docNumber}“: „${betragRoh}“ ist kein gültiger Abzugsbetrag`);
+            break;
+          }
+          beansprucht.set(key, head.docNumber);
+          abzuege.push({ nummer: nummerRoh, betrag: fmt2(Math.abs(betrag)), ziel });
+        }
+      }
+    } else if (istSchluss) {
+      for (const r of lebendig) {
+        r.messages.push({ level: "warn", text: `Schlussrechnung „${head.docNumber}“ ohne Abzüge — frühere Abschläge werden nicht angerechnet` });
+      }
+    }
+
+    if (abzuege.length) {
+      const summeAbzug = fmt2(abzuege.reduce((a, d) => a + d.betrag, 0));
+      const summePos = fmt2(lebendig.reduce((a, r) => a + num(r._dbRow.amount) + num(r._dbRow.extrasAmount), 0));
+      if (summeAbzug > summePos + 0.01) {
+        for (const r of lebendig) {
+          r.messages.push({ level: "warn", text: `Schlussrechnung „${head.docNumber}“: die Abzüge (${summeAbzug.toFixed(2)} €) übersteigen die Leistung (${summePos.toFixed(2)} €) — der Beleg wird negativ` });
+        }
+      }
+      for (const r of group) r._dbRow.abzuege = abzuege;
+    }
+
+    // ── Reihenfolge ────────────────────────────────────────────────────────
+    // Drei Stufen statt einer Sortierung nach Abhaengigkeit: Abschlaege und
+    // einfache Rechnungen zuerst, dann die Schlussrechnungen, die sie
+    // anrechnen, zuletzt die Stornos, die sich auf beides beziehen koennen.
+    // Eine Datei darf ihre Belege damit in beliebiger Reihenfolge fuehren.
+    const stufe = head.istStorno ? 2 : istSchluss ? 1 : 0;
+    for (const r of group) r._dbRow.commitSeq = stufe;
+  }
+}
+
+async function commitOpenItemRows(rows, { supabase, tenantId, batchId, ctx, employeeId }) {
   const byDoc = new Map();
   for (const r of rows) {
     const key = norm(r._dbRow.docNumber);
@@ -3248,8 +3516,23 @@ async function commitOpenItemRows(rows, { supabase, tenantId, batchId, employeeI
     byDoc.get(key).push(r);
   }
 
+  // Reihenfolge aus der Vorschau: Abschlaege vor den Schlussrechnungen, die
+  // sie anrechnen, Originale vor ihren Stornos. Die Datei darf ihre Belege
+  // damit in beliebiger Reihenfolge fuehren.
+  const gruppen = [...byDoc.values()].sort((a, b) => {
+    const sa = num(a[0]._dbRow.commitSeq), sb = num(b[0]._dbRow.commitSeq);
+    if (sa !== sb) return sa - sb;
+    return String(a[0]._dbRow.docDate || "").localeCompare(String(b[0]._dbRow.docDate || ""));
+  });
+
+  // Welche Belegnummer welche Datenbank-ID bekommen hat — Stornos und
+  // Schlussrechnungen brauchen sie, und ihre Bezugsbelege stehen dank der
+  // Reihenfolge bereits.
+  const idNachNummer = new Map();
+  const geschrieben = [];   // fuer das Anheben des Nummernkreises
+
   let inserted = 0;
-  for (const [, group] of byDoc) {
+  for (const group of gruppen) {
     const head = group[0]._dbRow;
     try {
       // Rechnungsempfänger sicherstellen (init… verlangt Adresse + Kontakt).
@@ -3266,8 +3549,35 @@ async function commitOpenItemRows(rows, { supabase, tenantId, batchId, employeeI
       const withPos = group.filter((r) => r._dbRow.node);
       const totalNet = group.reduce((a, r) => a + num(r._dbRow.amount), 0);
       const positions = withPos.length
-        ? withPos.map((r) => ({ id: r._dbRow.node.id, extrasPercent: r._dbRow.node.extrasPercent, amt: fmt2(r._dbRow.amount) }))
+        ? withPos.map((r) => ({
+            id: r._dbRow.node.id,
+            extrasPercent: r._dbRow.node.extrasPercent,
+            amt: fmt2(r._dbRow.amount),
+            // Nebenkosten aus der Datei schlagen den Prozentsatz des Knotens:
+            // ein Altbeleg traegt den Betrag, mit dem er gestellt wurde.
+            extrasAmt: r._dbRow.extrasAmount != null ? fmt2(r._dbRow.extrasAmount) : null,
+          }))
         : distributeOpening(fmt2(totalNet), head.nodes.filter((n) => n.billingTypeId === 1));
+
+      // Bezugsbelege aufloesen: erst in diesem Stapel, dann im Bestand.
+      const belegId = (nummer, kind) => {
+        const ausStapel = idNachNummer.get(norm(nummer));
+        if (ausStapel) return ausStapel.id;
+        const ausBestand = ctx?.docsByNumber?.get(norm(nummer));
+        return ausBestand && (!kind || ausBestand.kind === kind) ? ausBestand.id : null;
+      };
+
+      const stornoZielId = head.istStorno ? belegId(head.stornoZu) : null;
+      const abzugZeilen = (head.abzuege || []).map((d) => ({
+        advanceId: belegId(d.nummer, "advance"),
+        betrag: d.betrag,
+        nummer: d.nummer,
+      }));
+      const fehlend = abzugZeilen.find((d) => d.advanceId == null);
+      if (fehlend) throw { status: 400, message: `der Abschlag „${fehlend.nummer}“ wurde nicht geschrieben` };
+      if (head.istStorno && stornoZielId == null) {
+        throw { status: 400, message: `der stornierte Beleg „${head.stornoZu}“ wurde nicht geschrieben` };
+      }
 
       const { docId, vatPercent } = await bookReferenceDocument(supabase, {
         tenantId, batchId, employeeId, docType: head.docType,
@@ -3275,8 +3585,19 @@ async function commitOpenItemRows(rows, { supabase, tenantId, batchId, employeeI
           companyId: head.companyId, projectId: head.projectId, contractId: head.contractId,
           docNumber: head.docNumber, docDate: head.docDate, dueDate: head.dueDate,
           vatPercent: head.vatPercent, comment: head.comment, positions,
+          invoiceType: head.invoiceType, legacyRef: head.legacyRef,
+          text1: head.text1, text2: head.text2,
+          buyerReference: head.buyerReference,
+          periodStart: head.periodStart, periodEnd: head.periodEnd,
+          cashDiscountPercent: head.cashDiscountPercent, cashDiscountDays: head.cashDiscountDays,
+          cancelsId: stornoZielId, cancellationDate: head.cancellationDate,
+          abzuege: abzugZeilen,
+          closesProject: head.closesProject,
         },
       });
+
+      idNachNummer.set(norm(head.docNumber), { id: docId, kind: head.docType === "invoice" ? "invoice" : "advance" });
+      geschrieben.push({ companyId: head.companyId, nummer: head.docNumber, datum: head.docDate });
 
       const paidNet = fmt2(group.reduce((a, r) => a + num(r._dbRow.paid), 0));
       if (paidNet > 0) {
@@ -3292,7 +3613,19 @@ async function commitOpenItemRows(rows, { supabase, tenantId, batchId, employeeI
       throw { status: err?.status || 500, message: `Beleg ${head.docNumber} fehlgeschlagen: ${err?.message || err}` };
     }
   }
-  return { inserted };
+
+  // Zum Schluss den Nummernkreis anheben. Ein Fehler hier darf den Import
+  // nicht kippen — die Belege stehen bereits —, aber er gehoert in die
+  // Abschlussmeldung: sonst vergibt der Kunde spaeter eine Nummer, die es
+  // schon gibt, und die Datenbank faengt das nicht ab.
+  let nummernkreis = null;
+  try {
+    nummernkreis = await bumpNumberRanges(supabase, geschrieben);
+  } catch (err) {
+    nummernkreis = { angehoben: [], ungedeutet: [], fehler: err?.message || String(err) };
+  }
+
+  return { inserted, nummernkreis };
 }
 
 // ── Domäne: Kosten-Anfangsbestände (Kostenblöcke) ────────────────────────────

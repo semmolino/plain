@@ -392,3 +392,139 @@ describe("Belegarten", () => {
     expect(pv.rows[0]._dbRow.dueDate).toBe("2025-12-15");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Belegketten (09/2026): Abzüge der Schlussrechnung, Storno, Reihenfolge.
+//
+// Aufgelöst wird in der VORSCHAU, nicht im Commit — nur dort sieht der Nutzer
+// den Fehler, bevor ein Beleg gebucht ist. Und aufgelöst wird gegen die ganze
+// Datei UND den Bestand: die Reihenfolge der Zeilen darf keine Rolle spielen.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("Belegketten", () => {
+  const HEAD_K = [...HEAD, "Zieht Abschläge ab", "Storniert Beleg", "Stornodatum", "Kopfsumme netto (Prüfsumme)"];
+  const rowK = (...cells) => { const r = [...cells]; while (r.length < HEAD_K.length) r.push(""); return r; };
+
+  const seedK = () => {
+    const sb = seed({
+      // Genug freie Kennungen: jeder Beleg bekommt eine eigene.
+      ADVANCE_INVOICE: [500, 501, 502].map((ID) => ({ ID, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 })),
+      INVOICE: [600, 601, 602].map((ID) => ({ ID, TENANT_ID: TENANT, PROJECT_ID: 1, STATUS_ID: 0, VAT_PERCENT: 19 })),
+      INVOICE_STRUCTURE: [], INVOICE_DEDUCTION: [],
+    });
+    let ar = 500, re = 600;
+    ppSvc.initPartialPayment.mockImplementation(async () => ({ id: ar++ }));
+    invSvc.initInvoice.mockImplementation(async () => ({ id: re++ }));
+    return sb;
+  };
+
+  const previewK = async (zeilen, supabase) => {
+    const parsed = await parseBuffer(await xlsxBuffer([HEAD_K, ...zeilen]));
+    const ctx = await DOMAINS.open_items.loadContext(supabase, TENANT);
+    return buildPreview({ domainKey: "open_items", parsed, mapping: buildAutoMapping(parsed.headers, "open_items"), ctx });
+  };
+  const commitK = (zeilen, supabase) =>
+    xlsxBuffer([HEAD_K, ...zeilen]).then((buf) => runCommit(buf, supabase));
+
+  const abschlag = (nr, betrag) => rowK("P-1", nr, "Abschlag", "01.03.2025", "31.03.2025", "LP5", betrag);
+
+  it("schreibt die Abzüge einer Schlussrechnung in INVOICE_DEDUCTION", async () => {
+    const sb = seedK();
+    await commitK([
+      abschlag("AR-1", "10000"),
+      rowK("P-1", "SR-1", "Schlussrechnung", "01.12.2025", "31.12.2025", "LP5", "50000", "", "", "", "", "AR-1"),
+    ], sb);
+
+    expect(sb._tables.INVOICE_DEDUCTION).toHaveLength(1);
+    expect(sb._tables.INVOICE_DEDUCTION[0]).toMatchObject({
+      ADVANCE_INVOICE_ID: 500, DEDUCTION_AMOUNT_NET: 10000,
+    });
+    // Ohne Stapel-Kennung waere die Zeile beim Zuruecksetzen nicht auffindbar.
+    expect(sb._tables.INVOICE_DEDUCTION[0].IMPORT_BATCH_ID).toBeTruthy();
+  });
+
+  // Der Kern: die Datei darf ihre Belege in beliebiger Reihenfolge führen.
+  it("findet den Abschlag auch, wenn er HINTER der Schlussrechnung steht", async () => {
+    const sb = seedK();
+    await commitK([
+      rowK("P-1", "SR-1", "Schlussrechnung", "01.12.2025", "31.12.2025", "LP5", "50000", "", "", "", "", "AR-1"),
+      abschlag("AR-1", "10000"),
+    ], sb);
+
+    expect(sb._tables.INVOICE_DEDUCTION).toHaveLength(1);
+    expect(sb._tables.INVOICE_DEDUCTION[0].ADVANCE_INVOICE_ID).toBe(500);
+  });
+
+  it("nimmt einen Teilabzug aus der Datei", async () => {
+    const sb = seedK();
+    await commitK([
+      abschlag("AR-1", "10000"),
+      rowK("P-1", "SR-1", "Schlussrechnung", "01.12.2025", "31.12.2025", "LP5", "50000", "", "", "", "", "AR-1:4000"),
+    ], sb);
+    expect(sb._tables.INVOICE_DEDUCTION[0].DEDUCTION_AMOUNT_NET).toBe(4000);
+  });
+
+  it("lehnt einen Abzug ab, den es nirgends gibt", async () => {
+    const pv = await previewK([
+      rowK("P-1", "SR-1", "Schlussrechnung", "01.12.2025", "31.12.2025", "LP5", "50000", "", "", "", "", "AR-99"),
+    ], seedK());
+    expect(pv.rows[0].status).toBe("error");
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("weder in dieser Datei noch im System");
+  });
+
+  it("lässt denselben Abschlag nicht zweimal abziehen", async () => {
+    const pv = await previewK([
+      abschlag("AR-1", "10000"),
+      rowK("P-1", "SR-1", "Schlussrechnung", "01.12.2025", "", "LP5", "20000", "", "", "", "", "AR-1"),
+      rowK("P-1", "SR-2", "Schlussrechnung", "02.12.2025", "", "LP5", "20000", "", "", "", "", "AR-1"),
+    ], seedK());
+    expect(pv.rows.filter((r) => r.status === "error").length).toBeGreaterThan(0);
+    expect(pv.rows.map((r) => r.messages.map((m) => m.text).join()).join())
+      .toContain("von zwei Belegen abgezogen");
+  });
+
+  it("warnt bei einer Schlussrechnung ohne Abzüge", async () => {
+    const pv = await previewK([
+      rowK("P-1", "SR-1", "Schlussrechnung", "01.12.2025", "31.12.2025", "LP5", "50000"),
+    ], seedK());
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("ohne Abzüge");
+  });
+
+  it("verknüpft ein Storno mit seinem Original und datiert es aus der Datei", async () => {
+    const sb = seedK();
+    await commitK([
+      abschlag("AR-1", "10000"),
+      rowK("P-1", "S-AR-1", "Storno", "20.12.2025", "", "LP5", "10000", "", "", "", "", "", "AR-1", "20.12.2025"),
+    ], sb);
+
+    const storno = sb._tables.ADVANCE_INVOICE.find((r) => r.CANCELS_ADVANCE_INVOICE_ID === 500);
+    expect(storno).toBeTruthy();
+    // Das Stornodatum steht am ORIGINAL und kommt aus der Datei, nicht von heute.
+    expect(sb._tables.ADVANCE_INVOICE.find((r) => r.ID === 500).CANCELLATION_DATE).toBe("2025-12-20");
+  });
+
+  it("lehnt ein Storno auf einen unbekannten Beleg ab", async () => {
+    const pv = await previewK([
+      rowK("P-1", "S-1", "Storno", "20.12.2025", "", "LP5", "10000", "", "", "", "", "", "AR-99"),
+    ], seedK());
+    expect(pv.rows[0].status).toBe("error");
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("weder in dieser Datei noch im System");
+  });
+
+  // Geschrieben werden die Positionen. Weicht ihre Summe von der Kopfsumme ab,
+  // waere der Beleg eine falsche Forderung — deshalb Fehler, nicht Warnung.
+  it("lehnt einen Beleg ab, dessen Positionen nicht zur Kopfsumme passen", async () => {
+    const pv = await previewK([
+      rowK("P-1", "AR-1", "Abschlag", "01.03.2025", "", "LP5", "8000", "", "", "", "", "", "", "", "9000"),
+    ], seedK());
+    expect(pv.rows[0].status).toBe("error");
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("Kopfsumme");
+  });
+
+  it("lässt eine passende Kopfsumme durch", async () => {
+    const pv = await previewK([
+      rowK("P-1", "AR-1", "Abschlag", "01.03.2025", "", "LP5", "5000", "", "", "", "", "", "", "", "8000"),
+      rowK("P-1", "AR-1", "Abschlag", "01.03.2025", "", "LP1-4", "3000"),
+    ], seedK());
+    expect(pv.rows.every((r) => r.status !== "error")).toBe(true);
+  });
+});
