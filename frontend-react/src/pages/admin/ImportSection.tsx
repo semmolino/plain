@@ -64,7 +64,9 @@ export function ImportSection() {
   // Empfohlene Reihenfolge der Bereiche + bereits importierte (für die Schritt-Übersicht).
   // project_full steht neben project: es ist der Weg fuer eine Uebernahme aus
   // einem Altsystem, project/project_structure der fuer getrennte Dateien.
-  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_full', 'project_fee', 'project_structure', 'opening_balance', 'open_items', 'opening_cost']
+  // Reihenfolge der Schritte. Belege kommen nach der Projektstruktur (sie
+  // zeigen auf deren Knoten), Zahlungen zuletzt (sie zeigen auf Belege).
+  const DOMAIN_ORDER = ['address', 'contact', 'employee', 'project', 'project_full', 'project_fee', 'project_structure', 'opening_cost', 'opening_balance', 'open_items', 'document_payments']
   const orderedDomains = [...domains].sort((a, b) => {
     const ia = DOMAIN_ORDER.indexOf(a.key), ib = DOMAIN_ORDER.indexOf(b.key)
     return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
@@ -82,6 +84,20 @@ export function ImportSection() {
     void qc.invalidateQueries({ queryKey: ['employees'] })
     void qc.invalidateQueries({ queryKey: ['projects'] })
     void qc.invalidateQueries({ queryKey: ['setup-progress'] })
+    // Belege und Zahlungen. Ohne diese Schluessel zeigte die Rechnungsliste
+    // nach einem Beleg-Import weiter den alten Stand — und das sah aus, als
+    // waere der Import ohne Wirkung geblieben. Dieselbe Ursache wie beim
+    // Kostensatz in der Mitarbeiterliste, nur eine Ebene teurer: hier geht es
+    // um Forderungen.
+    void qc.invalidateQueries({ queryKey: ['invoices'] })
+    void qc.invalidateQueries({ queryKey: ['rechnungen'] })
+    void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+    void qc.invalidateQueries({ queryKey: ['mahnungen'] })
+    void qc.invalidateQueries({ queryKey: ['buchungen'] })
+    void qc.invalidateQueries({ queryKey: ['structure'] })
+    // Auswertungen lesen die Aggregate, die ein Beleg-Import setzt.
+    void qc.invalidateQueries({ queryKey: ['project-list'] })
+    void qc.invalidateQueries({ queryKey: ['projects-timeline'] })
   }
 
   const previewMut = useMutation({

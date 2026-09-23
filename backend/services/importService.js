@@ -3882,7 +3882,7 @@ const DOMAINS = {
   },
   open_items: {
     key: "open_items",
-    label: "Offene Posten (Altbelege)",
+    label: "Belege (Altbestand)",
     table: "ADVANCE_INVOICE",
     matchLabel: "Belegnummer",
     fields: OPEN_ITEM_FIELDS,
@@ -3890,6 +3890,7 @@ const DOMAINS = {
       { project_number: "P-2024-012", doc_number: "AR-2025-007", doc_type: "Abschlag", doc_date: "15.11.2025", due_date: "15.12.2025", position: "LP5",   amount_net: "12500", vat_percent: "19" },
       { project_number: "P-2024-012", doc_number: "AR-2025-007", doc_type: "Abschlag", doc_date: "15.11.2025", due_date: "15.12.2025", position: "LP6-8", amount_net: "8000",  vat_percent: "19" },
       { project_number: "P-2024-013", doc_number: "RE-2025-101", doc_type: "Rechnung", doc_date: "01.12.2025", due_date: "31.12.2025", position: "",       amount_net: "4200",  vat_percent: "19", paid_net: "2000", paid_date: "20.12.2025" },
+      { project_number: "P-2024-012", doc_number: "SR-2025-004", doc_type: "Schlussrechnung", doc_date: "20.12.2025", due_date: "19.01.2026", position: "LP5", amount_net: "60000", vat_percent: "19", deducts: "AR-2025-007" },
     ],
     dedupeInFile: false,               // mehrere Positionszeilen je Beleg sind der Normalfall
     loadContext: loadOpenItemContext,
@@ -4534,7 +4535,7 @@ const TEMPLATE_HELP = {
     ],
   },
   open_items: {
-    intro: "Rechnungen und Abschlagsrechnungen aus der alten Welt, die noch offen sind — mit eigener Nummer, Datum, Fälligkeit und Restbetrag. Sie werden als echte, gebuchte Belege angelegt (ohne PDF und ohne E-Rechnung), damit offene Posten, Zahlungszuordnung und Mahnwesen ab Tag 1 stimmen.",
+    intro: "Belege aus der alten Welt — offene wie bezahlte, mit eigener Nummer, Datum, Fälligkeit und Positionen. Sie werden als echte, gebuchte Belege angelegt (ohne PDF und ohne E-Rechnung): ein nachgebautes Altbeleg-Dokument mit heutigem Layout wäre eine Fälschung. Rechnerisch stimmt alles — offene Posten, Zahlungszuordnung, Mahnwesen und Umsatz je Jahr.",
     before: [
       "Projekte samt Leistungsstruktur importieren (Projekt-Honorar oder Projektstruktur) — die Belege hängen an deren Positionen.",
       "Zur Rechnungsadresse muss ein Ansprechpartner vorhanden sein.",
@@ -4544,7 +4545,10 @@ const TEMPLATE_HELP = {
       "Eine Zeile = eine Belegposition. Zeilen mit derselben Belegnummer gehören zu EINEM Beleg; Belegdatum und Fälligkeit gelten aus der ersten Zeile.",
       "Wer keine Positionen führt: eine Zeile je Beleg, Spalte „Position“ leer lassen — der Betrag wird dann über die Pauschal-Positionen des Projekts verteilt.",
       "„Position“ meint das Kürzel aus der Leistungsstruktur (z. B. LP5). Es muss im Projekt eindeutig sein.",
-      "Bezahlte Altbelege gehören NICHT hierher, sondern als eine Summe je Projekt in „Anfangsbestände“.",
+      "Belegarten: Abschlag, Rechnung, Schluss- und Teilschlussrechnung, Gutschrift, Storno. Alles andere wird abgewiesen statt stillschweigend als Abschlag verbucht.",
+      "Eine Schlussrechnung nennt in „Zieht Abschläge ab“ die Nummern der angerechneten Abschläge (mehrere mit Semikolon, Teilbetrag als AR-2025-001:5000). Ein Storno nennt in „Storniert Beleg“ den Beleg, den es aufhebt.",
+      "Die Reihenfolge in der Datei spielt keine Rolle: ein Abschlag darf hinter seiner Schlussrechnung stehen und aus einem früheren Import stammen.",
+      "Steht in „Kopfsumme netto“ ein Betrag, muss er zur Summe der Positionen passen — sonst fällt der ganze Beleg durch.",
       "Ein fehlerhafter Beleg wird als Ganzes übersprungen — eine halbe Rechnung wäre eine falsche Forderung.",
     ],
   },
