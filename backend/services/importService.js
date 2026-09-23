@@ -29,6 +29,7 @@ const { recomputeStructure } = require("./buchungen");
 const projekteSvc = require("./projekte");
 const { belegSummen } = require("./belegRechnung");
 const { bumpNumberRanges } = require("./numberRangeBump");
+const belegeSvc = require("./importBelege");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 /** String-Wert sicher trimmen (null/undefined → ""). */
@@ -3525,94 +3526,48 @@ async function commitOpenItemRows(rows, { supabase, tenantId, batchId, ctx, empl
     return String(a[0]._dbRow.docDate || "").localeCompare(String(b[0]._dbRow.docDate || ""));
   });
 
-  // Welche Belegnummer welche Datenbank-ID bekommen hat — Stornos und
-  // Schlussrechnungen brauchen sie, und ihre Bezugsbelege stehen dank der
-  // Reihenfolge bereits.
-  const idNachNummer = new Map();
-  const geschrieben = [];   // fuer das Anheben des Nummernkreises
-
-  let inserted = 0;
-  for (const group of gruppen) {
-    const head = group[0]._dbRow;
-    try {
-      // Rechnungsempfänger sicherstellen (init… verlangt Adresse + Kontakt).
-      let contactId = head.contactId;
-      if (!head.addressId) throw { status: 400, message: "keine Rechnungsadresse am Vertrag" };
-      if (!contactId) {
-        const { data: cts } = await supabase.from("CONTACTS").select("ID").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", head.addressId).order("ID", { ascending: true }).limit(1);
-        contactId = cts?.[0]?.ID ?? null;
-        if (!contactId) throw { status: 400, message: "kein Ansprechpartner zur Rechnungsadresse — bitte Kontakt importieren" };
-      }
-      await supabase.from("CONTRACT").update({ INVOICE_ADDRESS_ID: head.addressId, INVOICE_CONTACT_ID: contactId }).eq("ID", head.contractId).eq("TENANT_ID", tenantId);
-
-      // Positionen: benannte Knoten, sonst Verteilung über die Pauschal-Knoten.
-      const withPos = group.filter((r) => r._dbRow.node);
-      const totalNet = group.reduce((a, r) => a + num(r._dbRow.amount), 0);
-      const positions = withPos.length
-        ? withPos.map((r) => ({
-            id: r._dbRow.node.id,
-            extrasPercent: r._dbRow.node.extrasPercent,
-            amt: fmt2(r._dbRow.amount),
-            // Nebenkosten aus der Datei schlagen den Prozentsatz des Knotens:
-            // ein Altbeleg traegt den Betrag, mit dem er gestellt wurde.
-            extrasAmt: r._dbRow.extrasAmount != null ? fmt2(r._dbRow.extrasAmount) : null,
-          }))
-        : distributeOpening(fmt2(totalNet), head.nodes.filter((n) => n.billingTypeId === 1));
-
-      // Bezugsbelege aufloesen: erst in diesem Stapel, dann im Bestand.
-      const belegId = (nummer, kind) => {
-        const ausStapel = idNachNummer.get(norm(nummer));
-        if (ausStapel) return ausStapel.id;
-        const ausBestand = ctx?.docsByNumber?.get(norm(nummer));
-        return ausBestand && (!kind || ausBestand.kind === kind) ? ausBestand.id : null;
-      };
-
-      const stornoZielId = head.istStorno ? belegId(head.stornoZu) : null;
-      const abzugZeilen = (head.abzuege || []).map((d) => ({
-        advanceId: belegId(d.nummer, "advance"),
-        betrag: d.betrag,
-        nummer: d.nummer,
-      }));
-      const fehlend = abzugZeilen.find((d) => d.advanceId == null);
-      if (fehlend) throw { status: 400, message: `der Abschlag „${fehlend.nummer}“ wurde nicht geschrieben` };
-      if (head.istStorno && stornoZielId == null) {
-        throw { status: 400, message: `der stornierte Beleg „${head.stornoZu}“ wurde nicht geschrieben` };
-      }
-
-      const { docId, vatPercent } = await bookReferenceDocument(supabase, {
-        tenantId, batchId, employeeId, docType: head.docType,
-        doc: {
-          companyId: head.companyId, projectId: head.projectId, contractId: head.contractId,
-          docNumber: head.docNumber, docDate: head.docDate, dueDate: head.dueDate,
-          vatPercent: head.vatPercent, comment: head.comment, positions,
-          invoiceType: head.invoiceType, legacyRef: head.legacyRef,
-          text1: head.text1, text2: head.text2,
-          buyerReference: head.buyerReference,
-          periodStart: head.periodStart, periodEnd: head.periodEnd,
-          cashDiscountPercent: head.cashDiscountPercent, cashDiscountDays: head.cashDiscountDays,
-          cancelsId: stornoZielId, cancellationDate: head.cancellationDate,
-          abzuege: abzugZeilen,
-          closesProject: head.closesProject,
-        },
-      });
-
-      idNachNummer.set(norm(head.docNumber), { id: docId, kind: head.docType === "invoice" ? "invoice" : "advance" });
-      geschrieben.push({ companyId: head.companyId, nummer: head.docNumber, datum: head.docDate });
-
-      const paidNet = fmt2(group.reduce((a, r) => a + num(r._dbRow.paid), 0));
-      if (paidNet > 0) {
-        await recordOpeningPayment(supabase, {
-          tenantId, batchId, docType: head.docType, docId, projectId: head.projectId, contractId: head.contractId,
-          paidNet, vatPercent, dist: positions,
-          paymentDate: head.paidDate || head.docDate,
-          purpose: `Zahlung zu ${head.docNumber} (Import)`,
-        });
-      }
-      inserted += group.length;
-    } catch (err) {
-      throw { status: err?.status || 500, message: `Beleg ${head.docNumber} fehlgeschlagen: ${err?.message || err}` };
-    }
+  // Rechnungsempfaenger je Vertrag sicherstellen — der Stammdaten-Abzug liest
+  // Adresse und Ansprechpartner vom Vertrag. Einmal je Vertrag, nicht je Beleg.
+  const vertraege = new Map();
+  for (const g of gruppen) {
+    const e = g[0]._dbRow;
+    if (e.contractId != null && !vertraege.has(String(e.contractId))) vertraege.set(String(e.contractId), e);
   }
+  for (const [, e] of vertraege) {
+    if (!e.addressId) throw { status: 400, message: `Projekt ${e.projectNumber}: keine Rechnungsadresse am Vertrag` };
+    let contactId = e.contactId;
+    if (!contactId) {
+      const { data: cts } = await supabase.from("CONTACTS").select("ID")
+        .eq("TENANT_ID", tenantId).eq("ADDRESS_ID", e.addressId).order("ID", { ascending: true }).limit(1);
+      contactId = cts?.[0]?.ID ?? null;
+      if (!contactId) throw { status: 400, message: `Projekt ${e.projectNumber}: kein Ansprechpartner zur Rechnungsadresse — bitte Kontakte importieren` };
+      e.contactId = contactId;
+    }
+    await supabase.from("CONTRACT")
+      .update({ INVOICE_ADDRESS_ID: e.addressId, INVOICE_CONTACT_ID: contactId })
+      .eq("ID", e.contractId).eq("TENANT_ID", tenantId);
+  }
+
+  // Positionen je Beleg: benannte Knoten, sonst Verteilung ueber die
+  // Pauschal-Knoten des Projekts.
+  for (const g of gruppen) {
+    const head = g[0]._dbRow;
+    const mitPos = g.filter((r) => r._dbRow.node);
+    head._positionen = mitPos.length
+      ? mitPos.map((r) => ({
+          id: r._dbRow.node.id,
+          extrasPercent: r._dbRow.node.extrasPercent,
+          amt: fmt2(r._dbRow.amount),
+          extrasAmt: r._dbRow.extrasAmount != null ? fmt2(r._dbRow.extrasAmount) : null,
+        }))
+      : distributeOpening(fmt2(g.reduce((a, r) => a + num(r._dbRow.amount), 0)),
+                          head.nodes.filter((n) => n.billingTypeId === 1));
+    head.paid = fmt2(g.reduce((a, r) => a + num(r._dbRow.paid), 0));
+  }
+
+  const { gebaut } = await belegeSvc.schreibeBelege(supabase, { tenantId, batchId, employeeId, gruppen, ctx });
+  const { zahlungen } = await belegeSvc.schreibeZahlungen(supabase, { tenantId, batchId, gebaut });
+  const aggregate = await belegeSvc.setzeAggregate(supabase, { tenantId, gebaut });
 
   // Zum Schluss den Nummernkreis anheben. Ein Fehler hier darf den Import
   // nicht kippen — die Belege stehen bereits —, aber er gehoert in die
@@ -3620,12 +3575,27 @@ async function commitOpenItemRows(rows, { supabase, tenantId, batchId, ctx, empl
   // schon gibt, und die Datenbank faengt das nicht ab.
   let nummernkreis = null;
   try {
-    nummernkreis = await bumpNumberRanges(supabase, geschrieben);
+    nummernkreis = await bumpNumberRanges(supabase, gebaut.map((b) => ({
+      companyId: b.e.companyId, nummer: b.e.docNumber, datum: b.e.docDate,
+    })));
   } catch (err) {
     nummernkreis = { angehoben: [], ungedeutet: [], fehler: err?.message || String(err) };
   }
 
-  return { inserted, nummernkreis };
+  // Je Tabelle eine Zahl, nicht eine Gesamtzahl: eine Null an der falschen
+  // Stelle springt so sofort ins Auge.
+  return {
+    inserted: rows.length,
+    nummernkreis,
+    belege: {
+      rechnungen: gebaut.filter((b) => b.kind === "invoice").length,
+      abschlaege: gebaut.filter((b) => b.kind === "advance").length,
+      positionen: gebaut.reduce((a, b) => a + b.positionen.length, 0),
+      zahlungen,
+      knoten: aggregate.knoten,
+      projekte: aggregate.projekte,
+    },
+  };
 }
 
 // ── Domäne: Kosten-Anfangsbestände (Kostenblöcke) ────────────────────────────
@@ -4180,13 +4150,23 @@ async function commit({ domainKey, buffer, filename, mapping, sheetName, duplica
       const undo     = Array.isArray(res?.undo) ? res.undo : [];
       // Zusammengefuehrtes ist nur ruecknehmbar, wenn der vorherige Stand im
       // Stapel steht — loeschen kann man es nicht, die Zeile gab es vorher.
-      if (merged || undo.length) {
+      // Was die Domaene ueber ihren Lauf zu sagen hat, gehoert in den Stapel
+      // und in die Antwort: je Tabelle eine Zahl statt einer Gesamtzahl, und
+      // der Hinweis zum Nummernkreis. Eine Null an der falschen Stelle faellt
+      // so sofort auf; ein einzelnes "inserted: 7000" verbirgt sie. Steht es
+      // nur in der Antwort, ist es nach dem Neuladen der Seite weg — deshalb
+      // auch in SUMMARY_JSON, wo die Stapelliste es wiederfindet.
+      const extra = {};
+      if (res?.belege) extra.belege = res.belege;
+      if (res?.nummernkreis) extra.nummernkreis = res.nummernkreis;
+
+      if (merged || undo.length || Object.keys(extra).length) {
         await supabase.from("IMPORT_BATCH").update({
           ROW_OK: inserted + merged,
-          SUMMARY_JSON: { ...pv.summary, structureMode: structureMode || null, docType: docType || null, merged, undo },
+          SUMMARY_JSON: { ...pv.summary, structureMode: structureMode || null, docType: docType || null, merged, undo, ...extra },
         }).eq("ID", batchId).eq("TENANT_ID", tenantId);
       }
-      return { batchId, inserted, merged, summary: pv.summary };
+      return { batchId, inserted, merged, summary: pv.summary, ...extra };
     } catch (e) {
       await supabase.from("IMPORT_BATCH").update({ ROW_OK: 0 }).eq("ID", batchId).eq("TENANT_ID", tenantId);
       throw { status: e?.status || 500, message: `${e?.message || e} Stapel #${batchId} kann zurückgesetzt werden.` };

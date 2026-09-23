@@ -51,11 +51,18 @@ function makeFakeSupabase(initial = {}, opts = {}) {
     return null;
   }
 
+  // Zaehlt, wie oft eine Tabelle angefasst wurde. Damit laesst sich pruefen,
+  // dass ein gebuendelter Schreibweg gebuendelt BLEIBT — eine spaeter
+  // eingeschlichene Schleife "ach, eine Abfrage je Beleg geht schon" faellt
+  // sonst erst im Betrieb auf, als Gateway-Timeout.
+  let anfragen = 0;
+
   const tables = {};
   for (const [k, v] of Object.entries(initial)) tables[k] = v.map(r => ({ ...r }));
   let autoId = 1000;
 
   function from(table) {
+    anfragen++;
     if (!tables[table]) tables[table] = [];
     const filters = [];
     let mode = "select";
@@ -193,7 +200,7 @@ function makeFakeSupabase(initial = {}, opts = {}) {
     return builder;
   }
 
-  return { from, _tables: tables };
+  return { from, _tables: tables, _anfragen: () => anfragen, _anfragenZuruecksetzen: () => { anfragen = 0; } };
 }
 
 module.exports = { makeFakeSupabase };
