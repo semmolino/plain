@@ -122,10 +122,10 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0070b ist der generierte Seed (wiederholbar), 0139 die erste Migration,
     // die der Runner selbst einspielt. Kommt hier etwas Neues hinzu, ist das
     // richtig — dann gehoert es aber bewusst hierher, nicht versehentlich.
-    //
-    // 0140/0141 gehoeren zum Umbenennungsvorhaben (Block 01, CP_* -> COST_*).
-    // Je Block kommen zwei dazu: die ALTER-Anweisungen und die SQL-Objekte, die
-    // ALTER nicht anfasst. Auf der Produktionsdatenbank sind sie bereits
+    //
+    // 0140/0141 gehoeren zum Umbenennungsvorhaben (Block 01, CP_* -> COST_*).
+    // Je Block kommen zwei dazu: die ALTER-Anweisungen und die SQL-Objekte, die
+    // ALTER nicht anfasst. Auf der Produktionsdatenbank sind sie bereits
     // vermerkt; eine frisch aufgebaute Datenbank braucht sie.
     //
     // 0076, 0095, 0133, 0134, 0135 standen faelschlich in der Baseline: dort
@@ -145,6 +145,11 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0168 gibt PROJECT_TYPE die Stapel-Kennung (kombinierter Projektimport).
     // 0165 ergaenzt Geburtstag, Notiz und Vorgesetzter am Mitarbeiter und die
     // Stapel-Kennung auf den vier Nebentabellen des Mitarbeiter-Imports.
+    // 0169-0172 ruesten den Belegimport aus: Kennung des Vorsystems auf den
+    // Belegtabellen, Stapel-Kennung auf INVOICE_DEDUCTION und SE_RELEASE
+    // (ohne sie ist die Abzugskette nicht zuruecknehmbar), das Anheben des
+    // Nummernkreis-Zaehlers, und die Belegart fuer bereits importierte
+    // Rechnungen, die bisher ohne Typ dastanden.
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -182,6 +187,10 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0166_kostensatz_rechte_benennen.sql",
       "0167_legacy_ref.sql",
       "0168_project_type_import_batch.sql",
+      "0169_beleg_legacy_ref.sql",
+      "0170_beleg_import_batch.sql",
+      "0171_bump_document_number_range.sql",
+      "0172_invoice_type_backfill.sql",
     ]);
   });
 

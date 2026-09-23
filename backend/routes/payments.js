@@ -1,5 +1,6 @@
 const express = require("express");
 const { insertProgressSnapshot } = require("../services/projectProgress");
+const { neuSummierenPayed } = require("../services/paymentAggregates");
 const { requirePermission } = require("../middleware/permissions");
 
 // Payment routes
@@ -35,36 +36,6 @@ module.exports = (supabase) => {
     if (error) return 0;
     const p = toNum(data?.VAT_PERCENT);
     return Number.isFinite(p) ? p : 0;
-  }
-
-  // Re-aggregate PROJECT_STRUCTURE upward from a given node's parent
-  async function propagatePayedUpwards(structureId) {
-    const { data: node } = await supabase
-      .from("PROJECT_STRUCTURE")
-      .select("FATHER_ID")
-      .eq("ID", structureId)
-      .maybeSingle();
-    if (!node || node.FATHER_ID == null) return;
-    const parentId = String(node.FATHER_ID);
-
-    const { data: siblings } = await supabase
-      .from("PROJECT_STRUCTURE")
-      .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, ADVANCE_INVOICED, INVOICED, PAYED")
-      .eq("FATHER_ID", parentId);
-    if (siblings && siblings.length > 0) {
-      const s = (f) => siblings.reduce((acc, c) => acc + Number(c[f] ?? 0), 0);
-      await supabase.from("PROJECT_STRUCTURE").update({
-        REVENUE:                   s("REVENUE"),
-        EXTRAS:                    s("EXTRAS"),
-        COSTS:                     s("COSTS"),
-        REVENUE_COMPLETION:        s("REVENUE_COMPLETION"),
-        EXTRAS_COMPLETION:         s("EXTRAS_COMPLETION"),
-        ADVANCE_INVOICED:          s("ADVANCE_INVOICED"),
-        INVOICED:                  s("INVOICED"),
-        PAYED:                     s("PAYED"),
-      }).eq("ID", parentId);
-    }
-    await propagatePayedUpwards(parentId);
   }
 
   // GET /api/payments?invoice_id=X  or  ?advance_invoice_id=X
@@ -237,6 +208,10 @@ module.exports = (supabase) => {
           if (psInsErr) {
             console.error("[PAYMENT][PAYMENT_STRUCTURE]", psInsErr.message);
           } else {
+            // Erst die Knotenwerte, dann der Schnappschuss — der Schnappschuss
+            // soll den Stand festhalten, der danach auch in der Struktur steht.
+            await neuSummierenPayed(supabase, payStructRows.map((r) => r.STRUCTURE_ID));
+
             const payProgressRows = payStructRows.map((r) => ({
               TENANT_ID:    req.tenantId ?? null,
               STRUCTURE_ID: r.STRUCTURE_ID,
@@ -304,18 +279,8 @@ module.exports = (supabase) => {
       await supabase.from("PROJECT").update({ PAYED: newProjectPayed }).eq("ID", payment.PROJECT_ID);
 
       // 5. Re-sum PROJECT_STRUCTURE.PAYED per affected leaf, then propagate upward
-      const uniqueStructureIds = [...new Set(structureRows.map(r => String(r.STRUCTURE_ID)))];
-      for (const sid of uniqueStructureIds) {
-        const { data: sPayments } = await supabase
-          .from("PAYMENT_STRUCTURE")
-          .select("AMOUNT_PAYED_NET")
-          .eq("STRUCTURE_ID", sid);
-        const newPayed = round2(
-          (sPayments || []).reduce((s, r) => s + (Number.isFinite(toNum(r.AMOUNT_PAYED_NET)) ? toNum(r.AMOUNT_PAYED_NET) : 0), 0)
-        );
-        await supabase.from("PROJECT_STRUCTURE").update({ PAYED: newPayed }).eq("ID", sid);
-        await propagatePayedUpwards(sid);
-      }
+      //    (derselbe Weg wie beim Anlegen — eine Definition, nicht zwei)
+      await neuSummierenPayed(supabase, structureRows.map((r) => r.STRUCTURE_ID));
 
       // 6. Insert PROJECT_PROGRESS reversal rows with carry-forward
       if (structureRows.length > 0) {
