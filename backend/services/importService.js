@@ -3867,7 +3867,9 @@ const DOMAINS = {
     buildEntry: buildOpenItemEntry,
     finalizeRows: finalizeOpenItemRows,
     commitRows: commitOpenItemRows,
-    rollbackExecute: rollbackOpeningBalance,   // reversiert Belege + Zahlungen des Stapels
+    // Neurechnung statt Mindern, und Sperren, die auf die Belege des Stapels
+    // zeigen statt auf das Projekt — siehe services/importBelege.js.
+    rollbackExecute: belegeSvc.rollbackBelegImport,
   },
   opening_cost: {
     key: "opening_cost",

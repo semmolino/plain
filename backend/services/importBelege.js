@@ -491,8 +491,248 @@ async function setzeAggregate(supabase, { tenantId, gebaut }) {
   return { knoten: snapshots.length, projekte: projectIds.length };
 }
 
+// ---------------------------------------------------------------------------
+// Ruecksetzen
+// ---------------------------------------------------------------------------
+
+const geld = (n) => `${fmt2(n).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €`;
+
+/**
+ * Was spricht dagegen, diesen Stapel zurueckzunehmen?
+ *
+ * Geprueft wird der BEZUG AUF DIE BELEGE DES STAPELS, nicht die Koexistenz am
+ * selben Projekt. Der alte Blocker ("am Projekt haengt irgendein fremder
+ * gebuchter Beleg") ist bei mehrjaehriger Historie nach der ersten echten
+ * Rechnung dauerhaft aktiv — der Rollback waere damit genau dann tot, wenn man
+ * ihn braucht. Noetig war er nur, weil die Aggregate gemindert statt neu
+ * gerechnet wurden; die Neurechnung zaehlt Fremdbelege von selbst mit.
+ *
+ * Jede Meldung nennt Belegnummer und Betrag: "auf RE-2024-0117 (12.400 €) ist
+ * eine Zahlung eingegangen" ist handlungsfaehig, "3 Rechnung(en)" nicht.
+ */
+async function rollbackBlocker(supabase, { tenantId, batchId, belege }) {
+  const invIds = belege.filter((b) => b.kind === "invoice").map((b) => b.id);
+  const advIds = belege.filter((b) => b.kind === "advance").map((b) => b.id);
+  const nummerVon = new Map(belege.map((b) => [`${b.kind}|${b.id}`, b]));
+  const gruende = [];
+
+  // 1. Echte Zahlung auf einem importierten Beleg — Geld, das NACH dem Import
+  //    eingegangen ist. Loeschen waere Datenverlust.
+  for (const [spalte, ids, kind] of [["INVOICE_ID", invIds, "invoice"], ["ADVANCE_INVOICE_ID", advIds, "advance"]]) {
+    for (const teil of stapeln(ids, IN_CHUNK)) {
+      if (!teil.length) continue;
+      const { data } = await supabase.from("PAYMENT")
+        .select(`ID, ${spalte}, AMOUNT_PAYED_NET, PAYMENT_DATE, IMPORT_BATCH_ID`)
+        .eq("TENANT_ID", tenantId).in(spalte, teil);
+      for (const z of data || []) {
+        if (z.IMPORT_BATCH_ID === batchId) continue;   // aus diesem Stapel: geht mit
+        const b = nummerVon.get(`${kind}|${z[spalte]}`);
+        gruende.push(`auf ${b?.nummer ?? "einem Beleg"} (${geld(b?.betrag)}) ist am ${z.PAYMENT_DATE || "unbekannt"} eine Zahlung über ${geld(z.AMOUNT_PAYED_NET)} eingegangen`);
+      }
+    }
+  }
+
+  // 2. Mahnung — sie bezieht sich auf eine Forderung, die es danach nicht mehr
+  //    gaebe.
+  for (const [spalte, ids, kind] of [["INVOICE_ID", invIds, "invoice"], ["PP_ID", advIds, "advance"]]) {
+    for (const teil of stapeln(ids, IN_CHUNK)) {
+      if (!teil.length) continue;
+      const { data, error } = await supabase.from("MAHNUNG")
+        .select(`ID, ${spalte}`).eq("TENANT_ID", tenantId).in(spalte, teil);
+      if (error) continue;   // Tabelle fehlt im Mandanten: kein Hindernis
+      for (const z of data || []) {
+        const b = nummerVon.get(`${kind}|${z[spalte]}`);
+        gruende.push(`zu ${b?.nummer ?? "einem Beleg"} (${geld(b?.betrag)}) wurde bereits gemahnt`);
+      }
+    }
+  }
+
+  // 3. Ein Storno von ausserhalb, der auf einen Beleg dieses Stapels zeigt —
+  //    er haenge sonst in der Luft.
+  for (const [tabelle, spalte, ids, kind] of [
+    ["INVOICE", "CANCELS_INVOICE_ID", invIds, "invoice"],
+    ["ADVANCE_INVOICE", "CANCELS_ADVANCE_INVOICE_ID", advIds, "advance"],
+  ]) {
+    for (const teil of stapeln(ids, IN_CHUNK)) {
+      if (!teil.length) continue;
+      const { data } = await supabase.from(tabelle)
+        .select(`ID, ${spalte}, IMPORT_BATCH_ID`).eq("TENANT_ID", tenantId).in(spalte, teil);
+      for (const z of data || []) {
+        if (z.IMPORT_BATCH_ID === batchId) continue;
+        const b = nummerVon.get(`${kind}|${z[spalte]}`);
+        gruende.push(`${b?.nummer ?? "ein Beleg"} (${geld(b?.betrag)}) wurde inzwischen storniert`);
+      }
+    }
+  }
+
+  // 4. Eine Schlussrechnung von ausserhalb hat einen importierten Abschlag
+  //    angerechnet.
+  for (const teil of stapeln(advIds, IN_CHUNK)) {
+    if (!teil.length) continue;
+    const { data } = await supabase.from("INVOICE_DEDUCTION")
+      .select("INVOICE_ID, ADVANCE_INVOICE_ID, IMPORT_BATCH_ID").eq("TENANT_ID", tenantId).in("ADVANCE_INVOICE_ID", teil);
+    for (const z of data || []) {
+      if (z.IMPORT_BATCH_ID === batchId) continue;
+      const b = nummerVon.get(`advance|${z.ADVANCE_INVOICE_ID}`);
+      gruende.push(`der Abschlag ${b?.nummer ?? ""} (${geld(b?.betrag)}) ist von einer Schlussrechnung angerechnet`);
+    }
+  }
+
+  return gruende;
+}
+
+/**
+ * Den Stapel zuruecknehmen.
+ *
+ * Die Aggregate werden NEU GERECHNET, nicht gemindert. Mindern traegt die
+ * unausgesprochene Annahme, dass zwischen Import und Ruecknahme niemand sonst
+ * diese Spalte angefasst hat — bei einem Onboarding-Import, der Wochen im
+ * System steht, traegt sie nicht. Und wenn sie bricht, bricht sie still.
+ */
+async function rollbackBelegImport({ supabase, tenantId, batchId }) {
+  // ── Bestand des Stapels einsammeln ──────────────────────────────────────
+  const belege = [];
+  for (const [tabelle, kind, nrSpalte] of [
+    ["ADVANCE_INVOICE", "advance", "ADVANCE_INVOICE_NUMBER"],
+    ["INVOICE", "invoice", "INVOICE_NUMBER"],
+  ]) {
+    const { data } = await supabase.from(tabelle)
+      .select(`ID, ${nrSpalte}, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, CANCELS_INVOICE_ID, CANCELS_ADVANCE_INVOICE_ID`)
+      .eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+    for (const r of data || []) {
+      belege.push({
+        kind, id: r.ID, nummer: r[nrSpalte], projectId: r.PROJECT_ID, contractId: r.CONTRACT_ID,
+        betrag: num(r.TOTAL_AMOUNT_NET),
+        storniert: r.CANCELS_INVOICE_ID ?? r.CANCELS_ADVANCE_INVOICE_ID ?? null,
+      });
+    }
+  }
+  if (!belege.length) return { deleted: 0 };
+
+  const gruende = await rollbackBlocker(supabase, { tenantId, batchId, belege });
+  if (gruende.length) {
+    const zeigen = gruende.slice(0, 5);
+    const rest = gruende.length - zeigen.length;
+    throw {
+      status: 409,
+      message: `Zurücksetzen nicht möglich — ${zeigen.join("; ")}${rest > 0 ? ` (und ${rest} weitere)` : ""}.`,
+    };
+  }
+
+  // ── Zuwachs dieses Stapels je Knoten merken, VOR dem Loeschen ───────────
+  // Danach ist er nicht mehr ermittelbar, und ohne ihn traegt der letzte
+  // Fortschritts-Schnappschuss die importierten Betraege fuer immer weiter.
+  const zuwachs = new Map();
+  const merken = async (tabelle, spalte, feld) => {
+    const { data } = await supabase.from(tabelle)
+      .select(`STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET, AMOUNT_PAYED_NET`)
+      .eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+    for (const z of data || []) {
+      const k = String(z.STRUCTURE_ID);
+      if (!zuwachs.has(k)) zuwachs.set(k, { id: z.STRUCTURE_ID, INVOICED: 0, ADVANCE_INVOICED: 0, PAYED: 0 });
+      const w = zuwachs.get(k);
+      w[feld] = fmt2(w[feld] + (feld === "PAYED"
+        ? num(z.AMOUNT_PAYED_NET)
+        : num(z.AMOUNT_NET) + num(z.AMOUNT_EXTRAS_NET)));
+    }
+  };
+  await merken("INVOICE_STRUCTURE", "INVOICE_ID", "INVOICED");
+  await merken("ADVANCE_INVOICE_STRUCTURE", "ADVANCE_INVOICE_ID", "ADVANCE_INVOICED");
+  await merken("PAYMENT_STRUCTURE", "PAYMENT_ID", "PAYED");
+
+  // ── Referenzen loesen ───────────────────────────────────────────────────
+  // Sie tragen selbst keine Stapel-Kennung, zeigen aber auf Belege des
+  // Stapels — ueber deren Kennungen sind sie trotzdem auffindbar.
+  const invIds = belege.filter((b) => b.kind === "invoice").map((b) => b.id);
+  for (const teil of stapeln(invIds, IN_CHUNK)) {
+    if (!teil.length) continue;
+    await supabase.from("PROJECT_STRUCTURE").update({ CLOSED_BY_INVOICE_ID: null }).in("CLOSED_BY_INVOICE_ID", teil).eq("TENANT_ID", tenantId);
+    await supabase.from("ADVANCE_INVOICE").update({ SE_RELEASED_BY_INVOICE_ID: null }).in("SE_RELEASED_BY_INVOICE_ID", teil).eq("TENANT_ID", tenantId);
+  }
+
+  // Ein Original, das ein Storno DIESES Stapels auf Status 3 gesetzt hat, muss
+  // zurueck auf 2 — sonst bleibt es fuer immer als storniert stehen, obwohl
+  // sein Storno verschwindet.
+  for (const b of belege.filter((x) => x.storniert != null)) {
+    const tabelle = b.kind === "invoice" ? "INVOICE" : "ADVANCE_INVOICE";
+    await supabase.from(tabelle).update({ STATUS_ID: 2, CANCELLATION_DATE: null })
+      .eq("ID", b.storniert).eq("TENANT_ID", tenantId);
+  }
+
+  // ── Loeschen, in Fremdschluessel-Reihenfolge ────────────────────────────
+  let deleted = 0;
+  for (const tabelle of [
+    "PAYMENT_STRUCTURE", "PAYMENT", "SE_RELEASE", "INVOICE_DEDUCTION",
+    "INVOICE_STRUCTURE", "ADVANCE_INVOICE_STRUCTURE",
+    "INVOICE", "ADVANCE_INVOICE", "PROJECT_PROGRESS",
+  ]) {
+    const { data, error } = await supabase.from(tabelle).delete()
+      .eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId).select("ID");
+    if (error) {
+      if (/relation .* does not exist|column .* does not exist/i.test(error.message || "")) continue;
+      throw { status: 500, message: `${tabelle} konnte nicht geleert werden: ${error.message}` };
+    }
+    deleted += (data || []).length;
+  }
+
+  // ── Aggregate NEU rechnen ───────────────────────────────────────────────
+  const contractIds = [...new Set(belege.map((b) => b.contractId).filter((x) => x != null))];
+  const projectIds = [...new Set(belege.map((b) => b.projectId).filter((x) => x != null))];
+
+  const r = await recomputeBilledByStructure(supabase, { contractIds });
+  if (!r.ok) {
+    throw { status: 500, message: "Die Belege sind entfernt, die Summen konnten aber nicht nachgerechnet werden. Bitte den Support verständigen." };
+  }
+  for (const [k, w] of zuwachs) {
+    await supabase.from("PROJECT_STRUCTURE").update({
+      INVOICED:         fmt2(r.invoiced.get(k) || 0),
+      ADVANCE_INVOICED: fmt2(r.partial.get(k) || 0),
+    }).eq("ID", w.id).eq("TENANT_ID", tenantId);
+  }
+
+  // Bezahlt je Knoten aus dem, was noch steht.
+  for (const [k, w] of zuwachs) {
+    const { data } = await supabase.from("PAYMENT_STRUCTURE").select("AMOUNT_PAYED_NET").eq("STRUCTURE_ID", w.id);
+    await supabase.from("PROJECT_STRUCTURE")
+      .update({ PAYED: fmt2((data || []).reduce((a, z) => a + num(z.AMOUNT_PAYED_NET), 0)) })
+      .eq("ID", w.id).eq("TENANT_ID", tenantId);
+  }
+
+  for (const pid of projectIds) {
+    const [inv, adv, zahl] = await Promise.all([
+      supabase.from("INVOICE").select("TOTAL_AMOUNT_NET").eq("PROJECT_ID", pid).eq("TENANT_ID", tenantId).in("STATUS_ID", [2, 3]),
+      supabase.from("ADVANCE_INVOICE").select("TOTAL_AMOUNT_NET").eq("PROJECT_ID", pid).eq("TENANT_ID", tenantId).in("STATUS_ID", [2, 3]),
+      supabase.from("PAYMENT").select("AMOUNT_PAYED_NET").eq("PROJECT_ID", pid).eq("TENANT_ID", tenantId),
+    ]);
+    await supabase.from("PROJECT").update({
+      INVOICED:         fmt2((inv.data || []).reduce((a, x) => a + num(x.TOTAL_AMOUNT_NET), 0)),
+      ADVANCE_INVOICED: fmt2((adv.data || []).reduce((a, x) => a + num(x.TOTAL_AMOUNT_NET), 0)),
+      PAYED:            fmt2((zahl.data || []).reduce((a, x) => a + num(x.AMOUNT_PAYED_NET), 0)),
+    }).eq("ID", pid).eq("TENANT_ID", tenantId);
+  }
+
+  // ── Gegen-Schnappschuss ─────────────────────────────────────────────────
+  // Die Schnappschuesse des Stapels sind geloescht, aber jeder SPAETERE traegt
+  // die importierten Betraege bereits weitergetragen in sich. Ohne diese
+  // Gegenbuchung bliebe die Zeitreihe dauerhaft zu hoch.
+  const gegen = [...zuwachs.values()].map((w) => ({
+    TENANT_ID: tenantId, STRUCTURE_ID: w.id,
+    INVOICED: fmt2(-w.INVOICED), ADVANCE_INVOICED: fmt2(-w.ADVANCE_INVOICED), PAYED: fmt2(-w.PAYED),
+  }));
+  if (gegen.length) {
+    const { error } = (await insertProgressSnapshot(supabase, gegen)) || {};
+    // Ein Fehler hier darf den Rollback nicht kippen — die Belege sind weg.
+    // Er gehoert aber ins Ergebnis und nicht ins Protokoll: sonst ist die
+    // Zeitreihe still falsch. Genau das war der Befund am alten Weg.
+    if (error) return { deleted, hinweis: `Die Zeitreihe konnte nicht bereinigt werden: ${error.message}` };
+  }
+
+  return { deleted, knoten: zuwachs.size, projekte: projectIds.length };
+}
+
 module.exports = {
   einfuegen, ladeStammdaten, vatIdZuSatz, schreibeBelege, schreibeZahlungen, setzeAggregate,
+  rollbackBelegImport, rollbackBlocker,
   bumpNumberRanges,
   CHUNK, IN_CHUNK, fmt2, num, stapeln,
 };

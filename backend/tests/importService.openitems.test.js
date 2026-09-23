@@ -634,3 +634,105 @@ describe("Gebündelt schreiben", () => {
     expect(knoten.ADVANCE_INVOICED).toBe(22000);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Zurücksetzen (09/2026)
+//
+// Die Aggregate werden NEU GERECHNET, nicht gemindert. Mindern trägt die
+// unausgesprochene Annahme, dass zwischen Import und Rücknahme niemand sonst
+// diese Spalte angefasst hat — bei einem Onboarding-Import, der Wochen im
+// System steht, trägt sie nicht. Und wenn sie bricht, bricht sie still.
+//
+// Daraus folgt direkt der Wegfall des groben Blockers: ein fremder Beleg am
+// selben Projekt ist kein Hindernis mehr, weil die Neurechnung ihn mitzählt.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("Zurücksetzen", () => {
+  const ein = (nr, betrag, pos = "LP5") =>
+    row("P-1", nr, "Abschlag", "15.11.2025", "15.12.2025", pos, betrag, "19");
+
+  /** Ein Beleg, der NICHT aus dem Import stammt — mit Positionen am Knoten 42. */
+  const fremderBeleg = (sb, betrag) => {
+    sb._tables.INVOICE.push({ ID: 9001, TENANT_ID: TENANT, PROJECT_ID: 1, CONTRACT_ID: 31, STATUS_ID: 2,
+      INVOICE_NUMBER: "RE-ALT-1", TOTAL_AMOUNT_NET: betrag, IMPORT_BATCH_ID: null });
+    sb._tables.INVOICE_STRUCTURE.push({ ID: 9101, TENANT_ID: TENANT, INVOICE_ID: 9001,
+      STRUCTURE_ID: 42, AMOUNT_NET: betrag, AMOUNT_EXTRAS_NET: 0, IMPORT_BATCH_ID: null });
+  };
+
+  const knoten = (sb) => sb._tables.PROJECT_STRUCTURE.find((s) => s.ID === 42);
+
+  // Der wichtigste Fall: nicht 0, nicht die Summe — der Vorwert.
+  it("stellt die Aggregate auf den Stand vor dem Import", async () => {
+    const supabase = seed();
+    fremderBeleg(supabase, 5000);
+
+    const { batchId } = await runCommit(await xlsxBuffer([HEAD, ein("AR-1", "3000")]), supabase);
+    expect(knoten(supabase).ADVANCE_INVOICED).toBe(3300);   // 3000 + 10 % NK
+
+    await rollback({ batchId, supabase, tenantId: TENANT });
+
+    expect(knoten(supabase).ADVANCE_INVOICED).toBe(0);
+    expect(knoten(supabase).INVOICED).toBe(5000);           // der Fremdbeleg bleibt stehen
+  });
+
+  // Gegenprobe zum früheren Verhalten: das war der Blocker, der bei
+  // mehrjähriger Historie jedes Zurücksetzen verhindert hat.
+  it("blockiert NICHT mehr wegen eines fremden Belegs am selben Projekt", async () => {
+    const supabase = seed();
+    fremderBeleg(supabase, 5000);
+
+    const { batchId } = await runCommit(await xlsxBuffer([HEAD, ein("AR-1", "3000")]), supabase);
+    await expect(rollback({ batchId, supabase, tenantId: TENANT })).resolves.toBeTruthy();
+  });
+
+  it("blockiert bei einer Zahlung, die nach dem Import eingegangen ist", async () => {
+    const supabase = seed();
+    const { batchId } = await runCommit(await xlsxBuffer([HEAD, ein("AR-1", "3000")]), supabase);
+
+    const beleg = supabase._tables.ADVANCE_INVOICE.find((r) => r.ADVANCE_INVOICE_NUMBER === "AR-1");
+    supabase._tables.PAYMENT.push({ ID: 8001, TENANT_ID: TENANT, ADVANCE_INVOICE_ID: beleg.ID,
+      PROJECT_ID: 1, AMOUNT_PAYED_NET: 3300, PAYMENT_DATE: "2026-02-03", IMPORT_BATCH_ID: null });
+
+    await expect(rollback({ batchId, supabase, tenantId: TENANT })).rejects.toMatchObject({ status: 409 });
+    // Die Meldung muss handlungsfähig sein: Belegnummer und Betrag, nicht „3×".
+    await rollback({ batchId, supabase, tenantId: TENANT }).catch((e) => {
+      expect(e.message).toContain("AR-1");
+      expect(e.message).toContain("3.300,00");
+    });
+  });
+
+  it("nimmt ein Storno-Paar zurück und stellt das Original wieder her", async () => {
+    const supabase = seed();
+    const HEAD_S = [...HEAD, "Storniert Beleg"];
+    const rowS = (...c) => { const r = [...c]; while (r.length < HEAD_S.length) r.push(""); return r; };
+    const { batchId } = await runCommit(await xlsxBuffer([
+      HEAD_S,
+      rowS("P-1", "AR-1", "Abschlag", "15.11.2025", "15.12.2025", "LP5", "3000", "19"),
+      rowS("P-1", "S-AR-1", "Storno", "20.12.2025", "", "LP5", "3000", "19", "", "", "", "AR-1"),
+    ]), supabase);
+
+    const original = supabase._tables.ADVANCE_INVOICE.find((r) => r.ADVANCE_INVOICE_NUMBER === "AR-1");
+    expect(original.STATUS_ID).toBe(3);
+
+    await rollback({ batchId, supabase, tenantId: TENANT });
+
+    // Beide Belege sind weg — und es bleibt kein Original als „storniert" zurück.
+    expect(supabase._tables.ADVANCE_INVOICE.filter((r) => r.IMPORT_BATCH_ID === batchId)).toHaveLength(0);
+    expect(knoten(supabase).ADVANCE_INVOICED).toBe(0);
+  });
+
+  it("löst CLOSED_BY_INVOICE_ID wieder", async () => {
+    const supabase = seed();
+    const HEAD_C = [...HEAD, "Schließt Positionen ab"];
+    const rowC = (...c) => { const r = [...c]; while (r.length < HEAD_C.length) r.push(""); return r; };
+    const { batchId } = await runCommit(await xlsxBuffer([
+      HEAD_C,
+      rowC("P-1", "SR-1", "Schlussrechnung", "01.12.2025", "31.12.2025", "LP5", "20000", "19", "", "", "", "ja"),
+    ]), supabase);
+
+    expect(knoten(supabase).CLOSED_BY_INVOICE_ID).toBeTruthy();
+    await rollback({ batchId, supabase, tenantId: TENANT });
+    // Sonst hält der Schlussrechnungs-Assistent den Knoten für abgeschlossen,
+    // obwohl die Rechnung nicht mehr existiert.
+    expect(knoten(supabase).CLOSED_BY_INVOICE_ID).toBeNull();
+  });
+});
