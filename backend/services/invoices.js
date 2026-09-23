@@ -9,6 +9,7 @@ const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
 const { belegSummen } = require("./belegRechnung");
+const { belegSnapshot } = require("./belegSnapshot");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -665,57 +666,23 @@ async function initInvoice(supabase, { companyId, employeeId, projectId, contrac
   if (contactErr || !invoiceContact) throw { status: 500, message: "Rechnungskontakt konnte nicht geladen werden" };
   const contactSalutation = await getSalutationText(supabase, invoiceContact.SALUTATION_ID);
 
-  const insertRow = {
-    COMPANY_ID: resolvedCompanyId,
-    EMPLOYEE_ID: employeeId,
-    PROJECT_ID: projectId,
-    CONTRACT_ID: contractId,
-    CURRENCY_ID: contractRow.CURRENCY_ID ?? null,
-    VAT_ID: effectiveVatId,
-    VAT_PERCENT: contractVatPercent,
-    STATUS_ID: 1,
-    COMPANY_NAME_1: company.COMPANY_NAME_1 ?? null,
-    COMPANY_NAME_2: company.COMPANY_NAME_2 ?? null,
-    COMPANY_STREET: company.STREET ?? null,
-    COMPANY_POST_CODE: company.POST_CODE ?? null,
-    COMPANY_CITY: company.CITY ?? null,
-    COMPANY_COUNTRY: companyCountryLong,
-    COMPANY_POST_OFFICE_BOX: company.POST_OFFICE_BOX ?? null,
-    COMPANY_BIC: company.BIC ?? null,
-    "COMPANY_TAX-ID": company["TAX-ID"] ?? null,
-    COMPANY_TAX_NUMBER: company.TAX_NUMBER ?? null,
-    COMPANY_IBAN: company.IBAN ?? null,
-    "COMPANY_CREDITOR-ID": company["CREDITOR-ID"] ?? null,
-    EMPLOYEE: `${employee.ABBR ?? ""}: ${(employee.FIRST_NAME ?? "").trim()} ${(employee.LAST_NAME ?? "").trim()}`.trim(),
-    EMPLOYEE_SALUTATION: employeeSalutation,
-    EMPLOYEE_MAIL: employee.MAIL ?? null,
-    EMPLOYEE_PHONE: employee.MOBILE ?? null,
-    INVOICE_ADDRESS_ID: invoiceAddressId,
-    ADDRESS_NAME_1: invoiceAddress.ADDRESS_NAME_1 ?? null,
-    ADDRESS_NAME_2: invoiceAddress.ADDRESS_NAME_2 ?? null,
-    ADDRESS_STREET: invoiceAddress.STREET ?? null,
-    ADDRESS_POST_CODE: invoiceAddress.POST_CODE ?? null,
-    ADDRESS_CITY: invoiceAddress.CITY ?? null,
-    ADDRESS_COUNTRY: addressCountryShort,
-    ADDRESS_POST_OFFICE_BOX: invoiceAddress.POST_OFFICE_BOX ?? null,
-    ADDRESS_DEBITOR_NUMBER: invoiceAddress.CUSTOMER_NUMBER ?? null,
-    BUYER_REFERENCE: invoiceAddress.BUYER_REFERENCE ?? null,
-    ADDRESS_REFERENCE_NUMBER: invoiceAddress.BUYER_REFERENCE ?? null,
-    INVOICE_CONTACT_ID: invoiceContactId,
-    CONTACT: `${(invoiceContact.FIRST_NAME ?? "").trim()} ${(invoiceContact.LAST_NAME ?? "").trim()}`.trim(),
-    CONTACT_SALUTATION: contactSalutation,
-    CONTACT_MAIL: invoiceContact.EMAIL ?? null,
-    CONTACT_PHONE: invoiceContact.MOBILE ?? null,
-    TENANT_ID: tenantId,
-    INVOICE_TYPE: invoiceType,
-    // E-Rechnung Branch 2 — VAT-Category vom Vertrag uebernehmen
-    VAT_CATEGORY:              contractRow.VAT_CATEGORY              ?? 'S',
-    VAT_EXEMPTION_REASON_CODE: contractRow.VAT_EXEMPTION_REASON_CODE ?? null,
-    VAT_EXEMPTION_REASON_TEXT: contractRow.VAT_EXEMPTION_REASON_TEXT ?? null,
+  // Der Abzug selbst steht in services/belegSnapshot.js — dieselbe Funktion
+  // benutzt der gebuendelte Belegimport. Zwei Definitionen desselben
+  // Stammdaten-Abzugs wuerden auseinanderlaufen, ohne dass es jemand merkt.
+  const insertRow = belegSnapshot({
+    kind: "invoice",
+    tenantId, projectId, contractId, invoiceType,
+    companyId: resolvedCompanyId, employeeId,
+    company, companyCountryLong,
+    employee, employeeSalutation,
+    contract: contractRow,
+    address: invoiceAddress, addressCountryShort, addressId: invoiceAddressId,
+    contact: invoiceContact, contactSalutation, contactId: invoiceContactId,
+    vatId: effectiveVatId, vatPercent: contractVatPercent,
     // Zahlungsart aus den Vorbelegungen; ungepflegt bleibt leer (siehe
     // services/paymentMeans.js).
-    PAYMENT_MEANS_ID: await defaultPaymentMeansId(supabase, tenantId),
-  };
+    paymentMeansId: await defaultPaymentMeansId(supabase, tenantId),
+  });
 
   const { data: created, error: insertErr } = await supabase
     .from("INVOICE")
