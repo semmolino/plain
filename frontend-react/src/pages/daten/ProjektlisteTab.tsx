@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
+import { ApiRequestError } from '@/api/client'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
 import { SlidersHorizontal } from 'lucide-react'
@@ -530,13 +531,14 @@ export function ProjektlisteTab() {
     }
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['project-list', filter],
     queryFn:  () => fetchProjectList(filter),
     enabled:  filterReady,
   })
 
   const allRows = data?.data ?? []
+  const meta    = data?.meta
 
   // Unique values for each filter dimension
   const filterOptions: Record<FilterDimension, string[]> = useMemo(() => {
@@ -771,8 +773,34 @@ export function ProjektlisteTab() {
         </>
       )}
 
+      {/* Leer ist nicht gleich leer. Vorher stand hier in allen vier Fällen
+          „Keine Projekte vorhanden" — auch wenn die Anfrage gescheitert war
+          oder der Mandant hunderte Projekte hat, die dieser Nutzer nur nicht
+          sehen darf. Eine Auswertung, die schweigt statt zu sagen warum,
+          schickt den Nutzer auf die Suche nach einem Fehler, den es nicht
+          gibt. */}
       {!isLoading && filterReady && allRows.length === 0 && (
-        <p className="empty-note">Keine Projekte vorhanden.</p>
+        error ? (
+          <p className="empty-note">
+            Die Auswertung konnte nicht geladen werden
+            {error instanceof ApiRequestError ? ` (${error.status}: ${error.message})` : ''}.
+            Bitte erneut versuchen — bleibt es dabei, hilft der Support weiter.
+          </p>
+        ) : meta?.scope && meta.total > 0 ? (
+          <p className="empty-note">
+            {meta.scope === 'license'
+              ? <>Dieser Mandant führt {meta.total} Projekte. Der Tarif enthält keine
+                  mandantenweite Auswertung, deshalb siehst du hier nur Projekte, in denen
+                  du selbst Projektleiter bist — derzeit keines.</>
+              : <>Dieser Mandant führt {meta.total} Projekte. Deine Rolle erlaubt die
+                  Auswertung nur für eigene Projekte (Recht „Reporting: alle Projekte"),
+                  und du bist in keinem davon als Projektleiter eingetragen.</>}
+          </p>
+        ) : (
+          <p className="empty-note">
+            Noch keine Projekte — sobald welche angelegt sind, erscheint hier die Auswertung.
+          </p>
+        )
       )}
 
       {!isLoading && !filterReady && (
