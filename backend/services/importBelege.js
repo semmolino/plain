@@ -607,9 +607,16 @@ async function rollbackBelegImport({ supabase, tenantId, batchId }) {
       });
     }
   }
-  if (!belege.length) return { deleted: 0 };
+  // Ein Stapel kann auch NUR Zahlungen enthalten (Domaene "Zahlungseingaenge"):
+  // dann gibt es keine Belege zurueckzunehmen, wohl aber Zahlungen. Ohne diese
+  // Unterscheidung stiege der Rollback hier aus und meldete Erfolg, waehrend
+  // das Geld stehen bliebe.
+  const { data: eigeneZahlungen } = await supabase.from("PAYMENT")
+    .select("ID, PROJECT_ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  if (!belege.length && !(eigeneZahlungen || []).length) return { deleted: 0 };
 
-  const gruende = await rollbackBlocker(supabase, { tenantId, batchId, belege });
+  // An einer Zahlung haengt nichts — Sperren gibt es nur wegen der Belege.
+  const gruende = belege.length ? await rollbackBlocker(supabase, { tenantId, batchId, belege }) : [];
   if (gruende.length) {
     const zeigen = gruende.slice(0, 5);
     const rest = gruende.length - zeigen.length;
@@ -677,13 +684,19 @@ async function rollbackBelegImport({ supabase, tenantId, batchId }) {
 
   // ── Aggregate NEU rechnen ───────────────────────────────────────────────
   const contractIds = [...new Set(belege.map((b) => b.contractId).filter((x) => x != null))];
-  const projectIds = [...new Set(belege.map((b) => b.projectId).filter((x) => x != null))];
+  // Auch die Projekte der reinen Zahlungen, sonst bliebe deren PROJECT.PAYED stehen.
+  const projectIds = [...new Set([
+    ...belege.map((b) => b.projectId),
+    ...(eigeneZahlungen || []).map((z) => z.PROJECT_ID),
+  ].filter((x) => x != null))];
 
-  const r = await recomputeBilledByStructure(supabase, { contractIds });
+  const r = contractIds.length
+    ? await recomputeBilledByStructure(supabase, { contractIds })
+    : { ok: true, invoiced: new Map(), partial: new Map() };
   if (!r.ok) {
     throw { status: 500, message: "Die Belege sind entfernt, die Summen konnten aber nicht nachgerechnet werden. Bitte den Support verständigen." };
   }
-  for (const [k, w] of zuwachs) {
+  for (const [k, w] of (contractIds.length ? zuwachs : new Map())) {
     await supabase.from("PROJECT_STRUCTURE").update({
       INVOICED:         fmt2(r.invoiced.get(k) || 0),
       ADVANCE_INVOICED: fmt2(r.partial.get(k) || 0),

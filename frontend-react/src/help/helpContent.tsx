@@ -73,6 +73,30 @@ export const HELP = {
       </>
     ),
   },
+  'import.document_payments': {
+    title: 'Zahlungseingänge übernehmen',
+    body: (
+      <>
+        Zahlungen zu Belegen, die es in plan&amp;simple <strong>schon gibt</strong> — aus dem
+        Beleg-Import oder aus einem früheren. Diese Datei legt <strong>keine Belege an</strong>:
+        findet sie den Beleg nicht, ist das ein Fehler. Eine Zahlung ohne Forderung wäre eine
+        Behauptung über Geld.<br /><br />
+        <strong>Eine Zeile = eine Zahlung.</strong> Mehrere Teilzahlungen auf denselben Beleg sind
+        der Normalfall, und zwei gleiche Raten am selben Tag sind kein Fehler. Der Betrag ist
+        <strong> brutto</strong>; netto und Steuer rechnet plan&amp;simple aus dem Steuersatz des
+        Belegs.<br /><br />
+        <strong>Zuordnung:</strong> über die Belegnummer oder über die Kennung aus dem Altsystem.
+        Die Altsystem-Kennung ist der sichere Weg — auf Belegnummern gibt es keine erzwungene
+        Eindeutigkeit. Die Projektnummer ist reine Kontrolle: weicht sie ab, gibt es einen Hinweis,
+        aber es gilt der Beleg.<br /><br />
+        <strong>Geprüft wird die Summe je Beleg:</strong> bereits Bezahltes plus diese Datei darf
+        den Beleg nicht übersteigen. Das fängt den doppelten Import derselben Datei ebenso wie die
+        Doppelerfassung über das Feld „Bereits bezahlt" der Belegdatei.<br /><br />
+        Ein <strong>Skontoabzug</strong> wird als eigene Zahlung gebucht — sonst schließt der offene
+        Posten nie auf null und der Beleg bliebe für immer teilbezahlt stehen.
+      </>
+    ),
+  },
   'import.project_full': {
     title: 'Projekte inkl. Struktur',
     body: (

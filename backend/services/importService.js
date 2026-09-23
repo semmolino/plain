@@ -30,6 +30,7 @@ const projekteSvc = require("./projekte");
 const { belegSummen } = require("./belegRechnung");
 const { bumpNumberRanges } = require("./numberRangeBump");
 const belegeSvc = require("./importBelege");
+const zahlungenSvc = require("./importZahlungen");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 /** String-Wert sicher trimmen (null/undefined → ""). */
@@ -3721,6 +3722,127 @@ async function structureBatchBlockers({ supabase, tenantId, batchId }) {
   return blockers;
 }
 
+
+// ── Domäne: Zahlungseingänge zu vorhandenen Belegen ──────────────────────────
+// Der Belegimport kennt ein Feld "bereits bezahlt": EINE Zahlung je Beleg. Das
+// genügt für den einfachen Fall und verliert alles andere — Teilzahlungen,
+// einen zweiten Eingang, Skonto, und vor allem Zahlungen zu Belegen, die in
+// einem FRÜHEREN Stapel oder in plan&simple selbst entstanden sind.
+//
+// Der Aufbau des Belegbezugs und das Schreiben liegen in
+// services/importZahlungen.js; hier steht nur, was die Parser dieses Moduls
+// braucht.
+function buildPaymentEntry(mapped, ctx) {
+  const messages = [];
+  let ok = true;
+
+  const nummer = s(mapped.doc_number);
+  const altId = s(mapped.doc_legacy_ref);
+  let beleg = null;
+
+  if (!nummer && !altId) {
+    messages.push({ level: "error", text: "Belegnummer oder Beleg-ID im Altsystem angeben — sonst lässt sich die Zahlung nicht zuordnen" });
+    ok = false;
+  } else {
+    const ueberNummer = nummer ? ctx.docsByNumber.get(norm(nummer)) : null;
+    const ueberAltId = altId ? ctx.docsByLegacy.get(norm(altId)) : null;
+
+    if (!ueberNummer && !ueberAltId) {
+      messages.push({ level: "error", text: `Beleg „${nummer || altId}“ nicht gefunden — zuerst die Belege importieren` });
+      ok = false;
+    } else if (ueberNummer && ueberAltId && ueberNummer.id !== ueberAltId.id) {
+      messages.push({ level: "error", text: `Belegnummer „${nummer}“ und Altsystem-Kennung „${altId}“ zeigen auf verschiedene Belege` });
+      ok = false;
+    } else {
+      // Die Kennung aus dem Altsystem ist der präzisere Weg: auf Belegnummern
+      // gibt es nirgends einen Unique-Index.
+      beleg = ueberAltId || ueberNummer;
+      if (beleg.mehrdeutig) {
+        messages.push({ level: "error", text: `Die Nummer „${nummer || altId}“ gibt es mehrfach — bitte die Kennung aus dem Altsystem angeben` });
+        ok = false; beleg = null;
+      } else if (beleg.statusId !== 2) {
+        messages.push({ level: "error", text: `Beleg „${beleg.nummer}“ ist nicht gebucht — eine Zahlung darauf wäre gegenstandslos` });
+        ok = false;
+      }
+    }
+  }
+
+  // Projektnummer ist reine Kontrolle: sie soll einen Zuordnungsfehler in der
+  // Quelldatei sichtbar machen, nicht den Import aufhalten.
+  const projektRoh = s(mapped.project_number);
+  if (projektRoh && beleg) {
+    const erwartet = ctx.projektNummer.get(String(beleg.projectId));
+    if (erwartet && norm(erwartet) !== norm(projektRoh)) {
+      messages.push({ level: "warn", text: `Der Beleg gehört zu Projekt „${erwartet}“, die Datei sagt „${projektRoh}“ — es gilt der Beleg` });
+    }
+  }
+
+  const datum = parseDateISO(mapped.payment_date);
+  if (!s(mapped.payment_date)) { messages.push({ level: "error", text: "Zahlungsdatum fehlt (Pflichtfeld)" }); ok = false; }
+  else if (datum.invalid) { messages.push({ level: "error", text: "Zahlungsdatum nicht erkannt (TT.MM.JJJJ oder JJJJ-MM-TT)" }); ok = false; }
+
+  const geld = (key, label) => {
+    const roh = s(mapped[key]);
+    if (!roh) return null;
+    const p = parseAmountDE(mapped[key]);
+    if (p.invalid || p.value == null) {
+      messages.push({ level: "error", text: p.warDatum ? datumStattZahlHinweis(label, roh) : `${label} „${roh}“ ist keine gültige Zahl` });
+      ok = false; return null;
+    }
+    return p.value;
+  };
+
+  const brutto = geld("amount_gross", "Zahlbetrag");
+  if (!s(mapped.amount_gross)) { messages.push({ level: "error", text: "Zahlbetrag fehlt (Pflichtfeld)" }); ok = false; }
+  else if (brutto != null && brutto <= 0) { messages.push({ level: "error", text: "Zahlbetrag muss größer als 0 sein" }); ok = false; }
+  const skonto = geld("cash_discount_gross", "Skontoabzug");
+
+  const dbRow = {
+    beleg, datum: datum.value, brutto: brutto ?? 0, skonto: skonto ?? 0,
+    zweck: s(mapped.purpose) || null, comment: s(mapped.comment) || null,
+  };
+  const display = {
+    beleg: beleg?.nummer ?? (nummer || altId),
+    datum: s(mapped.payment_date),
+    betrag: brutto != null ? brutto.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : s(mapped.amount_gross),
+    skonto: skonto ? skonto.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : "",
+  };
+
+  // Zwei gleiche Raten am selben Tag sind real — die Dublettenprüfung laufe
+  // deshalb NICHT über die Zeile, sondern über die Summe je Beleg (unten).
+  return { ok, messages, dbRow, matchKey: `${beleg?.kind ?? "?"}|${beleg?.id ?? Math.random()}|${dbRow.datum}|${dbRow.brutto}`, display };
+}
+
+/**
+ * Was sich erst im Verbund zeigt: die Summe je Beleg.
+ *
+ * Das fängt den doppelten Import derselben Datei ebenso wie die
+ * Doppelerfassung über das Feld "bereits bezahlt" der Belegdatei — beides
+ * wäre sonst eine stille Überzahlung.
+ */
+function finalizePaymentRows(rows, ctx) {
+  const jeBeleg = new Map();
+  for (const r of rows) {
+    const b = r._dbRow?.beleg;
+    if (!b || r.status === "error") continue;
+    const key = `${b.kind}|${b.id}`;
+    if (!jeBeleg.has(key)) jeBeleg.set(key, []);
+    jeBeleg.get(key).push(r);
+  }
+
+  for (const [key, gruppe] of jeBeleg) {
+    const b = gruppe[0]._dbRow.beleg;
+    const schon = num(ctx.bezahlt.get(key));
+    const neu = gruppe.reduce((a, r) => a + num(r._dbRow.brutto) + num(r._dbRow.skonto), 0);
+    if (schon + neu > num(b.brutto) + 0.02) {
+      for (const r of gruppe) {
+        r.status = "error";
+        r.messages.push({ level: "error", text: `Beleg „${b.nummer}“: bereits ${fmt2(schon).toFixed(2)} € bezahlt, diese Datei bringt ${fmt2(neu).toFixed(2)} € — der Beleg lautet nur über ${fmt2(b.brutto).toFixed(2)} €` });
+      }
+    }
+  }
+}
+
 const DOMAINS = {
   address: {
     key: "address",
@@ -3869,6 +3991,25 @@ const DOMAINS = {
     commitRows: commitOpenItemRows,
     // Neurechnung statt Mindern, und Sperren, die auf die Belege des Stapels
     // zeigen statt auf das Projekt — siehe services/importBelege.js.
+    rollbackExecute: belegeSvc.rollbackBelegImport,
+  },
+  document_payments: {
+    key: "document_payments",
+    label: "Zahlungseingänge",
+    table: "PAYMENT",
+    matchLabel: "Beleg + Datum + Betrag",
+    fields: zahlungenSvc.PAYMENT_FIELDS,
+    // Zwei gleiche Raten am selben Tag sind real. Geprüft wird stattdessen
+    // die Summe je Beleg (finalizePaymentRows).
+    dedupeInFile: false,
+    exampleRows: [
+      { doc_number: "AR-2025-007", payment_date: "20.12.2025", amount_gross: "14875" },
+      { doc_number: "AR-2025-007", payment_date: "15.01.2026", amount_gross: "5000", purpose: "Restzahlung" },
+    ],
+    loadContext: zahlungenSvc.loadPaymentContext,
+    buildEntry: buildPaymentEntry,
+    finalizeRows: finalizePaymentRows,
+    commitRows: zahlungenSvc.commitPaymentRows,
     rollbackExecute: belegeSvc.rollbackBelegImport,
   },
   opening_cost: {
@@ -4532,6 +4673,19 @@ const TEMPLATE_HELP = {
       "Die Reihenfolge in der Datei spielt keine Rolle: ein Abschlag darf hinter seiner Schlussrechnung stehen und aus einem früheren Import stammen.",
       "Steht in „Kopfsumme netto“ ein Betrag, muss er zur Summe der Positionen passen — sonst fällt der ganze Beleg durch.",
       "Ein fehlerhafter Beleg wird als Ganzes übersprungen — eine halbe Rechnung wäre eine falsche Forderung.",
+    ],
+  },
+  document_payments: {
+    intro: "Zahlungseingänge zu Belegen, die es in plan&simple schon gibt — aus diesem Import oder aus einem früheren. Mehrere Teilzahlungen je Beleg sind der Normalfall; Skonto wird als eigene Zahlung gebucht, damit der offene Posten auf null schließt.",
+    before: [
+      "Die Belege müssen vorhanden und gebucht sein — diese Datei legt keine Belege an.",
+      "Belegnummer ODER die Kennung aus dem Altsystem je Zeile bereithalten. Die Altsystem-Kennung ist der sichere Weg: auf Belegnummern gibt es keine erzwungene Eindeutigkeit.",
+    ],
+    after: [
+      "Eine Zeile = eine Zahlung. Zwei gleiche Raten am selben Tag sind kein Fehler.",
+      "Der Betrag ist BRUTTO; netto und Steuer rechnet plan&simple aus dem Steuersatz des Belegs.",
+      "Geprüft wird die Summe je Beleg: bereits Bezahltes plus diese Datei darf den Beleg nicht übersteigen. Das fängt den doppelten Import derselben Datei.",
+      "Die Zahlung verteilt sich auf die Positionen des Belegs — nicht über die Positionen des Projekts.",
     ],
   },
   opening_cost: {

@@ -287,14 +287,25 @@ export function ImportSection() {
         {domainKey === 'open_items' && (
           <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0', display: 'flex', alignItems: 'flex-start' }}>
             <span>
-              Hinweis: Für <strong>noch offene</strong> Altbelege — je Beleg Nummer, Datum, Fälligkeit und
-              Restbetrag, damit Zahlungseingänge zuzuordnen sind und gemahnt werden kann. Eine Zeile je
-              <em> Belegposition</em>; Zeilen mit derselben Belegnummer gehören zu einem Beleg. Ohne
-              Positionsführung: eine Zeile je Beleg, Spalte „Position" leer lassen.
-              Bereits <strong>bezahlte</strong> Historie gehört nicht hierher, sondern als eine Summe je
-              Projekt unter <em>Anfangsbestände</em>.
+              Hinweis: Belege aus dem Altsystem — <strong>offene wie bezahlte</strong>, je Beleg Nummer,
+              Datum, Fälligkeit und Positionen. Eine Zeile je <em>Belegposition</em>; Zeilen mit derselben
+              Belegnummer gehören zu einem Beleg. Ohne Positionsführung: eine Zeile je Beleg, Spalte
+              „Position" leer lassen. Belegarten: Abschlag, Rechnung, Schluss- und Teilschlussrechnung,
+              Gutschrift, Storno — eine Schlussrechnung nennt ihre angerechneten Abschläge,
+              ein Storno seinen Bezugsbeleg. Die Reihenfolge in der Datei spielt keine Rolle.
             </span>
             <HelpHint id="import.open_items" />
+          </p>
+        )}
+        {domainKey === 'document_payments' && (
+          <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '10px 0 0', display: 'flex', alignItems: 'flex-start' }}>
+            <span>
+              Hinweis: Zahlungen zu Belegen, die es <strong>schon gibt</strong>. Diese Datei legt keine
+              Belege an — zuerst die Belege importieren. Eine Zeile je Zahlung; mehrere Teilzahlungen auf
+              denselben Beleg sind der Normalfall. Der Betrag ist <strong>brutto</strong>. Geprüft wird die
+              Summe je Beleg, damit dieselbe Datei nicht zweimal einläuft.
+            </span>
+            <HelpHint id="import.document_payments" />
           </p>
         )}
         {domainKey === 'opening_cost' && (
