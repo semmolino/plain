@@ -94,6 +94,13 @@ interface UnifiedRow {
   statusClass: string
   /** true = der Storno-Beleg selbst (nicht der stornierte Originalbeleg). */
   isStorno:   boolean
+  /**
+   * true = aus einer Datenuebernahme. Solche Belege sind rechnerisch echt, aber
+   * es liegt KEIN Dokument dahinter: ein nachgebautes Altbeleg-PDF mit heutigem
+   * Layout waere eine Faelschung. Ohne Kennzeichnung klickt jemand auf "PDF" und
+   * bekommt eine leere Fehlermeldung.
+   */
+  istReferenz: boolean
   raw:        Invoice | PartialPayment
 }
 
@@ -166,6 +173,7 @@ function fromInvoice(inv: Invoice): UnifiedRow {
     statusLabel,
     statusClass,
     isStorno:    isStornoRow && !isOrigCancelled,
+    istReferenz: inv.IMPORT_BATCH_ID != null,
     raw:         inv,
   }
 }
@@ -220,6 +228,7 @@ function fromPp(pp: PartialPayment): UnifiedRow {
     statusLabel,
     statusClass,
     isStorno:    isStornoRow && !isOrigCancelled,
+    istReferenz: pp.IMPORT_BATCH_ID != null,
     raw:         pp,
   }
 }
@@ -402,7 +411,22 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
    */
   function zellInhalt(row: UnifiedRow, key: ColKey): { inhalt: React.ReactNode; className?: string; title?: string } {
     switch (key) {
-      case 'typ':  return { inhalt: row.typ }
+      // Ein übernommener Beleg ist rechnerisch echt, aber es liegt KEIN Dokument
+      // dahinter: ein nachgebautes Altbeleg-PDF mit heutigem Layout wäre eine
+      // Fälschung. Ohne diesen Hinweis klickt jemand auf „PDF" und bekommt eine
+      // leere Fehlermeldung.
+      case 'typ':  return {
+        title: row.istReferenz ? 'Aus einer Datenübernahme — kein PDF und keine E-Rechnung hinterlegt' : undefined,
+        inhalt: row.istReferenz
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {row.typ}
+              <span style={{
+                fontSize: 10, padding: '1px 5px', borderRadius: 'var(--radius-pill)',
+                background: 'var(--surface-3)', color: 'var(--text-3)', whiteSpace: 'nowrap',
+              }}>Übernahme</span>
+            </span>
+          : row.typ,
+      }
       case 'date': return { inhalt: fmtDate(row.date), className: 'cell-nowrap' }
       case 'project': return {
         title:  row.project ?? undefined,

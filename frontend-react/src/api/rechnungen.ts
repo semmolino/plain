@@ -33,6 +33,8 @@ export interface Invoice {
   COMMENT:              string | null
   INVOICE_TYPE:         InvoiceType | null
   CANCELS_INVOICE_ID:   number | null
+  /** Gesetzt = aus einer Datenuebernahme; dann gibt es kein PDF und keine E-Rechnung. */
+  IMPORT_BATCH_ID:      number | null
   TOTAL_DISCOUNTS:        number | null
   CASH_DISCOUNT:          number | null
   DISCOUNT_1_PERCENT:     number | null
@@ -92,6 +94,8 @@ export interface PartialPayment {
   ADDRESS_NAME_1:               string | null
   COMMENT:                      string | null
   CANCELS_ADVANCE_INVOICE_ID:   number | null
+  /** Gesetzt = aus einer Datenuebernahme; dann gibt es kein PDF und keine E-Rechnung. */
+  IMPORT_BATCH_ID:              number | null
   TOTAL_DISCOUNTS:              number | null
   CASH_DISCOUNT:                number | null
   DISCOUNT_1_PERCENT:           number | null
