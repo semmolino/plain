@@ -8,6 +8,7 @@ const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
+const { belegSummen } = require("./belegRechnung");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -291,19 +292,16 @@ async function recomputePartialPaymentTotals(supabase, partialPaymentId) {
   }
 
   const sums = await sumPpsForPartialPayment(supabase, { partialPaymentId });
-  const amountNet = sums.net;
-  const amountExtras = sums.extras;
-  const totalNet = round2(amountNet + amountExtras);
-  const taxAmountNet = round2(totalNet * vatPercent / 100);
-  const totalGross = round2(totalNet + taxAmountNet);
+  // Gemeinsame Formel — siehe services/belegRechnung.js.
+  const betraege = belegSummen({
+    positionen: [{ AMOUNT_NET: sums.net, AMOUNT_EXTRAS_NET: sums.extras }],
+    vatPercent,
+  });
+  const { AMOUNT_NET: amountNet, AMOUNT_EXTRAS_NET: amountExtras,
+          TOTAL_AMOUNT_NET: totalNet, TAX_AMOUNT_NET: taxAmountNet,
+          TOTAL_AMOUNT_GROSS: totalGross } = betraege;
 
-  const updatePayload = {
-    AMOUNT_NET: amountNet,
-    AMOUNT_EXTRAS_NET: amountExtras,
-    TOTAL_AMOUNT_NET: totalNet,
-    TAX_AMOUNT_NET: taxAmountNet,
-    TOTAL_AMOUNT_GROSS: totalGross,
-  };
+  const updatePayload = { ...betraege };
   if (vatPercent !== 0) updatePayload.VAT_PERCENT = vatPercent;
   if (resolvedVatId)    updatePayload.VAT_ID      = resolvedVatId;
 

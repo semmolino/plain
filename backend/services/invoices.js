@@ -8,6 +8,7 @@ const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
+const { belegSummen } = require("./belegRechnung");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -276,19 +277,18 @@ async function recomputeInvoiceTotals(supabase, invoiceId) {
   }
 
   const sums = await sumInvStructureForInvoice(supabase, { invoiceId });
-  const amountNet = round2(sums.net);
-  const amountExtras = round2(sums.extras);
-  const totalNet = round2(amountNet + amountExtras);
-  const taxAmountNet = round2(totalNet * vatPct / 100);
-  const totalGross = round2(totalNet + taxAmountNet);
+  // Die Formel steht in services/belegRechnung.js — dieselbe, die der
+  // Abschlagsweg und der Belegimport benutzen. Drei Kopien derselben Rechnung
+  // driften, und zwar lautlos.
+  const betraege = belegSummen({
+    positionen: [{ AMOUNT_NET: sums.net, AMOUNT_EXTRAS_NET: sums.extras }],
+    vatPercent: vatPct,
+  });
+  const { AMOUNT_NET: amountNet, AMOUNT_EXTRAS_NET: amountExtras,
+          TOTAL_AMOUNT_NET: totalNet, TAX_AMOUNT_NET: taxAmountNet,
+          TOTAL_AMOUNT_GROSS: totalGross } = betraege;
 
-  const updatePayload = {
-    AMOUNT_NET: amountNet,
-    AMOUNT_EXTRAS_NET: amountExtras,
-    TOTAL_AMOUNT_NET: totalNet,
-    TAX_AMOUNT_NET: taxAmountNet,
-    TOTAL_AMOUNT_GROSS: totalGross,
-  };
+  const updatePayload = { ...betraege };
   if (vatPct !== 0)     updatePayload.VAT_PERCENT = vatPct;
   if (resolvedVatId)    updatePayload.VAT_ID      = resolvedVatId;
 

@@ -123,47 +123,66 @@ async function recomputeTotal(supabase, invoiceId) {
 // Bei jedem Fehler ist ok=false — der Aufrufer faellt dann auf die gecachten
 // Spalten zurueck. Lieber der alte Wert als gar keiner.
 // ---------------------------------------------------------------------------
-async function recomputeBilledByStructure(supabase, { contractId, excludeInvoiceId = null }) {
+//
+// MEHRERE VERTRAEGE AUF EINMAL (09/2026): Der Belegimport und sein Ruecksetzen
+// brauchen dieselbe Rechnung fuer hunderte Vertraege. Je Vertrag ein Aufruf
+// waeren vier Anfragen mal 866 — derselbe Weg, der den Projektimport in den
+// Gateway-Abbruch geschickt hat. `contractIds` fasst sie in Stapeln von 200
+// zusammen; `contractId` bleibt als Einzelfall erhalten, damit getPhases und
+// savePhases unveraendert weiterlaufen.
+//
+const IN_CHUNK = 200;
+const inStapeln = (arr, n = IN_CHUNK) => {
+  const out = [];
+  for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+  return out;
+};
+
+async function recomputeBilledByStructure(supabase, { contractId, contractIds, excludeInvoiceId = null }) {
   const recomputedInvoiced = new Map();
   const recomputedPartial  = new Map();
-  if (!contractId) return { ok: false, invoiced: recomputedInvoiced, partial: recomputedPartial };
-  try {
-    const { data: otherInvs } = await supabase
-      .from("INVOICE")
-      .select("ID")
-      .eq("CONTRACT_ID", contractId)
-      .neq("ID", excludeInvoiceId)
-      .in("STATUS_ID", [2, 3]);
-    const otherInvIds = (otherInvs || []).map(i => i.ID);
-    if (otherInvIds.length > 0) {
-      const { data: invStructs } = await supabase
-        .from("INVOICE_STRUCTURE")
-        .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-        .in("INVOICE_ID", otherInvIds);
-      for (const r of invStructs || []) {
-        const sid = String(r.STRUCTURE_ID);
-        recomputedInvoiced.set(sid,
-          round2((recomputedInvoiced.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
-      }
+
+  const ids = [...new Set((contractIds || (contractId != null ? [contractId] : [])).filter((x) => x != null))];
+  if (ids.length === 0) return { ok: false, invoiced: recomputedInvoiced, partial: recomputedPartial };
+
+  const addiere = (map, rows) => {
+    for (const r of rows || []) {
+      const sid = String(r.STRUCTURE_ID);
+      map.set(sid, round2((map.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
     }
-    // STATUS 2 (gebucht) + 3 (stornoiertes Original) — beide nötig, sonst
-    // sieht die Funktion nach AR-Storno nur die Storno-Hälfte (-X) und
-    // das Original (+X) rutscht durch. Wie bei loadPreviouslyBilledByStructure.
-    const { data: pps } = await supabase
-      .from("ADVANCE_INVOICE")
-      .select("ID")
-      .eq("CONTRACT_ID", contractId)
-      .in("STATUS_ID", [2, 3]);
-    const ppIds = (pps || []).map(p => p.ID);
-    if (ppIds.length > 0) {
-      const { data: ppStructs } = await supabase
-        .from("ADVANCE_INVOICE_STRUCTURE")
-        .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
-        .in("ADVANCE_INVOICE_ID", ppIds);
-      for (const r of ppStructs || []) {
-        const sid = String(r.STRUCTURE_ID);
-        recomputedPartial.set(sid,
-          round2((recomputedPartial.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+  };
+
+  try {
+    for (const stapel of inStapeln(ids)) {
+      let q = supabase.from("INVOICE").select("ID").in("CONTRACT_ID", stapel).in("STATUS_ID", [2, 3]);
+      // Nur filtern, wenn wirklich ein Beleg ausgenommen werden soll — ein
+      // `neq` gegen null ist zwar wirkungslos, aber es liest sich wie eine
+      // Bedingung und ist im Fake keine.
+      if (excludeInvoiceId != null) q = q.neq("ID", excludeInvoiceId);
+      const { data: otherInvs } = await q;
+
+      const otherInvIds = (otherInvs || []).map((i) => i.ID);
+      for (const belegStapel of inStapeln(otherInvIds)) {
+        const { data: invStructs } = await supabase
+          .from("INVOICE_STRUCTURE")
+          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .in("INVOICE_ID", belegStapel);
+        addiere(recomputedInvoiced, invStructs);
+      }
+
+      // STATUS 2 (gebucht) + 3 (stornoiertes Original) — beide nötig, sonst
+      // sieht die Funktion nach AR-Storno nur die Storno-Hälfte (-X) und
+      // das Original (+X) rutscht durch. Wie bei loadPreviouslyBilledByStructure.
+      const { data: pps } = await supabase
+        .from("ADVANCE_INVOICE").select("ID").in("CONTRACT_ID", stapel).in("STATUS_ID", [2, 3]);
+
+      const ppIds = (pps || []).map((p) => p.ID);
+      for (const belegStapel of inStapeln(ppIds)) {
+        const { data: ppStructs } = await supabase
+          .from("ADVANCE_INVOICE_STRUCTURE")
+          .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+          .in("ADVANCE_INVOICE_ID", belegStapel);
+        addiere(recomputedPartial, ppStructs);
       }
     }
     return { ok: true, invoiced: recomputedInvoiced, partial: recomputedPartial };
@@ -734,4 +753,8 @@ module.exports = {
   saveDeductions,
   getFinalInvoice,
   bookFinalInvoice,
+  // Nach aussen gegeben fuer den Belegimport und sein Ruecksetzen: beide
+  // muessen die Aggregate aus denselben Rohzeilen rechnen wie die Anwendung,
+  // sonst driften zwei Zahlen auseinander, von denen keine sich meldet.
+  recomputeBilledByStructure,
 };
