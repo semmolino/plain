@@ -2804,16 +2804,96 @@ const OPEN_ITEM_FIELDS = [
   { key: "paid_net",       header: "Bereits bezahlt (netto)",    required: false, example: "",            aliases: ["bezahlt", "bereitsbezahlt", "zahlung", "paid", "eingegangen"], type: "money" },
   { key: "paid_date",      header: "Zahlungsdatum",              required: false, example: "",            aliases: ["zahlungsdatum", "zahldatum", "paymentdate", "bezahltam"], type: "date" },
   { key: "comment",        header: "Bemerkung",                  required: false, example: "",            aliases: ["bemerkung", "kommentar", "notiz", "text", "comment"] },
+
+  // ── Ab hier die Erweiterung fuer die vollstaendige Belegoruebernahme ──────
+  // Alle neu und alle optional: eine Datei, die vor dieser Erweiterung lief,
+  // laeuft unveraendert weiter.
+  { key: "payment_terms_days", header: "Zahlungsziel (Tage)",     required: false, example: "30",          aliases: ["zahlungsziel", "zahlungszieltage", "paymtarget", "nettotage", "zieltage"] },
+  { key: "cash_discount_percent", header: "Skonto %",             required: false, example: "",            aliases: ["skonto", "skontoprozent", "skontosatz", "discountperc"] },
+  { key: "cash_discount_days", header: "Skonto Tage",             required: false, example: "",            aliases: ["skontotage", "skontofrist", "discountdays"] },
+  { key: "period_start",   header: "Leistungszeitraum von",       required: false, example: "",            aliases: ["leistungszeitraumvon", "leistungvon", "invoicingperiodstart", "zeitraumvon"], type: "date" },
+  { key: "period_end",     header: "Leistungszeitraum bis",       required: false, example: "",            aliases: ["leistungszeitraumbis", "leistungbis", "invoicingperiodend", "deliverydate", "zeitraumbis"], type: "date" },
+  { key: "buyer_reference", header: "Leitweg-ID",                 required: false, example: "",            aliases: ["leitwegid", "leitweg", "buyerreference", "routingid"] },
+  { key: "text_1",         header: "Belegtext oben",              required: false, example: "",            aliases: ["belegtextoben", "einleitung", "invoicedesc1", "text1", "kopftext"] },
+  { key: "text_2",         header: "Belegtext unten",             required: false, example: "",            aliases: ["belegtextunten", "schlusstext", "invoicedesc2", "text2", "fusstext"] },
+  { key: "deducts",        header: "Zieht Abschläge ab",          required: false, example: "",            aliases: ["ziehtabschlaegeab", "abzuege", "abschlagsabzug", "anrechnung", "deducts"], type: "text" },
+  { key: "cancels_doc_number", header: "Storniert Beleg",         required: false, example: "",            aliases: ["storniertbeleg", "storniert", "stornozu", "assigned2invoice", "bezugsbeleg"], type: "text" },
+  { key: "cancellation_date", header: "Stornodatum",              required: false, example: "",            aliases: ["stornodatum", "datestorno"], type: "date" },
+  { key: "closes_project", header: "Schließt Positionen ab",      required: false, example: "",            aliases: ["schliesstab", "schliesstpositionenab", "abschluss", "closed"] },
+  { key: "head_amount_net", header: "Kopfsumme netto (Prüfsumme)", required: false, example: "",           aliases: ["kopfsumme", "gesamtnetto", "rechnungsbetragnetto", "amountnet", "summenetto"], type: "money" },
+  { key: "amount_extras_net", header: "Nebenkosten netto",        required: false, example: "",            aliases: ["nebenkosten", "nebenkostennetto", "extras", "bextras", "nk"], type: "money" },
+  { key: "legacy_ref",     header: "ID im Altsystem",             required: false, example: "",            aliases: ["idimaltsystem", "altid", "legacyref", "wikoid", "quellid", "idvorsystem"], type: "text" },
+  { key: "position_legacy_ref", header: "Position (ID Altsystem)", required: false, example: "",           aliases: ["positionidaltsystem", "positionaltid", "poslegacyref", "strukturaltid"], type: "text" },
 ];
+
+// ---------------------------------------------------------------------------
+// Belegart aus der Datei aufloesen.
+//
+// Die frueherer Heuristik war eine Zeile:
+//     dt.includes("rechnung") && !dt.includes("abschlag") ? "invoice" : "partial"
+// Sie traf "Schlussrechnung" richtig und "Storno-Abschlagsrechnung" falsch, und
+// sie kannte nur zwei der sechs Belegarten. Vor allem aber hatte sie keinen
+// Fehlerfall: alles Unbekannte wurde stillschweigend zur Abschlagsrechnung.
+//
+// `target`      welche Tabelle: ADVANCE_INVOICE oder INVOICE
+// `invoiceType` INVOICE_TYPE (nur bei INVOICE; die Abschlagsrechnung ist eine
+//               eigene Tabelle und traegt keine Typspalte)
+// `negativ`     Belegart kehrt das Vorzeichen um (Gutschrift, Storno)
+// ---------------------------------------------------------------------------
+const DOC_TYPE_ALIASES = [
+  { target: "advance", invoiceType: null, negativ: false, label: "Abschlagsrechnung",
+    worte: ["abschlag", "abschlagsrechnung", "ar", "abschlagszahlung", "arechnung", "partpayment", "partial", "anzahlung"] },
+  { target: "invoice", invoiceType: "rechnung", negativ: false, label: "Rechnung",
+    worte: ["rechnung", "einzelrechnung", "re", "honorarrechnung", "invoice"] },
+  { target: "invoice", invoiceType: "schlussrechnung", negativ: false, label: "Schlussrechnung",
+    worte: ["schlussrechnung", "sr", "endrechnung", "schluss", "schlussrg"] },
+  { target: "invoice", invoiceType: "teilschlussrechnung", negativ: false, label: "Teilschlussrechnung",
+    worte: ["teilschlussrechnung", "tsr", "teilschluss", "teilschlussrg"] },
+  { target: "invoice", invoiceType: "gutschrift", negativ: true, label: "Gutschrift",
+    worte: ["gutschrift", "gs", "creditnote", "credit"] },
+  // Das Ziel eines Stornos bestimmt der Beleg, den es storniert — eine Storno-
+  // Abschlagsrechnung gehoert in ADVANCE_INVOICE, eine Storno-Rechnung in
+  // INVOICE. Deshalb hier bewusst kein festes `target`.
+  { target: null, invoiceType: "stornorechnung", negativ: true, label: "Storno",
+    worte: ["storno", "stornorechnung", "stornobeleg", "cancellation", "cancel"] },
+];
+
+const DOC_TYPE_LOOKUP = (() => {
+  const m = new Map();
+  for (const eintrag of DOC_TYPE_ALIASES) {
+    for (const w of eintrag.worte) m.set(katalogKey(w), eintrag);
+  }
+  return m;
+})();
+
+/** Erlaubte Schreibweisen fuer Meldung und Vorlagen-Dropdown. */
+const DOC_TYPE_LABELS = DOC_TYPE_ALIASES.map((e) => e.label);
+
+/** @returns {null|{target, invoiceType, negativ, label}} null = unbekannt */
+function belegartAusText(text) {
+  const k = katalogKey(text);
+  if (!k) return null;
+  return DOC_TYPE_LOOKUP.get(k) || null;
+}
 
 async function loadOpenItemContext(supabase, tenantId) {
   const [projRes, contractRes, structRes, ppRes, invRes] = await Promise.all([
     supabase.from("PROJECT").select("ID, ABBR, NAME, ADDRESS_ID, CONTACT_ID, COMPANY_ID").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("CONTRACT").select("ID, PROJECT_ID, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, ABBR, NAME, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("ADVANCE_INVOICE").select("ADVANCE_INVOICE_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
-    supabase.from("INVOICE").select("INVOICE_NUMBER").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, FATHER_ID, ABBR, NAME, REVENUE, EXTRAS_PERCENT, BILLING_TYPE_ID, LEGACY_REF").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("ADVANCE_INVOICE").select("ID, ADVANCE_INVOICE_NUMBER, PROJECT_ID, CONTRACT_ID, STATUS_ID, TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, LEGACY_REF").eq("TENANT_ID", tenantId).limit(100000),
+    supabase.from("INVOICE").select("ID, INVOICE_NUMBER, PROJECT_ID, CONTRACT_ID, STATUS_ID, INVOICE_TYPE, TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, LEGACY_REF").eq("TENANT_ID", tenantId).limit(100000),
   ]);
+
+  // Ein stilles Abschneiden an der Grenze waere hier kein Fehler, sondern ein
+  // falsches Ergebnis: es fehlten Belegnummern in der Dublettenpruefung, und
+  // der Import legte doppelte Nummern an, ohne sich zu melden.
+  for (const [name, res] of [["Projekte", projRes], ["Projektstruktur", structRes],
+                             ["Abschlagsrechnungen", ppRes], ["Rechnungen", invRes]]) {
+    if ((res.data || []).length >= 100000) {
+      throw { status: 500, message: `Bestand zu gross: ${name} wurde beim Lesen abgeschnitten. Bitte den Import in kleineren Mandanten oder nach Jahrgang fahren.` };
+    }
+  }
 
   const contractByProject = new Map();
   for (const c of contractRes.data || []) if (!contractByProject.has(c.PROJECT_ID)) contractByProject.set(c.PROJECT_ID, c);
@@ -2827,14 +2907,41 @@ async function loadOpenItemContext(supabase, tenantId) {
     nodesByProject.get(st.PROJECT_ID).push({
       id: st.ID, nameShort: st.ABBR || "", nameLong: st.NAME || "",
       revenue: num(st.REVENUE), extrasPercent: num(st.EXTRAS_PERCENT), billingTypeId: Number(st.BILLING_TYPE_ID),
+      legacyRef: st.LEGACY_REF || null,
     });
   }
 
   // Vergebene Belegnummern — eine importierte Altnummer darf nicht mit einer
   // bestehenden kollidieren.
+  //
+  // Dazu der ganze Beleg, nicht nur seine Nummer: eine Schlussrechnung kann
+  // einen Abschlag anrechnen, der in einem FRUEHEREN Stapel entstanden ist,
+  // und ein Storno kann sich auf einen Beleg beziehen, den plan&simple selbst
+  // erzeugt hat. Beides laesst sich nur beantworten, wenn der Bestand mit
+  // Projekt, Status und Betrag dasteht.
   const takenNumbers = new Set();
-  for (const r of ppRes.data || []) if (r.ADVANCE_INVOICE_NUMBER) takenNumbers.add(norm(r.ADVANCE_INVOICE_NUMBER));
-  for (const r of invRes.data || []) if (r.INVOICE_NUMBER) takenNumbers.add(norm(r.INVOICE_NUMBER));
+  const docsByNumber = new Map();
+  const docsByLegacy = new Map();
+  const merke = (kind, id, nummer, row) => {
+    if (!nummer) return;
+    takenNumbers.add(norm(nummer));
+    const eintrag = {
+      kind, id, nummer,
+      projectId: row.PROJECT_ID ?? null, contractId: row.CONTRACT_ID ?? null,
+      statusId: Number(row.STATUS_ID) || null, invoiceType: row.INVOICE_TYPE ?? null,
+      totalNet: num(row.TOTAL_AMOUNT_NET), totalGross: num(row.TOTAL_AMOUNT_GROSS),
+      imBestand: true,
+    };
+    // Bei einer doppelt vergebenen Nummer gewinnt niemand: der Eintrag wird
+    // als mehrdeutig markiert, damit ein Bezug darauf ein Fehler wird statt
+    // stillschweigend den erstbesten Beleg zu treffen.
+    const key = norm(nummer);
+    if (docsByNumber.has(key)) docsByNumber.get(key).mehrdeutig = true;
+    else docsByNumber.set(key, eintrag);
+    if (row.LEGACY_REF) docsByLegacy.set(norm(row.LEGACY_REF), eintrag);
+  };
+  for (const r of ppRes.data || []) merke("advance", r.ID, r.ADVANCE_INVOICE_NUMBER, r);
+  for (const r of invRes.data || []) merke("invoice", r.ID, r.INVOICE_NUMBER, r);
 
   const projectsByNumber = new Map();
   for (const p of projRes.data || []) {
@@ -2848,7 +2955,7 @@ async function loadOpenItemContext(supabase, tenantId) {
   }
 
   // Dubletten laufen hier über die Belegnummer (Fehler, nicht „überspringen").
-  return { projectsByNumber, takenNumbers, existingKeys: new Set() };
+  return { projectsByNumber, takenNumbers, docsByNumber, docsByLegacy, existingKeys: new Set() };
 }
 
 function buildOpenItemEntry(mapped, ctx) {
@@ -2862,7 +2969,6 @@ function buildOpenItemEntry(mapped, ctx) {
     proj = ctx.projectsByNumber.get(norm(number)) || null;
     if (!proj) { messages.push({ level: "error", text: `Projekt „${number}“ nicht gefunden` }); ok = false; }
     else if (!proj.contract) { messages.push({ level: "error", text: "Projekt hat keinen Vertrag — zuerst Projekt-Honorar oder Projektstruktur importieren" }); ok = false; }
-    else if (!proj.nodes.some((n) => n.billingTypeId === 1)) { messages.push({ level: "error", text: "Projekt hat keine abrechenbare Pauschal-Position" }); ok = false; }
   }
 
   const docNumber = s(mapped.doc_number);
@@ -2871,22 +2977,90 @@ function buildOpenItemEntry(mapped, ctx) {
     messages.push({ level: "error", text: `Belegnummer „${docNumber}“ ist bereits vergeben` }); ok = false;
   }
 
-  const dt = norm(mapped.doc_type);
-  const docType = (dt.includes("rechnung") && !dt.includes("abschlag")) || dt === "invoice" ? "invoice" : "partial";
+  // ── Belegart ───────────────────────────────────────────────────────────────
+  // Unbekanntes ist ein Fehler, kein stiller Standardwert: ein falsch
+  // einsortierter Beleg landet in der falschen Tabelle, und das faellt erst
+  // auf, wenn die Schlussrechnung ihn nicht mehr findet.
+  const belegartRoh = s(mapped.doc_type);
+  let belegart = belegartAusText(belegartRoh);
+  if (!belegartRoh) {
+    belegart = DOC_TYPE_ALIASES[0];   // Abschlagsrechnung, wie bisher
+    messages.push({ level: "warn", text: "Belegart leer — als Abschlagsrechnung übernommen" });
+  } else if (!belegart) {
+    messages.push({ level: "error", text: `Belegart „${belegartRoh}“ unbekannt — erlaubt sind: ${DOC_TYPE_LABELS.join(", ")}` });
+    ok = false;
+    belegart = DOC_TYPE_ALIASES[0];
+  }
+  const istStorno = belegart.invoiceType === "stornorechnung";
+  // Das Ziel des Stornos steht erst fest, wenn der stornierte Beleg aufgeloest
+  // ist — das passiert in finalizeOpenItemRows, wo die ganze Datei bekannt ist.
+  const docType = belegart.target === "invoice" ? "invoice" : belegart.target === "advance" ? "partial" : null;
+
+  const stornoZu = s(mapped.cancels_doc_number);
+  if (istStorno && !stornoZu) {
+    messages.push({ level: "error", text: "Storno ohne Bezugsbeleg — bitte die Nummer des stornierten Belegs angeben" });
+    ok = false;
+  }
 
   const docDate = parseDateISO(mapped.doc_date);
   if (!s(mapped.doc_date)) { messages.push({ level: "error", text: "Belegdatum fehlt (Pflichtfeld)" }); ok = false; }
   else if (docDate.invalid) { messages.push({ level: "error", text: "Belegdatum nicht erkannt (TT.MM.JJJJ oder JJJJ-MM-TT)" }); ok = false; }
 
+  // Fälligkeit: steht sie nicht da, laesst sie sich aus dem Zahlungsziel
+  // ableiten — das ist besser als zu warnen und den Beleg aus dem Mahnwesen
+  // fallen zu lassen.
   const dueDate = parseDateISO(mapped.due_date);
+  const zielTage = parseAmountDE(mapped.payment_terms_days);
+  let faelligkeit = dueDate.value;
   if (dueDate.invalid) { messages.push({ level: "error", text: "Fälligkeitsdatum nicht erkannt" }); ok = false; }
-  else if (!dueDate.value) messages.push({ level: "warn", text: "Ohne Fälligkeit kann nicht gemahnt werden" });
+  if (!faelligkeit && docDate.value && zielTage.value != null && zielTage.value > 0) {
+    const d = new Date(`${docDate.value}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + Math.round(zielTage.value));
+    faelligkeit = d.toISOString().slice(0, 10);
+  }
+  if (!faelligkeit && !dueDate.invalid) {
+    messages.push({ level: "warn", text: "Ohne Fälligkeit erscheint der Beleg nie im Mahnwesen" });
+  }
+
+  /** Geldfeld lesen und dabei die Datum-statt-Zahl-Falle benennen. */
+  const geld = (key, label) => {
+    const roh = s(mapped[key]);
+    if (!roh) return { roh, wert: null };
+    const p = parseAmountDE(mapped[key]);
+    if (p.invalid || p.value == null) {
+      messages.push({
+        level: "error",
+        text: p.warDatum ? datumStattZahlHinweis(label, roh) : `${label} „${roh}“ ist keine gültige Zahl`,
+      });
+      ok = false;
+      return { roh, wert: null };
+    }
+    return { roh, wert: p.value };
+  };
 
   const amtRaw = s(mapped.amount_net);
-  const amount = parseAmountDE(mapped.amount_net);
+  const amount = geld("amount_net", "Betrag");
   if (!amtRaw) { messages.push({ level: "error", text: "Betrag fehlt (Pflichtfeld)" }); ok = false; }
-  else if (amount.invalid || amount.value == null) { messages.push({ level: "error", text: `Betrag „${amtRaw}“ ist keine gültige Zahl` }); ok = false; }
-  else if (amount.value <= 0) { messages.push({ level: "error", text: "Betrag muss größer als 0 sein" }); ok = false; }
+  else if (amount.wert != null && amount.wert === 0) {
+    messages.push({ level: "error", text: "Betrag darf nicht 0 sein" }); ok = false;
+  }
+
+  // Vorzeichen folgt der Belegart. Gutschrift und Storno mindern; schreibt die
+  // Datei den Betrag positiv (der Regelfall in Altsystemen, dort steckt das
+  // Vorzeichen in der Belegart), dreht der Import ihn und sagt es.
+  let betrag = amount.wert;
+  if (betrag != null && belegart.negativ && betrag > 0) {
+    betrag = -betrag;
+    messages.push({ level: "warn", text: `${belegart.label} mit positivem Betrag — als Minderung übernommen` });
+  } else if (betrag != null && !belegart.negativ && betrag < 0) {
+    messages.push({ level: "warn", text: `${belegart.label} mit negativem Betrag — bitte prüfen, ob es eine Gutschrift ist` });
+  }
+
+  const extras = geld("amount_extras_net", "Nebenkosten");
+  let nebenkosten = extras.wert;
+  if (nebenkosten != null && belegart.negativ && nebenkosten > 0) nebenkosten = -nebenkosten;
+
+  const kopfsumme = geld("head_amount_net", "Kopfsumme netto");
 
   const vat = parseAmountDE(mapped.vat_percent);
   if (s(mapped.vat_percent) && (vat.invalid || vat.value == null)) { messages.push({ level: "error", text: "MwSt-Satz ist keine gültige Zahl" }); ok = false; }
@@ -2902,18 +3076,37 @@ function buildOpenItemEntry(mapped, ctx) {
   const paidDate = parseDateISO(mapped.paid_date);
   if (paidDate.invalid) { messages.push({ level: "error", text: "Zahlungsdatum nicht erkannt" }); ok = false; }
 
-  // Position über das Kürzel des Strukturknotens auflösen (eindeutig sein muss es).
+  // Position über das Kürzel des Strukturknotens auflösen (eindeutig sein muss
+  // es), ersatzweise über die Kennung aus dem Vorsystem.
   const posRaw = s(mapped.position);
+  const posLegacy = s(mapped.position_legacy_ref);
   let node = null;
-  if (posRaw && proj) {
-    const hits = proj.nodes.filter((n) => norm(n.nameShort) === norm(posRaw) || norm(n.nameLong) === norm(posRaw));
+  if ((posRaw || posLegacy) && proj) {
+    let hits = [];
+    if (posLegacy) hits = proj.nodes.filter((n) => n.legacyRef && norm(n.legacyRef) === norm(posLegacy));
+    if (!hits.length && posRaw) {
+      hits = proj.nodes.filter((n) => norm(n.nameShort) === norm(posRaw) || norm(n.nameLong) === norm(posRaw));
+    }
+    const bezeichnung = posRaw || posLegacy;
     if (!hits.length) {
-      messages.push({ level: "error", text: `Position „${posRaw}“ nicht gefunden — Kürzel aus der Leistungsstruktur verwenden` }); ok = false;
+      messages.push({ level: "error", text: `Position „${bezeichnung}“ nicht gefunden — Kürzel aus der Leistungsstruktur verwenden` }); ok = false;
     } else if (hits.length > 1) {
-      messages.push({ level: "error", text: `Position „${posRaw}“ kommt im Projekt mehrfach vor — bitte eindeutig benennen` }); ok = false;
-    } else if (hits[0].billingTypeId !== 1) {
-      messages.push({ level: "error", text: `Position „${posRaw}“ ist eine Stunden-Position — dort entsteht der Umsatz aus den Buchungen` }); ok = false;
-    } else node = hits[0];
+      messages.push({ level: "error", text: `Position „${bezeichnung}“ kommt im Projekt mehrfach vor — bitte eindeutig benennen` }); ok = false;
+    } else {
+      node = hits[0];
+      // Frueher war das ein Fehler. Fuer eine echte Historie ist es falsch:
+      // Altsysteme rechnen Abschlaege sehr wohl auf Stunden-Positionen ab. Der
+      // Leistungsstand kann dadurch ueber 100 % laufen — das ist eine Aussage
+      // ueber die Daten, kein Grund, den Beleg abzulehnen.
+      if (node.billingTypeId !== 1) {
+        messages.push({ level: "warn", text: `Position „${bezeichnung}“ wird nach Aufwand abgerechnet — der Leistungsstand kann dort über 100 % laufen` });
+      }
+    }
+  } else if (proj && !proj.nodes.some((n) => n.billingTypeId === 1)) {
+    // Ohne Positionsangabe verteilt der Import den Betrag ueber die
+    // Pauschal-Knoten. Gibt es keine, gibt es auch nichts zu verteilen.
+    messages.push({ level: "error", text: "Projekt hat keine abrechenbare Pauschal-Position — bitte die Position in der Datei angeben" });
+    ok = false;
   }
 
   const dbRow = {
@@ -2922,16 +3115,34 @@ function buildOpenItemEntry(mapped, ctx) {
     addressId: proj?.contract?.INVOICE_ADDRESS_ID ?? proj?.addressId ?? null,
     contactId: proj?.contract?.INVOICE_CONTACT_ID ?? proj?.contactId ?? null,
     nodes: proj?.nodes ?? [],
-    docNumber, docType, docDate: docDate.value, dueDate: dueDate.value,
-    amount: amount.value ?? 0, vatPercent: vat.value ?? null,
+    docNumber, docType, docDate: docDate.value, dueDate: faelligkeit,
+    amount: betrag ?? 0, extrasAmount: nebenkosten, vatPercent: vat.value ?? null,
     paid, paidDate: paidDate.value, comment: s(mapped.comment) || null,
-    positionLabel: posRaw, node,
+    positionLabel: posRaw || posLegacy, node,
+
+    // Belegart und ihre Folgen
+    invoiceType: belegart.invoiceType, istStorno, negativ: belegart.negativ,
+    belegartLabel: belegart.label, stornoZu: stornoZu || null,
+    cancellationDate: parseDateISO(mapped.cancellation_date).value,
+    deductsRaw: s(mapped.deducts) || null,
+    closesProject: parseBool(mapped.closes_project),
+
+    // Kopffelder, die unveraendert am Beleg landen
+    kopfsumme: kopfsumme.wert,
+    cashDiscountPercent: parseAmountDE(mapped.cash_discount_percent).value,
+    cashDiscountDays: parseAmountDE(mapped.cash_discount_days).value,
+    periodStart: parseDateISO(mapped.period_start).value,
+    periodEnd: parseDateISO(mapped.period_end).value,
+    buyerReference: s(mapped.buyer_reference) || null,
+    text1: s(mapped.text_1) || null,
+    text2: s(mapped.text_2) || null,
+    legacyRef: s(mapped.legacy_ref) || null,
   };
 
   const display = {
-    number, doc: `${docNumber}${docType === "invoice" ? " (Rechnung)" : " (Abschlag)"}`,
-    datum: s(mapped.doc_date), position: posRaw,
-    betrag: amount.value != null ? amount.value.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : amtRaw,
+    number, doc: `${docNumber} (${belegart.label})`,
+    datum: s(mapped.doc_date), position: posRaw || posLegacy,
+    betrag: betrag != null ? betrag.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : amtRaw,
     bezahlt: paid ? paid.toLocaleString("de-DE", { minimumFractionDigits: 2 }) + " €" : "",
   };
   return { ok, messages, dbRow, matchKey: norm(docNumber), display };

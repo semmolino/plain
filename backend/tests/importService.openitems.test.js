@@ -22,7 +22,7 @@ jest.mock("../services/invoices", () => ({
 
 const ppSvc = require("../services/partialPayments");
 const invSvc = require("../services/invoices");
-const { commit, preview, rollback } = require("../services/importService");
+const { commit, preview, rollback, parseBuffer, buildAutoMapping, buildPreview, DOMAINS } = require("../services/importService");
 const { makeFakeSupabase } = require("./helpers/fakeSupabase");
 const { xlsxBuffer } = require("./helpers/sheetFixture");
 
@@ -199,7 +199,7 @@ describe("Pruefung", () => {
 
     const pv = await runPreview(buffer, supabase);
     expect(pv.summary.warning).toBe(1);
-    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("gemahnt");
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("Mahnwesen");
   });
 
   it("meldet ein unbekanntes Positions-Kuerzel", async () => {
@@ -210,12 +210,17 @@ describe("Pruefung", () => {
     expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("nicht gefunden");
   });
 
-  it("lehnt eine Stunden-Position ab", async () => {
+  // Bis 09/2026 war das ein Fehler. Fuer eine echte Belegoruebernahme ist das
+  // falsch: Altsysteme rechnen Abschlaege sehr wohl auf Stunden-Positionen ab.
+  // Der Leistungsstand kann dort ueber 100 % laufen — das ist eine Aussage
+  // ueber die Daten, kein Grund, den Beleg abzulehnen.
+  it("warnt bei einer Stunden-Position, lehnt sie aber nicht ab", async () => {
     const supabase = seed();
     const buffer = await xlsxBuffer([HEAD, row("P-1", "AR-1", "Abschlag", "15.11.2025", "", "BL", "8000")]);
 
     const pv = await runPreview(buffer, supabase);
-    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("Stunden-Position");
+    expect(pv.rows[0].status).not.toBe("error");
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("nach Aufwand abgerechnet");
   });
 
   it("verbietet, Positionszeilen mit einer Sammelzeile zu mischen", async () => {
@@ -320,5 +325,70 @@ describe("Rollback", () => {
     expect(supabase._tables.PAYMENT_STRUCTURE).toHaveLength(0);
     // Der Beleg selbst ist ebenfalls weg (er trug die Stapel-Kennung).
     expect(supabase._tables.ADVANCE_INVOICE.filter((r) => r.IMPORT_BATCH_ID === batchId)).toHaveLength(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Belegarten (09/2026)
+//
+// Bis dahin kannte der Import zwei Ausprägungen und leitete sie aus einer
+// Zeile ab: `dt.includes("rechnung") && !dt.includes("abschlag")`. Das traf
+// "Schlussrechnung" richtig und "Storno-Abschlagsrechnung" falsch — und vor
+// allem hatte es keinen Fehlerfall: alles Unbekannte wurde stillschweigend
+// zur Abschlagsrechnung.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("Belegarten", () => {
+  const HEAD_X = [...HEAD, "Zahlungsziel (Tage)", "Storniert Beleg"];
+  const rowX = (...cells) => { const r = [...cells]; while (r.length < HEAD_X.length) r.push(""); return r; };
+  const previewX = async (zeilen, supabase) => {
+    const parsed = await parseBuffer(await xlsxBuffer([HEAD_X, ...zeilen]));
+    const ctx = await DOMAINS.open_items.loadContext(supabase, TENANT);
+    return buildPreview({ domainKey: "open_items", parsed, mapping: buildAutoMapping(parsed.headers, "open_items"), ctx });
+  };
+
+  it.each([
+    ["Abschlag",            "partial", null],
+    ["Abschlagsrechnung",   "partial", null],
+    ["Rechnung",            "invoice", "rechnung"],
+    ["Schlussrechnung",     "invoice", "schlussrechnung"],
+    ["SR",                  "invoice", "schlussrechnung"],
+    ["Teilschlussrechnung", "invoice", "teilschlussrechnung"],
+    ["Gutschrift",          "invoice", "gutschrift"],
+  ])("erkennt „%s“", async (text, docType, invoiceType) => {
+    const pv = await previewX([rowX("P-1", "B-1", text, "15.11.2025", "30.11.2025", "LP5", "8000")], seed());
+    expect(pv.rows[0]._dbRow.docType).toBe(docType);
+    expect(pv.rows[0]._dbRow.invoiceType).toBe(invoiceType);
+  });
+
+  it("dreht bei einer Gutschrift das Vorzeichen und sagt es", async () => {
+    const pv = await previewX([rowX("P-1", "GS-1", "Gutschrift", "15.11.2025", "30.11.2025", "LP5", "8000")], seed());
+    expect(pv.rows[0]._dbRow.amount).toBe(-8000);
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("als Minderung");
+  });
+
+  it("lehnt eine unbekannte Belegart ab und nennt die erlaubten", async () => {
+    const pv = await previewX([rowX("P-1", "X-1", "Zwischenrechnung", "15.11.2025", "30.11.2025", "LP5", "8000")], seed());
+    expect(pv.rows[0].status).toBe("error");
+    const text = pv.rows[0].messages.map((m) => m.text).join();
+    expect(text).toContain("unbekannt");
+    expect(text).toContain("Schlussrechnung");
+  });
+
+  it("nimmt eine leere Belegart als Abschlag, sagt es aber", async () => {
+    const pv = await previewX([rowX("P-1", "B-1", "", "15.11.2025", "30.11.2025", "LP5", "8000")], seed());
+    expect(pv.rows[0]._dbRow.docType).toBe("partial");
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("Belegart leer");
+  });
+
+  it("lehnt ein Storno ohne Bezugsbeleg ab", async () => {
+    const pv = await previewX([rowX("P-1", "S-1", "Storno", "15.11.2025", "30.11.2025", "LP5", "8000")], seed());
+    expect(pv.rows[0].status).toBe("error");
+    expect(pv.rows[0].messages.map((m) => m.text).join()).toContain("ohne Bezugsbeleg");
+  });
+
+  // Statt zu warnen, dass der Beleg nie im Mahnwesen erscheint: ableiten.
+  it("rechnet die Fälligkeit aus dem Zahlungsziel", async () => {
+    const pv = await previewX([rowX("P-1", "B-1", "Abschlag", "15.11.2025", "", "LP5", "8000", "", "", "", "", "30")], seed());
+    expect(pv.rows[0]._dbRow.dueDate).toBe("2025-12-15");
   });
 });
