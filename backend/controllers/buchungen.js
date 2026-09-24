@@ -71,23 +71,7 @@ async function listBuchungenByProject(req, res, supabase) {
     const data = await svc.listBuchungenByProject(supabase, { projectId, tenantId: req.tenantId });
 
     // Phase 6: Felder-Filter — Erloese / Kosten nur mit jeweiliger Permission
-    const showRevenue = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.revenue.view");
-    const showCosts   = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.costs.view");
-    const filtered = (data || []).map(r => {
-      const out = { ...r };
-      if (!showRevenue) {
-        delete out.QUANTITY_EXT;
-        delete out.HOURLY_RATE;
-        delete out.HOURLY_RATE_TOTAL;
-      }
-      if (!showCosts) {
-        delete out.COST_RATE;
-        delete out.COST_TOTAL;
-      }
-      return out;
-    });
-
-    res.json({ data: filtered });
+    res.json({ data: stripBookingMoney(req, data) });
   } catch (err) {
     res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
@@ -109,11 +93,36 @@ async function createTimerDraft(req, res, supabase) {
   }
 }
 
+/** Erloes- und Kostenfelder nur mit dem jeweiligen Recht (wie die Projektliste). */
+function stripBookingMoney(req, rows) {
+  const showRevenue = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.revenue.view");
+  const showCosts   = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.costs.view");
+  return (rows || []).map(r => {
+    const out = { ...r };
+    if (!showRevenue) { delete out.QUANTITY_EXT; delete out.HOURLY_RATE; delete out.HOURLY_RATE_TOTAL; }
+    if (!showCosts)   { delete out.COST_RATE; delete out.COST_TOTAL; }
+    return out;
+  });
+}
+
+/** Timer-Entwuerfe sehen und bestaetigen: eigene immer, fremde nur mit
+ *  employees.bookings.view_all. Vorher kam die Mitarbeiter-ID ungeprueft aus
+ *  der Anfrage — jeder mit Buchungsrecht las (samt Kostensatz) und bestaetigte
+ *  die Tagesentwuerfe eines Kollegen. */
+function mayActForEmployee(req, employeeId) {
+  if (Number(employeeId) === Number(req.employeeId)) return true;
+  return !!req.hasPermission?.("employees.bookings.view_all");
+}
+
 async function listDraftsByEmployee(req, res, supabase) {
   const { employee_id, date } = req.query;
+  const employeeId = employee_id != null && employee_id !== "" ? Number(employee_id) : req.employeeId;
+  if (!mayActForEmployee(req, employeeId)) {
+    return res.status(403).json({ error: "Nur eigene Entwürfe sichtbar." });
+  }
   try {
-    const data = await svc.listDraftsByEmployee(supabase, { employeeId: employee_id, date, tenantId: req.tenantId });
-    res.json({ data });
+    const data = await svc.listDraftsByEmployee(supabase, { employeeId, date, tenantId: req.tenantId });
+    res.json({ data: stripBookingMoney(req, data) });
   } catch (err) {
     res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
@@ -126,6 +135,8 @@ async function confirmDrafts(req, res, supabase) {
       ids,
       breakConfirmations: break_confirmations || {},
       tenantId: req.tenantId,
+      // Fremde Entwuerfe nur mit Team-Sicht; sonst werden sie still uebergangen.
+      employeeId: req.hasPermission?.("employees.bookings.view_all") ? null : req.employeeId,
     });
     res.json({ success: true, ...result });
   } catch (err) {

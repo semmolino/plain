@@ -508,6 +508,7 @@ Windows): `owner-console/README.md`.
 
 - Sitzungs-Rücknahme über `EMPLOYEE.SESSION_EPOCH` (`middleware/sessionGuard.js`): Passwortwechsel, Reset und Rollenänderung beenden laufende Sitzungen sofort. **Der Guard hängt in der authChain hinter `tenantScope`** — davor liegt kein Mandanten-Claim an, und die EMPLOYEE-Abfrage würde unter RLS null Zeilen liefern, also jeden aussperren.
 - Upload-Rechte nach `asset_type` (`routes/assets.js`): `AVATAR` ist Selbstbedienung, alles andere verlangt ein bestehendes Recht; unbekannte Arten fail-closed.
+- Buchungen: eine abgerechnete Buchung (`INVOICE_ID`/`ADVANCE_INVOICE_ID`) ist auch für `PATCH` gesperrt, und der Monatsabschluss gilt beim Ändern für den alten und den neuen Monat (`patchBuchung`). Timer-Entwürfe liest und bestätigt man nur für sich selbst; fremde nur mit `employees.bookings.view_all` (`controllers/buchungen.js`). Beides war bis Runde 2 des UI-Pilots offen.
 
 - Drosselung teurer Endpunkte (PDF, Reports) **pro Konto, nicht pro IP** (`middleware/rateLimit.js`) — ein Büro hinter einer NAT-Adresse darf sich nicht selbst aussperren. Die Limiter hängen deshalb hinter `authMiddleware`.
 - Progressive Verzögerung bei Fehlversuchen **je Konto** (`middleware/loginAttempts.js`) — bewusst keine Sperre: die wäre ein Weg, einen bekannten Nutzer gezielt auszusperren.
