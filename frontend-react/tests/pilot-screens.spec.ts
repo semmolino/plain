@@ -26,7 +26,8 @@ async function prepare(page: Page, device: string, opts: Parameters<typeof mockP
   await page.clock.setFixedTime(new Date('2026-09-24T10:30:00+02:00'))
   if (density) {
     await page.addInitScript(d => {
-      localStorage.setItem('ui.density', JSON.stringify(d))
+      // Schluessel wie useStickyState: plain:filt:<Schema>:<Mitarbeiter>:<Name>
+      localStorage.setItem('plain:filt:v2:1:ui.density', JSON.stringify(d))
     }, density)
   }
   await mockPilot(page, opts)

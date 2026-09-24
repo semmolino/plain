@@ -4668,3 +4668,182 @@ th.doc-actions, td.doc-actions {
 @media (prefers-reduced-motion: reduce) {
   .skeleton { background-image: none; animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI-Pilot 2026-09 (Branch ui-sm)
+
+   Alles in diesem Block ist NEU und opt-in: jede Regel haengt an einer
+   Klasse, die es vorher nicht gab. Bestehende Selektoren (`button`,
+   `.btn-primary`, `.wizard-nav`, `.master-table`, `.tbl-input` …) werden
+   hier nicht umdefiniert — der letzte systemweite Anlauf hat genau damit
+   Regressionen in Ansichten erzeugt, die niemand angeschaut hatte.
+
+   Gilt nur in den vier Pilot-Ansichten: Zeiterfassung, Projekt-Arbeits-
+   bereich, Abschlagsrechnung, Uebersicht. Wird der Pilot angenommen, wandern
+   die Bausteine in ihre regulaeren Abschnitte.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Knoepfe in den neuen Bausteinen erben die Hausschrift. Die globale
+   button-Regel setzt keine font-family — ohne das rendert der Browser seine
+   Steuerelement-Schrift statt Hanken Grotesk. */
+.page-header button, .action-bar button, .disclosure-btn, .density-btn,
+.pw-root button, .qb-form button, .iw-root button, .hdr-action, .dash-band button {
+  font-family: inherit;
+}
+
+/* ── PageHeader ─────────────────────────────────────────────────────────── */
+.page-header {
+  display: flex; flex-direction: column; gap: var(--space-2);
+  padding-bottom: var(--space-3);
+}
+.page-header-back {
+  align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 10px 0 6px; margin-left: -6px;
+  border: none; background: transparent; box-shadow: none;
+  color: var(--text-2); font-size: 13px; font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+.page-header-back:hover { background: var(--hover-bg); color: var(--text); }
+.page-header-main {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: var(--space-3); flex-wrap: wrap;
+}
+.page-header-titles { min-width: 0; flex: 1 1 320px; display: flex; flex-direction: column; gap: 2px; }
+.page-header-eyebrow {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  font-size: 12px; font-weight: 600; color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.page-header-titlerow { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.page-header-title {
+  font-size: var(--fs-page-title); font-weight: var(--fw-title); line-height: 1.25;
+  margin: 0; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.page-header-meta {
+  display: flex; flex-wrap: wrap; gap: 4px 14px;
+  font-size: 13px; color: var(--text-2);
+}
+.page-header-meta > span { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.page-header-meta-label { color: var(--text-3); }
+.page-header-actions {
+  display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap;
+  margin-left: auto;
+}
+.page-header-actions .btn-primary { width: auto; margin-top: 0; height: 38px; padding: 0 16px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.page-header-extra { min-width: 0; }
+@media (max-width: 640px) {
+  .page-header-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .page-header-actions { margin-left: 0; width: 100%; }
+  .page-header-actions .btn-primary,
+  .page-header-actions .btn-secondary { min-height: 44px; }
+  .page-header-back { height: 44px; }
+}
+
+/* Status-Plakette im Seitenkopf (Projektstatus o. ä.) */
+.status-pill {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px;
+  border-radius: var(--radius-pill);
+  background: var(--dim); color: var(--text-2);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.2px;
+}
+
+/* ── ActionBar ──────────────────────────────────────────────────────────── */
+.action-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface);
+  border-top: 1px solid var(--border-2);
+  box-shadow: 0 -4px 14px -8px var(--shadow-color);
+  z-index: 40;
+}
+.action-bar-left, .action-bar-right { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.action-bar-right { margin-left: auto; }
+.action-bar-status {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; color: var(--text-3); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.action-bar--dirty .action-bar-status { color: var(--text); font-weight: 600; }
+.action-bar-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); flex-shrink: 0; }
+.action-bar button { height: 40px; margin-top: 0; white-space: nowrap; }
+.action-bar .btn-primary {
+  width: auto; padding: 0 18px; font-size: 14px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.action-bar .btn-secondary { height: 40px; }
+.action-bar kbd {
+  font: inherit; font-size: 11px; font-weight: 600; opacity: 0.75;
+  padding: 1px 5px; border-radius: 4px; border: 1px solid currentColor;
+}
+.action-bar-spacer { display: none; }
+
+@media (min-width: 1024px) {
+  /* .app-main scrollt hier selbst — sticky haelt die Leiste am Rand. */
+  .action-bar {
+    position: sticky; bottom: -16px;
+    margin: var(--space-4) -16px -16px;
+    padding-bottom: calc(var(--space-3) + 16px);
+  }
+}
+@media (max-width: 1023px) {
+  .action-bar {
+    position: fixed; left: 0; right: 0;
+    bottom: calc(58px + env(safe-area-inset-bottom, 0px));
+    padding: var(--space-2) var(--space-3);
+    z-index: 95;               /* unter „Mehr"-Sheet (99/101) und Dialogen (500) */
+  }
+  .action-bar-spacer { display: block; height: 72px; }
+  .action-bar button { min-height: 44px; height: auto; }
+  .action-bar kbd { display: none; }
+}
+@media (max-width: 640px) {
+  .action-bar-status { display: none; }
+  .action-bar--dirty .action-bar-status { display: inline-flex; font-size: 12px; }
+  .action-bar-right { flex: 1; justify-content: flex-end; }
+  .action-bar .btn-primary { flex: 1 1 auto; justify-content: center; }
+}
+
+/* ── Disclosure ─────────────────────────────────────────────────────────── */
+.disclosure { border-top: 1px solid var(--border-2); padding-top: var(--space-2); margin-top: var(--space-3); }
+.disclosure-btn {
+  display: flex; align-items: center; gap: var(--space-2); width: 100%;
+  min-height: 40px; padding: 6px 4px;
+  border: none; background: transparent; box-shadow: none; text-align: left;
+  color: var(--text); font-size: 14px; font-weight: 600;
+  border-radius: var(--radius-sm);
+}
+.disclosure-btn:hover { background: var(--hover-bg); }
+.disclosure-chevron { flex-shrink: 0; color: var(--text-3); transition: transform 0.15s; }
+.disclosure--open .disclosure-chevron { transform: rotate(90deg); }
+.disclosure-title { min-width: 0; }
+.disclosure-hint { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.disclosure-body { padding: var(--space-2) 0 var(--space-1) 27px; }
+@media (max-width: 640px) {
+  .disclosure-btn { min-height: 44px; }
+  .disclosure-body { padding-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .disclosure-chevron { transition: none; } }
+
+/* ── Guard-Rueckfrage ───────────────────────────────────────────────────── */
+.guard-text { font-size: 14px; line-height: 1.55; color: var(--text-2); margin: 0 0 var(--space-3); }
+
+/* ── Dichte-Umschalter ──────────────────────────────────────────────────── */
+.density-toggle {
+  display: inline-flex; padding: 2px; gap: 2px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.density-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 30px; padding: 0 10px;
+  border: none; background: transparent; box-shadow: none;
+  border-radius: calc(var(--radius-md) - 3px);
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+}
+.density-btn:hover { background: var(--hover-bg); }
+.density-btn[aria-pressed="true"] { background: var(--dim); color: var(--text); }
+@media (max-width: 640px), (pointer: coarse) {
+  .density-toggle { display: none; }
+}
