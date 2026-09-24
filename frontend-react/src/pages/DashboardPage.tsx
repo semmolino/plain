@@ -22,6 +22,7 @@ import { Disclosure } from '@/components/ui/Disclosure'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { AttentionList, type AttentionItem } from '@/components/dashboard/AttentionList'
 import { QuickTimeCard } from '@/components/dashboard/QuickTimeCard'
+import { MeineZeitCard } from '@/components/zeit/MeineZeitCard'
 import { useQuickBooking } from '@/store/quickBookingStore'
 import { useCanBook } from '@/hooks/useBooking'
 import { localIsoDate } from '@/utils/zeit'
@@ -1017,10 +1018,11 @@ function BookingsTable({ bookings }: { bookings: DayBooking[] }) {
 }
 
 function MitarbeiterView({ employeeId }: { employeeId: number }) {
+  const { canBook } = useCanBook()
   const now   = new Date()
   const year  = now.getFullYear()
   const month = now.getMonth() + 1
-  const today = now.toISOString().slice(0, 10)
+  const today = localIsoDate(now)
 
   const { data: monthRes,   isLoading: l1 } = useQuery({
     queryKey: ['emp-balance', employeeId, year, month],
@@ -1065,6 +1067,8 @@ function MitarbeiterView({ employeeId }: { employeeId: number }) {
         <KpiCard label="Laufender Saldo"       value={fmtSaldo(totalSaldo)} accent={totalSaldo < -8} />
       </KpiGrid>
 
+      <MeineZeitCard employeeId={employeeId} />
+
       <NarrativeBlock>
         Diesen Monat: <strong>{fmtH(monthActual)}</strong> von <strong>{fmtH(monthReq)}</strong> Soll-Stunden gebucht
         {monthReq > 0 ? ` (${fmtPct((monthActual / monthReq) * 100)})` : ''}.{' '}
@@ -1077,26 +1081,32 @@ function MitarbeiterView({ employeeId }: { employeeId: number }) {
         <MitarbeiterBalanceChart months={months} />
       </div>
 
-      <div className="dash-card">
-        <div className="dash-card-title">Buchungen heute</div>
-        {todayBkgs.length > 0
-          ? <BookingsTable bookings={todayBkgs} />
-          : <p className="empty-note">Noch keine Buchungen für heute erfasst.</p>
-        }
-      </div>
+      {/* Wer buchen darf, bekommt „Meine Zeit" (Woche, Tag, Aendern/Loeschen)
+          statt der zwei Nur-Lese-Tabellen. Die bleiben fuer alle anderen. */}
+      {!canBook && (
+        <>
+          <div className="dash-card">
+            <div className="dash-card-title">Buchungen heute</div>
+            {todayBkgs.length > 0
+              ? <BookingsTable bookings={todayBkgs} />
+              : <p className="empty-note">Noch keine Buchungen für heute erfasst.</p>
+            }
+          </div>
 
-      {recentDays.length > 0 && (
-        <div className="dash-card">
-          <div className="dash-card-title">Letzte Buchungen dieses Monats</div>
-          {recentDays.map(d => (
-            <div key={d.date} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
-                {fmtDateDE(d.date)} — {fmtH(d.actual)}
-              </div>
-              <BookingsTable bookings={d.bookings} />
+          {recentDays.length > 0 && (
+            <div className="dash-card">
+              <div className="dash-card-title">Letzte Buchungen dieses Monats</div>
+              {recentDays.map(d => (
+                <div key={d.date} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
+                    {fmtDateDE(d.date)} — {fmtH(d.actual)}
+                  </div>
+                  <BookingsTable bookings={d.bookings} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </>
   )

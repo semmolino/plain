@@ -13,3 +13,30 @@ export type OwnLeaf = Pick<StructureNode, 'STRUCTURE_ID' | 'FATHER_ID' | 'ABBR' 
 
 export const fetchOwnLeaves = (projectId: number) =>
   apiClient.get<{ data: OwnLeaf[] }>(`/buchungen/eigen/projekte/${projectId}/leistungen`)
+
+/** Eine eigene Buchung fuer „Meine Zeit" — ohne Saetze und Summen. */
+export interface MyBooking {
+  ID:                  number
+  PROJECT_ID:          number | null
+  STRUCTURE_ID:        number | null
+  BOOKING_DATE:        string
+  TIME_START:          string | null
+  TIME_FINISH:         string | null
+  QUANTITY_INT:        number
+  /** Abrechnungsstunden = geleistete Stunden (beim Aendern mitziehen). */
+  EXT_FOLLOWS:         boolean
+  POSTING_DESCRIPTION: string
+  ENTRY_KIND:          'WORK' | 'BREAK' | string
+  BOOKING_KIND:        string | null
+  PROJECT:             { ABBR: string; NAME: string } | null
+  STRUCTURE:           { ABBR: string; NAME: string | null } | null
+  /** steckt in einer Rechnung/Abschlagsrechnung — nicht mehr aenderbar */
+  BILLED:              boolean
+  /** Monat fuer den Mitarbeiter abgeschlossen */
+  CLOSED:              boolean
+}
+
+/** Eigene Buchungen eines Zeitraums (hoechstens 62 Tage); Mitarbeiter = Sitzung. */
+export const fetchMine = (from: string, to: string) =>
+  apiClient.get<{ data: { from: string; to: string; bookings: MyBooking[]; drafts: MyBooking[] } }>(
+    `/buchungen/mine?from=${from}&to=${to}`)

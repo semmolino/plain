@@ -8,7 +8,7 @@ import { useToast } from '@/store/toastStore'
 import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
 import { NotificationBell } from './NotificationBell'
-import { TimerBar } from './TimerBar'
+import { TimerBar, TimerReview } from './TimerBar'
 import { useCanBook } from '@/hooks/useBooking'
 import { QuickBookingButton } from '@/components/zeit/QuickBookingButton'
 import { QuickBookingDialog } from '@/components/zeit/QuickBookingDialog'
@@ -181,6 +181,7 @@ export function AppLayout() {
           <Outlet />
         </main>
         <QuickBookingDialog />
+        {canBook && <TimerReview />}
       </div>
       <BottomNav />
     </div>

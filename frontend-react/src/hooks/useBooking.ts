@@ -16,6 +16,8 @@ export function useCanBook() {
   const create   = usePermission('projects.bookings.create')
   const own      = usePermission('projects.bookings.own')
   const projView = usePermission('projects.view')
+  const edit     = usePermission('projects.bookings.edit')
+  const del      = usePermission('projects.bookings.delete')
   return {
     /** „Zeit buchen" und Stempeluhr anzeigen */
     canBook:       (create && projView) || own,
@@ -23,6 +25,9 @@ export function useCanBook() {
     canBookOthers: create && projView,
     /** volle Projektdaten statt der schlanken Listen */
     fullLists:     create && projView,
+    /** eigene, offene Buchungen aendern / loeschen (Server prueft Sperren) */
+    canEditOwn:    edit || own,
+    canDeleteOwn:  del || own,
   }
 }
 

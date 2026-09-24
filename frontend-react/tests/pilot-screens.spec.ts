@@ -1,6 +1,6 @@
 import { test, type Page } from '@playwright/test'
 import { hideDevtools } from './fixtures/demoData'
-import { mockPilot } from './fixtures/pilotData'
+import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 
 /**
  * Vorher/Nachher-Bilder fuer den UI-Pilot (Branch ui-sm).
@@ -201,4 +201,72 @@ test('Rechnungen – Neue Rechnung', async ({ page }, info) => {
   await page.getByRole('button', { name: /Neue Rechnung/ }).click()
   await page.getByRole('menu').waitFor()
   await shoot(page, info.project.name, 'rechnungen-neu')
+})
+
+// ── Runde 2 ──────────────────────────────────────────────────────────────────
+// Vorher-Bilder fuer Runde 2 entstehen gegen den Stand am Ende von Runde 1
+// (PILOT_PHASE=vorher2). Die Szenen muessen deshalb auch mit den alten
+// Stempeluhr-Overlays funktionieren (.tbm-modal statt role=dialog).
+
+const DIALOG = '[role="dialog"], .tbm-modal'
+
+async function seedTimer(page: Page, minutesAgo: number) {
+  const start = new Date(new Date('2026-09-24T10:30:00+02:00').getTime() - minutesAgo * 60_000).toISOString()
+  await page.addInitScript(iso => {
+    localStorage.setItem('plain-timer-session', JSON.stringify({
+      state: {
+        session: { employeeId: 1, employeeName: 'SM', cpRate: 0, projectId: 1, projectName: 'P-2024-001',
+          structureId: 107, structureName: 'LP5.1', blockStartIso: iso },
+        breakState: null, showReview: false, reviewDate: null,
+      },
+      version: 0,
+    }))
+  }, start)
+}
+
+/** Kopfzeile am Desktop, Blatt am Handy. */
+async function timerAction(page: Page, device: string, name: RegExp) {
+  if (device === 'mobile') {
+    await page.locator('.timer-chip').click()
+    await page.getByRole('dialog', { name: 'Stempeluhr' }).getByRole('button', { name }).click()
+  } else {
+    await page.getByRole('button', { name }).first().click()
+  }
+}
+
+test('Stempeluhr – Start', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/')
+  await page.getByRole('button', { name: /Stempeluhr/ }).first().click()
+  await page.locator(DIALOG).last().waitFor()
+  await shoot(page, info.project.name, 'stempeluhr-start')
+})
+
+test('Stempeluhr – Nächste Aufgabe', async ({ page }, info) => {
+  await seedTimer(page, 95)
+  await prepare(page, info.project.name)
+  await open(page, '/')
+  await timerAction(page, info.project.name, /^Nächste Aufgabe$/)
+  await page.locator(DIALOG).last().waitFor()
+  await shoot(page, info.project.name, 'stempeluhr-naechste')
+})
+
+test('Stempeluhr – Tagesübersicht', async ({ page }, info) => {
+  await seedTimer(page, 30)
+  await prepare(page, info.project.name)
+  await page.route(/\/api\/v1\/buchungen\/timer\/drafts(\?|$)/, r => r.fulfill({ json: { data: TIMER_DRAFTS } }))
+  await open(page, '/')
+  await timerAction(page, info.project.name, /^Beenden/)
+  await page.getByRole('button', { name: /Beenden & prüfen|Abschließen & Prüfen/ }).click()
+  await page.getByText(/ohne ausreichende Pause/).waitFor()
+  await shoot(page, info.project.name, 'stempeluhr-tag')
+})
+
+test('Meine Zeit – Buchung ändern', async ({ page }, info) => {
+  test.skip(!PHASE.startsWith('nachher'), 'gibt es erst mit Runde 2')
+  await prepare(page, info.project.name, { role: 'mitarbeiter' })
+  await open(page, '/')
+  await page.locator('.mz-row').first().getByRole('button', { name: /ändern/ }).click()
+  await page.getByRole('dialog', { name: 'Buchung ändern' }).waitFor()
+  await shoot(page, info.project.name, 'meine-zeit-aendern')
 })

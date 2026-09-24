@@ -25,11 +25,13 @@ interface TimerStore {
   session:     TimerSession | null
   breakState:  BreakState | null
   showReview:  boolean
+  /** Tag der Tagesuebersicht; null = heute. */
+  reviewDate:  string | null
 
   startSession: (s: TimerSession) => void
   nextBlock:    (structureId: number, structureName: string, projectId: number, projectName: string) => void
   endSession:   () => void
-  openReview:   () => void
+  openReview:   (date?: string) => void
   closeReview:  () => void
 
   startBreak:   () => void
@@ -43,6 +45,7 @@ export const useTimerStore = create<TimerStore>()(
       session:    null,
       breakState: null,
       showReview: false,
+      reviewDate: null,
 
       startSession: (s) => set({ session: s, showReview: false }),
 
@@ -63,8 +66,8 @@ export const useTimerStore = create<TimerStore>()(
 
       endSession: () => set({ session: null, breakState: null, showReview: false }),
 
-      openReview:  () => set({ showReview: true }),
-      closeReview: () => set({ showReview: false }),
+      openReview:  (date) => set({ showReview: true, reviewDate: date ?? null }),
+      closeReview: () => set({ showReview: false, reviewDate: null }),
 
       startBreak: () => {
         const prev = get().session

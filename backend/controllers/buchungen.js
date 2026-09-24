@@ -19,6 +19,18 @@ async function loadOwnBooking(supabase, req, id) {
   return data;
 }
 
+/** GET /buchungen/mine?from&to — eigene Buchungen, Mitarbeiter aus der Sitzung. */
+async function listMine(req, res, supabase) {
+  try {
+    const data = await eigen.listMine(supabase, {
+      tenantId: req.tenantId, employeeId: req.employeeId, from: req.query.from, to: req.query.to,
+    });
+    res.json({ data });
+  } catch (err) {
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
+  }
+}
+
 async function createBuchung(req, res, supabase) {
   try {
     let body = req.body || {};
@@ -83,7 +95,9 @@ async function patchBuchung(req, res, supabase) {
       }
     }
     const data = await svc.patchBuchung(supabase, { id, body, tenantId: req.tenantId });
-    res.json({ data });
+    // patchBuchung liefert die ganze Zeile (select *) — Saetze nur mit Recht,
+    // wie beim Lesen der Liste.
+    res.json({ data: stripBookingMoney(req, [data])[0] });
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json({ error: err.message || err });
@@ -336,4 +350,5 @@ module.exports = {
   deleteDraft,
   patchDraftDescription,
   getWorkstartStatus,
+  listMine,
 };

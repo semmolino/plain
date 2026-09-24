@@ -1,19 +1,16 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { History } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { Message } from '@/components/ui/Message'
 import { Disclosure } from '@/components/ui/Disclosure'
-import { HelpHint } from '@/components/ui/HelpHint'
 import { TextSnippetBar } from '@/components/ui/TextSnippetBar'
-import { ProjectPicker } from '@/components/projekte/ProjectPicker'
 import {
   fetchActiveEmployees, fetchEmployee2ProjectPreset, createBuchung,
 } from '@/api/projekte'
-import { fetchRecents, trackRecent } from '@/api/recents'
-import { useBookableProjects, useBookableStructure, useCanBook } from '@/hooks/useBooking'
-import { parentStructureIds, structurePaths } from '@/utils/treeUtils'
+import { useCanBook } from '@/hooks/useBooking'
+import { LeafFields } from '@/components/zeit/LeafChoice'
+import { useLeafChoice } from '@/components/zeit/useLeafChoice'
 import { localIsoDate, addDaysIso, previousWorkday, hoursBetween, parseHours, fmtHours } from '@/utils/zeit'
 import { useQuickBooking, type QuickBookingPrefill } from '@/store/quickBookingStore'
 import { useAuthStore } from '@/store/authStore'
@@ -58,14 +55,13 @@ function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; 
   const today  = localIsoDate()
   const lastWorkday = previousWorkday(today)
 
-  const [projectId,   setProjectId]   = useState<number | null>(prefill.projectId ?? null)
-  // undefined = noch nicht gewaehlt → Vorbelegung gilt; null = bewusst geleert.
-  const [structureChoice, setStructureId] = useState<number | null | undefined>(prefill.structureId)
+  const leaf = useLeafChoice({ projectId: prefill.projectId, structureId: prefill.structureId })
+  const { projectId, structureId } = leaf
   const [date,        setDate]        = useState(prefill.date ?? today)
   const [timeStart,   setTimeStart]   = useState('')
   const [timeFinish,  setTimeFinish]  = useState('')
   const [hours,       setHours]       = useState('')
-  const [description, setDescription] = useState('')
+  const [description, setDescription] = useState(prefill.description ?? '')
   const [ext,         setExt]         = useState('')
   const [rate,        setRate]        = useState('')
   const [employeeId,  setEmployeeId]  = useState<number | null>(ownId)
@@ -73,54 +69,16 @@ function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; 
   const [serverError, setServerError] = useState<string | null>(null)
   const [saving,      setSaving]      = useState(false)
 
-  const { data: projectsData } = useBookableProjects()
-  const { data: structData, isLoading: structLoading } = useBookableStructure(projectId)
-  const { data: recentsData } = useQuery({
-    queryKey: ['recents', 'project_structure', null, 'recent'],
-    queryFn:  () => fetchRecents('project_structure', 12, { sortBy: 'recent' }),
-    staleTime: 30_000,
-  })
   const { data: empData } = useQuery({
     queryKey: ['active-employees'], queryFn: fetchActiveEmployees, enabled: !!allowOther,
   })
+  // Der Satz aus der Preisliste ist nur Anzeige — der Server setzt ihn selbst.
+  // Ohne Umsatzrecht wird er deshalb gar nicht erst geladen.
   const { data: preset } = useQuery({
     queryKey: ['e2p-preset', employeeId, projectId],
     queryFn:  () => fetchEmployee2ProjectPreset(employeeId!, projectId!),
-    enabled:  employeeId != null && projectId != null,
+    enabled:  showRevenue && employeeId != null && projectId != null,
   })
-
-  const projects  = useMemo(() => projectsData?.data ?? [], [projectsData])
-  const structure = useMemo(() => structData?.data ?? [], [structData])
-  const paths     = useMemo(() => structurePaths(structure), [structure])
-  const leaves    = useMemo(() => {
-    const parents = parentStructureIds(structure)
-    return structure
-      .filter(n => !parents.has(n.STRUCTURE_ID))
-      .sort((a, b) => (paths.get(a.STRUCTURE_ID) ?? '').localeCompare(paths.get(b.STRUCTURE_ID) ?? '', 'de', { numeric: true }))
-  }, [structure, paths])
-
-  // Zuletzt gebucht — ueber alle Projekte, je Leistung einmal.
-  const recents = useMemo(() => {
-    const seen = new Set<number>()
-    return (recentsData?.data ?? []).filter(r => {
-      const pid = Number((r.META as { project_id?: number } | null)?.project_id)
-      if (!Number.isFinite(pid) || seen.has(r.ENTITY_ID)) return false
-      seen.add(r.ENTITY_ID)
-      return projects.some(p => p.ID === pid)
-    }).slice(0, narrow ? 3 : 6)
-  }, [recentsData, projects, narrow])
-
-  // Leistung vorbelegen: die einzige Leistung oder die zuletzt in diesem
-  // Projekt gebuchte. Abgeleitet statt per Effekt gesetzt — eine Wahl des
-  // Nutzers (auch „bitte waehlen") hat immer Vorrang.
-  const defaultLeaf = useMemo(() => {
-    if (projectId == null || !leaves.length) return null
-    if (leaves.length === 1) return leaves[0].STRUCTURE_ID
-    const last = (recentsData?.data ?? []).find(r =>
-      Number((r.META as { project_id?: number } | null)?.project_id) === projectId && leaves.some(l => l.STRUCTURE_ID === r.ENTITY_ID))
-    return last ? last.ENTITY_ID : null
-  }, [projectId, leaves, recentsData])
-  const structureId = structureChoice === undefined ? defaultLeaf : structureChoice
 
   // Stundensatz aus der Preisliste des Projekts
   const presetRate = preset?.found && preset.HOURLY_RATE != null ? preset.HOURLY_RATE : null
@@ -133,12 +91,7 @@ function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; 
 
   const hoursNum  = parseHours(hours)
   const timesBad  = !!timeStart && !!timeFinish && hoursBetween(timeStart, timeFinish) == null
-  const project   = projects.find(p => p.ID === projectId)
-  const leafLabel = (id: number | null) => {
-    if (id == null) return ''
-    const p = paths.get(id) ?? ''
-    return p.includes(' > ') ? p.slice(p.lastIndexOf(' > ') + 3) : p
-  }
+  const leafLabel = leaf.leafLabel
 
   function validate(): boolean {
     const e: Record<string, string> = {}
@@ -177,13 +130,12 @@ function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; 
       return
     }
     setSaving(false)
-    const path = paths.get(structureId) ?? leafLabel(structureId)
-    void trackRecent('project_structure', structureId, path, { project_id: projectId }).catch(() => {})
-    for (const key of ['buchungen', 'timer-drafts', 'emp-balance', 'emp-running', 'workstart-status', 'recents', 'my-streak']) {
+    leaf.remember()
+    for (const key of ['buchungen', 'timer-drafts', 'emp-balance', 'emp-running', 'workstart-status', 'recents', 'my-streak', 'my-time']) {
       void qc.invalidateQueries({ queryKey: [key] })
     }
     void qc.invalidateQueries({ queryKey: ['structure', projectId] })
-    toast.success(`${fmtHours(hoursNum)} h gebucht · ${project?.ABBR ?? ''} / ${leafLabel(structureId)}`)
+    toast.success(`${fmtHours(hoursNum)} h gebucht · ${leaf.projectAbbr(projectId)} / ${leafLabel(structureId)}`)
     if (mode === 'close') { onClose(); return }
     setTimeStart(''); setTimeFinish(''); setHours(''); setDescription(''); setExt(''); setErrors({})
   }
@@ -221,53 +173,8 @@ function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; 
         }}
         noValidate
       >
-        {recents.length > 0 && (
-          <div className="qb-recents">
-            <div className="qb-recents-title">
-              <History size={13} strokeWidth={2} aria-hidden="true" /> Zuletzt gebucht
-              <HelpHint id="bookings.quick" size={13} />
-            </div>
-            <div className="qb-chips">
-              {recents.map(r => {
-                const pid = Number((r.META as { project_id?: number }).project_id)
-                const abbr = projects.find(p => p.ID === pid)?.ABBR ?? ''
-                const lbl = (r.LABEL ?? '').includes(' > ') ? (r.LABEL ?? '').slice((r.LABEL ?? '').lastIndexOf(' > ') + 3) : (r.LABEL ?? '')
-                const active = pid === projectId && r.ENTITY_ID === structureId
-                return (
-                  <button key={r.ID} type="button" className="qb-chip qb-recent-chip" aria-pressed={active}
-                    title={`${abbr} · ${r.LABEL ?? ''}`}
-                    onClick={() => { setProjectId(pid); setStructureId(r.ENTITY_ID); setErrors({}) }}>
-                    <span className="qb-chip-project">{abbr}</span>
-                    <span className="qb-chip-leaf">{lbl}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        <div className="form-group">
-          <label>Projekt*</label>
-          <ProjectPicker
-            projects={projects}
-            selectedId={projectId}
-            onSelect={id => { setProjectId(id); setStructureId(undefined) }}
-            placeholder="Projekt suchen …"
-            openOnFocus={false}
-          />
-          {errors.project && <p className="form-field-error" role="alert">{errors.project}</p>}
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="qb-leaf">Leistung*</label>
-          <select id="qb-leaf" value={structureId ?? ''} disabled={projectId == null || structLoading}
-            aria-invalid={errors.leaf ? true : undefined}
-            onChange={e => setStructureId(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">{projectId == null ? 'Erst ein Projekt wählen' : structLoading ? 'Lädt …' : 'Bitte wählen …'}</option>
-            {leaves.map(l => <option key={l.STRUCTURE_ID} value={l.STRUCTURE_ID}>{paths.get(l.STRUCTURE_ID) ?? l.ABBR}</option>)}
-          </select>
-          {errors.leaf && <p className="form-field-error" role="alert">{errors.leaf}</p>}
-        </div>
+        <LeafFields choice={leaf} idPrefix="qb" errors={{ project: errors.project, leaf: errors.leaf }}
+          onPicked={() => setErrors({})} />
 
         <div className="qb-row">
           <div className="form-group qb-date">

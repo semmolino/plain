@@ -4,6 +4,8 @@ export interface QuickBookingPrefill {
   projectId?:   number
   structureId?: number
   date?:        string
+  /** Beschreibung vorbelegen („Nochmal buchen" in „Meine Zeit"). */
+  description?: string
   /** Mitarbeiter waehlbar (nur aus dem Projekt-Tab „Buchungen" heraus). */
   allowOtherEmployee?: boolean
 }

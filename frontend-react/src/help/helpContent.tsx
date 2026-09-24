@@ -1508,14 +1508,44 @@ export const HELP = {
       </>
     ),
   },
+  'bookings.mine': {
+    title: 'Meine Zeit',
+    body: (
+      <>
+        Deine Woche auf einen Blick: je Tag die gebuchten Stunden und das Soll aus deinem
+        Arbeitszeitmodell (Urlaub, Krankheit und Feiertage werden angerechnet). Ein Tipp auf einen
+        Tag zeigt seine Buchungen.<br /><br />
+        <strong>Nochmal buchen</strong> öffnet „Zeit buchen" mit demselben Projekt, derselben Leistung
+        und derselben Beschreibung. Ändern und Löschen gehen, solange eine Buchung noch nicht
+        abgerechnet und der Monat nicht abgeschlossen ist — danach steht dort ein Schloss mit dem
+        Grund. Eine abgerechnete Buchung wird über Storno oder Gutschrift korrigiert.
+      </>
+    ),
+  },
   'timer.flow': {
     title: 'Stempeluhr',
     body: (
       <>
-        Die Stempeluhr misst die Zeit, während du arbeitest. Jeder Abschnitt (Start → Nächste
-        Aufgabe → Beenden) wird als <strong>Entwurf</strong> gesammelt. Gebucht ist erst, was du in
-        der <strong>Tagesübersicht</strong> freigibst — dort lassen sich Entwürfe noch korrigieren.
-        Wer lieber nachträglich bucht, nimmt „Zeit buchen".
+        Die Stempeluhr misst die Zeit, während du arbeitest. Jeder Abschnitt wird als
+        <strong> Entwurf</strong> gesichert — beim Wechsel über „Nächste Aufgabe", beim Start einer
+        <strong> Pause</strong> (die Arbeitszeit bis dahin geht nicht verloren) und bei „Beenden".
+        Gebucht ist erst, was du in der <strong>Tagesübersicht</strong> freigibst — dort lassen sich
+        Entwürfe noch korrigieren. Die Uhr gehört dem angemeldeten Nutzer: meldet sich am selben
+        Rechner jemand anderes an, sieht er sie nicht. Wer lieber nachträglich bucht, nimmt „Zeit buchen".
+      </>
+    ),
+  },
+  'timer.review': {
+    title: 'Tagesübersicht',
+    body: (
+      <>
+        Zeigt alle Entwürfe der Stempeluhr von heute. Zeiten, Stunden und Beschreibung lassen sich
+        hier noch ändern, einzelne Einträge löschen. <strong>Freigeben</strong> macht aus den
+        Entwürfen Buchungen — erst dann zählen sie für Zeitkonto, Kosten und Abrechnung.<br /><br />
+        Ist die Arbeitszeitprüfung eingeschaltet (Einstellungen → Arbeitszeit), prüft die Übersicht
+        die Pausenpflicht nach § 4 ArbZG. Fehlt Pause, wählst du, ob sie vom letzten Arbeitsblock
+        abgezogen wird oder ob du sie gemacht, aber nicht gestempelt hast. „Später" schließt die
+        Übersicht, die Entwürfe bleiben erhalten.
       </>
     ),
   },

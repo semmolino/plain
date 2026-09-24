@@ -64,3 +64,20 @@ export function fmtDayShort(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number)
   return FMT_DAY.format(new Date(y, m - 1, d))
 }
+
+/** Montag der Woche, in der `iso` liegt. */
+export function mondayOf(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const wd = new Date(y, m - 1, d).getDay()          // 0 = Sonntag
+  return addDaysIso(iso, wd === 0 ? -6 : 1 - wd)
+}
+
+/** Kalenderwoche nach ISO 8601 (Woche mit dem ersten Donnerstag = KW 1). */
+export function isoWeek(iso: string): number {
+  const [y, m, d] = iso.split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  const wd = date.getUTCDay() || 7
+  date.setUTCDate(date.getUTCDate() + 4 - wd)       // Donnerstag derselben Woche
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1)
+  return Math.ceil(((date.getTime() - yearStart) / 86400000 + 1) / 7)
+}

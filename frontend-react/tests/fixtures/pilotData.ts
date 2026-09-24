@@ -527,4 +527,72 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   // Stempeluhr
   await get('buchungen/timer/drafts', { data: [] })
   await byMethod('buchungen/timer/draft', { POST: r => r.fulfill(json({ success: true, data: { ID: 900 } })) })
+  await byMethod('buchungen/timer/draft/\\d+', {
+    PATCH:  r => r.fulfill(json({ success: true })),
+    DELETE: r => r.fulfill(json({ success: true })),
+  })
+  await byMethod('buchungen/timer/confirm', { POST: r => r.fulfill(json({ success: true, confirmed: 2 })) })
+  await get('arbzg/limits/\\d+', { data: ARBZG_LIMITS })
+
+  // „Meine Zeit" und „Eigene Zeit buchen"
+  await get('buchungen/mine', { data: myWeek() })
+  await get('buchungen/eigen/projekte', { data: projectsShort.slice(0, 4) })
+  await get('buchungen/eigen/projekte/\\d+/leistungen', { data: STRUCTURE.map(n => ({
+    STRUCTURE_ID: n.STRUCTURE_ID, FATHER_ID: n.FATHER_ID, ABBR: n.ABBR, NAME: n.NAME, BILLING_TYPE_ID: n.BILLING_TYPE_ID,
+  })) })
+  await byMethod('buchungen/\\d+', {
+    PATCH:  r => r.fulfill(json({ data: { ID: Number(r.request().url().match(/buchungen\/(\d+)/)?.[1]) } })),
+    DELETE: r => r.fulfill(json({ success: true })),
+  })
+}
+
+// ── Stempeluhr / Meine Zeit ──────────────────────────────────────────────────
+
+export const ARBZG_LIMITS = {
+  settings: { enabled: true, checkBreakRequired: true, autoBreakRequireConfirm: true },
+  model: null,
+  breakRule: { NAME: '§ 4 ArbZG', T1_HOURS: 6, T1_BREAK_MIN: 30, T2_HOURS: 9, T2_BREAK_MIN: 45 },
+}
+
+/** Zwei Entwuerfe von heute: 08:00–11:30 Kita, 11:30–14:15 Werk II (6,25 h, keine Pause). */
+export const TIMER_DRAFTS = [
+  { ID: 801, PROJECT_ID: 1, STRUCTURE_ID: 107, EMPLOYEE_ID: 1, BOOKING_DATE: PILOT_TODAY, TIME_START: '08:00:00', TIME_FINISH: '11:30:00',
+    QUANTITY_INT: 3.5, COST_RATE: 0, COST_TOTAL: 0, QUANTITY_EXT: 3.5, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
+    POSTING_DESCRIPTION: 'Werkplanung Treppenhaus', STATUS: 'DRAFT', ENTRY_KIND: 'WORK',
+    PROJECT: { ABBR: 'P-2024-001' }, STRUCTURE: { ABBR: 'LP5.1', NAME: 'Ausführungsplanung Rohbau' } },
+  { ID: 802, PROJECT_ID: 4, STRUCTURE_ID: 408, EMPLOYEE_ID: 1, BOOKING_DATE: PILOT_TODAY, TIME_START: '11:30:00', TIME_FINISH: '14:15:00',
+    QUANTITY_INT: 2.75, COST_RATE: 0, COST_TOTAL: 0, QUANTITY_EXT: 2.75, HOURLY_RATE: 0, HOURLY_RATE_TOTAL: 0,
+    POSTING_DESCRIPTION: '', STATUS: 'DRAFT', ENTRY_KIND: 'WORK',
+    PROJECT: { ABBR: 'P-2024-004' }, STRUCTURE: { ABBR: 'LP8', NAME: 'Objektüberwachung' } },
+]
+
+/** GET /buchungen/mine fuer die Pilotwoche 21.–27.09. — passend zu monthBalance(). */
+function myWeek() {
+  const bal = monthBalance()
+  const bookings: Record<string, unknown>[] = []
+  for (const d of bal.days) {
+    if (d.date < '2026-09-21' || d.date > '2026-09-27') continue
+    d.bookings.forEach((b, i) => bookings.push({
+      ID: b.id, PROJECT_ID: b.project_id, STRUCTURE_ID: b.structure_id, BOOKING_DATE: d.date,
+      TIME_START: i === 0 ? '08:00:00' : null, TIME_FINISH: i === 0 ? `${String(8 + Math.floor(b.hours)).padStart(2, '0')}:${b.hours % 1 ? '30' : '00'}:00` : null,
+      QUANTITY_INT: b.hours, EXT_FOLLOWS: true, POSTING_DESCRIPTION: b.description,
+      ENTRY_KIND: 'WORK', BOOKING_KIND: null,
+      PROJECT: { ABBR: b.project_id === 1 ? 'P-2024-001' : 'P-2024-004', NAME: b.project.replace(/^P-\d{4}-\d{3} /, '') },
+      STRUCTURE: b.structure_id === 108 ? { ABBR: 'LP5.2', NAME: 'Ausführungsplanung Ausbau' } : { ABBR: 'LP8', NAME: 'Objektüberwachung' },
+      // Montag steckt schon in der Abschlagsrechnung — die Zeile ist gesperrt.
+      BILLED: d.date === '2026-09-21' && i === 0, CLOSED: false,
+    }))
+  }
+  bookings.push({
+    ID: 9901, PROJECT_ID: null, STRUCTURE_ID: null, BOOKING_DATE: '2026-09-22', TIME_START: '12:00:00', TIME_FINISH: '12:30:00',
+    QUANTITY_INT: 0.5, EXT_FOLLOWS: true, POSTING_DESCRIPTION: 'Pause', ENTRY_KIND: 'BREAK', BOOKING_KIND: null,
+    PROJECT: null, STRUCTURE: null, BILLED: false, CLOSED: false,
+  })
+  const drafts = [{
+    ID: 801, PROJECT_ID: 1, STRUCTURE_ID: 107, BOOKING_DATE: PILOT_TODAY, TIME_START: '11:00:00', TIME_FINISH: '12:15:00',
+    QUANTITY_INT: 1.25, EXT_FOLLOWS: true, POSTING_DESCRIPTION: '', ENTRY_KIND: 'WORK', BOOKING_KIND: null,
+    PROJECT: { ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume' }, STRUCTURE: { ABBR: 'LP5.1', NAME: 'Ausführungsplanung Rohbau' },
+    BILLED: false, CLOSED: false,
+  }]
+  return { from: '2026-09-21', to: '2026-09-27', bookings, drafts }
 }

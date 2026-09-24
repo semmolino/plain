@@ -1,88 +1,84 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Pause, Play, ArrowRight, Square, X } from 'lucide-react'
+import { useState, useEffect, useMemo, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { Pause, Play, ArrowRight, Square, X, Pencil, Trash2, Check, Coffee, AlertTriangle, CheckCircle2, Info, ClipboardCheck } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTimerStore, elapsedSeconds, formatDuration, formatDurationHuman, quantityFromSeconds } from '@/store/timerStore'
 import type { TimerSession } from '@/store/timerStore'
-import { fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
 import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraft, fetchWorkstartStatus } from '@/api/timer'
 import type { DraftEntry } from '@/api/timer'
 import { fetchArbzgLimits } from '@/api/arbzg'
 import type { ArbzgLimits, BreakConfirmation, BreakConfirmationMap } from '@/api/arbzg'
-import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
-import type { StructureNode } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
-import { localIsoDate } from '@/utils/zeit'
-import { useBackdropClose } from '@/hooks/useBackdropClose'
+import { localIsoDate, fmtHours } from '@/utils/zeit'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { Modal } from '@/components/ui/Modal'
 import { DialogFooter } from '@/components/ui/DialogFooter'
+import { Message } from '@/components/ui/Message'
+import { HelpHint } from '@/components/ui/HelpHint'
+import { TextSnippetBar } from '@/components/ui/TextSnippetBar'
+import { LeafFields } from '@/components/zeit/LeafChoice'
+import { useLeafChoice } from '@/components/zeit/useLeafChoice'
 
-// ── Small helpers ─────────────────────────────────────────────────────────────
+/*
+ * Stempeluhr-Dialoge (UI-Pilot 2026-09, Runde 2).
+ *
+ * Vorher vier handgebaute Overlays (`.tbm-overlay`) ohne Escape, ohne
+ * Fokusfalle und ohne Fokus-Rueckgabe, mit Emoji als Symbolen (▶⏭⏹📋✎🗑⚠✓)
+ * und zwei nackten Auswahllisten, die als „Leistung" auch Knoten mit
+ * Unterelementen anboten. Jetzt `Modal` + `DialogFooter` (Abbrechen links,
+ * Hauptaktion rechts) und dieselbe Projekt-/Leistungswahl wie „Zeit buchen",
+ * samt „Zuletzt gebucht".
+ */
 
 // Lokales Datum — das UTC-Datum ist zwischen 0 und 2 Uhr noch gestern.
 function nowDateIso()  { return localIsoDate() }
 function nowTimeIso()  { return new Date().toTimeString().slice(0, 8) }
+const hhmm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
 
-function LeafPicker({
-  label, projectId, onProjectId, structureId, onStructureId,
-}: {
-  label: string
-  projectId: number | null
-  onProjectId: (id: number | null) => void
-  structureId: number | null
-  onStructureId: (id: number | null, name: string) => void
-}) {
-  const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
-  const { data: structData } = useQuery({
-    queryKey: ['structure', projectId],
-    queryFn: () => fetchProjectStructure(projectId!),
-    enabled: projectId !== null,
-  })
-
-  const projects = projectsData?.data ?? []
-  const allNodes = (structData?.data ?? []) as StructureNode[]
-  const tree = buildStructureTree(allNodes)
-  const flat = flattenTree(tree)
-  const fatherIds = new Set(allNodes.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
-  const leaves = flat.filter(fn => !fatherIds.has(String(fn.node.STRUCTURE_ID)))
-
+/** Der abgeschlossene Abschnitt: was, seit wann, wie lange. */
+function FinishedBlock({ label, session, elapsed }: { label: string; session: TimerSession; elapsed: number }) {
   return (
-    <div className="tbm-field-group">
-      <label className="tbm-label">{label}</label>
-      <select
-        className="tbm-select"
-        value={projectId ?? ''}
-        onChange={e => { onProjectId(e.target.value ? Number(e.target.value) : null); onStructureId(null, '') }}
-      >
-        <option value="">— Projekt wählen —</option>
-        {projects.map(p => <option key={p.ID} value={p.ID}>{p.ABBR} – {p.NAME}</option>)}
-      </select>
-      {projectId && (
-        <select
-          className="tbm-select"
-          value={structureId ?? ''}
-          onChange={e => {
-            const id = e.target.value ? Number(e.target.value) : null
-            const name = leaves.find(fn => fn.node.STRUCTURE_ID === id)?.node.ABBR ?? ''
-            onStructureId(id, name)
-          }}
-        >
-          <option value="">— Leistung wählen —</option>
-          {leaves.map(({ node, depth }) => (
-            <option key={node.STRUCTURE_ID} value={node.STRUCTURE_ID}>
-              {'  '.repeat(depth)}{node.ABBR}{node.NAME ? ` – ${node.NAME}` : ''}
-            </option>
-          ))}
-        </select>
-      )}
+    <div className="tm-block">
+      <span className="tm-block-label">{label}</span>
+      <span className="tm-block-task">{session.projectName} / {session.structureName}</span>
+      <span className="tm-block-time">
+        seit {hhmm(session.blockStartIso)} · <strong>{formatDurationHuman(elapsed)}</strong>
+      </span>
     </div>
   )
 }
 
-// ── Start modal ───────────────────────────────────────────────────────────────
+function DescriptionField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="form-group">
+      <label htmlFor={id}>Was hast du gemacht? <span className="tm-optional">(optional, später änderbar)</span></label>
+      <textarea id={id} rows={2} value={value} placeholder="z. B. Entwurf Grundrisse EG"
+        onChange={e => onChange(e.target.value)} />
+      <TextSnippetBar currentText={value} onChange={onChange} kind="WORK" />
+    </div>
+  )
+}
+
+/** Strg+S im Dialog: Hauptaktion, nicht die Seite dahinter. */
+function ctrlS(run: () => void) {
+  return (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault(); e.stopPropagation(); run()
+    }
+  }
+}
+
+/**
+ * Dialoge der Stempeluhr an <body> haengen. Die Uhr sitzt in der Kopfzeile
+ * (z-index 90), die untere Navigation liegt darueber (100) — ein Dialog im
+ * Kopf bleibt in dessen Ebene gefangen, und am Handy verdeckte die Navigation
+ * die Fusszeile mit „Abbrechen" und der Hauptaktion.
+ */
+const InBody = ({ children }: { children: ReactNode }) => createPortal(children, document.body)
+
+// ── Start ─────────────────────────────────────────────────────────────────────
 
 function StartModal({ onClose }: { onClose: () => void }) {
-  const backdrop = useBackdropClose(onClose)
   const startSession = useTimerStore(s => s.startSession)
   // Die Stempeluhr laeuft immer fuer den angemeldeten Nutzer. Vorher gab es
   // hier ein Mitarbeiterfeld: gespeichert wurde trotzdem fuer die Sitzung
@@ -91,84 +87,65 @@ function StartModal({ onClose }: { onClose: () => void }) {
   // ohne Gehaltsrecht einen 403-Hinweis.
   const employeeId   = useAuthStore(s => s.employeeId)
   const employeeName = useAuthStore(s => s.shortName)
-  const [projectId,     setProjectId]     = useState<number | null>(null)
-  const [structureId,   setStructureId]   = useState<number | null>(null)
-  const [structureName, setStructureName] = useState('')
-
-  const projects = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
-  const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.ABBR]))
+  const leaf = useLeafChoice()
+  const ready = !!employeeId && leaf.projectId != null && leaf.structureId != null
 
   function handleStart() {
-    if (!employeeId || !structureId || !projectId) return
-    const session: TimerSession = {
+    if (!ready || !employeeId || leaf.projectId == null || leaf.structureId == null) return
+    leaf.remember()
+    startSession({
       employeeId,
       employeeName: employeeName ?? String(employeeId),
       cpRate: 0,
-      projectId,
-      projectName: projectMap[projectId] ?? String(projectId),
-      structureId,
-      structureName,
+      projectId:     leaf.projectId,
+      projectName:   leaf.projectAbbr(leaf.projectId) || String(leaf.projectId),
+      structureId:   leaf.structureId,
+      structureName: leaf.leafLabel(leaf.structureId),
       blockStartIso: new Date().toISOString(),
-    }
-    startSession(session)
+    })
     onClose()
   }
 
-  const ready = !!employeeId && !!structureId
-
   return (
-    <div className="tbm-overlay" {...backdrop}>
-      <div className="tbm-modal">
-        <div className="tbm-modal-header">
-          <span className="tbm-modal-title">▶ Arbeitstag starten</span>
-          <button className="tbm-modal-close" onClick={onClose}>✕</button>
-        </div>
-
-        <div className="tbm-modal-body">
-          <LeafPicker
-            label="Erste Aufgabe"
-            projectId={projectId}
-            onProjectId={id => { setProjectId(id) }}
-            structureId={structureId}
-            onStructureId={(id, name) => { setStructureId(id); setStructureName(name) }}
-          />
-        </div>
-
-        <div className="tbm-modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn btn-primary" disabled={!ready} onClick={handleStart}>
-            ▶ Aufgabe starten
+    <Modal open onClose={onClose} title="Stempeluhr starten" className="qb-dialog">
+      <div className="qb-form" onKeyDown={ctrlS(handleStart)}>
+        <p className="tm-lead">
+          Die Uhr misst ab jetzt. Bei „Nächste Aufgabe“, „Pause“ und „Beenden“ wird die Zeit bis dahin
+          als Entwurf gesichert; gebucht ist erst, was du am Ende des Tages freigibst.
+          <HelpHint id="timer.flow" size={13} />
+        </p>
+        <LeafFields choice={leaf} idPrefix="tm-start" leafLabel="Woran arbeitest du?" />
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={!ready} onClick={handleStart}>
+            <Play size={14} strokeWidth={2} aria-hidden="true" /> Starten
           </button>
-        </div>
+        </DialogFooter>
       </div>
-    </div>
+    </Modal>
   )
 }
 
-// ── Next task modal ───────────────────────────────────────────────────────────
+// ── Nächste Aufgabe ───────────────────────────────────────────────────────────
 
 function NextTaskModal({ onClose }: { onClose: () => void }) {
-  const backdrop = useBackdropClose(onClose)
   const { session, nextBlock } = useTimerStore()
   const qc = useQueryClient()
-
-  const [description,  setDescription]  = useState('')
-  const [projectId,    setProjectId]    = useState<number | null>(null)
-  const [structureId,  setStructureId]  = useState<number | null>(null)
-  const [structureName, setStructureName] = useState('')
+  const leaf = useLeafChoice()
+  const [description, setDescription] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState<string | null>(null)
-
-  const projects = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
-  const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.ABBR]))
+  // Beim Oeffnen einfrieren: die Uhr laeuft weiter, der Dialog zeigt, was
+  // beim Klick gesichert wird — gesichert wird trotzdem bis „jetzt".
+  const [openedAt] = useState(() => Date.now())
 
   if (!session) return null
-  const elapsed = elapsedSeconds(session.blockStartIso)
-  const finishTime = nowTimeIso()
-  const ready = !!structureId
+  const elapsed = Math.max(0, Math.floor((openedAt - new Date(session.blockStartIso).getTime()) / 1000))
+  const same = leaf.projectId === session.projectId && leaf.structureId === session.structureId
+  const ready = leaf.projectId != null && leaf.structureId != null && !same
 
   async function handleNext() {
-    if (!structureId || !projectId || !session) return
+    if (!ready || !session || leaf.projectId == null || leaf.structureId == null) return
     setSaving(true)
     setError(null)
     try {
@@ -178,83 +155,55 @@ function NextTaskModal({ onClose }: { onClose: () => void }) {
         STRUCTURE_ID:        session.structureId,
         BOOKING_DATE:        nowDateIso(),
         TIME_START:          new Date(session.blockStartIso).toTimeString().slice(0, 8),
-        TIME_FINISH:         finishTime,
-        QUANTITY_INT:        quantityFromSeconds(elapsed),
-        COST_RATE:             session.cpRate,
+        TIME_FINISH:         nowTimeIso(),
+        QUANTITY_INT:        quantityFromSeconds(elapsedSeconds(session.blockStartIso)),
+        COST_RATE:           session.cpRate,
         POSTING_DESCRIPTION: description,
       })
-      nextBlock(structureId, structureName, projectId, projectMap[projectId] ?? String(projectId))
+      leaf.remember()
+      nextBlock(leaf.structureId, leaf.leafLabel(leaf.structureId), leaf.projectId,
+        leaf.projectAbbr(leaf.projectId) || String(leaf.projectId))
       void qc.invalidateQueries({ queryKey: ['timer-drafts'] })
       onClose()
     } catch (e: unknown) {
-      setError((e as { message?: string }).message ?? 'Fehler')
+      setError((e as { message?: string }).message ?? 'Speichern fehlgeschlagen')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="tbm-overlay" {...backdrop}>
-      <div className="tbm-modal">
-        <div className="tbm-modal-header">
-          <span className="tbm-modal-title">⏭ Nächste Aufgabe</span>
-          <button className="tbm-modal-close" onClick={onClose}>✕</button>
-        </div>
-
-        <div className="tbm-modal-body">
-          <div className="tbm-prev-task">
-            <span className="tbm-prev-label">Abgeschlossene Aufgabe</span>
-            <span className="tbm-prev-name">{session.projectName} / {session.structureName}</span>
-            <span className="tbm-prev-duration">{formatDurationHuman(elapsed)}</span>
-          </div>
-
-          <div className="tbm-field-group">
-            <label className="tbm-label">Tätigkeitsbeschreibung (optional)</label>
-            <textarea
-              className="tbm-textarea"
-              rows={2}
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Was wurde gemacht?"
-            />
-          </div>
-
-          <LeafPicker
-            label="Nächste Aufgabe"
-            projectId={projectId}
-            onProjectId={id => { setProjectId(id) }}
-            structureId={structureId}
-            onStructureId={(id, name) => { setStructureId(id); setStructureName(name) }}
-          />
-
-          {error && <p className="tbm-error">{error}</p>}
-        </div>
-
-        <div className="tbm-modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn btn-primary" disabled={!ready || saving} onClick={handleNext}>
-            {saving ? 'Speichern…' : '⏭ Weiter'}
+    <Modal open onClose={onClose} title="Nächste Aufgabe" className="qb-dialog">
+      <div className="qb-form" onKeyDown={ctrlS(() => void handleNext())}>
+        <FinishedBlock label="Bisher" session={session} elapsed={elapsed} />
+        <DescriptionField id="tm-next-desc" value={description} onChange={setDescription} />
+        <div className="tm-divider" role="presentation"><ArrowRight size={14} strokeWidth={2} aria-hidden="true" /> danach</div>
+        <LeafFields choice={leaf} idPrefix="tm-next" leafLabel="Nächste Leistung" />
+        {same && <p className="form-field-hint">Das ist die laufende Aufgabe.</p>}
+        <Message text={error} type="error" />
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={!ready || saving} onClick={() => void handleNext()}>
+            <ArrowRight size={14} strokeWidth={2} aria-hidden="true" /> {saving ? 'Sichert …' : 'Wechseln'}
           </button>
-        </div>
+        </DialogFooter>
       </div>
-    </div>
+    </Modal>
   )
 }
 
-// ── Finish modal ──────────────────────────────────────────────────────────────
+// ── Beenden ───────────────────────────────────────────────────────────────────
 
 function FinishModal({ onClose }: { onClose: () => void }) {
-  const backdrop = useBackdropClose(onClose)
-  const { session, openReview } = useTimerStore()
+  const { session, openReview, endSession } = useTimerStore()
   const qc = useQueryClient()
-
   const [description, setDescription] = useState('')
-  const [saving, setSaving]           = useState(false)
-  const [error, setError]             = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState<string | null>(null)
+  const [openedAt] = useState(() => Date.now())
 
   if (!session) return null
-  const elapsed    = elapsedSeconds(session.blockStartIso)
-  const finishTime = nowTimeIso()
+  const elapsed = Math.max(0, Math.floor((openedAt - new Date(session.blockStartIso).getTime()) / 1000))
 
   async function handleFinish() {
     if (!session) return
@@ -267,64 +216,44 @@ function FinishModal({ onClose }: { onClose: () => void }) {
         STRUCTURE_ID:        session.structureId,
         BOOKING_DATE:        nowDateIso(),
         TIME_START:          new Date(session.blockStartIso).toTimeString().slice(0, 8),
-        TIME_FINISH:         finishTime,
-        QUANTITY_INT:        quantityFromSeconds(elapsed),
-        COST_RATE:             session.cpRate,
+        TIME_FINISH:         nowTimeIso(),
+        QUANTITY_INT:        quantityFromSeconds(elapsedSeconds(session.blockStartIso)),
+        COST_RATE:           session.cpRate,
         POSTING_DESCRIPTION: description,
       })
       void qc.invalidateQueries({ queryKey: ['timer-drafts'] })
+      // Die Uhr ist ab hier aus. Vorher lief sie bis zur Freigabe weiter —
+      // wer die Tagesuebersicht mit „Spaeter" schloss, hatte eine Uhr, die
+      // den schon gesicherten Abschnitt ein zweites Mal zaehlte.
+      endSession()
       onClose()
       openReview()
     } catch (e: unknown) {
-      setError((e as { message?: string }).message ?? 'Fehler')
+      setError((e as { message?: string }).message ?? 'Speichern fehlgeschlagen')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="tbm-overlay" {...backdrop}>
-      <div className="tbm-modal">
-        <div className="tbm-modal-header">
-          <span className="tbm-modal-title">⏹ Buchungen abschließen</span>
-          <button className="tbm-modal-close" onClick={onClose}>✕</button>
-        </div>
-
-        <div className="tbm-modal-body">
-          <div className="tbm-prev-task">
-            <span className="tbm-prev-label">Letzte Aufgabe</span>
-            <span className="tbm-prev-name">{session.projectName} / {session.structureName}</span>
-            <span className="tbm-prev-duration">{formatDurationHuman(elapsed)}</span>
-          </div>
-
-          <div className="tbm-field-group">
-            <label className="tbm-label">Tätigkeitsbeschreibung (optional)</label>
-            <textarea
-              className="tbm-textarea"
-              rows={2}
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Was wurde gemacht?"
-            />
-          </div>
-
-          {error && <p className="tbm-error">{error}</p>}
-        </div>
-
-        <div className="tbm-modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn btn-primary" disabled={saving} onClick={handleFinish}>
-            {saving ? 'Speichern…' : '⏹ Abschließen & Prüfen'}
+    <Modal open onClose={onClose} title="Arbeitstag beenden" className="qb-dialog">
+      <div className="qb-form" onKeyDown={ctrlS(() => void handleFinish())}>
+        <FinishedBlock label="Letzte Aufgabe" session={session} elapsed={elapsed} />
+        <DescriptionField id="tm-finish-desc" value={description} onChange={setDescription} />
+        <p className="tm-lead">Danach siehst du alle Einträge von heute und gibst sie frei.</p>
+        <Message text={error} type="error" />
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={saving} onClick={() => void handleFinish()}>
+            <Square size={12} strokeWidth={2} aria-hidden="true" /> {saving ? 'Sichert …' : 'Beenden & prüfen'}
           </button>
-        </div>
+        </DialogFooter>
       </div>
-    </div>
+    </Modal>
   )
 }
 
-// ── Day review modal ──────────────────────────────────────────────────────────
-
-const FMT_H = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
+// ── Tagesübersicht ────────────────────────────────────────────────────────────
 
 interface EditingRow {
   id:          number
@@ -334,18 +263,23 @@ interface EditingRow {
   description: string
 }
 
+const fmtDateDe = (iso: string) => {
+  const [y, m, d] = iso.split('-')
+  return `${d}.${m}.${y}`
+}
+
 function DayReviewModal({ onClose }: { onClose: () => void }) {
-  const backdrop = useBackdropClose(onClose)
-  const { session, endSession } = useTimerStore()
+  const reviewDate = useTimerStore(s => s.reviewDate)
   const qc = useQueryClient()
-  const employeeId = session?.employeeId
+  // Immer die eigenen Entwuerfe — auch ohne laufende Uhr (aus „Meine Zeit").
+  const employeeId = useAuthStore(s => s.employeeId) ?? undefined
   const [editRow,    setEditRow]    = useState<EditingRow | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [error,      setError]      = useState<string | null>(null)
   const [breakChoice, setBreakChoice] = useState<'auto' | 'manual'>('auto')
   const [breakManualMin, setBreakManualMin] = useState<string>('')
 
-  const today = nowDateIso()
+  const today = reviewDate ?? nowDateIso()
 
   const { data: draftsData, isLoading } = useQuery({
     queryKey: ['timer-drafts', employeeId, today],
@@ -360,9 +294,12 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
     refetchOnWindowFocus: false,
   })
 
-  const drafts = (draftsData?.data ?? []) as DraftEntry[]
+  const drafts = useMemo(() => (draftsData?.data ?? []) as DraftEntry[], [draftsData])
   const totalH = drafts
     .filter(d => (d.ENTRY_KIND ?? 'WORK') === 'WORK')
+    .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)
+  const breakH = drafts
+    .filter(d => d.ENTRY_KIND === 'BREAK')
     .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)
 
   // ── ArbZG-Auswertung der Drafts ───────────────────────────────────────
@@ -392,6 +329,7 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteTimerDraft(id),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['timer-drafts'] }),
+    onError:   (e: unknown) => setError((e as { message?: string }).message ?? 'Löschen fehlgeschlagen'),
   })
 
   const patchMut = useMutation({
@@ -401,41 +339,41 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
       setEditRow(null)
       void qc.invalidateQueries({ queryKey: ['timer-drafts'] })
     },
+    onError: (e: unknown) => setError((e as { message?: string }).message ?? 'Speichern fehlgeschlagen'),
   })
 
-  function startEdit(d: { ID: number; TIME_START: string | null; TIME_FINISH: string | null; QUANTITY_INT: number; POSTING_DESCRIPTION: string }) {
+  function startEdit(d: DraftEntry) {
     setEditRow({
       id:          d.ID,
       timeStart:   d.TIME_START?.slice(0, 5) ?? '',
       timeFinish:  d.TIME_FINISH?.slice(0, 5) ?? '',
-      quantityInt: String(d.QUANTITY_INT ?? ''),
-      description: d.POSTING_DESCRIPTION,
+      quantityInt: d.QUANTITY_INT != null ? fmtHours(Number(d.QUANTITY_INT)) : '',
+      description: d.POSTING_DESCRIPTION ?? '',
     })
   }
 
   function onTimeChange(field: 'timeStart' | 'timeFinish', val: string) {
     if (!editRow) return
     const next = { ...editRow, [field]: val }
-    const start  = field === 'timeStart'  ? val : next.timeStart
-    const finish = field === 'timeFinish' ? val : next.timeFinish
-    if (start && finish) {
-      const [sh, sm] = start.split(':').map(Number)
-      const [fh, fm] = finish.split(':').map(Number)
+    if (next.timeStart && next.timeFinish) {
+      const [sh, sm] = next.timeStart.split(':').map(Number)
+      const [fh, fm] = next.timeFinish.split(':').map(Number)
       const diffMin = Math.max(0, fh * 60 + fm - (sh * 60 + sm))
-      next.quantityInt = String(Math.round(diffMin / 60 * 100) / 100)
+      next.quantityInt = fmtHours(Math.round(diffMin / 60 * 100) / 100)
     }
     setEditRow(next)
   }
 
   function saveEdit() {
     if (!editRow) return
+    const qty = Number(editRow.quantityInt.replace(',', '.'))
     patchMut.mutate({
       id: editRow.id,
       body: {
         description:  editRow.description,
         time_start:   editRow.timeStart  ? editRow.timeStart  + ':00' : undefined,
         time_finish:  editRow.timeFinish ? editRow.timeFinish + ':00' : undefined,
-        quantity_int: editRow.quantityInt ? Number(editRow.quantityInt) : undefined,
+        quantity_int: editRow.quantityInt && Number.isFinite(qty) ? qty : undefined,
       },
     })
   }
@@ -454,218 +392,209 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
         confirmations[dayKey] = c
       }
       await confirmDrafts(drafts.map(d => d.ID), confirmations)
-      void qc.invalidateQueries({ queryKey: ['buchungen'] })
-      void qc.invalidateQueries({ queryKey: ['structure'] })
-      void qc.invalidateQueries({ queryKey: ['arbzg-audit'] })
-      endSession()
+      for (const key of ['buchungen', 'structure', 'arbzg-audit', 'timer-drafts', 'my-time', 'emp-balance', 'workstart-status']) {
+        void qc.invalidateQueries({ queryKey: [key] })
+      }
       onClose()
     } catch (e: unknown) {
       const err = e as { message?: string; details?: { code?: string } }
       const code = err.details?.code
       setError(code === 'ARBZG_BREAK_CONFIRM_REQUIRED'
         ? 'Bitte Pausenbestätigung wählen, bevor freigegeben wird.'
-        : (err.message ?? 'Fehler'))
+        : (err.message ?? 'Freigeben fehlgeschlagen'))
       setConfirming(false)
     }
   }
 
   return (
-    <div className="tbm-overlay" {...backdrop}>
-      <div className="tbm-modal tbm-modal-wide">
-        <div className="tbm-modal-header">
-          <span className="tbm-modal-title">📋 Tagesübersicht – {today}</span>
-          <button className="tbm-modal-close" onClick={onClose}>✕</button>
-        </div>
+    <Modal open onClose={onClose} title={`Tagesübersicht ${fmtDateDe(today)}`} className="qb-dialog tm-review">
+      <div className="qb-form">
+        <p className="tm-lead">
+          Prüfe die Einträge der Stempeluhr und gib sie frei — erst dann sind sie gebucht.
+          Bis dahin kannst du Zeiten und Beschreibung noch ändern.
+          <HelpHint id="timer.review" size={13} />
+        </p>
 
-        <div className="tbm-modal-body">
-          {isLoading && <p className="tbm-info">Lade Einträge…</p>}
-          {!isLoading && drafts.length === 0 && (
-            <p className="tbm-info">Keine Entwürfe für heute.</p>
-          )}
+        {isLoading && <p className="tm-empty">Lädt Einträge …</p>}
+        {!isLoading && drafts.length === 0 && (
+          <p className="tm-empty">Für diesen Tag gibt es keine offenen Einträge der Stempeluhr.</p>
+        )}
 
-          {/* ── ArbZG-Block ─────────────────────────────────────────── */}
-          {limits?.settings.enabled && breakAnalysis && breakAnalysis.required > 0 && (
-            <div className={breakAnalysis.missing > 0 ? 'tbm-arbzg-warn' : 'tbm-arbzg-ok'}>
-              {breakAnalysis.missing > 0 ? (
-                <>
-                  <div className="tbm-arbzg-title">
-                    ⚠ {breakAnalysis.dayWork.toFixed(2)} h Arbeit ohne ausreichende Pause
+        {/* ── ArbZG-Block ─────────────────────────────────────────── */}
+        {limits?.settings.enabled && breakAnalysis && breakAnalysis.required > 0 && (
+          <div className={`tm-arbzg ${breakAnalysis.missing > 0 ? 'tm-arbzg--warn' : 'tm-arbzg--ok'}`}
+            role={breakAnalysis.missing > 0 ? 'alert' : undefined}>
+            {breakAnalysis.missing > 0 ? (
+              <>
+                <div className="tm-arbzg-title">
+                  <AlertTriangle size={15} strokeWidth={2} aria-hidden="true" />
+                  {fmtHours(breakAnalysis.dayWork)} h Arbeit ohne ausreichende Pause
+                </div>
+                <div className="tm-arbzg-meta">
+                  Erforderlich {breakAnalysis.required} min · gestempelt {breakAnalysis.breakMin} min ·
+                  es fehlen {breakAnalysis.missing} min
+                  {limits.breakRule?.NAME && <> ({limits.breakRule.NAME})</>}
+                </div>
+                {needsBreakConfirm && (
+                  <fieldset className="tm-arbzg-choices">
+                    <legend className="sr-only">Wie soll die fehlende Pause behandelt werden?</legend>
+                    <label className="tm-arbzg-choice">
+                      <input type="radio" name="brkChoice"
+                        checked={breakChoice === 'auto'}
+                        onChange={() => setBreakChoice('auto')} />
+                      <span>
+                        {breakAnalysis.missing} min vom letzten Arbeitsblock abziehen
+                      </span>
+                    </label>
+                    <label className="tm-arbzg-choice">
+                      <input type="radio" name="brkChoice"
+                        checked={breakChoice === 'manual'}
+                        onChange={() => setBreakChoice('manual')} />
+                      <span className="tm-arbzg-manual">
+                        Ich habe zusätzlich
+                        <input type="number" min={1} step={5} inputMode="numeric"
+                          aria-label="Minuten Pause"
+                          value={breakManualMin}
+                          placeholder={String(breakAnalysis.missing)}
+                          onFocus={() => setBreakChoice('manual')}
+                          onChange={e => setBreakManualMin(e.target.value)} />
+                        min Pause gemacht (wird nachgetragen)
+                      </span>
+                    </label>
+                  </fieldset>
+                )}
+              </>
+            ) : (
+              <div className="tm-arbzg-title">
+                <CheckCircle2 size={15} strokeWidth={2} aria-hidden="true" />
+                Pausenpflicht (§ 4 ArbZG) erfüllt — {breakAnalysis.breakMin} von {breakAnalysis.required} min
+              </div>
+            )}
+            {breakAnalysis.dayWork > 8 && (
+              <div className="tm-arbzg-info">
+                <Info size={13} strokeWidth={2} aria-hidden="true" />
+                Tagesarbeit {fmtHours(breakAnalysis.dayWork)} h wird nach § 16 Abs. 2 ArbZG dokumentiert.
+              </div>
+            )}
+          </div>
+        )}
+
+        {drafts.length > 0 && (
+          <ul className="tm-list" aria-label="Einträge der Stempeluhr">
+            {drafts.map(d => {
+              const isEditing = editRow?.id === d.ID
+              const isBreak   = d.ENTRY_KIND === 'BREAK'
+              return (
+                <li key={d.ID} className={`tm-row${isBreak ? ' tm-row--break' : ''}${isEditing ? ' tm-row--editing' : ''}`}>
+                  <div className="tm-row-main">
+                    <span className="tm-row-time">
+                      {d.TIME_START?.slice(0, 5)}–{d.TIME_FINISH?.slice(0, 5)}
+                    </span>
+                    <span className="tm-row-task">
+                      {isBreak ? (
+                        <><Coffee size={13} strokeWidth={2} aria-hidden="true" /> Pause</>
+                      ) : (
+                        <><strong>{d.PROJECT?.ABBR}</strong> · {d.STRUCTURE?.ABBR}{d.STRUCTURE?.NAME ? ` ${d.STRUCTURE.NAME}` : ''}</>
+                      )}
+                    </span>
+                    <span className="tm-row-hours">{fmtHours(Number(d.QUANTITY_INT))} h</span>
+                    {!isEditing && (
+                      <span className="tm-row-actions">
+                        <button type="button" className="row-action-btn" onClick={() => startEdit(d)}
+                          aria-label={`Eintrag ${d.TIME_START?.slice(0, 5) ?? ''} bearbeiten`} title="Bearbeiten">
+                          <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                        <button type="button" className="row-action-btn row-action-btn--danger" onClick={() => deleteMut.mutate(d.ID)}
+                          disabled={deleteMut.isPending}
+                          aria-label={`Eintrag ${d.TIME_START?.slice(0, 5) ?? ''} löschen`} title="Löschen">
+                          <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                      </span>
+                    )}
                   </div>
-                  <div className="tbm-arbzg-meta">
-                    Erforderlich: {breakAnalysis.required} min ·
-                    gestempelt: {breakAnalysis.breakMin} min ·
-                    fehlt: {breakAnalysis.missing} min
-                    {limits.breakRule?.NAME && <> ({limits.breakRule.NAME})</>}
-                  </div>
-                  {needsBreakConfirm && (
-                    <div className="tbm-arbzg-choices">
-                      <label className="tbm-arbzg-choice">
-                        <input type="radio" name="brkChoice"
-                          checked={breakChoice === 'auto'}
-                          onChange={() => setBreakChoice('auto')} />
-                        <span>
-                          Auto-Abzug akzeptieren — {breakAnalysis.missing} min werden
-                          vom letzten Arbeitsblock abgezogen
-                        </span>
-                      </label>
-                      <label className="tbm-arbzg-choice">
-                        <input type="radio" name="brkChoice"
-                          checked={breakChoice === 'manual'}
-                          onChange={() => setBreakChoice('manual')} />
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          Ich habe zusätzlich
-                          <input type="number" min={1} step={5}
-                            className="tbm-input"
-                            style={{ width: 64, padding: '2px 4px' }}
-                            value={breakManualMin}
-                            placeholder={String(breakAnalysis.missing)}
-                            onFocus={() => setBreakChoice('manual')}
-                            onChange={e => setBreakManualMin(e.target.value)} />
-                          min Pause gemacht (wird nachgetragen)
-                        </span>
-                      </label>
+                  {!isEditing && !isBreak && (
+                    <div className={`tm-row-desc${d.POSTING_DESCRIPTION ? '' : ' tm-row-desc--missing'}`}>
+                      {d.POSTING_DESCRIPTION || 'Noch keine Beschreibung'}
                     </div>
                   )}
-                </>
-              ) : (
-                <div className="tbm-arbzg-title">
-                  ✓ Pausenpflicht (§ 4 ArbZG) erfüllt — {breakAnalysis.breakMin}/{breakAnalysis.required} min
-                </div>
-              )}
-              {breakAnalysis.dayWork > 8 && (
-                <div className="tbm-arbzg-info">
-                  ℹ Tagesarbeit {breakAnalysis.dayWork.toFixed(2)} h wird gem. § 16 Abs. 2 ArbZG dokumentiert.
-                </div>
-              )}
-            </div>
-          )}
-
-          {drafts.length > 0 && (
-            <table className="tbm-review-table">
-              <thead>
-                <tr>
-                  <th scope="col">Projekt / Aufgabe</th>
-                  <th scope="col">Zeit</th>
-                  <th scope="col">Std.</th>
-                  <th scope="col">Beschreibung</th>
-                  <th scope="col"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {drafts.map(d => {
-                  const isEditing = editRow?.id === d.ID
-                  const isBreak   = d.ENTRY_KIND === 'BREAK'
-                  return (
-                    <tr key={d.ID} className={isEditing ? 'tbm-row-editing' : ''}>
-                      <td>
-                        {isBreak ? (
-                          <span className="tbm-review-proj" style={{ color: 'var(--warning-strong)' }}>
-                            ⏸ Pause
-                          </span>
-                        ) : (
-                          <>
-                            <span className="tbm-review-proj">{d.PROJECT?.ABBR}</span>
-                            <span className="tbm-review-struct">{d.STRUCTURE?.ABBR}</span>
-                          </>
-                        )}
-                      </td>
-                      {isEditing ? (
-                        <>
-                          <td className="tbm-edit-time">
-                            <input
-                              type="time"
-                              className="tbm-input tbm-input-time"
-                              value={editRow.timeStart}
-                              onChange={e => onTimeChange('timeStart', e.target.value)}
-                            />
-                            <span className="tbm-time-sep">–</span>
-                            <input
-                              type="time"
-                              className="tbm-input tbm-input-time"
-                              value={editRow.timeFinish}
-                              onChange={e => onTimeChange('timeFinish', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="number"
-                              className="tbm-input tbm-input-qty"
-                              min={0}
-                              step={0.25}
-                              value={editRow.quantityInt}
-                              onChange={e => setEditRow({ ...editRow, quantityInt: e.target.value })}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className="tbm-input"
-                              value={editRow.description}
-                              onChange={e => setEditRow({ ...editRow, description: e.target.value })}
-                              autoFocus
-                            />
-                          </td>
-                          <td className="tbm-row-actions">
-                            <button
-                              className="tbm-icon-btn tbm-save"
-                              onClick={saveEdit}
-                              disabled={patchMut.isPending}
-                            >✓</button>
-                            <button className="tbm-icon-btn" onClick={() => setEditRow(null)}>✕</button>
-                          </td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="tbm-mono">
-                            {d.TIME_START?.slice(0, 5)} – {d.TIME_FINISH?.slice(0, 5)}
-                          </td>
-                          <td className="tbm-mono">{FMT_H.format(Number(d.QUANTITY_INT))}</td>
-                          <td>
-                            <span className="tbm-review-desc">
-                              {d.POSTING_DESCRIPTION || <em className="tbm-muted">Keine Beschreibung</em>}
-                            </span>
-                          </td>
-                          <td className="tbm-row-actions">
-                            <button
-                              className="tbm-icon-btn"
-                              title="Eintrag bearbeiten"
-                              onClick={() => startEdit(d)}
-                            >✎</button>
-                            <button
-                              className="tbm-icon-btn tbm-danger"
-                              title="Eintrag löschen"
-                              onClick={() => deleteMut.mutate(d.ID)}
-                            >🗑</button>
-                          </td>
-                        </>
+                  {isEditing && editRow && (
+                    <div className="tm-edit" onKeyDown={e => {
+                      if (e.key === 'Escape') { e.stopPropagation(); setEditRow(null) }
+                      if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') { e.preventDefault(); saveEdit() }
+                    }}>
+                      <div className="tm-edit-times">
+                        <div className="form-group">
+                          <label htmlFor={`tm-e-von-${d.ID}`}>Von</label>
+                          <input id={`tm-e-von-${d.ID}`} type="time" value={editRow.timeStart}
+                            onChange={e => onTimeChange('timeStart', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor={`tm-e-bis-${d.ID}`}>Bis</label>
+                          <input id={`tm-e-bis-${d.ID}`} type="time" value={editRow.timeFinish}
+                            onChange={e => onTimeChange('timeFinish', e.target.value)} />
+                        </div>
+                        <div className="form-group">
+                          <label htmlFor={`tm-e-h-${d.ID}`}>Stunden</label>
+                          <input id={`tm-e-h-${d.ID}`} type="text" inputMode="decimal" value={editRow.quantityInt}
+                            onChange={e => setEditRow({ ...editRow, quantityInt: e.target.value })} />
+                        </div>
+                      </div>
+                      {!isBreak && (
+                        <div className="form-group">
+                          <label htmlFor={`tm-e-d-${d.ID}`}>Beschreibung</label>
+                          <input id={`tm-e-d-${d.ID}`} type="text" value={editRow.description} autoFocus
+                            onChange={e => setEditRow({ ...editRow, description: e.target.value })} />
+                        </div>
                       )}
-                    </tr>
-                  )
-                })}
-              </tbody>
-              <tfoot>
-                <tr>
-                  <td colSpan={2} className="tbm-total-label">Gesamt</td>
-                  <td className="tbm-mono tbm-total-val">{FMT_H.format(totalH)}</td>
-                  <td colSpan={2}></td>
-                </tr>
-              </tfoot>
-            </table>
-          )}
+                      <div className="tm-edit-actions">
+                        <button type="button" className="btn-secondary btn-small" onClick={() => setEditRow(null)}>
+                          <X size={13} strokeWidth={2} aria-hidden="true" /> Abbrechen
+                        </button>
+                        <button type="button" className="btn-primary btn-small" onClick={saveEdit} disabled={patchMut.isPending}>
+                          <Check size={13} strokeWidth={2} aria-hidden="true" /> Übernehmen
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
-          {error && <p className="tbm-error">{error}</p>}
-        </div>
+        {drafts.length > 0 && (
+          <div className="tm-total">
+            <span>Arbeit <strong>{fmtHours(totalH)} h</strong></span>
+            {breakH > 0 && <span>Pause {fmtHours(breakH)} h</span>}
+          </div>
+        )}
 
-        <div className="tbm-modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Schließen</button>
+        <Message text={error} type="error" />
+
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Später</button>
           {drafts.length > 0 && (
-            <button className="btn btn-primary" disabled={confirming} onClick={handleConfirm}>
-              {confirming ? 'Freigeben…' : `✓ ${drafts.length} Buchung${drafts.length !== 1 ? 'en' : ''} freigeben`}
+            <button type="button" className="btn-primary" disabled={confirming || !!editRow} onClick={() => void handleConfirm()}
+              title={editRow ? 'Erst die offene Änderung übernehmen oder abbrechen' : undefined}>
+              <ClipboardCheck size={14} strokeWidth={2} aria-hidden="true" />
+              {confirming ? 'Gibt frei …' : drafts.length === 1 ? '1 Eintrag freigeben' : `${drafts.length} Einträge freigeben`}
             </button>
           )}
-        </div>
+        </DialogFooter>
       </div>
-    </div>
+    </Modal>
   )
+}
+
+/**
+ * Tagesuebersicht, unabhaengig von der Kopfzeile eingehaengt (AppLayout).
+ * Sie gehoert zum Freigeben, nicht zur laufenden Uhr: nach „Beenden" ist die
+ * Uhr aus, und „Meine Zeit" oeffnet sie fuer liegengebliebene Entwuerfe.
+ */
+export function TimerReview() {
+  const show        = useTimerStore(s => s.showReview)
+  const closeReview = useTimerStore(s => s.closeReview)
+  return show ? <DayReviewModal onClose={closeReview} /> : null
 }
 
 // ── Main TimerBar ─────────────────────────────────────────────────────────────
@@ -676,7 +605,7 @@ const FMT_H1 = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const fmtH1  = (h: number) => FMT_H1.format(h)
 
 export function TimerBar() {
-  const { session: storedSession, breakState: storedBreak, showReview, closeReview, startBreak, endBreak, cancelBreak }
+  const { session: storedSession, breakState: storedBreak, startBreak, endBreak, cancelBreak }
     = useTimerStore()
   // Die Sitzung liegt im Browser. Meldet sich am selben Rechner jemand
   // anderes an, gehoert sie nicht ihm: nicht anzeigen, nicht weiterfuehren.
@@ -822,7 +751,7 @@ export function TimerBar() {
           <Play size={15} strokeWidth={2} aria-hidden="true" />
           <span className="hdr-label">Stempeluhr</span>
         </button>
-        {modal === 'start' && <StartModal onClose={() => setModal('none')} />}
+        {modal === 'start' && <InBody><StartModal onClose={() => setModal('none')} /></InBody>}
       </>
     )
   }
@@ -846,6 +775,7 @@ export function TimerBar() {
           onClick={() => setSheet(true)} aria-label={`Stempeluhr: ${breakState ? 'Pause' : formatDuration(elapsed)} – Bedienung öffnen`}>
           {chip}
         </button>
+        <InBody>
         <Modal open={sheet} onClose={() => setSheet(false)} title="Stempeluhr">
           <div className="timer-sheet">
             <div className="timer-sheet-now">
@@ -881,9 +811,9 @@ export function TimerBar() {
             <button type="button" className="btn-secondary" onClick={() => setSheet(false)}>Schließen</button>
           </DialogFooter>
         </Modal>
-        {modal === 'next'   && <NextTaskModal onClose={() => setModal('none')} />}
-        {modal === 'finish' && <FinishModal   onClose={() => setModal('none')} />}
-        {showReview         && <DayReviewModal onClose={closeReview} />}
+        </InBody>
+        {modal === 'next'   && <InBody><NextTaskModal onClose={() => setModal('none')} /></InBody>}
+        {modal === 'finish' && <InBody><FinishModal   onClose={() => setModal('none')} /></InBody>}
       </>
     )
   }
@@ -926,9 +856,8 @@ export function TimerBar() {
         </button>
       </div>
 
-      {modal === 'next'   && <NextTaskModal onClose={() => setModal('none')} />}
-      {modal === 'finish' && <FinishModal   onClose={() => setModal('none')} />}
-      {showReview         && <DayReviewModal onClose={closeReview} />}
+      {modal === 'next'   && <InBody><NextTaskModal onClose={() => setModal('none')} /></InBody>}
+      {modal === 'finish' && <InBody><FinishModal   onClose={() => setModal('none')} /></InBody>}
     </>
   )
 }

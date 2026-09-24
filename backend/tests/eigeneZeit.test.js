@@ -104,6 +104,10 @@ describe("Ändern und Löschen mit Eigene Zeit buchen", () => {
     expect(b.EMPLOYEE_ID).toBe(5);
     expect(Number(b.QUANTITY_INT)).toBe(2.5);
     expect(Number(b.HOURLY_RATE)).toBe(95);
+    // Die Antwort traegt die ganze Zeile — ohne Kosten-/Umsatzrecht ohne Saetze.
+    for (const k of ["COST_RATE", "COST_TOTAL", "HOURLY_RATE", "HOURLY_RATE_TOTAL"]) {
+      expect(r.body.data).not.toHaveProperty(k);
+    }
   });
 
   it("verweigert die Buchung eines Kollegen", async () => {

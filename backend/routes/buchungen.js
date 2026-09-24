@@ -23,6 +23,8 @@ module.exports = (supabase) => {
   router.post("/special",             requirePermission("projects.bookings.special.create"), (req, res) => ctrl.createSpecialBuchung(req, res, supabase));
   router.patch("/special/:id",        requirePermission("projects.bookings.edit"),           (req, res) => ctrl.updateSpecialBuchung(req, res, supabase));
   // Schlanke Auswahlliste fuer „Eigene Zeit buchen" — ohne Betraege, statt projects.view.
+  // Eigene Buchungen — ohne eigenes Recht, der Mitarbeiter kommt aus der Sitzung.
+  router.get("/mine",                         (req, res) => ctrl.listMine(req, res, supabase));
   router.get("/eigen/projekte",               requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.listOwnProjects(req, res, supabase));
   router.get("/eigen/projekte/:id/leistungen", requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.listOwnLeaves(req, res, supabase));
   router.post("/",                    requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.createBuchung(req, res, supabase));
