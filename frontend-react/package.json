@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:live": "vite --mode live",
     "build": "npm run check:design && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -12,7 +13,8 @@
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
     "test": "vitest run && playwright test",
-    "check:design": "node scripts/check-design-system.mjs"
+    "check:design": "node scripts/check-design-system.mjs",
+    "design:shots": "playwright test design-shots --project=desktop"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.100.1",

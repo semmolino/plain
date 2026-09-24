@@ -1,0 +1,449 @@
+/* ── Design-Experiment „Stuxen" — nur die Übersicht ─────────────────────────
+   Branch design/ui-experimente. Nachbau der Designsprache von
+   stuxen.webflow.io (kostenpflichtiges Webflow-Template für Agentur-Websites).
+   Übernommen sind nur Farben, Schrift und Formen, nachgebaut mit eigenem
+   Code — keine Datei, kein CSS und kein Bild der Vorlage.
+
+   Wirkt ausschließlich unter .dash-page[data-skin="stuxen"]. Das Attribut
+   setzt DashboardPage über den Umschalter „Neues Design"; ohne Attribut ist
+   diese Datei wirkungslos. Geladen wird sie mit der (lazy) Übersichtsseite.
+
+   Mechanik: Die Übersicht benutzt durchgehend die Tokens aus globals.css.
+   Hier werden die Tokens innerhalb des Wrappers überschrieben, dazu ein paar
+   Formen (Radien, Pillen, Versalien). Farben stehen deshalb nur im Token-
+   Block unten, nicht in den Regeln.
+
+   Bewusst NICHT überschrieben: --kpi-*, --success/--danger/--warning/--info
+   und die Diagrammreihen. Bedeutungsfarben sind Vokabular und wechseln nicht
+   mit dem Design (CLAUDE.md, „Farben mit Bedeutung"). Die Flächen der
+   Dunkelvariante sind deshalb exakt die der App — so bleiben deren
+   nachgerechnete Ampel-Kontraste gültig.
+
+   Kontraste (WCAG 2.x, schlechtester Wert über alle Flächen):
+     hell   (#ffffff / #fafafa / #f5f5f5)
+       --text 14.77  --text-2 5.68  --text-3 5.04  --text-4 3.38 (Ziel 3)
+       --accent 6.02  Weiß auf --accent 6.57  --kpi-* ≥ 5.67
+     dunkel (#131316 / #1c1c21 / #252529)
+       --text 14.01  --text-2 8.31  --text-3 6.28  --text-4 4.04 (Ziel 3)
+       --accent 5.52  #14141c auf --accent 6.62
+
+   Schrift: Poppins (SIL OFL 1.1), selbst gehostet aus @fontsource/poppins
+   5.3.0, Latin-Teilmenge (enthält Umlaute, ß, €). Lizenz:
+   public/fonts/Poppins-OFL.txt. Nicht über Google Fonts eingebunden — das
+   überträgt die IP jedes Nutzers an Google (DSGVO). */
+
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/fonts/poppins-latin-300-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/poppins-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/poppins-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/poppins-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Poppins';
+  font-style: italic;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/fonts/poppins-latin-300-italic.woff2') format('woff2');
+}
+
+/* ── Tokens: hell ─────────────────────────────────────────────────────────── */
+.dash-page[data-skin="stuxen"] {
+  --bg:         #f5f5f5;
+  --surface:    #ffffff;
+  --surface-2:  #fafafa;
+  --surface-3:  #fafafa;
+
+  --text:       #212121;
+  --text-2:     rgba(33,33,33,0.70);
+  --text-3:     rgba(33,33,33,0.66);
+  --text-4:     rgba(33,33,33,0.53);
+  --text-5:     rgba(33,33,33,0.38);
+
+  --border:     rgba(33,33,33,0.12);
+  --border-2:   rgba(33,33,33,0.10);
+  --border-3:   rgba(33,33,33,0.08);
+  --border-4:   rgba(33,33,33,0.06);
+
+  --accent:       #5235f6;
+  --accent-dark:  #3d22d6;
+  --accent-bg:    #efecfe;
+  --accent-bg2:   #e2dcfd;
+  --accent-tint:  rgba(82,53,246,0.05);
+  --accent-tint2: rgba(82,53,246,0.09);
+  --accent-tint3: rgba(82,53,246,0.12);
+  --accent-ring:  rgba(82,53,246,0.25);
+  --accent-rgb:   82,53,246;
+  --accent-fg:    #ffffff;
+
+  --btn:    #5235f6;
+  --btn-h:  #4327e6;
+  --btn-fg: #ffffff;
+  --cta:    #5235f6;
+  --cta-h:  #4327e6;
+  --cta-fg: #ffffff;
+
+  --hover-bg: rgba(33,33,33,0.05);
+
+  /* Abgeleitete Tokens neu setzen: var() in einem Custom Property wird dort
+     aufgelöst, wo es definiert ist — am <html>. Ohne diese Zeilen bliebe der
+     Fokusring blau, obwohl --accent-ring hier violett ist. */
+  --focus-ring:        0 0 0 3px var(--accent-ring);
+  --brand-glyph:       var(--accent);
+  --brand-glyph-empty: rgba(82,53,246,0.18);
+
+  /* Formen der Vorlage: große Radien, flache Karten ohne Schatten. */
+  --radius-sm:  10px;
+  --radius-md:  12px;
+  --radius-lg:  20px;
+  --shadow-sm:  none;
+
+  --fw-title:      600;
+  --fw-heading:    600;
+  --fs-card-title: 15px;
+  --ls-eyebrow:    0.06em;
+}
+
+/* ── Tokens: dunkel ───────────────────────────────────────────────────────── */
+[data-theme="dark"] .dash-page[data-skin="stuxen"],
+[data-theme="trust-dark"] .dash-page[data-skin="stuxen"] {
+  --bg:         #131316;
+  --surface:    #1c1c21;
+  --surface-2:  #252529;
+  --surface-3:  #252529;
+
+  --text:       #f5f5f5;
+  --text-2:     rgba(245,245,245,0.74);
+  --text-3:     rgba(245,245,245,0.62);
+  --text-4:     rgba(245,245,245,0.45);
+  --text-5:     rgba(245,245,245,0.32);
+
+  --border:     rgba(255,255,255,0.12);
+  --border-2:   rgba(255,255,255,0.10);
+  --border-3:   rgba(255,255,255,0.07);
+  --border-4:   rgba(255,255,255,0.05);
+
+  /* Das Violett der Vorlage liegt auf dunklem Grund bei 2.4:1 — aufgehellt,
+     und darauf dunkle statt weißer Schrift. */
+  --accent:       #9b8cff;
+  --accent-dark:  #b8adff;
+  --accent-bg:    rgba(155,140,255,0.16);
+  --accent-bg2:   rgba(155,140,255,0.10);
+  --accent-tint:  rgba(155,140,255,0.06);
+  --accent-tint2: rgba(155,140,255,0.10);
+  --accent-tint3: rgba(155,140,255,0.14);
+  --accent-ring:  rgba(155,140,255,0.40);
+  --accent-rgb:   155,140,255;
+  --accent-fg:    #14141c;
+
+  --btn:    #9b8cff;
+  --btn-h:  #ada0ff;
+  --btn-fg: #14141c;
+  --cta:    #9b8cff;
+  --cta-h:  #ada0ff;
+  --cta-fg: #14141c;
+
+  --hover-bg: rgba(255,255,255,0.07);
+
+  --focus-ring:        0 0 0 3px var(--accent-ring);
+  --brand-glyph:       var(--accent);
+  --brand-glyph-empty: rgba(155,140,255,0.22);
+}
+
+/* ── Seite und Kopf ───────────────────────────────────────────────────────── */
+.dash-page[data-skin="stuxen"] {
+  font-family: 'Poppins', 'Hanken Grotesk', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  padding: var(--space-6) var(--space-6) var(--space-2);
+}
+
+.dash-page[data-skin="stuxen"] .dash-header {
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+/* Titel und Rolle in einer Zeile: „ÜBERSICHT Geschäftsleitung", die Rolle
+   kursiv und leicht — die typische Überschrift der Vorlage. */
+.dash-page[data-skin="stuxen"] .dash-header > :first-child {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 0.4em;
+}
+.dash-page[data-skin="stuxen"] .dash-title,
+.dash-page[data-skin="stuxen"] .dash-role-label {
+  font-size: clamp(26px, 3.4vw, 40px);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+.dash-page[data-skin="stuxen"] .dash-title { font-weight: 600; }
+.dash-page[data-skin="stuxen"] .dash-role-label {
+  margin-top: 0;
+  font-style: italic;
+  font-weight: 300;
+  color: var(--text-2);
+}
+
+/* Pillen-Knöpfe im Kopf („Neues Design", „Ansicht wechseln"). */
+.dash-page[data-skin="stuxen"] .dash-role-switch {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+.dash-page[data-skin="stuxen"] .dash-role-switch:hover {
+  background: var(--surface);
+  border-color: var(--text);
+}
+/* Gedrückter Schalter: dunkle Pille wie der Sekundärknopf der Vorlage. */
+.dash-page[data-skin="stuxen"] .dash-role-switch[aria-pressed="true"] {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+.dash-page[data-skin="stuxen"] .dashboard-hero {
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+
+/* ── Karten ───────────────────────────────────────────────────────────────── */
+.dash-page[data-skin="stuxen"] .dash-card,
+.dash-page[data-skin="stuxen"] .timeline-wrap,
+.dash-page[data-skin="stuxen"] .recent-list-card,
+.dash-page[data-skin="stuxen"] .welcome-panel,
+.dash-page[data-skin="stuxen"] .setup-checklist,
+.dash-page[data-skin="stuxen"] .role-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+.dash-page[data-skin="stuxen"] .dash-card {
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+/* Die Karten darunter schlossen ohne Abstand an — bei großen Radien sichtbar. */
+.dash-page[data-skin="stuxen"] .timeline-wrap {
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+}
+.dash-page[data-skin="stuxen"] .recent-list-card-dashboard { padding: var(--space-4) var(--space-6); }
+.dash-page[data-skin="stuxen"] .role-card:hover { border-color: var(--accent); box-shadow: none; }
+
+/* Kartentitel als „Eyebrow"-Pille mit violettem Punkt — das auffälligste
+   Bauteil der Vorlage. CardTitle setzt display:flex inline; fit-content
+   hält die Pille trotzdem so breit wie ihren Text. */
+.dash-page[data-skin="stuxen"] .dash-card-title,
+.dash-page[data-skin="stuxen"] .timeline-title,
+.dash-page[data-skin="stuxen"] .recent-list-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: var(--space-4);
+}
+.dash-page[data-skin="stuxen"] .dash-card-title::before,
+.dash-page[data-skin="stuxen"] .timeline-title::before,
+.dash-page[data-skin="stuxen"] .recent-list-title::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+/* Die Liste „Zuletzt geöffnet" hat im Titel schon ein Icon — dort kein Punkt. */
+.dash-page[data-skin="stuxen"] .recent-list-title::before { display: none; }
+.dash-page[data-skin="stuxen"] .recent-list-title { margin-bottom: 0; }
+
+/* ── Kennzahlen ───────────────────────────────────────────────────────────── */
+.dash-page[data-skin="stuxen"] .kpi-grid {
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+.dash-page[data-skin="stuxen"] .kpi-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5) var(--space-6);
+  box-shadow: none;
+}
+.dash-page[data-skin="stuxen"] .kpi-label {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.dash-page[data-skin="stuxen"] .kpi-value {
+  margin-top: var(--space-2);
+  font-size: clamp(22px, 2.2vw, 30px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.dash-page[data-skin="stuxen"] .kpi-meta { font-size: 12px; }
+/* Warnkachel: der rote Rand links bleibt als Signal, folgt aber der Rundung
+   (ein border-left auf 20px Radius knickt sichtbar ab). Farbe ist nicht der
+   einzige Träger — die Kachel sagt ihren Zustand zusätzlich im Klartext. */
+.dash-page[data-skin="stuxen"] .kpi-card-accent {
+  border-left: 1px solid var(--border);
+  box-shadow: inset 4px 0 0 var(--danger);
+}
+
+/* ── Unternavigation (Geschäftsleitung) als Pillen-Leiste ─────────────────── */
+.dash-page[data-skin="stuxen"] .dash-subnav {
+  width: fit-content;
+  max-width: 100%;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  margin-bottom: var(--space-6);
+}
+.dash-page[data-skin="stuxen"] .dash-subnav-btn {
+  min-height: 44px;
+  padding: 0 var(--space-5);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 500;
+}
+.dash-page[data-skin="stuxen"] .dash-subnav-btn:hover { background: var(--hover-bg); color: var(--text); }
+.dash-page[data-skin="stuxen"] .dash-subnav-btn.active { background: var(--accent); color: var(--accent-fg); }
+
+/* ── Filterleiste ─────────────────────────────────────────────────────────── */
+.dash-page[data-skin="stuxen"] .dash-filter-bar {
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  margin-bottom: var(--space-6);
+}
+.dash-page[data-skin="stuxen"] .dash-filter-label { color: var(--text-2); font-weight: 500; }
+.dash-page[data-skin="stuxen"] .inline-select {
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+}
+.dash-page[data-skin="stuxen"] .dash-filter-reset {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-pill);
+}
+
+/* ── Fließtext, Hinweise, Tabellen ────────────────────────────────────────── */
+.dash-page[data-skin="stuxen"] .narrative-block {
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-2);
+  margin-bottom: var(--space-6);
+}
+.dash-page[data-skin="stuxen"] .narrative-block strong { color: var(--text); font-weight: 600; }
+
+.dash-page[data-skin="stuxen"] .dash-table th {
+  padding: var(--space-3) var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.dash-page[data-skin="stuxen"] .dash-table td {
+  padding: var(--space-3) var(--space-2);
+  border-bottom-color: var(--border-3);
+}
+/* Poppins hat keine Tabellenziffern — gemessen: „1111" 51px, „0000" 100px,
+   auch mit tabular-nums. Betragsspalten bleiben deshalb in der App-Schrift,
+   sonst fluchten die Beträge untereinander nicht mehr. */
+.dash-page[data-skin="stuxen"] td.num {
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+.dash-page[data-skin="stuxen"] .btn,
+.dash-page[data-skin="stuxen"] .btn-secondary,
+.dash-page[data-skin="stuxen"] .btn-sm {
+  border-radius: var(--radius-pill);
+  font-weight: 500;
+}
+
+/* ── Tablet ───────────────────────────────────────────────────────────────── */
+/* Poppins läuft breiter als Hanken Grotesk. Mit den Desktop-Abständen brach
+   in der zweispaltigen Ansicht (768px) die Angebotsnummer „A-2025-014" am
+   Bindestrich um — im bisherigen Design nicht. */
+@media (max-width: 1023px) {
+  .dash-page[data-skin="stuxen"] { padding: var(--space-5) var(--space-4) var(--space-2); }
+  .dash-page[data-skin="stuxen"] .dash-card,
+  .dash-page[data-skin="stuxen"] .timeline-wrap { padding: var(--space-5); }
+  .dash-page[data-skin="stuxen"] .dash-table th,
+  .dash-page[data-skin="stuxen"] .dash-table td {
+    padding-left: var(--space-1);
+    padding-right: var(--space-1);
+  }
+}
+
+/* ── Handy ────────────────────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .dash-page[data-skin="stuxen"] { padding: var(--space-4) var(--space-4) 0; }
+  .dash-page[data-skin="stuxen"] .dash-card,
+  .dash-page[data-skin="stuxen"] .timeline-wrap { padding: var(--space-4); }
+  .dash-page[data-skin="stuxen"] .kpi-card { padding: var(--space-4); }
+  /* Mehrzeilig umbrechende Leisten sehen als Pille zerdrückt aus — auf
+     schmalen Schirmen deshalb als Karte. Die Unternavigation scrollt in sich
+     statt die Seite zu verbreitern. */
+  .dash-page[data-skin="stuxen"] .dash-filter-bar {
+    border-radius: var(--radius-lg);
+    padding: var(--space-3) var(--space-4);
+  }
+  .dash-page[data-skin="stuxen"] .dash-subnav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .dash-page[data-skin="stuxen"] .dash-subnav-btn { flex-shrink: 0; }
+}

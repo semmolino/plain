@@ -1113,6 +1113,7 @@ input::placeholder { color: var(--text-4); }
   margin-bottom: 16px;
 }
 .dash-title { font-size: var(--fs-page-title); font-weight: var(--fw-title); color: var(--text); }
+.dash-role-label { font-size: 12px; color: var(--text-3); margin-top: 2px; }
 
 .dash-filter-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .dash-filter-group { display: flex; align-items: center; gap: 6px; }

@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Bildstrecke des Design-Experiments (npm run design:shots)
+design-shots

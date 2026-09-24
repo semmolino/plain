@@ -67,6 +67,10 @@ import { fetchSetupProgress } from '@/api/setupProgress'
 import { useChartDefaults } from '@/theme/useChartDefaults'
 import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
 import { fmtEur, fmtEur0, money, money0 } from '@/utils/money'
+import { useStickyState } from '@/hooks/useStickyState'
+// Design-Experiment (Branch design/ui-experimente): wirkt nur unter
+// .dash-page[data-skin="stuxen"], Erklaerung im Kopf von skin-stuxen.css.
+import '@/styles/skin-stuxen.css'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -1736,6 +1740,10 @@ export function DashboardPage() {
 
   const [filters, setFilters] = useState<DashboardFilters>(DEFAULT_FILTERS)
   const [glSubPage, setGlSubPage] = useState<'uebersicht' | 'risiko' | 'abrechnung' | 'personal'>('uebersicht')
+  // Design-Experiment: pro Nutzer und Browser gemerkt, auf diesem Branch
+  // standardmäßig an. Rein kosmetisch — kein Recht, kein Serverzugriff.
+  const [skin, setSkin] = useStickyState<'stuxen' | 'classic'>('dashboard-skin', 'stuxen')
+  const stuxen = skin === 'stuxen'
 
   const isMitarbeiter = dashboardRole === 'mitarbeiter'
   const isController  = dashboardRole === 'controller'
@@ -1816,22 +1824,33 @@ export function DashboardPage() {
   const roleLabel = ROLES.find(r => r.id === dashboardRole)?.title ?? ''
 
   return (
-    <div className="dash-page">
+    <div className="dash-page" data-skin={stuxen ? 'stuxen' : undefined}>
       <div className="dash-header">
         <div>
           <div className="dash-title">Übersicht</div>
-          {roleLabel && <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{roleLabel}</div>}
+          {roleLabel && <div className="dash-role-label">{roleLabel}</div>}
         </div>
-        {dashboardRole && (
-          <Can permission="dashboard.view_switch">
-            <button
-              className="dash-role-switch"
-              onClick={() => setDashboardRole(null)}
-            >
-              Ansicht wechseln
-            </button>
-          </Can>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="dash-role-switch"
+            aria-pressed={stuxen}
+            title="Design-Experiment: die Übersicht im neuen Look anzeigen"
+            onClick={() => setSkin(stuxen ? 'classic' : 'stuxen')}
+          >
+            Neues Design
+          </button>
+          {dashboardRole && (
+            <Can permission="dashboard.view_switch">
+              <button
+                className="dash-role-switch"
+                onClick={() => setDashboardRole(null)}
+              >
+                Ansicht wechseln
+              </button>
+            </Can>
+          )}
+        </div>
       </div>
 
       <DashboardHero />
