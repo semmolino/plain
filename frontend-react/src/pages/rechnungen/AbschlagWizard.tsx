@@ -192,6 +192,10 @@ export function AbschlagWizard({ resumeId, initialDraft, initialProjectId, initi
         setOrderRef(pp.BUYER_ORDER_REFERENCE ?? '')
         setAccountingRef(pp.BUYER_ACCOUNTING_REFERENCE ?? '')
         setRemittance(pp.REMITTANCE_INFORMATION ?? '')
+        // Zahlungsart: ohne das zeigte das Feld die Vorbelegung, und „Weiter"
+        // schrieb sie ueber eine im Entwurf gewaehlte andere Zahlungsart.
+        const pmId = (pp as unknown as { PAYMENT_MEANS_ID?: number | null }).PAYMENT_MEANS_ID
+        if (pmId != null) setPmGewaehlt(String(pmId))
         if (pp.VAT_CATEGORY) setVatCategory(pp.VAT_CATEGORY)
         setVatExemptCode(pp.VAT_EXEMPTION_REASON_CODE ?? '')
         setVatExemptText(pp.VAT_EXEMPTION_REASON_TEXT ?? '')

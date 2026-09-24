@@ -91,6 +91,7 @@ test.describe('Abschlagsrechnung', () => {
       advance_invoice_date: '2026-09-20', due_date: '2026-10-20',
       billing_period_start: '2026-08-01', comment: '7. Abschlagsrechnung gemäß Zahlungsplan',
       buyer_reference: '04011000-12345-34', buyer_order_reference: 'BE-2024-0815',
+      payment_means_id: 2,
     })
   })
 

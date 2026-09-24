@@ -202,7 +202,11 @@ export const initInvoice = (body: {
 }) => apiClient.post<{ id: number }>('/invoices/init', body)
 
 export const getInvoice = (id: number) =>
-  apiClient.get<{ data: { inv: Invoice } }>(`/invoices/${id}`)
+  apiClient.get<{ data: {
+    inv: Invoice
+    project?:  { ABBR: string | null; NAME: string | null } | null
+    contract?: { ABBR: string | null; NAME: string | null } | null
+  } }>(`/invoices/${id}`)
 
 export const patchInvoice = (id: number, body: Partial<{
   invoice_number: string; invoice_date: string; due_date: string

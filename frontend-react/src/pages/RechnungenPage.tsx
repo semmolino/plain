@@ -117,15 +117,12 @@ export function RechnungenPage() {
     navigate({ pathname: '/rechnungen', search }, { replace: true, state: null })
   }, [location.state]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Nicht erlaubte Art, oder ein Entwurf der anderen Assistenten, der nur im
-  // Speicher fortgesetzt werden kann → zur Liste, statt leer zu starten.
-  const orphanDraft = !!wizardKind && wizardKind !== 'abschlag' && !!urlDraft
-    && !(editDraft?.type === wizardKind && editDraft.draft.id === urlDraft)
+  // Nicht erlaubte Art → zur Liste, statt einen leeren Assistenten zu zeigen.
   useEffect(() => {
-    if ((isKind && !kindAllowed) || orphanDraft) {
+    if (isKind && !kindAllowed) {
       setSearchParams({}, { replace: true })
     }
-  }, [isKind, kindAllowed, orphanDraft]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isKind, kindAllowed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function goList(tab: ListTab = 'liste') {
     setSearchParams(tab === 'liste' ? {} : { tab })
@@ -158,12 +155,14 @@ export function RechnungenPage() {
 
   // ── Assistent ─────────────────────────────────────────────────────────────
   if (wizardKind) {
-    const resumeId   = wizardKind === 'abschlag' && urlDraft && urlDraft !== ownDraft ? urlDraft : undefined
+    // Alle Arten setzen ueber die URL fort und laden den Entwurf vom Server —
+    // Neuladen und Links funktionieren (vorher nur beim Abschlag).
+    const resumeId   = urlDraft && urlDraft !== ownDraft ? urlDraft : undefined
     const memDraft   = editDraft?.type === wizardKind && editDraft.draft.id === urlDraft ? editDraft.draft : undefined
     const isDraft    = !!(resumeId || memDraft)
     // Neuer Assistent nur, wenn sich Art, fortgesetzter Entwurf oder
     // Vorbelegung aendern — nicht, wenn er seinen eigenen Entwurf meldet.
-    const wizardKey  = `${wizardKind}:${resumeId ?? memDraft?.id ?? 'neu'}:${urlProject ?? ''}`
+    const wizardKey  = `${wizardKind}:${resumeId ?? 'neu'}:${urlProject ?? ''}`
     const prefill    = { initialProjectId: urlProject ?? undefined, initialProjectLabel: projectLabel }
     const waitLabel  = !!urlProject && !projectLabel && !isDraft && !shortData
     return (
@@ -180,9 +179,9 @@ export function RechnungenPage() {
                 <AbschlagWizard key={wizardKey} resumeId={resumeId} {...prefill}
                   onDraftCreated={handleDraftCreated} onExit={() => goList()} />
               )}
-              {wizardKind === 'rechnung'   && <RechnungWizard key={wizardKey} initialDraft={memDraft} {...prefill} />}
-              {wizardKind === 'schluss'    && <SchlussrechnungWizard key={wizardKey} initialDraft={memDraft} {...prefill} />}
-              {wizardKind === 'gutschrift' && <RechnungWizard key={wizardKey} initialDraft={memDraft} {...prefill} invoiceType="gutschrift" />}
+              {wizardKind === 'rechnung'   && <RechnungWizard key={wizardKey} resumeId={resumeId} {...prefill} onDraftCreated={handleDraftCreated} />}
+              {wizardKind === 'schluss'    && <SchlussrechnungWizard key={wizardKey} resumeId={resumeId} {...prefill} onDraftCreated={handleDraftCreated} />}
+              {wizardKind === 'gutschrift' && <RechnungWizard key={wizardKey} resumeId={resumeId} {...prefill} onDraftCreated={handleDraftCreated} invoiceType="gutschrift" />}
             </>
           )}
         </div>

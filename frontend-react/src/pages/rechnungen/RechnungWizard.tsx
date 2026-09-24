@@ -11,7 +11,7 @@ import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
 import { BuchungsauswahlTable } from '@/components/rechnungen/BuchungsauswahlTable'
 import {
   searchContracts,
-  initInvoice, patchInvoice, getInvoiceBillingProposal,
+  initInvoice, patchInvoice, getInvoice, getInvoiceBillingProposal,
   putInvoicePerformance, getInvoiceTec, postInvoiceTec, bookInvoice, bookInvoiceForce, deleteInvoice,
   openInvoicePdf, downloadInvoiceEinvoice,
   VAT_CATEGORY_LABELS,
@@ -24,8 +24,11 @@ import { useAuthStore } from '@/store/authStore'
 import { useDueDatePreset, useDefaultString } from '@/hooks/useTenantDefaults'
 import { fetchPaymentMeans } from '@/api/stammdaten'
 import { fmtEur, money } from '@/utils/money'
+import { localIsoDate } from '@/utils/zeit'
+import { draftFormFromRow, abbrNameLabel } from './draftForm'
 
-function todayIso() { return new Date().toISOString().slice(0, 10) }
+// Lokales Datum — das UTC-Datum ist zwischen 0 und 2 Uhr noch gestern.
+function todayIso() { return localIsoDate() }
 
 const STEPS = ['Init', 'Details', 'Beträge', 'Buchen']
 
@@ -33,8 +36,13 @@ const STEPS = ['Init', 'Details', 'Beträge', 'Buchen']
 
 interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }
 
-export function RechnungWizard({ initialDraft, initialProjectId, initialProjectLabel, onPrefillConsumed, invoiceType = 'rechnung' }: {
+export function RechnungWizard({ resumeId, initialDraft, initialProjectId, initialProjectLabel, onPrefillConsumed, onDraftCreated, invoiceType = 'rechnung' }: {
+  /** Entwurf fortsetzen — geladen wird vom Server, auch nach Neuladen. */
+  resumeId?: number
+  /** Veraltet: Entwurf aus der Liste — es zaehlt nur die ID. */
   initialDraft?: DraftResume
+  /** Neuer Entwurf angelegt — die Seite schreibt die ID in die URL. */
+  onDraftCreated?: (id: number) => void
   initialProjectId?: number
   initialProjectLabel?: string
   onPrefillConsumed?: () => void
@@ -106,9 +114,12 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
 
-  // Resume existing draft passed from the invoice list
+  // Fortsetzen: den ganzen Entwurf vom Server holen (siehe draftForm.ts).
+  // Vorher kamen nur Projekt, Vertrag, Nachlaesse und Skonto aus der Liste,
+  // und der erste Klick auf „Weiter" ueberschrieb Datum und E-Rechnungsfelder.
+  const resumeTarget = resumeId ?? initialDraft?.id ?? null
   useEffect(() => {
-    if (!initialDraft) {
+    if (!resumeTarget) {
       if (initialProjectId && initialProjectLabel) {
         setProjectId(initialProjectId)
         setProjectLabel(initialProjectLabel)
@@ -117,21 +128,36 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
       return
     }
     isResumeRef.current = true
-    setDraftId(initialDraft.id)
-    setProjectId(initialDraft.projectId)
-    setProjectLabel(initialDraft.projectLabel)
-    setContractId(initialDraft.contractId)
-    setContractLabel(initialDraft.contractLabel)
-    if (initialDraft.d1Pct > 0) { setShowDiscounts(true); setD1Pct(String(initialDraft.d1Pct)) }
-    if (initialDraft.d2Pct > 0) setD2Pct(String(initialDraft.d2Pct))
-    if (initialDraft.d1Reason) setD1Reason(initialDraft.d1Reason)
-    if (initialDraft.d2Reason) setD2Reason(initialDraft.d2Reason)
-    if (initialDraft.cashDiscPct > 0) { setShowSkonto(true); setCashDiscPct(String(initialDraft.cashDiscPct)) }
-    if (initialDraft.cashDiscDays > 0) setCashDiscDays(String(initialDraft.cashDiscDays))
-    // Reopened drafts start at step 1 (Rechnungsdetails) — see AbschlagWizard.
-    getInvoiceBillingProposal(initialDraft.id)
-      .then(r => { setProposal(r.data); setStep(1) })
-      .catch(() => setStep(1))
+    let cancelled = false
+    Promise.all([getInvoice(resumeTarget), getInvoiceBillingProposal(resumeTarget).catch(() => null)])
+      .then(([res, prop]) => {
+        if (cancelled) return
+        const { inv, project, contract } = res.data
+        if (inv.STATUS_ID !== 1) {
+          setMsg({ text: 'Diese Rechnung ist bereits gebucht und lässt sich nicht mehr bearbeiten.', type: 'error' })
+          return
+        }
+        const f = draftFormFromRow(inv as unknown as Record<string, unknown>, 'INVOICE_DATE')
+        setDraftId(inv.ID)
+        setProjectId(inv.PROJECT_ID); setProjectLabel(abbrNameLabel(project) || initialDraft?.projectLabel || '')
+        setContractId(inv.CONTRACT_ID); setContractLabel(abbrNameLabel(contract) || initialDraft?.contractLabel || '')
+        if (f.date) setDetDate(f.date)
+        if (f.dueDate) setDueDate(f.dueDate)
+        setBpStart(f.bpStart); setBpFinish(f.bpFinish); setComment(f.comment)
+        setBuyerRef(f.buyerRef); setOrderRef(f.orderRef); setAccountingRef(f.accountingRef); setRemittance(f.remittance)
+        if (f.paymentMeansId) setPmGewaehlt(f.paymentMeansId)
+        setVatCategory(f.vatCategory); setVatExemptCode(f.vatExemptCode); setVatExemptText(f.vatExemptText)
+        if (f.buyerRef || f.orderRef || f.accountingRef || f.remittance || f.vatCategory !== 'S') setShowEinvoice(true)
+        if (f.d1Pct) { setShowDiscounts(true); setD1Pct(f.d1Pct) }
+        if (f.d2Pct) setD2Pct(f.d2Pct)
+        setD1Reason(f.d1Reason); setD2Reason(f.d2Reason)
+        if (f.cashDiscPct) { setShowSkonto(true); setCashDiscPct(f.cashDiscPct) }
+        if (f.cashDiscDays) setCashDiscDays(f.cashDiscDays)
+        if (prop) setProposal(prop.data)
+        setStep(1)
+      })
+      .catch((e: Error) => { if (!cancelled) setMsg({ text: e.message, type: 'error' }) })
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -173,6 +199,8 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
           basis:   (c.SE_BASIS === 'NETTO' ? 'NETTO' : 'BRUTTO') as 'BRUTTO' | 'NETTO',
         })
       })
+      // Beim Fortsetzen steht der Vertrag schon fest — nicht ueberschreiben.
+      if (draftIdRef.current) return
       if (list.length === 1) {
         setContractId(list[0].ID)
         setContractLabel(`${list[0].ABBR} – ${list[0].NAME}`)
@@ -192,7 +220,7 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
 
   const initMut = useMutation({
     mutationFn: initInvoice,
-    onSuccess: async (res) => { setDraftId(res.id); setMsg(null); setStep(1) },
+    onSuccess: async (res) => { setDraftId(res.id); onDraftCreated?.(res.id); setMsg(null); setStep(1) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -210,7 +238,10 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
       setPerfInput(prev => prev !== '' ? prev : String(prop.data.performance_amount ?? ''))
       setTecList(tec.data)
       setHasBt2(tec.hasBt2 ?? tec.data.length > 0)
-      setSelected(prev => prev.size > 0 ? prev : new Set(tec.data.map(t => t.ID)))
+      // Ein fortgesetzter Entwurf behaelt seine Auswahl; ohne Zuordnung ist
+      // wie bisher alles vorgewaehlt.
+      const assigned = tec.data.filter(t => t.ASSIGNED)
+      setSelected(prev => prev.size > 0 ? prev : new Set((assigned.length ? assigned : tec.data).map(t => t.ID)))
       setStep(2)
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),

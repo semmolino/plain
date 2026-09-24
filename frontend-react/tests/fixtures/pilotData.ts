@@ -228,7 +228,7 @@ const dashProjects = PROJ.map(([id, abbr, name, st, pl, budget, ls, cr, billed])
 const riskProjects = dashProjects.map((p, i) => ({
   ...p,
   ampel: (['gruen', 'orange', 'rot', 'gruen', 'gelb', 'orange', 'gelb'] as const)[i],
-  flags: [[], ['Kostenquote über Plan'], ['Kosten über Leistungsstand', 'Pausiert seit 42 Tagen'], [], ['Kein Leistungsstand seit 60 Tagen'], ['Budget fast verbraucht'], ['Abrechnung überfällig']][i],
+  flags: [[], ['Kostenquote über Plan'], ['Kosten über Leistungsstand', 'Pausiert seit 42 Tagen'], [], ['budget_warn'], ['Budget fast verbraucht'], ['Abrechnung überfällig']][i],
   db: r2(p.LEISTUNGSSTAND_VALUE - p.COST_TOTAL),
 }))
 
@@ -410,9 +410,11 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     { STATUS_NAME: 'Angebot', PROJECT_COUNT: 1 }, { STATUS_NAME: 'Abgeschlossen', PROJECT_COUNT: 1 },
   ] })
   await get('reports/dashboard/alerts', { data: [
-    { severity: 'red',   type: 'overdue',  message: '4 Rechnungen überfällig (1.021.874,58 €)', count: 4, action_url: '/rechnungen' },
-    { severity: 'amber', type: 'risk',     message: '2 Projekte mit Kosten über Leistungsstand', count: 2, action_url: '/projekte' },
-    { severity: 'amber', type: 'progress', message: '3 Projekte ohne Leistungsstand seit 60 Tagen', count: 3, action_url: '/projekte?tab=leistungsstand' },
+    // Genau die drei Arten, die routes/reports.js (/dashboard/alerts) kennt.
+    // Runde 1 stand hier ein erfundener „ohne Leistungsstand seit 60 Tagen".
+    { severity: 'red',   type: 'overdue_invoices', message: '4 Rechnungen überfällig', count: 4, action_url: '/rechnungen' },
+    { severity: 'amber', type: 'budget_critical',  message: '2 Projekte über 90% Budget', count: 2, action_url: '/projekte' },
+    { severity: 'amber', type: 'open_mahnungen',   message: '3 offene Mahnungen', count: 3, action_url: '/rechnungen?tab=mahnungen' },
   ] })
   await get('reports/dashboard/risk-projects', { data: riskProjects })
   await get('reports/dashboard/billing-summary', { data: {
@@ -469,7 +471,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
       STATUS_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11,
       BILLING_PERIOD_START: '2026-08-01', BILLING_PERIOD_FINISH: '2026-08-31', COMMENT: '7. Abschlagsrechnung gemäß Zahlungsplan',
       BUYER_REFERENCE: '04011000-12345-34', BUYER_ORDER_REFERENCE: 'BE-2024-0815', BUYER_ACCOUNTING_REFERENCE: null,
-      REMITTANCE_INFORMATION: null, VAT_CATEGORY: 'S', DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0,
+      REMITTANCE_INFORMATION: null, PAYMENT_MEANS_ID: 2, VAT_CATEGORY: 'S', DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0,
       CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', ...ppPatched,
     },
     // So antwortet der Server: Projekt und Vertrag getrennt, nicht im Beleg.
@@ -492,4 +494,37 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   })
   await get('partial-payments/\\d+/attachments', { data: [] })
   await byMethod('partial-payments/\\d+/book', { POST: r => r.fulfill(json({ success: true })) })
+
+  // Einzelrechnung (Entwurf 601) — Fortsetzen vom Server
+  let invPatched: Record<string, unknown> = {}
+  await byMethod('invoices/\\d+', {
+    GET: r => r.fulfill(json({ data: {
+      inv: {
+        ID: 601, INVOICE_NUMBER: null, INVOICE_TYPE: 'rechnung', INVOICE_DATE: '2026-09-18', DUE_DATE: '2026-10-18',
+        STATUS_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11, COMMENT: 'Nebenleistung Brandschutz',
+        BILLING_PERIOD_START: '2026-08-01', BILLING_PERIOD_FINISH: '2026-08-31',
+        BUYER_REFERENCE: '04011000-12345-34', BUYER_ORDER_REFERENCE: 'BE-2024-0815', BUYER_ACCOUNTING_REFERENCE: 'KST 4711',
+        REMITTANCE_INFORMATION: null, PAYMENT_MEANS_ID: 2, VAT_CATEGORY: 'S',
+        DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0, CASH_DISCOUNT_PERCENT: 0, CASH_DISCOUNT_DAYS: 0, ...invPatched,
+      },
+      project:  { ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1' },
+      contract: { ABBR: CONTRACTS[0].ABBR, NAME: CONTRACTS[0].NAME },
+    } })),
+    PATCH: async r => {
+      const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>
+      invPatched = { ...invPatched, ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k.toUpperCase(), v])) }
+      return r.fulfill(json({ ok: true }))
+    },
+  })
+  await get('invoices/\\d+/billing-proposal', { data: PROPOSAL })
+  await byMethod('invoices/\\d+/performance', { PUT: r => r.fulfill(json({ data: PROPOSAL })) })
+  await byMethod('invoices/\\d+/tec', {
+    GET:  r => r.fulfill(json({ data: PP_TEC, hasBt2: true })),
+    POST: r => r.fulfill(json({ data: PROPOSAL })),
+  })
+  await get('invoices/\\d+/attachments', { data: [] })
+
+  // Stempeluhr
+  await get('buchungen/timer/drafts', { data: [] })
+  await byMethod('buchungen/timer/draft', { POST: r => r.fulfill(json({ success: true, data: { ID: 900 } })) })
 }
