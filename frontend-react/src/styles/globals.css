@@ -5742,3 +5742,17 @@ div.dash-attn-link:hover { background: transparent; }
 }
 .modal-card.sxm-sheet .modal-actions-secondary { align-self: flex-end; }
 .modal-card.sxm-sheet .sxm-icon-btn { height: 44px; align-self: flex-end; }
+
+/* ── Fehlerseite der Wurzel-Route (Runde 2) ──────────────────────────────── */
+.route-error {
+  max-width: 560px; margin: 12vh auto 0; padding: var(--space-6) var(--space-5);
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--text);
+}
+.route-error > svg { color: var(--warning-strong); }
+.route-error h1 { margin: 0; font-size: 20px; }
+.route-error p { margin: 0; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.route-error-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.route-error-actions .btn-primary, .route-error-actions .btn-secondary { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; width: auto; }
+.route-error-detail { font-size: 12px; color: var(--text-3); }
+.route-error-detail pre { white-space: pre-wrap; margin: var(--space-2) 0 0; }
