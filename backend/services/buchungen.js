@@ -1498,6 +1498,7 @@ async function rebookBuchungen(supabase, {
 }
 
 module.exports = {
+  checkMonthNotClosed,
   recomputeStructure,
   createBuchung,
   createSpecialBuchung,

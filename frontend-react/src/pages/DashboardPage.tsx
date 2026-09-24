@@ -23,6 +23,7 @@ import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { AttentionList, type AttentionItem } from '@/components/dashboard/AttentionList'
 import { QuickTimeCard } from '@/components/dashboard/QuickTimeCard'
 import { useQuickBooking } from '@/store/quickBookingStore'
+import { useCanBook } from '@/hooks/useBooking'
 import { localIsoDate } from '@/utils/zeit'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import { KpiValue } from '@/components/ui/KpiValue'
@@ -1821,9 +1822,7 @@ export function DashboardPage() {
 
   const welcome = useWelcome()
   const openQuickBooking = useQuickBooking(s => s.open)
-  const canBookCreate = usePermission('projects.bookings.create')
-  const canProjView   = usePermission('projects.view')
-  const canBook       = canBookCreate && canProjView
+  const { canBook } = useCanBook()
   const { companyName } = useSession()
 
   // Eigenes Zeitkonto fuer „Jetzt wichtig" der Mitarbeiter-Ansicht — derselbe

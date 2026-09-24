@@ -1,10 +1,38 @@
 "use strict";
 
 const svc = require("../services/buchungen");
+const eigen = require("../services/eigeneZeit");
+
+const has = (req, key) => !!req._permissionsUnrestricted || !!req.hasPermission?.(key);
+/** Nur „Eigene Zeit buchen", nicht das volle Recht fuer diese Aktion. */
+const ownOnly = (req, fullKey) => !has(req, fullKey) && has(req, "projects.bookings.own");
+
+/** Eigene, geladene Buchung — oder 403/404. */
+async function loadOwnBooking(supabase, req, id) {
+  const { data } = await supabase
+    .from("BOOKING").select("ID, EMPLOYEE_ID, PROJECT_ID, BOOKING_DATE")
+    .eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+  if (!data) throw { status: 404, message: "Buchung nicht gefunden" };
+  if (Number(data.EMPLOYEE_ID) !== Number(req.employeeId)) {
+    throw { status: 403, message: "Nur eigene Buchungen lassen sich ändern." };
+  }
+  return data;
+}
 
 async function createBuchung(req, res, supabase) {
   try {
-    await svc.createBuchung(supabase, { body: req.body, tenantId: req.tenantId });
+    let body = req.body || {};
+    // Mit „Eigene Zeit buchen": immer fuer sich selbst, Saetze vom Server,
+    // Stunden zur Abrechnung = geleistete Stunden, nur laufende Projekte.
+    if (ownOnly(req, "projects.bookings.create")) {
+      await eigen.assertBookable(supabase, { tenantId: req.tenantId, projectId: body.PROJECT_ID });
+      if (body.STRUCTURE_ID) {
+        await eigen.assertLeafOfProject(supabase, { tenantId: req.tenantId, projectId: body.PROJECT_ID, structureId: body.STRUCTURE_ID });
+      }
+      body = { ...body, EMPLOYEE_ID: req.employeeId, HOURLY_RATE: 0, QUANTITY_EXT: body.QUANTITY_INT };
+      delete body.COST_RATE;
+    }
+    await svc.createBuchung(supabase, { body, tenantId: req.tenantId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
@@ -42,7 +70,19 @@ async function patchBuchung(req, res, supabase) {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "ID fehlt" });
   try {
-    const data = await svc.patchBuchung(supabase, { id, body: req.body, tenantId: req.tenantId });
+    let body = req.body || {};
+    if (ownOnly(req, "projects.bookings.edit")) {
+      const own = await loadOwnBooking(supabase, req, id);
+      // Nur Zeit, Menge, Text und die Leistung im selben Projekt — kein
+      // Mitarbeiter-, Projekt- oder Satzwechsel (Umbuchen ist ein eigenes Recht).
+      const allowed = ["BOOKING_DATE", "TIME_START", "TIME_FINISH", "QUANTITY_INT", "POSTING_DESCRIPTION", "STRUCTURE_ID"];
+      body = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
+      if (body.QUANTITY_INT !== undefined) body.QUANTITY_EXT = body.QUANTITY_INT;
+      if (body.STRUCTURE_ID !== undefined) {
+        await eigen.assertLeafOfProject(supabase, { tenantId: req.tenantId, projectId: own.PROJECT_ID, structureId: body.STRUCTURE_ID });
+      }
+    }
+    const data = await svc.patchBuchung(supabase, { id, body, tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     const status = err.status || 500;
@@ -54,6 +94,10 @@ async function deleteBuchung(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "ID fehlt" });
   try {
+    if (ownOnly(req, "projects.bookings.delete")) {
+      const own = await loadOwnBooking(supabase, req, id);
+      if (own.BOOKING_DATE) await svc.checkMonthNotClosed(supabase, req.tenantId, own.EMPLOYEE_ID, String(own.BOOKING_DATE));
+    }
     const depCheck = require("../services/dependencyCheck");
     const check = await depCheck.checkTec(supabase, { tenantId: req.tenantId, id });
     if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
@@ -259,7 +303,25 @@ async function getWorkstartStatus(req, res, supabase) {
   }
 }
 
+async function listOwnProjects(req, res, supabase) {
+  try {
+    res.json({ data: await eigen.listOwnProjects(supabase, { tenantId: req.tenantId }) });
+  } catch (err) {
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
+  }
+}
+
+async function listOwnLeaves(req, res, supabase) {
+  try {
+    res.json({ data: await eigen.listOwnLeaves(supabase, { tenantId: req.tenantId, projectId: req.params.id }) });
+  } catch (err) {
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
+  }
+}
+
 module.exports = {
+  listOwnProjects,
+  listOwnLeaves,
   createBuchung,
   createSpecialBuchung,
   updateSpecialBuchung,

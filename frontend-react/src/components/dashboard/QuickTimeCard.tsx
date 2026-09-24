@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ClockPlus, History } from 'lucide-react'
-import { Can } from '@/components/ui/Can'
+import { useCanBook, useBookableProjects } from '@/hooks/useBooking'
 import { fetchRecents } from '@/api/recents'
-import { fetchProjectsShort } from '@/api/projekte'
 import { fetchMonthBalance } from '@/api/mitarbeiter'
 import { useQuickBooking } from '@/store/quickBookingStore'
 import { localIsoDate, fmtHours } from '@/utils/zeit'
@@ -19,11 +18,8 @@ import { localIsoDate, fmtHours } from '@/utils/zeit'
  * Gleiche Rechte wie der Knopf in der Kopfzeile.
  */
 export function QuickTimeCard({ employeeId }: { employeeId: number | null }) {
-  return (
-    <Can allOf={['projects.bookings.create', 'projects.view']}>
-      <QuickTimeCardInner employeeId={employeeId} />
-    </Can>
-  )
+  const { canBook } = useCanBook()
+  return canBook ? <QuickTimeCardInner employeeId={employeeId} /> : null
 }
 
 function QuickTimeCardInner({ employeeId }: { employeeId: number | null }) {
@@ -45,7 +41,7 @@ function QuickTimeCardInner({ employeeId }: { employeeId: number | null }) {
     queryFn:  () => fetchRecents('project_structure', 12, { sortBy: 'recent' }),
     staleTime: 30_000,
   })
-  const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
+  const { data: projectsData } = useBookableProjects()
 
   // Defensiv: eine unvollstaendige Antwort darf die Startseite nicht mitreissen.
   const days   = Array.isArray(bal?.data?.days) ? bal.data.days : null

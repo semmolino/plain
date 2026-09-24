@@ -9,7 +9,7 @@ import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
 import { NotificationBell } from './NotificationBell'
 import { TimerBar } from './TimerBar'
-import { Can } from '@/components/ui/Can'
+import { useCanBook } from '@/hooks/useBooking'
 import { QuickBookingButton } from '@/components/zeit/QuickBookingButton'
 import { QuickBookingDialog } from '@/components/zeit/QuickBookingDialog'
 import { ThemeOptions, useAppliedTheme } from './ThemeOptions'
@@ -117,6 +117,7 @@ export function AppLayout() {
     staleTime: 60_000,
   })
   const timerEnabled = defData?.data?.timer_enabled !== 'false'
+  const { canBook } = useCanBook()
 
   const location = useLocation()
   const toast    = useToast()
@@ -164,7 +165,7 @@ export function AppLayout() {
           {/* Stempeluhr nur mit Buchungsrecht — vorher ungegatet: der
               Start-Dialog zeigte dann eine leere Projektliste, Beenden
               scheiterte mit 403. */}
-          {timerEnabled && <Can allOf={['projects.bookings.create', 'projects.view']}><TimerBar /></Can>}
+          {timerEnabled && canBook && <TimerBar />}
         </div>
         <div className="app-header-right">
 

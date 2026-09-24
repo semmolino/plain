@@ -9,9 +9,10 @@ import { HelpHint } from '@/components/ui/HelpHint'
 import { TextSnippetBar } from '@/components/ui/TextSnippetBar'
 import { ProjectPicker } from '@/components/projekte/ProjectPicker'
 import {
-  fetchProjectsShort, fetchProjectStructure, fetchActiveEmployees, fetchEmployee2ProjectPreset, createBuchung,
+  fetchActiveEmployees, fetchEmployee2ProjectPreset, createBuchung,
 } from '@/api/projekte'
 import { fetchRecents, trackRecent } from '@/api/recents'
+import { useBookableProjects, useBookableStructure, useCanBook } from '@/hooks/useBooking'
 import { parentStructureIds, structurePaths } from '@/utils/treeUtils'
 import { localIsoDate, addDaysIso, previousWorkday, hoursBetween, parseHours, fmtHours } from '@/utils/zeit'
 import { useQuickBooking, type QuickBookingPrefill } from '@/store/quickBookingStore'
@@ -45,6 +46,10 @@ export function QuickBookingDialog() {
 }
 
 function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; onClose: () => void }) {
+  // Fuer Kollegen buchen nur mit dem vollen Buchungsrecht — mit „Eigene Zeit
+  // buchen" gibt es das Mitarbeiterfeld nicht (der Server setzt die Sitzung).
+  const { canBookOthers } = useCanBook()
+  const allowOther = !!prefill.allowOtherEmployee && canBookOthers
   const qc     = useQueryClient()
   const toast  = useToast()
   const narrow = useIsNarrow()
@@ -68,19 +73,15 @@ function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; 
   const [serverError, setServerError] = useState<string | null>(null)
   const [saving,      setSaving]      = useState(false)
 
-  const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
-  const { data: structData, isLoading: structLoading } = useQuery({
-    queryKey: ['structure', projectId],
-    queryFn:  () => fetchProjectStructure(projectId!),
-    enabled:  projectId != null,
-  })
+  const { data: projectsData } = useBookableProjects()
+  const { data: structData, isLoading: structLoading } = useBookableStructure(projectId)
   const { data: recentsData } = useQuery({
     queryKey: ['recents', 'project_structure', null, 'recent'],
     queryFn:  () => fetchRecents('project_structure', 12, { sortBy: 'recent' }),
     staleTime: 30_000,
   })
   const { data: empData } = useQuery({
-    queryKey: ['active-employees'], queryFn: fetchActiveEmployees, enabled: !!prefill.allowOtherEmployee,
+    queryKey: ['active-employees'], queryFn: fetchActiveEmployees, enabled: !!allowOther,
   })
   const { data: preset } = useQuery({
     queryKey: ['e2p-preset', employeeId, projectId],
@@ -315,10 +316,10 @@ function QuickBookingForm({ prefill, onClose }: { prefill: QuickBookingPrefill; 
           {errors.desc && <p className="form-field-error" role="alert">{errors.desc}</p>}
         </div>
 
-        {(showRevenue || prefill.allowOtherEmployee) && (
+        {(showRevenue || allowOther) && (
           <Disclosure title="Weitere Angaben" className="qb-more"
             hint={ext !== '' || (rate !== '' && presetRate == null) || (employeeId !== ownId) ? 'geändert' : undefined}>
-            {prefill.allowOtherEmployee && (
+            {allowOther && (
               <div className="form-group">
                 <label htmlFor="qb-emp">Mitarbeiter</label>
                 <select id="qb-emp" value={employeeId ?? ''} onChange={e => setEmployeeId(e.target.value ? Number(e.target.value) : null)}>

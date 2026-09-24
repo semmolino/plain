@@ -1,5 +1,5 @@
 import { ClockPlus } from 'lucide-react'
-import { Can } from '@/components/ui/Can'
+import { useCanBook } from '@/hooks/useBooking'
 import { useQuickBooking } from '@/store/quickBookingStore'
 
 /**
@@ -9,13 +9,15 @@ import { useQuickBooking } from '@/store/quickBookingStore'
  */
 export function QuickBookingButton() {
   const open = useQuickBooking(s => s.open)
+  const { canBook } = useCanBook()
+  if (!canBook) return null
   return (
-    <Can allOf={['projects.bookings.create', 'projects.view']}>
+    <>
       <button type="button" className="hdr-action hdr-action--accent" onClick={() => open()}
         title="Arbeitszeit buchen">
         <ClockPlus size={15} strokeWidth={2} aria-hidden="true" />
         <span className="hdr-label">Zeit buchen</span>
       </button>
-    </Can>
+    </>
   )
 }

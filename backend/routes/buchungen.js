@@ -4,7 +4,13 @@ const express = require("express");
 const ctrl = require("../controllers/buchungen");
 const bookingTypesCtrl = require("../controllers/bookingTypes");
 const textSnippetsCtrl = require("../controllers/textSnippets");
-const { requirePermission } = require("../middleware/permissions");
+const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
+
+// „Eigene Zeit buchen" (projects.bookings.own, Migration 0169) oeffnet die
+// Buchungswege fuer die eigene Person; was genau erlaubt ist, entscheidet der
+// Controller (ownOnly): nur fuer sich selbst, Saetze vom Server, nur eigene
+// unabgerechnete Buchungen in offenen Monaten.
+const OWN = "projects.bookings.own";
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -16,9 +22,12 @@ module.exports = (supabase) => {
   router.put("/booking-prices",       requirePermission("projects.hourly_rates.edit"),      (req, res) => bookingTypesCtrl.upsertProjectPrice(req, res, supabase));
   router.post("/special",             requirePermission("projects.bookings.special.create"), (req, res) => ctrl.createSpecialBuchung(req, res, supabase));
   router.patch("/special/:id",        requirePermission("projects.bookings.edit"),           (req, res) => ctrl.updateSpecialBuchung(req, res, supabase));
-  router.post("/",                    requirePermission("projects.bookings.create"), (req, res) => ctrl.createBuchung(req, res, supabase));
-  router.patch("/:id",                requirePermission("projects.bookings.edit"),   (req, res) => ctrl.patchBuchung(req, res, supabase));
-  router.delete("/:id",               requirePermission("projects.bookings.delete"), (req, res) => ctrl.deleteBuchung(req, res, supabase));
+  // Schlanke Auswahlliste fuer „Eigene Zeit buchen" — ohne Betraege, statt projects.view.
+  router.get("/eigen/projekte",               requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.listOwnProjects(req, res, supabase));
+  router.get("/eigen/projekte/:id/leistungen", requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.listOwnLeaves(req, res, supabase));
+  router.post("/",                    requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.createBuchung(req, res, supabase));
+  router.patch("/:id",                requireAnyPermission("projects.bookings.edit", OWN),   (req, res) => ctrl.patchBuchung(req, res, supabase));
+  router.delete("/:id",               requireAnyPermission("projects.bookings.delete", OWN), (req, res) => ctrl.deleteBuchung(req, res, supabase));
   // Umbuchen steht unter einem EIGENEN Recht, nicht unter bookings.edit: es
   // verschiebt Kosten und Erloes zwischen zwei Projekten, ohne dass sich eine
   // Zahl aendert und jemandem auffaellt (Migration 0139). Die Vorschau tragt
@@ -35,11 +44,13 @@ module.exports = (supabase) => {
   //
   // Dieselben Permissions wie bei den regulaeren Buchungen: ein Entwurf wird
   // durch /timer/confirm zu einer abrechnungsrelevanten Buchung.
-  router.post("/timer/draft",        requirePermission("projects.bookings.create"), (req, res) => ctrl.createTimerDraft(req, res, supabase));
-  router.get("/timer/drafts",        requirePermission("projects.bookings.view"),   (req, res) => ctrl.listDraftsByEmployee(req, res, supabase));
-  router.post("/timer/confirm",      requirePermission("projects.bookings.create"), (req, res) => ctrl.confirmDrafts(req, res, supabase));
-  router.delete("/timer/draft/:id",  requirePermission("projects.bookings.delete"), (req, res) => ctrl.deleteDraft(req, res, supabase));
-  router.patch("/timer/draft/:id",   requirePermission("projects.bookings.edit"),   (req, res) => ctrl.patchDraftDescription(req, res, supabase));
+  // Die Stempeluhr ist immer „eigene Zeit": Entwuerfe tragen die Sitzung als
+  // Mitarbeiter, Lesen/Bestaetigen fremder nur mit employees.bookings.view_all.
+  router.post("/timer/draft",        requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.createTimerDraft(req, res, supabase));
+  router.get("/timer/drafts",        requireAnyPermission("projects.bookings.view", OWN),   (req, res) => ctrl.listDraftsByEmployee(req, res, supabase));
+  router.post("/timer/confirm",      requireAnyPermission("projects.bookings.create", OWN), (req, res) => ctrl.confirmDrafts(req, res, supabase));
+  router.delete("/timer/draft/:id",  requireAnyPermission("projects.bookings.delete", OWN), (req, res) => ctrl.deleteDraft(req, res, supabase));
+  router.patch("/timer/draft/:id",   requireAnyPermission("projects.bookings.edit", OWN),   (req, res) => ctrl.patchDraftDescription(req, res, supabase));
   router.get("/workstart-status",    (req, res) => ctrl.getWorkstartStatus(req, res, supabase));
 
   // Persönliche Buchungstexte (Textbausteine) — jeweils nur die eigenen.
