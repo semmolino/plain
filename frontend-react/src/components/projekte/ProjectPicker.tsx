@@ -13,6 +13,10 @@ interface Props {
   placeholder?: string
   /** Feld beim Einblenden fokussieren und die Liste oeffnen (Projekt wechseln im Kopf). */
   autoFocus?: boolean
+  /** Liste schon beim Fokussieren oeffnen (Standard). In Dialogen aus: dort
+   *  setzt der Dialog den Fokus selbst, und die offene Liste verdeckte sonst
+   *  gleich beim Oeffnen das halbe Formular. Klick und Tippen oeffnen weiter. */
+  openOnFocus?: boolean
 }
 
 const displayName = (p: ProjectOption) => p.ABBR + (p.NAME ? ` – ${p.NAME}` : '')
@@ -22,7 +26,7 @@ const displayName = (p: ProjectOption) => p.ABBR + (p.NAME ? ` – ${p.NAME}` : 
  * Beim Fokus: „Zuletzt verwendet" oben, darunter alle Projekte (scrollbar);
  * Tippen filtert. Optional ein Sprung „Zur Projektliste".
  */
-export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, placeholder = 'Projekt suchen …', autoFocus }: Props) {
+export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, placeholder = 'Projekt suchen …', autoFocus, openOnFocus = true }: Props) {
   const [input, setInput] = useState('')
   const [open,  setOpen]  = useState(false)
   const acRef = useRef<HTMLDivElement>(null)
@@ -90,7 +94,8 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
         aria-label={placeholder}
         value={input}
         onChange={e => { setInput(e.target.value); setOpen(true) }}
-        onFocus={e => { setOpen(true); e.currentTarget.select() }}
+        onFocus={e => { if (openOnFocus) setOpen(true); e.currentTarget.select() }}
+        onClick={() => setOpen(true)}
         onKeyDown={e => {
           if (e.key === 'Enter') {
             const first = (isFiltering ? filtered : [...recentProjects, ...filtered])[0]

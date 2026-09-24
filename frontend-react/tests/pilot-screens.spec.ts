@@ -16,7 +16,8 @@ import { mockPilot } from './fixtures/pilotData'
  */
 
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const OUT   = process.env.PILOT_OUT ?? `test-results/pilot/${PHASE}`
+// Nicht unter test-results/: das leert Playwright bei jedem Lauf.
+const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
 test.skip(!process.env.PILOT_SCREENS, 'Nur mit PILOT_SCREENS=1 (lokale Aufnahmen)')
 test.use({ timezoneId: 'Europe/Berlin', locale: 'de-DE' })
@@ -102,7 +103,7 @@ test('Projekt – Buchungen', async ({ page }, info) => {
 test('Stunden buchen – Dialog', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=buchungen&projectId=1')
-  await page.getByRole('button', { name: /Stundenbuchung|Stunden buchen/ }).first().click()
+  await page.getByRole('button', { name: /Stundenbuchung|^\s*Stunden( buchen)?\s*$/ }).first().click()
   await page.getByRole('dialog').waitFor()
   await shoot(page, info.project.name, 'buchung-dialog')
 })

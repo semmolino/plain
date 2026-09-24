@@ -28,6 +28,7 @@ logs/
 backend/uploads/
 .claude/
 frontend-react/test-results/
+frontend-react/pilot-shots/
 
 # Temp files
 brand.md

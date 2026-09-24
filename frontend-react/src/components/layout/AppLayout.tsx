@@ -9,6 +9,9 @@ import { BottomNav } from './BottomNav'
 import { SideNav }   from './SideNav'
 import { NotificationBell } from './NotificationBell'
 import { TimerBar } from './TimerBar'
+import { Can } from '@/components/ui/Can'
+import { QuickBookingButton } from '@/components/zeit/QuickBookingButton'
+import { QuickBookingDialog } from '@/components/zeit/QuickBookingDialog'
 import { ThemeOptions, useAppliedTheme } from './ThemeOptions'
 import { ToastContainer } from '@/components/ui/Toast'
 import { BrandMark } from '@/components/brand/BrandLogo'
@@ -157,9 +160,14 @@ export function AppLayout() {
       <header className="app-header">
         <div className="app-header-left">
           <BrandMark size={26} className="app-header-brand" />
-          {timerEnabled && <TimerBar />}
+          <QuickBookingButton />
+          {/* Stempeluhr nur mit Buchungsrecht — vorher ungegatet: der
+              Start-Dialog zeigte dann eine leere Projektliste, Beenden
+              scheiterte mit 403. */}
+          {timerEnabled && <Can allOf={['projects.bookings.create', 'projects.view']}><TimerBar /></Can>}
         </div>
-        <div className="app-header-right">
+        <div className="app-header-right">
+
           <NotificationBell />
           <UserMenu />
         </div>
@@ -171,6 +179,7 @@ export function AppLayout() {
           <LicenseReadOnlyBanner />
           <Outlet />
         </main>
+        <QuickBookingDialog />
       </div>
       <BottomNav />
     </div>

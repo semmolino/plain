@@ -5018,3 +5018,166 @@ th.doc-actions, td.doc-actions {
 .sx-add-grid .form-group { margin-bottom: var(--space-3); }
 .sx-add-wide { grid-column: 1 / -1; }
 @media (max-width: 640px) { .sx-add-grid { grid-template-columns: 1fr; } }
+
+/* ── Kopfzeile: Zeit buchen und Stempeluhr ─────────────────────────────────
+   Vorher: gruener „Start"-Knopf und im Lauf drei verschiedenfarbige Flaechen
+   (Orange, Blau, Schwarz) — das Lauteste auf jeder Seite. Jetzt ruhige
+   Umriss-Knoepfe in den Chrome-Farben des Themes. */
+.hdr-action {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  height: 32px; padding: 0 12px;
+  border: 1px solid var(--chrome-border); border-radius: var(--radius-md);
+  background: transparent; color: var(--chrome-text); box-shadow: none;
+  font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+}
+.hdr-action:hover:not(:disabled) { background: var(--chrome-hover-bg); }
+.hdr-action svg { color: var(--chrome-icon); }
+.hdr-action--accent { border-color: var(--nav-active); }
+.hdr-action--accent svg { color: var(--nav-active); }
+.hdr-action--ghost { border-color: transparent; }
+.hdr-action:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.timer-run { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.timer-chip {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  height: 32px; padding: 0 12px;
+  border: 1px solid transparent; border-radius: var(--radius-pill);
+  background: var(--chrome-hover-bg); color: var(--chrome-text);
+  font-size: 13px;
+}
+.timer-chip--break { border-color: var(--warning); }
+.timer-chip--button { cursor: pointer; box-shadow: none; }
+.timer-clock { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.timer-task {
+  font-size: 12px; color: var(--chrome-icon);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px;
+}
+.timer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--success); }
+.timer-dot--yellow { background: var(--warning); }
+.timer-dot--orange { background: var(--warning-strong); }
+.timer-dot--red    { background: var(--danger); }
+.timer-dot--break  { background: var(--warning); }
+
+.timer-sheet { display: flex; flex-direction: column; gap: var(--space-2); }
+.timer-sheet-now { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: var(--space-2) 0 var(--space-3); text-align: center; }
+.timer-sheet-clock { font-size: 32px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.timer-sheet-task  { font-size: 14px; color: var(--text-2); }
+.timer-sheet-day   { font-size: 12px; color: var(--text-3); }
+.timer-sheet-btn {
+  width: 100%; min-height: 48px; margin-top: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 15px;
+}
+
+@media (max-width: 640px) {
+  .hdr-label {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .hdr-action { width: 44px; height: 44px; padding: 0; justify-content: center; }
+  .timer-chip { height: 44px; padding: 0 12px; }
+}
+
+/* ── Dialog „Zeit buchen" ───────────────────────────────────────────────── */
+.modal-card.qb-dialog { max-width: 580px; }
+.qb-form .form-group { margin-bottom: var(--space-3); }
+.qb-form textarea { width: 100%; resize: vertical; font: inherit; font-size: 15px; }
+.qb-recents { margin-bottom: var(--space-4); }
+.qb-recents-title {
+  display: flex; align-items: center; gap: 6px; margin-bottom: var(--space-2);
+  font-size: 12px; font-weight: 700; color: var(--text-3);
+}
+.qb-chips, .qb-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.qb-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  height: 32px; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text-2); box-shadow: none;
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+}
+.qb-chip:hover { background: var(--hover-bg); color: var(--text); }
+.qb-chip[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--text); }
+.qb-recent-chip { height: auto; min-height: 32px; padding: 4px 12px; }
+.qb-chip-project { font-size: 12px; color: var(--text-3); font-weight: 700; }
+.qb-chip-leaf { overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.qb-inline input[type="date"] { flex: 1 1 150px; min-width: 150px; width: auto; }
+.qb-hours { width: 110px; }
+.qb-times { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-3); }
+.qb-row { display: block; }
+.qb-date { margin-bottom: var(--space-3); }
+.qb-more { margin-bottom: var(--space-3); }
+.qb-again { white-space: nowrap; }
+@media (max-width: 640px) {
+  .qb-chip { min-height: 44px; }
+  .qb-again { display: none; }
+  .qb-form input, .qb-form select, .qb-form textarea { font-size: 16px; }   /* iOS zoomt sonst */
+}
+
+/* ── Buchungen (Projekt-Tab) ────────────────────────────────────────────── */
+.bk-root {
+  --bk-pad-y: 8px;
+  --bk-font: 14px;
+}
+.bk-root[data-density="compact"] {
+  --bk-pad-y: 3px;
+  --bk-font: 13px;
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .bk-root, .bk-root[data-density="compact"] {
+    --bk-pad-y: 10px;
+    --bk-font: 14px;
+  }
+}
+.bk-toolbar { align-items: center; }
+.bk-struct-filter { max-width: 260px; }
+.bk-daterange { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.bk-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.bk-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.bk-primary { width: auto; margin-top: 0; height: 38px; padding: 0 16px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.bk-more-kinds { gap: 6px; }
+.bk-bulk-bar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; font-size: 13px; color: var(--text-3); flex-wrap: wrap; }
+.bk-summary { font-size: 13px; color: var(--text-2); margin: 0 0 var(--space-2); font-variant-numeric: tabular-nums; }
+.bk-empty { padding: var(--space-6) var(--space-4); text-align: center; }
+.bk-empty .empty-note { margin-bottom: var(--space-2); }
+.bk-empty-why { font-size: 13px; color: var(--text-3); max-width: 520px; margin: 0 auto var(--space-4); line-height: 1.55; }
+
+.bk-table td { padding-top: var(--bk-pad-y); padding-bottom: var(--bk-pad-y); font-size: var(--bk-font); }
+.bk-col-check { width: 32px; }
+.bk-col-actions { width: 1%; white-space: nowrap; text-align: right; }
+.bk-date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bk-path { color: var(--text-3); font-size: 13px; max-width: 240px; }
+.bk-desc { min-width: 160px; }
+.bk-desc-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bk-sub { display: block; font-size: 12px; color: var(--text-3); }
+.bk-sub--path { margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
+.bk-badge {
+  display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px;
+  font-size: 11px; font-weight: 700; vertical-align: middle;
+}
+.bk-badge--special { color: var(--accent2-strong); background: var(--info-bg); }
+.bk-badge--break   { color: var(--warning-strong); background: var(--warning-bg); }
+.bk-billed { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.bk-foot td { font-weight: 600; border-top: 2px solid var(--border); font-variant-numeric: tabular-nums; }
+.bk-textarea { width: 100%; resize: vertical; font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); }
+
+@media (max-width: 640px) {
+  .bk-toolbar-right { margin-left: 0; }
+  .bk-primary { min-height: 44px; }
+  .bk-desc { min-width: 0; }
+}
+
+/* Buchungen-Leiste: oben Suche + Aktionen, darunter die Filter (Desktop).
+   Auf dem Handy: Suche, dann [Filter] [⋯] [+ Stunden] in einer Zeile. */
+.bk-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); flex: 1 0 100%; }
+.bk-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
+@media (min-width: 641px) {
+  .bk-toolbar .list-search { flex: 1 1 280px; max-width: 420px; }
+}
+@media (max-width: 640px) {
+  .bk-filters { flex: 0 0 auto; order: 2; }
+  .bk-toolbar-right { order: 3; }
+  .bk-filters:has(.filter-bar-chips.open) { flex: 1 0 100%; }
+}
+@media (min-width: 641px) and (pointer: fine) {
+  .bk-root[data-density="compact"] .bk-desc-text { -webkit-line-clamp: 1; }
+}

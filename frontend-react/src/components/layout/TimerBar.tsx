@@ -12,11 +12,16 @@ import type { ArbzgLimits, BreakConfirmation, BreakConfirmationMap } from '@/api
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
+import { localIsoDate } from '@/utils/zeit'
 import { useBackdropClose } from '@/hooks/useBackdropClose'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
+import { Modal } from '@/components/ui/Modal'
+import { DialogFooter } from '@/components/ui/DialogFooter'
 
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
-function nowDateIso()  { return new Date().toISOString().slice(0, 10) }
+// Lokales Datum — das UTC-Datum ist zwischen 0 und 2 Uhr noch gestern.
+function nowDateIso()  { return localIsoDate() }
 function nowTimeIso()  { return new Date().toTimeString().slice(0, 8) }
 
 function LeafPicker({
@@ -704,12 +709,8 @@ function DayReviewModal({ onClose }: { onClose: () => void }) {
 
 type ModalState = 'none' | 'start' | 'next' | 'finish'
 
-function clockClassForHours(h: number): string {
-  if (h >= 10) return 'tbr-clock tbr-clock-red'
-  if (h >= 9)  return 'tbr-clock tbr-clock-orange'
-  if (h >= 6)  return 'tbr-clock tbr-clock-yellow'
-  return 'tbr-clock tbr-clock-green'
-}
+const FMT_H1 = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
+const fmtH1  = (h: number) => FMT_H1.format(h)
 
 export function TimerBar() {
   const { session, breakState, showReview, closeReview, startBreak, endBreak, cancelBreak }
@@ -720,6 +721,8 @@ export function TimerBar() {
   const [brElapsed, setBrElapsed] = useState(0)
   const [savingBreak, setSavingBreak] = useState(false)
   const [breakErr,    setBreakErr]    = useState<string | null>(null)
+  const [sheet,       setSheet]       = useState(false)
+  const narrow = useIsNarrow()
 
   const today = nowDateIso()
 
@@ -809,31 +812,92 @@ export function TimerBar() {
     }
   }
 
+  const dayLevel = dayWorkH >= 10 ? 'red' : dayWorkH >= 9 ? 'orange' : dayWorkH >= 6 ? 'yellow' : 'green'
+  const dayText  = `Heute ${fmtH1(dayWorkH)} h gearbeitet${dayWorkH >= 10 ? ' – über 10 Stunden' : dayWorkH >= 9 ? ' – über 9 Stunden' : ''}`
+
   if (!session) {
     return (
       <>
-        <button className="tbr-btn tbr-start" onClick={() => setModal('start')} title="Arbeitstag starten">
-          <Play size={14} strokeWidth={2.5} />
-          <span className="tbr-label">Start</span>
+        <button className="hdr-action hdr-action--ghost" onClick={() => setModal('start')} title="Stempeluhr starten – misst die Zeit, während du arbeitest">
+          <Play size={15} strokeWidth={2} aria-hidden="true" />
+          <span className="hdr-label">Stempeluhr</span>
         </button>
         {modal === 'start' && <StartModal onClose={() => setModal('none')} />}
       </>
     )
   }
 
+  const taskLabel = `${session.projectName} / ${session.structureName}`
+  const chip = (
+    <>
+      <span className={`timer-dot timer-dot--${breakState ? 'break' : dayLevel}`} aria-hidden="true" />
+      <span className="timer-clock">{breakState ? `Pause ${formatDuration(brElapsed)}` : formatDuration(elapsed)}</span>
+      {!narrow && <span className="timer-task">{breakState ? 'Pause läuft' : taskLabel}</span>}
+      <span className="sr-only"> – {breakState ? 'Pause läuft' : `${taskLabel}. ${dayText}`}</span>
+    </>
+  )
+
+  // Handy: nur der Chip; die Bedienung liegt in einem Sheet mit grossen Knoepfen.
+  // Drei Symbole plus Uhr plus „Zeit buchen" passten nicht in 390px Kopfzeile.
+  if (narrow) {
+    return (
+      <>
+        <button type="button" className={`timer-chip timer-chip--button${breakState ? ' timer-chip--break' : ''}`}
+          onClick={() => setSheet(true)} aria-label={`Stempeluhr: ${breakState ? 'Pause' : formatDuration(elapsed)} – Bedienung öffnen`}>
+          {chip}
+        </button>
+        <Modal open={sheet} onClose={() => setSheet(false)} title="Stempeluhr">
+          <div className="timer-sheet">
+            <div className="timer-sheet-now">
+              <span className="timer-sheet-clock">{breakState ? formatDuration(brElapsed) : formatDuration(elapsed)}</span>
+              <span className="timer-sheet-task">{breakState ? 'Pause läuft' : taskLabel}</span>
+              <span className="timer-sheet-day">{dayText}</span>
+            </div>
+            {breakState ? (
+              <>
+                <button type="button" className="btn-primary timer-sheet-btn" disabled={savingBreak} onClick={() => { void handleEndBreak(); setSheet(false) }}>
+                  <Play size={16} strokeWidth={2} aria-hidden="true" /> {savingBreak ? 'Speichert …' : 'Weiter arbeiten'}
+                </button>
+                <button type="button" className="btn-secondary timer-sheet-btn" onClick={() => { cancelBreak(); setSheet(false) }}>
+                  <X size={16} strokeWidth={2} aria-hidden="true" /> Pause verwerfen
+                </button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="btn-secondary timer-sheet-btn" onClick={() => { startBreak(); setSheet(false) }}>
+                  <Pause size={16} strokeWidth={2} aria-hidden="true" /> Pause
+                </button>
+                <button type="button" className="btn-secondary timer-sheet-btn" onClick={() => { setSheet(false); setModal('next') }}>
+                  <ArrowRight size={16} strokeWidth={2} aria-hidden="true" /> Nächste Aufgabe
+                </button>
+                <button type="button" className="btn-primary timer-sheet-btn" onClick={() => { setSheet(false); setModal('finish') }}>
+                  <Square size={14} strokeWidth={2} aria-hidden="true" /> Beenden &amp; prüfen
+                </button>
+              </>
+            )}
+            {breakErr && <p className="tbr-error">{breakErr}</p>}
+          </div>
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setSheet(false)}>Schließen</button>
+          </DialogFooter>
+        </Modal>
+        {modal === 'next'   && <NextTaskModal onClose={() => setModal('none')} />}
+        {modal === 'finish' && <FinishModal   onClose={() => setModal('none')} />}
+        {showReview         && <DayReviewModal onClose={closeReview} />}
+      </>
+    )
+  }
+
   if (breakState) {
     return (
-      <div className="tbr-running tbr-running-break">
-        <span className="tbr-clock tbr-clock-break">
-          <Pause size={13} strokeWidth={2.5} /> {formatDuration(brElapsed)}
-        </span>
-        <span className="tbr-task tbr-task-break">Pause läuft</span>
-        <button className="tbr-btn tbr-resume" disabled={savingBreak} onClick={handleEndBreak}>
-          <Play size={14} strokeWidth={2.5} />
-          <span className="tbr-label">{savingBreak ? 'Speichere…' : 'Pause beenden'}</span>
+      <div className="timer-run">
+        <span className="timer-chip timer-chip--break" title={dayText}>{chip}</span>
+        <button className="hdr-action" disabled={savingBreak} onClick={handleEndBreak}>
+          <Play size={14} strokeWidth={2} aria-hidden="true" />
+          <span className="hdr-label">{savingBreak ? 'Speichert …' : 'Weiter arbeiten'}</span>
         </button>
-        <button className="tbr-btn" title="Pause verwerfen (nicht buchen)" onClick={cancelBreak}>
-          <X size={14} strokeWidth={2.5} />
+        <button className="hdr-action hdr-action--ghost" title="Pause verwerfen (nicht buchen)" onClick={cancelBreak}>
+          <X size={14} strokeWidth={2} aria-hidden="true" />
           <span className="sr-only">Pause verwerfen</span>
         </button>
         {breakErr && <span className="tbr-error">{breakErr}</span>}
@@ -841,31 +905,24 @@ export function TimerBar() {
     )
   }
 
+  // Drei gleichrangige Knoepfe statt drei verschiedenfarbiger Flaechen
+  // (vorher Orange, Blau, Schwarz — zusammen mit dem gruenen Start war die
+  // Kopfzeile das Lauteste auf jeder Seite).
   return (
     <>
-      <div className="tbr-running">
-        <span className={clockClassForHours(dayWorkH)} title={`Heute insgesamt ${dayWorkH.toFixed(2)} h`}>
-          {formatDuration(elapsed)}
-        </span>
-        <span className="tbr-task" title={`${session.projectName} / ${session.structureName}`}>
-          {session.projectName} / {session.structureName}
-        </span>
-        {/* Auf schmalen Geraeten bleiben nur die Symbole stehen: die drei
-            Beschriftungen brauchten sonst mehr Platz als die Kopfzeile hat
-            und wurden mitten im Wort abgeschnitten („Nächs Aufgab").
-            Der Text bleibt im DOM und wird per .sr-only nur visuell
-            ausgeblendet — der Screenreader liest ihn weiterhin vor. */}
-        <button className="tbr-btn tbr-pause" onClick={startBreak} title="Pause starten">
-          <Pause size={14} strokeWidth={2.5} />
-          <span className="tbr-label">Pause</span>
+      <div className="timer-run">
+        <span className="timer-chip" title={`${taskLabel} · ${dayText}`}>{chip}</span>
+        <button className="hdr-action" onClick={startBreak} title="Pause starten">
+          <Pause size={14} strokeWidth={2} aria-hidden="true" />
+          <span className="hdr-label">Pause</span>
         </button>
-        <button className="tbr-btn tbr-next" onClick={() => setModal('next')} title="Nächste Aufgabe">
-          <ArrowRight size={14} strokeWidth={2.5} />
-          <span className="tbr-label">Nächste Aufgabe</span>
+        <button className="hdr-action" onClick={() => setModal('next')} title="Aufgabe wechseln">
+          <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
+          <span className="hdr-label">Nächste Aufgabe</span>
         </button>
-        <button className="tbr-btn tbr-finish" onClick={() => setModal('finish')} title="Buchungen abschließen">
-          <Square size={14} strokeWidth={2.5} fill="currentColor" />
-          <span className="tbr-label">Buchungen abschließen</span>
+        <button className="hdr-action" onClick={() => setModal('finish')} title="Arbeitstag beenden und Buchungen prüfen">
+          <Square size={12} strokeWidth={2} aria-hidden="true" />
+          <span className="hdr-label">Beenden</span>
         </button>
       </div>
 
