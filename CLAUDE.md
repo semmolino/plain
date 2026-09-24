@@ -302,6 +302,15 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   alte Satz und die Antwort sagt das); der Kostensatz bleibt, er hängt am
   Mitarbeiter. Die Vorschau ist derselbe Lauf mit `dryRun` — keine zweite Kopie
   der Prüfungen. Jede Umbuchung landet in `TEC_REBOOKING`.
+- **Monatsrunde Leistungsstände** (Projekte → Reiter „Leistungsstände",
+  `GET /projekte/leistungsstand/runde`, `services/leistungsstandRunde.js`):
+  Arbeitsliste der laufenden Projekte (Status aus Monatsabschluss), vorbelegt
+  „meine" und letztes Monatsende. Erledigt ist ein Projekt, sobald
+  `PROJECT.PROGRESS_REVIEWED_AS_OF ≥ Stichtag` — gesetzt von Speichern und
+  „Unverändert bestätigen" (`POST /projekte/:id/leistungsstand` mit
+  `as_of_date` / `confirm_unchanged`). Rechte: `projects.performance.view/edit`,
+  kein eigenes. „Jetzt wichtig" zeigt „Leistungsstände {Monat}: n von m offen"
+  (Alert-Typ `progress_round`).
 - **Teilfertige Leistungen** (`services/wipReport.js`, Report unter Projektdaten):
   der kaufmännische Abschluss. Je Projekt und Stichtag `unfertig = max(0,
   Leistungswert − abgerechnet)`, HGB-Ansatz `min(Kostenanteil, unfertig)`.
@@ -310,7 +319,12 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Abs. 2 HGB), und der HGB-Wert enthält **keinen** anteiligen Gewinn (§ 252
   Abs. 1 Nr. 4 HGB). Stichtagswerte in der Vergangenheit hängen an den
   `PROJECT_PROGRESS`-Snapshots — fehlt einer, weist der Report das aus statt
-  eine 0 zu zeigen. Optional daneben: ein zweiter Wertansatz für die
+  eine 0 zu zeigen. Maßgeblich ist der **Stichtag des Standes**
+  (`PROJECT_PROGRESS.AS_OF_DATE`, Migration `0170`), nicht `created_at`: je
+  Element steigt er nie ab — Fortschreibungen übernehmen ihn, ein Element mit
+  späterem Stand ist für einen früheren Stichtag gesperrt
+  (`services/leistungsstandRunde.js`). Wer neu in `PROJECT_PROGRESS` schreibt,
+  hält diese Regel ein: „heute" (Spaltenstandard) oder das Datum der Vorlage. Optional daneben: ein zweiter Wertansatz für die
   Steuerbilanz und eine Gegenprobe des Leistungsstands über eine
   Zielkostenquote — beide bleiben ohne gepflegte Einstellung ganz aus, statt
   eine 0 zu behaupten. Konzept: `docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md`.

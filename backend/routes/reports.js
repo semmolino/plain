@@ -1,4 +1,7 @@
 const express = require("express");
+
+/** Tag, zu dem ein Leistungsstand gilt: sein Stichtag (0170), sonst das Erfassungsdatum. */
+const progressDay = (r) => (r.AS_OF_DATE ? String(r.AS_OF_DATE).slice(0, 10) : r.created_at ? String(r.created_at).substring(0, 10) : null);
 const { requirePermission } = require("../middleware/permissions");
 const wipSvc = require("../services/wipReport");
 const { loadParentSurchargesByProject: loadSurcharges } = require("../services/reportSurcharges");
@@ -132,9 +135,10 @@ module.exports = (supabase) => {
 
     const { data: progressRows } = await supabase
       .from("PROJECT_PROGRESS")
-      .select("STRUCTURE_ID, REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, created_at")
+      .select("STRUCTURE_ID, REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, AS_OF_DATE, created_at")
       .eq("TENANT_ID", tenantId)
       .in("STRUCTURE_ID", leafIds)
+      .order("AS_OF_DATE", { ascending: true })
       .order("created_at", { ascending: true });
 
     let tecQ = supabase
@@ -180,7 +184,7 @@ module.exports = (supabase) => {
     const { data: payRows } = await payQ;
 
     const dateSet = new Set();
-    (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
+    (progressRows || []).forEach(r => { const d = progressDay(r); if (d) dateSet.add(d); });
     (tecRows      || []).forEach(r => { if (r.BOOKING_DATE) dateSet.add(r.BOOKING_DATE); });
     (ppRows       || []).forEach(r => { if (r.ADVANCE_INVOICE_DATE) dateSet.add(r.ADVANCE_INVOICE_DATE); });
     invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
@@ -204,7 +208,7 @@ module.exports = (supabase) => {
 
       for (const leaf of leaves) {
         const leafProg = (progressRows || []).filter(r =>
-          r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
+          r.STRUCTURE_ID === leaf.ID && progressDay(r) && progressDay(r) <= date
         );
         const leafTec = (tecRows || []).filter(r =>
           r.STRUCTURE_ID === leaf.ID && r.BOOKING_DATE <= date
@@ -818,9 +822,10 @@ module.exports = (supabase) => {
       // 2. All PROJECT_PROGRESS rows for these leaves (full history — no date filter)
       const { data: progressRows } = await supabase
         .from("PROJECT_PROGRESS")
-        .select("STRUCTURE_ID, REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, created_at")
+        .select("STRUCTURE_ID, REVENUE, EXTRAS, REVENUE_COMPLETION, EXTRAS_COMPLETION, AS_OF_DATE, created_at")
         .eq("TENANT_ID", tenantId)
         .in("STRUCTURE_ID", leafIds)
+        .order("AS_OF_DATE", { ascending: true })
         .order("created_at", { ascending: true });
 
       // 3. BOOKING rows (fetch up to dateTo for efficiency; full history needed for cumulative)
@@ -871,7 +876,7 @@ module.exports = (supabase) => {
 
       // 7. Collect distinct event dates, apply date range filter for X axis
       const dateSet = new Set();
-      (progressRows || []).forEach(r => { if (r.created_at) dateSet.add(r.created_at.substring(0, 10)); });
+      (progressRows || []).forEach(r => { const d = progressDay(r); if (d) dateSet.add(d); });
       (tecRows      || []).forEach(r => { if (r.BOOKING_DATE) dateSet.add(r.BOOKING_DATE); });
       (ppRows       || []).forEach(r => { if (r.ADVANCE_INVOICE_DATE) dateSet.add(r.ADVANCE_INVOICE_DATE); });
       invRows.forEach(r => { if (r.INVOICE_DATE) dateSet.add(r.INVOICE_DATE); });
@@ -897,7 +902,7 @@ module.exports = (supabase) => {
 
         for (const leaf of leaves) {
           const leafProg = (progressRows || []).filter(r =>
-            r.STRUCTURE_ID === leaf.ID && r.created_at && r.created_at.substring(0, 10) <= date
+            r.STRUCTURE_ID === leaf.ID && progressDay(r) && progressDay(r) <= date
           );
           const leafTec = (tecRows || []).filter(r =>
             r.STRUCTURE_ID === leaf.ID && r.BOOKING_DATE <= date
@@ -1143,6 +1148,29 @@ module.exports = (supabase) => {
       count: mahnCount,
       action_url: "/rechnungen?tab=mahnungen",
     });
+
+    // Monatsrunde Leistungsstaende (Migration 0170): wer pflegen darf, sieht,
+    // wie viele laufende Projekte fuer das letzte Monatsende noch offen sind —
+    // die eigenen, oder alle, wenn man keine Projekte leitet.
+    const mayEditProgress = !!req._permissionsUnrestricted || !!req.hasPermission?.("projects.performance.edit");
+    if (mayEditProgress) {
+      try {
+        const runde = require("../services/leistungsstandRunde");
+        const r = await runde.roundSummary(supabase, { tenantId, employeeId: req.employeeId });
+        if (r.total > 0 && r.open > 0) {
+          const monat = new Date(`${r.as_of}T12:00:00Z`).toLocaleDateString("de-DE", { month: "long", timeZone: "UTC" });
+          alerts.push({
+            severity: "amber",
+            type: "progress_round",
+            message: `Leistungsstände ${monat}: ${r.open} von ${r.total} offen`,
+            count: r.open,
+            action_url: "/projekte?tab=leistungsstaende",
+          });
+        }
+      } catch (e) {
+        console.warn("[alerts] Monatsrunde nicht verfuegbar:", e?.message || e);
+      }
+    }
 
     res.json({ data: alerts });
   });

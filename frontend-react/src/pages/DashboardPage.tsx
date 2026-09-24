@@ -1771,7 +1771,7 @@ export function DashboardPage() {
       { queryKey: ['dashboard', 'projects', dateRange.dateFrom, dateRange.dateTo],   queryFn: () => fetchDashboardProjects(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: isGl },
       { queryKey: ['dashboard', 'monthly',  dateRange.dateFrom, dateRange.dateTo],   queryFn: () => fetchDashboardMonthly(dateRange.dateFrom, dateRange.dateTo),  staleTime: 300000, enabled: isController },
       { queryKey: ['dashboard', 'by-status'],                                        queryFn: fetchDashboardByStatus,          staleTime: 300000, enabled: isGl },
-      { queryKey: ['dashboard', 'alerts'],                                           queryFn: fetchDashboardAlerts,            staleTime: 120000, enabled: isGl || isController },
+      { queryKey: ['dashboard', 'alerts'],                                           queryFn: fetchDashboardAlerts,            staleTime: 120000, enabled: isGl || isController || isBl },
       { queryKey: ['dashboard', 'overdue-invoices'],                                 queryFn: fetchOverdueInvoices,            staleTime: 120000, enabled: isController },
       { queryKey: ['dashboard', 'mahnung-stats'],                                    queryFn: fetchMahnungStats,               staleTime: 120000, enabled: isController },
       { queryKey: ['dashboard', 'risk-projects', isBl ? 'own' : 'all'],              queryFn: () => fetchRiskProjects(isBl ? 'own' : undefined), staleTime: 300000, enabled: isGl || isBl },
@@ -1852,6 +1852,11 @@ export function DashboardPage() {
     const lvl = { red: 'critical', amber: 'watch', blue: 'info' } as const
     if (isGl || isController) {
       alerts.forEach((a, i) => items.push({ id: `alert-${i}`, level: lvl[a.severity] ?? 'info', text: a.message, to: a.action_url }))
+    } else if (isBl) {
+      // Projektleitung: nur die Monatsrunde — Rechnungen und Mahnungen sind
+      // nicht ihre Liste.
+      alerts.filter(a => a.type === 'progress_round')
+        .forEach((a, i) => items.push({ id: `alert-pr-${i}`, level: lvl[a.severity] ?? 'info', text: a.message, to: a.action_url }))
     }
     if (isController && mahnStats && mahnStats.overdueActionsCount > 0) {
       items.push({

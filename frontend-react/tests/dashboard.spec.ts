@@ -22,7 +22,8 @@ test.describe('Übersicht', () => {
     await setup(page)
     const attn = page.getByRole('region', { name: /Jetzt wichtig/ })
     const time = page.getByRole('region', { name: 'Zeit buchen' })
-    await expect(attn.getByRole('link')).toHaveCount(3)
+    // Vier Hinweise, darunter die Monatsrunde Leistungsstände (Runde 2)
+    await expect(attn.getByRole('link')).toHaveCount(4)
     for (const r of [attn, time]) {
       const box = await r.boundingBox()
       expect(box!.y).toBeLessThan(vh(page))

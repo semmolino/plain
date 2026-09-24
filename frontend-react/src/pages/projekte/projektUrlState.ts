@@ -9,6 +9,7 @@
  * Jetzt ist die URL der Zustand:
  *   /projekte                               → Projektliste
  *   /projekte?tab=honorar                   → Kalkulationen ohne Projekt
+ *   /projekte?tab=leistungsstaende          → Monatsrunde Leistungsstände (Runde 2)
  *   /projekte?projectId=12                  → Arbeitsbereich, Tab Struktur
  *   /projekte?projectId=12&tab=buchungen    → Arbeitsbereich, Tab Buchungen
  *
@@ -22,7 +23,7 @@ export type ProjektTab =
   | 'struktur' | 'leistungsstand' | 'buchungen' | 'nachtraege'
   | 'vertraege' | 'honorar' | 'mitarbeiter' | 'budget'
 
-export type ListTab = 'liste' | 'honorar'
+export type ListTab = 'liste' | 'honorar' | 'leistungsstaende'
 
 export const WORKSPACE_TABS: ProjektTab[] = [
   'struktur', 'leistungsstand', 'buchungen', 'nachtraege',
@@ -63,8 +64,14 @@ export function resolveProjektView(
   const tabRaw = urlTab ?? stTab
   const pid    = urlPid ?? stPid
 
+  // Sammel-Erinnerungen vor Runde 2 verlinkten „?tab=leistungsstand&filter=mine"
+  // — gemeint war immer die Runde ueber alle eigenen Projekte.
+  const roundLink = tabRaw === 'leistungsstaende' || (pid == null && tabRaw === 'leistungsstand' && params.get('filter') === 'mine')
+
   let view: ProjektView
-  if (pid != null && tabRaw !== 'liste') {
+  if (roundLink) {
+    view = { view: 'list', listTab: 'leistungsstaende', pendingTab: null }
+  } else if (pid != null && tabRaw !== 'liste') {
     view = { view: 'workspace', projectId: pid, tab: isWorkspaceTab(tabRaw) ? tabRaw : 'struktur' }
   } else if (pid == null && isWorkspaceTab(tabRaw) && tabRaw !== 'honorar' && savedPid != null) {
     // Benachrichtigung „?tab=buchungen" ohne Projekt → zuletzt geoeffnetes Projekt
@@ -88,8 +95,8 @@ export function serializeProjektView(v: ProjektView): string {
   if (v.view === 'workspace') {
     p.set('projectId', String(v.projectId))
     p.set('tab', v.tab)
-  } else if (v.listTab === 'honorar') {
-    p.set('tab', 'honorar')
+  } else if (v.listTab === 'honorar' || v.listTab === 'leistungsstaende') {
+    p.set('tab', v.listTab)
   } else if (v.pendingTab) {
     p.set('tab', v.pendingTab)
   }

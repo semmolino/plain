@@ -33,6 +33,7 @@ module.exports = (supabase) => {
 
   // Static paths MUST come before /:id-style dynamic routes
   router.get("/search",                                (req, res) => ctrl.searchProjects(req, res, supabase));
+  router.get("/leistungsstand/runde",                  requirePermission("projects.performance.view"), (req, res) => ctrl.getLeistungsstandRunde(req, res, supabase));
   router.get("/contracts/search",                      (req, res) => ctrl.searchContracts(req, res, supabase));
   router.patch("/contract/:id",                        requirePermission("projects.contracts.edit"), (req, res) => ctrl.patchContract(req, res, supabase));
   router.patch("/structure/:id/completion-percents",   requirePermission("projects.performance.edit"), (req, res) => ctrl.patchStructureCompletionPercents(req, res, supabase));

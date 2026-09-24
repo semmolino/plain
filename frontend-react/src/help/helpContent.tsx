@@ -805,7 +805,10 @@ export const HELP = {
         Projekt-Snapshots. Liegt für ein Projekt kein Snapshot zum Stichtag vor,
         ist sein Leistungswert nicht belegt — die Spalte zeigt dann „fehlt".
         Snapshots entstehen automatisch beim Monatsabschluss (Einstellungen →
-        Monatsabschluss) oder von Hand über den Projekt-Snapshot im Projekt.
+        Monatsabschluss) und beim Pflegen der Leistungsstände — über die
+        Monatsrunde (Projekte → Leistungsstände) oder im Projekt. Maßgeblich ist
+        der <strong>Stichtag</strong>, zu dem ein Stand erfasst wurde, nicht der Tag
+        der Eingabe: der am 3. Oktober zum 30.09. eingetragene Stand gilt zum 30.09.
         Für den Stichtag „heute" wird der Live-Stand verwendet.
       </>
     ),
@@ -1519,6 +1522,45 @@ export const HELP = {
         und derselben Beschreibung. Ändern und Löschen gehen, solange eine Buchung noch nicht
         abgerechnet und der Monat nicht abgeschlossen ist — danach steht dort ein Schloss mit dem
         Grund. Eine abgerechnete Buchung wird über Storno oder Gutschrift korrigiert.
+      </>
+    ),
+  },
+  'performance.asof': {
+    title: 'Stand zum Stichtag',
+    body: (
+      <>
+        Der Leistungsstand gilt zu dem Tag, den du hier wählst — nicht zu dem Tag, an dem du ihn
+        einträgst. Wer den September-Stand am 3. Oktober pflegt, wählt den <strong>30.09.</strong>;
+        der Bericht „Teilfertige Leistungen" zum 30.09. findet ihn dann.<br /><br />
+        Der Stichtag darf nicht in der Zukunft liegen. Ein Element, das schon einen späteren Stand hat,
+        ist für einen früheren Stichtag gesperrt (Schloss) — sonst würde der ältere Wert den neueren
+        überschreiben, und der Abrechnungsvorschlag rechnete mit dem falschen Stand.
+      </>
+    ),
+  },
+  'performance.confirm': {
+    title: 'Unverändert bestätigen',
+    body: (
+      <>
+        Hat sich in diesem Monat nichts bewegt, hältst du mit einem Klick fest, dass die heutigen Werte
+        auch zum Stichtag gelten. Das ist mehr als nichts zu tun: der Stichtagsbericht braucht für jedes
+        Monatsende einen Stand, und die Monatsrunde zählt das Projekt als erledigt.
+      </>
+    ),
+  },
+  'performance.round': {
+    title: 'Monatsrunde Leistungsstände',
+    body: (
+      <>
+        Die Arbeitsliste für den Monatsabschluss: alle laufenden Projekte (Status aus Einstellungen →
+        Monatsabschluss) mit Elementen, deren Leistungsstand man eingibt. Vorbelegt sind deine eigenen
+        Projekte (Projektleitung) und das letzte Monatsende.<br /><br />
+        Links wählst du das Projekt, rechts trägst du die Prozente ein. <strong>Speichern &amp;
+        nächstes</strong> (Strg+S) springt zum nächsten offenen Projekt, <strong>Unverändert
+        bestätigen</strong> gilt, wenn sich nichts bewegt hat, <strong>Überspringen</strong> merkt sich
+        das Projekt nur für diese Sitzung. Erledigt ist ein Projekt, sobald es für diesen oder einen
+        späteren Stichtag gepflegt ist. Nach Aufwand abgerechnete Elemente stehen immer auf 100 % und
+        erscheinen nicht als Eingabe.
       </>
     ),
   },

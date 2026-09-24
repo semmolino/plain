@@ -9,6 +9,7 @@ import { HonorarTab }     from '@/pages/projekte/HonorarWizard'
 import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
+import { LeistungsstandRunde } from '@/pages/projekte/leistungsstand/LeistungsstandRunde'
 import { Vertraege }      from '@/pages/projekte/Vertraege'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 import { Budget }          from '@/pages/projekte/Budget'
@@ -36,8 +37,9 @@ const WORKSPACE_TABS: (ProjektTabDef & { permissions: string[]; feature?: string
 ]
 
 const LIST_TABS: { id: ListTab; label: string; permissions: string[]; feature?: string }[] = [
-  { id: 'liste',   label: 'Projektliste',  permissions: ['projects.view'] },
-  { id: 'honorar', label: 'Kalkulationen', permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
+  { id: 'liste',            label: 'Projektliste',    permissions: ['projects.view'] },
+  { id: 'leistungsstaende', label: 'Leistungsstände', permissions: ['projects.performance.view'] },
+  { id: 'honorar',          label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
 ]
 
 function savedPid(): number | null {
@@ -108,7 +110,7 @@ function ProjektePageInner() {
       <div className="master-page pw-list">
         <PageHeader title="Projekte" />
         {listTabs.length > 1 && (
-          <Tabs tabs={listTabs} active={view.listTab} onChange={id => go({ view: 'list', listTab: id as ListTab, pendingTab: null })} />
+          <Tabs tabs={listTabs} active={view.listTab} onChange={id => guarded(() => go({ view: 'list', listTab: id as ListTab, pendingTab: null }))} />
         )}
         {pendingLabel && (
           <p className="pw-pending-hint">Wähle ein Projekt, um „{pendingLabel}" zu öffnen.</p>
@@ -116,6 +118,7 @@ function ProjektePageInner() {
         <div className="master-tab-content">
           {view.listTab === 'liste'   && <ProjekteListe onSelectProject={openProject} onProjectCreated={id => go({ view: 'workspace', projectId: id, tab: 'struktur' })} initialSearch={initialSearch} />}
           {view.listTab === 'honorar' && <HonorarTab />}
+          {view.listTab === 'leistungsstaende' && <LeistungsstandRunde />}
         </div>
       </div>
     )

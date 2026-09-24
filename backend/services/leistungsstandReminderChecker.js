@@ -115,7 +115,7 @@ async function fireForTenant(supabase, cfg) {
         type:     TYPE_KEY,
         title:    `Leistungsstände erfassen`,
         body:     `Bitte die Leistungsstände der Projekte aktualisieren.`,
-        link:     `/projekte?tab=leistungsstand&filter=mine`,
+        link:     `/projekte?tab=leistungsstaende`,
         metadata: { ref_date: todayLocal(), scope: "audience" },
       });
       created++;
@@ -205,7 +205,7 @@ async function notifyPmSummary(supabase, { tenantId, pmId, projekte }) {
       body:     anzahl === 1
         ? `Bitte den Leistungsstand für „${projektLabel(projekte[0])}" aktualisieren.`
         : `Bitte die Leistungsstände aktualisieren: ${aufzaehlung}.`,
-      link:     `/projekte?tab=leistungsstand&filter=mine`,
+      link:     `/projekte?tab=leistungsstaende`,
       metadata: {
         ref_date:    todayLocal(),
         scope:       "pm_summary",

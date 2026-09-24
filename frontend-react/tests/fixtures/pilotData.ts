@@ -410,11 +410,13 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     { STATUS_NAME: 'Angebot', PROJECT_COUNT: 1 }, { STATUS_NAME: 'Abgeschlossen', PROJECT_COUNT: 1 },
   ] })
   await get('reports/dashboard/alerts', { data: [
-    // Genau die drei Arten, die routes/reports.js (/dashboard/alerts) kennt.
+    // Genau die Arten, die routes/reports.js (/dashboard/alerts) kennt.
     // Runde 1 stand hier ein erfundener „ohne Leistungsstand seit 60 Tagen".
     { severity: 'red',   type: 'overdue_invoices', message: '4 Rechnungen überfällig', count: 4, action_url: '/rechnungen' },
     { severity: 'amber', type: 'budget_critical',  message: '2 Projekte über 90% Budget', count: 2, action_url: '/projekte' },
     { severity: 'amber', type: 'open_mahnungen',   message: '3 offene Mahnungen', count: 3, action_url: '/rechnungen?tab=mahnungen' },
+    // Runde 2: Monatsrunde Leistungsstände (nur mit projects.performance.edit)
+    { severity: 'amber', type: 'progress_round',   message: 'Leistungsstände August: 3 von 5 offen', count: 3, action_url: '/projekte?tab=leistungsstaende' },
   ] })
   await get('reports/dashboard/risk-projects', { data: riskProjects })
   await get('reports/dashboard/billing-summary', { data: {
@@ -534,6 +536,37 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   await byMethod('buchungen/timer/confirm', { POST: r => r.fulfill(json({ success: true, confirmed: 2 })) })
   await get('arbzg/limits/\\d+', { data: ARBZG_LIMITS })
 
+  // Leistungsstände je Projekt und Monatsrunde (Runde 2) — mit Gedaechtnis:
+  // Speichern markiert das Projekt fuer den Stichtag als erledigt.
+  const reviewed = new Map<number, string>(RUNDE_SEED.filter(r => r.reviewed).map(r => [r.id, r.reviewed!]))
+  await page.route(/\/api\/v1\/projekte\/(\d+)\/leistungsstand(\?|$)/, r => {
+    const id = Number(r.request().url().match(/projekte\/(\d+)\/leistungsstand/)?.[1])
+    if (r.request().method() === 'POST') {
+      const body = (r.request().postDataJSON() ?? {}) as { updates?: unknown[]; as_of_date?: string; confirm_unchanged?: boolean }
+      const asOf = body.as_of_date ?? PILOT_TODAY
+      reviewed.set(id, asOf)
+      return r.fulfill(json({ success: true, saved: body.updates?.length ?? 0, inserted: 20, as_of: asOf, confirmed: !!body.confirm_unchanged }))
+    }
+    return r.fulfill(json({ data: LEISTUNGSSTAND, meta: {
+      reviewed_as_of: reviewed.get(id) ?? null, reviewed_at: null, today: PILOT_TODAY, last_month_end: '2026-08-31',
+    } }))
+  })
+  await page.route(/\/api\/v1\/projekte\/leistungsstand\/runde(\?|$)/, r => {
+    const u = new URL(r.request().url())
+    const asOf  = u.searchParams.get('as_of') ?? '2026-08-31'
+    const scope = u.searchParams.get('scope') === 'all' ? 'all' : 'own'
+    const all = RUNDE_SEED.map(x => ({
+      ID: x.id, ABBR: x.abbr, NAME: x.name, PROJECT_MANAGER_ID: x.pm, PROJECT_MANAGER: x.pmName, STATUS: 'Laufend',
+      EDITABLE_COUNT: x.leaves, BUDGET_TOTAL_NET: x.budget, LEISTUNGSSTAND_PERCENT: x.pct, OPEN_NET_TOTAL: x.open,
+      REVIEWED_AS_OF: reviewed.get(x.id) ?? null, REVIEWED_AT: null, DONE: (reviewed.get(x.id) ?? '') >= asOf,
+    }))
+    const projects = scope === 'all' ? all : all.filter(p => p.PROJECT_MANAGER_ID === 1)
+    return r.fulfill(json({ data: {
+      as_of: asOf, today: PILOT_TODAY, scope, mine_count: all.filter(p => p.PROJECT_MANAGER_ID === 1).length,
+      total: projects.length, done: projects.filter(p => p.DONE).length, projects,
+    } }))
+  })
+
   // „Meine Zeit" und „Eigene Zeit buchen"
   await get('buchungen/mine', { data: myWeek() })
   await get('buchungen/eigen/projekte', { data: projectsShort.slice(0, 4) })
@@ -545,6 +578,40 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     DELETE: r => r.fulfill(json({ success: true })),
   })
 }
+
+// ── Leistungsstände / Monatsrunde ───────────────────────────────────────────
+
+// Stand zum 31.08.: LP1–4 fertig, Ausführungsplanung und Vergabe laufen,
+// Bauüberwachung hat begonnen. LP5.2 ist schon zu 70 % abgerechnet (Warnung
+// beim Zurücksetzen), BL4 hat einen Stand vom 15.09. (gesperrt zum 31.08.).
+const LS_PCT: Record<number, number> = {
+  102: 100, 103: 100, 104: 100, 105: 100, 107: 80, 108: 70, 109: 40, 110: 50, 111: 20,
+  113: 35, 114: 0, 115: 0, 116: 0, 118: 100, 119: 50, 120: 100, 121: 30,
+}
+const PARENT_IDS = new Set(SPECS.filter(x => x.father != null).map(x => x.father))
+export const LEISTUNGSSTAND = STRUCTURE.map(n => {
+  const id = Number(n.STRUCTURE_ID)
+  const pct = LS_PCT[id] ?? (Number(n.BILLING_TYPE_ID) === 2 ? 100 : 0)
+  const fee = Number(n.REVENUE) + Number(n.EXTRAS)
+  return {
+    ...n, IS_LEAF: !PARENT_IDS.has(id),
+    REVENUE_COMPLETION_PERCENT: pct, EXTRAS_COMPLETION_PERCENT: pct,
+    REVENUE_COMPLETION: r2(Number(n.REVENUE) * pct / 100), EXTRAS_COMPLETION: r2(Number(n.EXTRAS) * pct / 100),
+    PREV_REVENUE_COMPLETION_PERCENT: pct, PREV_EXTRAS_COMPLETION_PERCENT: pct,
+    PREV_AT: '2026-09-02T08:15:00Z', PREV_AS_OF: id === 121 ? '2026-09-15' : '2026-08-31',
+    ADVANCE_INVOICED: id === 108 ? r2(fee * 0.7) : id === 107 ? r2(fee * 0.6) : 0, INVOICED: 0,
+  }
+})
+
+const RUNDE_SEED: { id: number; abbr: string; name: string; pm: number; pmName: string; leaves: number; budget: number; pct: number; open: number; reviewed?: string }[] = [
+  { id: 1,  abbr: 'P-2024-001', name: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', pm: 1, pmName: 'S. Messina', leaves: 17, budget: 4_012_521.56, pct: 63.8, open: 258_609.09 },
+  { id: 2,  abbr: 'P-2024-002', name: 'Sanierung Altbau Bahnhofstraße 14', pm: 2, pmName: 'T. Kern', leaves: 6, budget: 386_400, pct: 41.2, open: 40_888.8, reviewed: '2026-08-31' },
+  { id: 4,  abbr: 'P-2024-004', name: 'Erweiterung Produktionshalle Werk II', pm: 1, pmName: 'S. Messina', leaves: 9, budget: 1_284_000, pct: 72.5, open: 128_300 },
+  { id: 6,  abbr: 'P-2025-012', name: 'Innenausbau Praxisräume Dr. Hoffmann', pm: 1, pmName: 'S. Messina', leaves: 4, budget: 94_300, pct: 88.0, open: 11_584, reviewed: '2026-08-31' },
+  { id: 8,  abbr: 'P-2025-014', name: 'Brandschutzertüchtigung Schulzentrum', pm: 1, pmName: 'S. Messina', leaves: 5, budget: 522_180, pct: 33.5, open: 76_230.3 },
+  { id: 9,  abbr: 'P-2025-015', name: 'Wohnanlage Am Mühlbach, 42 WE, Tiefgarage', pm: 3, pmName: 'S. Braun', leaves: 10, budget: 2_140_000, pct: 18.0, open: 0 },
+  { id: 10, abbr: 'P-2025-016', name: 'Umbau Rathaus Bürgerbüro', pm: 1, pmName: 'S. Messina', leaves: 3, budget: 68_200, pct: 95.0, open: 3_410, reviewed: '2026-09-15' },
+]
 
 // ── Stempeluhr / Meine Zeit ──────────────────────────────────────────────────
 

@@ -4,6 +4,20 @@ import { resolveProjektView, serializeProjektView } from './projektUrlState'
 const p = (qs: string) => new URLSearchParams(qs)
 
 describe('resolveProjektView', () => {
+  it('Monatsrunde: ?tab=leistungsstaende ist eine Listen-Ansicht, auch mit Projekt', () => {
+    expect(resolveProjektView(p('tab=leistungsstaende'), null, 4)).toEqual({
+      view: { view: 'list', listTab: 'leistungsstaende', pendingTab: null }, canonical: null,
+    })
+    expect(resolveProjektView(p('tab=leistungsstaende&projectId=4'), null, null).canonical).toBe('tab=leistungsstaende')
+  })
+
+  // Alte Sammel-Erinnerungen — die liegen noch in den Benachrichtigungen.
+  it('alter Erinnerungs-Link ?tab=leistungsstand&filter=mine fuehrt in die Monatsrunde', () => {
+    const r = resolveProjektView(p('tab=leistungsstand&filter=mine'), null, 7)
+    expect(r.view).toEqual({ view: 'list', listTab: 'leistungsstaende', pendingTab: null })
+    expect(r.canonical).toBe('tab=leistungsstaende')
+  })
+
   it('ohne Parameter: Projektliste, URL bleibt', () => {
     expect(resolveProjektView(p(''), null, null)).toEqual({ view: { view: 'list', listTab: 'liste', pendingTab: null }, canonical: null })
   })
@@ -39,7 +53,7 @@ describe('resolveProjektView', () => {
   })
 
   it('Tab ohne Projekt und ohne gemerktes Projekt: Liste mit Hinweis', () => {
-    const r = resolveProjektView(p('tab=leistungsstand&filter=mine'), null, null)
+    const r = resolveProjektView(p('tab=leistungsstand'), null, null)
     expect(r.view).toEqual({ view: 'list', listTab: 'liste', pendingTab: 'leistungsstand' })
   })
 

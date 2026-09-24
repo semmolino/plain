@@ -270,3 +270,26 @@ test('Meine Zeit – Buchung ändern', async ({ page }, info) => {
   await page.getByRole('dialog', { name: 'Buchung ändern' }).waitFor()
   await shoot(page, info.project.name, 'meine-zeit-aendern')
 })
+
+test('Leistungsstände – im Projekt', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=leistungsstand')
+  await page.locator('.lr-table, .ls-table').first().waitFor()
+  await shoot(page, info.project.name, 'leistungsstand-projekt')
+})
+
+test('Leistungsstände – Monatsrunde', async ({ page }, info) => {
+  test.skip(!PHASE.startsWith('nachher'), 'gibt es erst mit Runde 2')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?tab=leistungsstaende')
+  await page.locator('.lsr-list').waitFor()
+  if (info.project.name === 'mobile') {
+    await shoot(page, info.project.name, 'monatsrunde-liste')
+    await page.locator('.lsr-item').first().click()
+  }
+  await page.locator('.lr-table').waitFor()
+  // Eine Änderung mit Warnung: LP5.2 unter den abgerechneten Stand
+  await page.getByLabel(/Neuer Stand LP5\.2/).fill('60')
+  await page.getByLabel(/Neuer Stand LP6 /).fill('65')
+  await shoot(page, info.project.name, 'monatsrunde')
+})
