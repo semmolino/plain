@@ -23,7 +23,6 @@ import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
 import { useDueDatePreset, useDefaultString } from '@/hooks/useTenantDefaults'
 import { fetchPaymentMeans } from '@/api/stammdaten'
-import { API_BASE }     from '@/api/client'
 import { fmtEur, money } from '@/utils/money'
 
 function todayIso() { return new Date().toISOString().slice(0, 10) }
@@ -141,18 +140,18 @@ export function RechnungWizard({ initialDraft, initialProjectId, initialProjectL
   const contractSkontoRef = useRef<Map<number, { pct: number | null; days: number | null }>>(new Map())
   const contractSeRef     = useRef<Map<number, { enabled: boolean; pct: number | null; basis: 'BRUTTO' | 'NETTO' }>>(new Map())
 
-  // Show browser "leave?" dialog and delete draft when user closes/reloads
+  // Beim Schliessen/Neuladen nur nachfragen. Frueher wurde hier zusaetzlich
+  // der Entwurf geloescht — und zwar sofort, noch bevor der Nutzer die
+  // Rueckfrage beantwortet hatte, und auch bei einem fortgesetzten Entwurf.
+  // Wer „Bleiben" waehlte oder nur neu lud, hatte seinen Entwurf verloren.
+  // Ein Entwurf bleibt jetzt in der Rechnungsliste stehen, bis er gebucht
+  // oder dort geloescht wird.
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
       const id = draftIdRef.current
       if (!id) return
       e.preventDefault()
       e.returnValue = ''
-      const token = useAuthStore.getState().token
-      fetch(`${API_BASE}/invoices/${id}`, {
-        method: 'DELETE', keepalive: true,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
