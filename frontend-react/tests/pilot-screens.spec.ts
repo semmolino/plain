@@ -24,7 +24,10 @@ test.use({ timezoneId: 'Europe/Berlin', locale: 'de-DE' })
 
 async function prepare(page: Page, device: string, opts: Parameters<typeof mockPilot>[1] = {}, density?: 'compact' | 'comfortable') {
   if (device === 'desktop') await page.setViewportSize({ width: 1280, height: 800 })
-  await page.clock.setFixedTime(new Date('2026-09-24T10:30:00+02:00'))
+  // install statt setFixedTime: die Uhr laeuft ab dem Startpunkt weiter.
+  // Mit eingefrorenem Date.now() bleiben Chart.js-Animationen bei 0 stehen —
+  // alle Diagramme saehen aus wie leer.
+  await page.clock.install({ time: new Date('2026-09-24T10:30:00+02:00') })
   if (density) {
     await page.addInitScript(d => {
       // Schluessel wie useStickyState: plain:filt:<Schema>:<Mitarbeiter>:<Name>
@@ -38,7 +41,19 @@ async function shoot(page: Page, device: string, name: string) {
   await hideDevtools(page)
   await page.waitForTimeout(700)
   await page.screenshot({ path: `${OUT}/${device}-${name}.png` })
+  // Ab 1024px scrollt nur .app-main — fullPage saehe dort nur den Ausschnitt.
+  // Fuer das Gesamtbild wird das Fenster kurz so hoch wie der Inhalt.
+  const vp = page.viewportSize()!
+  const inner = await page.evaluate(() => {
+    const m = document.querySelector('.app-main') as HTMLElement | null
+    return m && m.scrollHeight > m.clientHeight ? m.scrollHeight - m.clientHeight : 0
+  })
+  if (inner > 0) {
+    await page.setViewportSize({ width: vp.width, height: Math.min(vp.height + inner, 7000) })
+    await page.waitForTimeout(300)
+  }
   await page.screenshot({ path: `${OUT}/${device}-${name}-voll.png`, fullPage: true })
+  if (inner > 0) await page.setViewportSize(vp)
 }
 
 async function open(page: Page, url: string) {
@@ -51,6 +66,21 @@ test('Übersicht Geschäftsleitung', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/')
   await shoot(page, info.project.name, 'uebersicht-gl')
+})
+
+// Der Alltag: Einfuehrung einmal weggeklickt (gleicher Schluessel vorher/nachher).
+test('Übersicht Geschäftsleitung – Alltag', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('plansimple.welcome_dismissed_1', '1'))
+  await prepare(page, info.project.name)
+  await open(page, '/')
+  await shoot(page, info.project.name, 'uebersicht-gl-alltag')
+})
+
+test('Übersicht Controller', async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem('plansimple.welcome_dismissed_1', '1'))
+  await prepare(page, info.project.name, { role: 'controller' })
+  await open(page, '/')
+  await shoot(page, info.project.name, 'uebersicht-controller')
 })
 
 test('Übersicht Mitarbeiter', async ({ page }, info) => {

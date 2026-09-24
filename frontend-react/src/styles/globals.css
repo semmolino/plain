@@ -5253,3 +5253,108 @@ th.doc-actions, td.doc-actions {
   .iw-sub { padding-left: 0; }
   .iw-check { min-height: 44px; }
 }
+
+/* ── Übersicht (Pilot B) ────────────────────────────────────────────────── */
+/* Oberes Band: Jetzt wichtig · Zeit buchen · Schnellzugriff. auto-fit, damit
+   eine fehlende Karte (keine Buchungsrechte) keine Luecke hinterlaesst. */
+.dash-band {
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  margin-bottom: var(--space-4);
+}
+.dash-band--time-first .dash-time { order: -1; }
+.dash-band-card {
+  background: var(--surface); border: 1px solid var(--border-3);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+  padding: var(--space-3) var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-2); min-width: 0;
+}
+.dash-band-recent { display: contents; }
+.dash-band-title {
+  display: flex; align-items: center; gap: var(--space-1);
+  margin: 0; font-size: 14px; font-weight: 700; color: var(--text);
+}
+
+.dash-attn { min-height: 120px; }
+.recent-compact { gap: var(--space-1); }
+.dash-attn-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.dash-attn-row + .dash-attn-row { border-top: 1px solid var(--border-2); }
+.dash-attn-link {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  min-height: 40px; padding: 8px 4px; margin: 0;
+  border: none; background: transparent; box-shadow: none; border-radius: var(--radius-sm);
+  color: var(--text); font: inherit; font-size: 13px; text-align: left; text-decoration: none;
+  cursor: pointer;
+}
+div.dash-attn-link { cursor: default; }
+div.dash-attn-link:hover { background: transparent; }
+.dash-attn-link:hover { background: var(--hover-bg); }
+.dash-attn-icon { flex-shrink: 0; color: var(--text-3); }
+.dash-attn-row--critical .dash-attn-icon { color: var(--kpi-critical); }
+.dash-attn-row--watch .dash-attn-icon { color: var(--kpi-watch); }
+.dash-attn-text { flex: 1; min-width: 0; line-height: 1.35; }
+.dash-attn-amount { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash-attn-chev { flex-shrink: 0; color: var(--text-3); }
+.dash-attn-empty { display: flex; align-items: center; gap: var(--space-2); margin: 0; font-size: 13px; color: var(--text-2); }
+.dash-attn-more { align-self: flex-start; font-size: 13px; }
+
+.dash-time-today { margin: 0; font-size: 14px; color: var(--text-2); }
+.dash-time-today strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.dash-time-recents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dash-time-recents-title { flex: 1 0 100%; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3); }
+.dash-time-chip { max-width: 100%; }
+.dash-time-chip .qb-chip-leaf { max-width: 200px; }
+.dash-time-cta {
+  margin-top: auto; align-self: flex-start;
+  display: inline-flex; align-items: center; gap: 6px; height: 40px;
+}
+
+.recent-compact-list { list-style: none; margin: 0; padding: 0; }
+.recent-compact-row {
+  display: flex; align-items: baseline; gap: var(--space-2); width: 100%;
+  min-height: 34px; padding: 6px 4px; margin: 0;
+  border: none; background: transparent; box-shadow: none; border-radius: var(--radius-sm);
+  color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+.recent-compact-row:hover { background: var(--hover-bg); }
+.recent-compact-type {
+  flex: 0 0 72px; font-size: 11px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.recent-compact-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dash-role-select { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--text-2); }
+.dash-role-select-label { font-weight: 600; }
+.dash-role-select select {
+  height: 36px; padding: 0 10px; font: inherit; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text);
+}
+.dash-more { min-width: 36px; height: 36px; }
+
+/* Kennzahlen: Spalten nach Platz, anklickbare Kacheln mit Pfeil. */
+.kpi-grid.dash-kpis { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.kpi-card--link {
+  display: block; position: relative; color: inherit; text-decoration: none;
+  transition: border-color 0.15s;
+}
+.kpi-card--link:hover { border-color: var(--accent); }
+.kpi-card-arrow { position: absolute; top: 14px; right: 14px; color: var(--text-3); }
+.dash-kpis-more { margin: 0 0 var(--space-4); }
+
+.dash-mobile-only { display: none; }
+
+@media (max-width: 640px) {
+  .dash-band .dash-time { order: -1; }
+  .dash-band-recent { display: none; }
+  .dash-mobile-only { display: block; margin: var(--space-4) 0; }
+  /* Das Foto kostet auf dem Handy rund 100px ueber dem Falz. */
+  .dash-hero-slot { display: none; }
+  .dash-attn-link, .recent-compact-row { min-height: 44px; }
+  .dash-time-cta { align-self: stretch; justify-content: center; height: 44px; }
+  /* Zwei Vorschlaege reichen am Handy — die Karte soll „Jetzt wichtig" nicht unter den Falz schieben. */
+  .dash-time-recents button:nth-of-type(n+3) { display: none; }
+  .dash-role-select select, .dash-more { height: 44px; }
+  .kpi-grid.dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-kpis .kpi-value { font-size: 20px; }
+}
