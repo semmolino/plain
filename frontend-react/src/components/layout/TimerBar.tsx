@@ -3,8 +3,7 @@ import { Pause, Play, ArrowRight, Square, X } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTimerStore, elapsedSeconds, formatDuration, formatDurationHuman, quantityFromSeconds } from '@/store/timerStore'
 import type { TimerSession } from '@/store/timerStore'
-import { fetchActiveEmployees, fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
-import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
+import { fetchProjectsShort, fetchProjectStructure } from '@/api/projekte'
 import { createTimerDraft, fetchDrafts, confirmDrafts, deleteTimerDraft, patchDraft, fetchWorkstartStatus } from '@/api/timer'
 import type { DraftEntry } from '@/api/timer'
 import { fetchArbzgLimits } from '@/api/arbzg'
@@ -85,33 +84,26 @@ function LeafPicker({
 function StartModal({ onClose }: { onClose: () => void }) {
   const backdrop = useBackdropClose(onClose)
   const startSession = useTimerStore(s => s.startSession)
-  const { data: empData } = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
-  const employees = empData?.data ?? []
-
-  const [employeeId,    setEmployeeId]    = useState<number | null>(() => useAuthStore.getState().employeeId)
-  const [cpRate,        setCpRate]        = useState('0')
-  const [cpRateFound,   setCpRateFound]   = useState<boolean | null>(null)
+  // Die Stempeluhr laeuft immer fuer den angemeldeten Nutzer. Vorher gab es
+  // hier ein Mitarbeiterfeld: gespeichert wurde trotzdem fuer die Sitzung
+  // (der Server erzwingt das), gelesen und bestaetigt aber fuer den gewaehlten
+  // Kollegen. Den Kostensatz ermittelt der Server selbst; die Anzeige kostete
+  // ohne Gehaltsrecht einen 403-Hinweis.
+  const employeeId   = useAuthStore(s => s.employeeId)
+  const employeeName = useAuthStore(s => s.shortName)
   const [projectId,     setProjectId]     = useState<number | null>(null)
   const [structureId,   setStructureId]   = useState<number | null>(null)
   const [structureName, setStructureName] = useState('')
-
-  useEffect(() => {
-    if (!employeeId) { setCpRate('0'); setCpRateFound(null); return }
-    fetchEmployeeCpRateForDate(employeeId, nowDateIso())
-      .then(res => { setCpRate(String(res.data.rate)); setCpRateFound(res.data.found) })
-      .catch(() => {})
-  }, [employeeId])
 
   const projects = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const projectMap = Object.fromEntries((projects.data?.data ?? []).map(p => [p.ID, p.ABBR]))
 
   function handleStart() {
     if (!employeeId || !structureId || !projectId) return
-    const emp = employees.find(e => e.ID === employeeId)
     const session: TimerSession = {
       employeeId,
-      employeeName: emp ? `${emp.ABBR}` : String(employeeId),
-      cpRate: Number(cpRate) || 0,
+      employeeName: employeeName ?? String(employeeId),
+      cpRate: 0,
       projectId,
       projectName: projectMap[projectId] ?? String(projectId),
       structureId,
@@ -133,35 +125,6 @@ function StartModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="tbm-modal-body">
-          <div className="tbm-field-group">
-            <label className="tbm-label">Mitarbeiter</label>
-            <select className="tbm-select" value={employeeId ?? ''} onChange={e => {
-              setEmployeeId(e.target.value ? Number(e.target.value) : null)
-            }}>
-              <option value="">— Mitarbeiter wählen —</option>
-              {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR} – {e.FIRST_NAME} {e.LAST_NAME}</option>)}
-            </select>
-          </div>
-
-          <div className="tbm-field-group">
-            <label className="tbm-label">Kostensatz (€/h)</label>
-            <input
-              className="tbm-input"
-              type="number"
-              min={0}
-              step={0.01}
-              value={cpRate}
-              readOnly
-              style={{ background: 'var(--dim)', cursor: 'not-allowed' }}
-              placeholder="Mitarbeiter wählen …"
-            />
-            {cpRateFound === false && (
-              <span style={{ fontSize: 11, color: 'var(--danger)', marginTop: 2, display: 'block' }}>
-                ⚠ Kein Kostensatz für heute hinterlegt — Buchung wird mit 0 gespeichert.
-              </span>
-            )}
-          </div>
-
           <LeafPicker
             label="Erste Aufgabe"
             projectId={projectId}
@@ -713,8 +676,15 @@ const FMT_H1 = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const fmtH1  = (h: number) => FMT_H1.format(h)
 
 export function TimerBar() {
-  const { session, breakState, showReview, closeReview, startBreak, endBreak, cancelBreak }
+  const { session: storedSession, breakState: storedBreak, showReview, closeReview, startBreak, endBreak, cancelBreak }
     = useTimerStore()
+  // Die Sitzung liegt im Browser. Meldet sich am selben Rechner jemand
+  // anderes an, gehoert sie nicht ihm: nicht anzeigen, nicht weiterfuehren.
+  // Der Besitzer findet sie beim naechsten Anmelden wieder.
+  const currentEmployeeId = useAuthStore(s => s.employeeId)
+  const ownSession = !!storedSession && storedSession.employeeId === currentEmployeeId
+  const session    = ownSession ? storedSession : null
+  const breakState = ownSession ? storedBreak : null
   const qc = useQueryClient()
   const [modal,    setModal]    = useState<ModalState>('none')
   const [elapsed,  setElapsed]  = useState(0)
@@ -753,7 +723,6 @@ export function TimerBar() {
   // sichtbar). Wir holen Tenant-Schalter + ob heute schon BOOKING existiert in
   // einem Aufruf — pro eingeloggtem Mitarbeiter (employeeId im QueryKey,
   // damit Login-Wechsel auf demselben Browser nicht den Cache erbt).
-  const currentEmployeeId = useAuthStore(s => s.employeeId)
   const { data: workstartStatus } = useQuery({
     queryKey: ['workstart-status', currentEmployeeId],
     queryFn:  fetchWorkstartStatus,
@@ -781,6 +750,37 @@ export function TimerBar() {
     .reduce((s, d) => s + Number(d.QUANTITY_INT ?? 0), 0)
   const liveBlockH = breakState ? 0 : quantityFromSeconds(elapsed)
   const dayWorkH   = persistedWorkH + liveBlockH
+
+  // Pause: erst den laufenden Arbeitsblock als Entwurf sichern. Vorher setzte
+  // der Knopf nur den Pausenzustand — beim Weiterarbeiten begann ein neuer
+  // Block, und die Zeit vom Blockbeginn bis zur Pause war verloren.
+  async function handleStartBreak() {
+    if (!session || breakState) return
+    setSavingBreak(true)
+    setBreakErr(null)
+    try {
+      const sec = elapsedSeconds(session.blockStartIso)
+      if (sec >= 60) {
+        await createTimerDraft({
+          EMPLOYEE_ID:         session.employeeId,
+          PROJECT_ID:          session.projectId,
+          STRUCTURE_ID:        session.structureId,
+          BOOKING_DATE:        today,
+          TIME_START:          new Date(session.blockStartIso).toTimeString().slice(0, 8),
+          TIME_FINISH:         nowTimeIso(),
+          QUANTITY_INT:        quantityFromSeconds(sec),
+          COST_RATE:           session.cpRate,
+          POSTING_DESCRIPTION: '',
+        })
+        void qc.invalidateQueries({ queryKey: ['timer-drafts'] })
+      }
+      startBreak()
+    } catch (e: unknown) {
+      setBreakErr((e as { message?: string }).message ?? 'Arbeitszeit konnte nicht gesichert werden – Pause nicht gestartet')
+    } finally {
+      setSavingBreak(false)
+    }
+  }
 
   async function handleEndBreak() {
     if (!breakState || !session) return
@@ -864,7 +864,7 @@ export function TimerBar() {
               </>
             ) : (
               <>
-                <button type="button" className="btn-secondary timer-sheet-btn" onClick={() => { startBreak(); setSheet(false) }}>
+                <button type="button" className="btn-secondary timer-sheet-btn" disabled={savingBreak} onClick={() => { void handleStartBreak().then(() => setSheet(false)) }}>
                   <Pause size={16} strokeWidth={2} aria-hidden="true" /> Pause
                 </button>
                 <button type="button" className="btn-secondary timer-sheet-btn" onClick={() => { setSheet(false); setModal('next') }}>
@@ -912,9 +912,9 @@ export function TimerBar() {
     <>
       <div className="timer-run">
         <span className="timer-chip" title={`${taskLabel} · ${dayText}`}>{chip}</span>
-        <button className="hdr-action" onClick={startBreak} title="Pause starten">
+        <button className="hdr-action" onClick={() => void handleStartBreak()} disabled={savingBreak} title="Pause starten – die Arbeitszeit bis jetzt wird gesichert">
           <Pause size={14} strokeWidth={2} aria-hidden="true" />
-          <span className="hdr-label">Pause</span>
+          <span className="hdr-label">{savingBreak ? 'Sichert …' : 'Pause'}</span>
         </button>
         <button className="hdr-action" onClick={() => setModal('next')} title="Aufgabe wechseln">
           <ArrowRight size={14} strokeWidth={2} aria-hidden="true" />
