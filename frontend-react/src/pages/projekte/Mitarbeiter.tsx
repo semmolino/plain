@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { DialogFooter } from '@/components/ui/DialogFooter'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
 import { Modal }       from '@/components/ui/Modal'
@@ -9,7 +8,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { Pencil, Trash2, Plus } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import {
-  fetchProjectsShort, fetchActiveEmployees, fetchActiveRoles,
+  fetchActiveEmployees, fetchActiveRoles,
   fetchE2PByProject, createE2P, updateE2P, deleteE2P,
   type E2PEntry,
 } from '@/api/projekte'
@@ -55,7 +54,6 @@ function emptyAdd(): { employee_id: string; role_id: string; role_abbr: string; 
 
 export function Mitarbeiter({ initialProjectId }: Props) {
   const qc       = useQueryClient()
-  const navigate = useNavigate()
 
   const [pid,       setPid]       = useState<number | null>(initialProjectId ?? null)
   // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
@@ -65,8 +63,6 @@ export function Mitarbeiter({ initialProjectId }: Props) {
   const [addForm,      setAddForm]      = useState(emptyAdd())
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-
-  const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }      = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const { data: roleData }     = useQuery({ queryKey: ['active-roles'],     queryFn: fetchActiveRoles })
 
@@ -75,13 +71,10 @@ export function Mitarbeiter({ initialProjectId }: Props) {
     queryFn:  () => fetchE2PByProject(pid!),
     enabled:  pid !== null,
   })
-
-  const projects = projectsData?.data ?? []
   const employees = empData?.data     ?? []
   const roles     = roleData?.data    ?? []
   const rows      = e2pData?.data     ?? []
 
-  const currentProject = projects.find(p => p.ID === pid)
 
   // Employees not yet assigned to this project
   const assignedIds = new Set(rows.map(r => r.EMPLOYEE_ID))
@@ -185,18 +178,6 @@ export function Mitarbeiter({ initialProjectId }: Props) {
 
   return (
     <div className="list-section">
-      {/* Jump bar */}
-      {pid && (
-        <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject?.ABBR ?? ''}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
-            Rechnungen →
-          </button>
-          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
-            Projekt-Report →
-          </button>
-        </div>
-      )}
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
 

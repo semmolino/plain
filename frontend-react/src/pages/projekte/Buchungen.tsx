@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
 import { Modal }       from '@/components/ui/Modal'
@@ -11,7 +10,7 @@ import { usePermissionsStore } from '@/store/permissionsStore'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }   from '@/components/ui/FormField'
 import {
-  fetchProjectsShort, fetchProjectStructure, fetchBuchungen, createBuchung, updateBuchung, deleteBuchung,
+  fetchProjectStructure, fetchBuchungen, createBuchung, updateBuchung, deleteBuchung,
   fetchEmployee2ProjectPreset,
   type Buchung, type UpdateBuchungPayload,
 } from '@/api/projekte'
@@ -25,7 +24,6 @@ import { TextSnippetBar } from '@/components/ui/TextSnippetBar'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
-import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { RecentList } from '@/components/recents/RecentList'
 import { UmbuchenModal } from './UmbuchenModal'
 import { parentStructureIds, structurePaths } from '@/utils/treeUtils'
@@ -109,7 +107,6 @@ interface Props { initialProjectId?: number }
 
 export function Buchungen({ initialProjectId }: Props = {}) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const formRef = useRef<HTMLFormElement>(null)
 
   // Phase 6: Sichtbarkeit Erloese / Kosten
@@ -149,8 +146,6 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   // Spalte kostet dort 44px) — einzeln umbuchen geht über die Zeilenaktion.
   const [selected,    setSelected]    = useState<Set<number>>(new Set())
   const [rebookRows,  setRebookRows]  = useState<Buchung[] | null>(null)
-
-  const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const { data: buchData, isLoading } = useQuery({
     queryKey: ['buchungen', pid],
@@ -170,8 +165,6 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     queryFn:  () => fetchEmployee2ProjectPreset(empId!, pid!),
     enabled:  empId !== null && pid !== null && showForm,
   })
-
-  const projects  = projectsData?.data ?? []
   const employees = empData?.data      ?? []
 
   // HOURLY_RATE (Stundensatz) aus Mitarbeiter/Projekt-Zuordnung vorbelegen.
@@ -456,24 +449,10 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     setFilterStatus(new Set()); setHideZeroExt(false); setDateFrom(''); setDateTo('')
   }
 
-  const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME].filter(Boolean).join(' · ') || null) : null)
 
   return (
     <div>
       {pid === null && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
-
-      {pid !== null && currentProject && (
-        <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject.ABBR}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
-            Rechnungen →
-          </button>
-          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
-            Projekt-Report →
-          </button>
-        </div>
-      )}
 
       {pid !== null && (
         <>

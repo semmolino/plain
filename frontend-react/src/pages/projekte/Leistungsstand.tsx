@@ -1,14 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  fetchProjectsShort, fetchLeistungsstand, saveLeistungsstand,
+  fetchLeistungsstand, saveLeistungsstand,
   type LeistungsstandNode,
 } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import type { StructureNode } from '@/api/projekte'
 import { Message } from '@/components/ui/Message'
-import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { fmtEur, money } from '@/utils/money'
 
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -20,7 +18,6 @@ interface Props {
 
 export function Leistungsstand({ initialProjectId }: Props) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
   const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
   // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
   useEffect(() => { setPid(initialProjectId ?? null); setMsg(null) }, [initialProjectId])
@@ -28,11 +25,6 @@ export function Leistungsstand({ initialProjectId }: Props) {
   const [msg,           setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [elementSearch, setElementSearch] = useState('')
   const inputRefs                       = useRef<Record<number, HTMLInputElement | null>>({})
-
-  const { data: projectsData } = useQuery({
-    queryKey: ['projects-short'],
-    queryFn: fetchProjectsShort,
-  })
 
   const { data: lsData, isLoading, isError } = useQuery({
     queryKey: ['leistungsstand', pid],
@@ -91,8 +83,6 @@ export function Leistungsstand({ initialProjectId }: Props) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleSave])
-
-  const projects  = projectsData?.data ?? []
   const lsNodes   = (lsData?.data ?? []) as LeistungsstandNode[]
   const tree      = buildStructureTree(lsNodes as StructureNode[])
   const flatNodes = flattenTree(tree)
@@ -139,22 +129,9 @@ export function Leistungsstand({ initialProjectId }: Props) {
     setMsg(null)
   }
 
-  const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME].filter(Boolean).join(' · ') || null) : null)
 
   return (
     <div className="ls-wrap">
-      {pid !== null && currentProject && (
-        <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject.ABBR}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
-            Rechnungen →
-          </button>
-          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
-            Projekt-Report →
-          </button>
-        </div>
-      )}
 
       {msg && (
         <div style={{ marginBottom: 12 }}>

@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { GuardContext, type GuardEntry } from '@/hooks/useDirtyGuard'
 import { Modal } from './Modal'
 import { DialogFooter } from './DialogFooter'
 import { Message } from './Message'
@@ -22,33 +23,16 @@ import { Message } from './Message'
  * eigener Schritt.
  */
 
-interface Entry {
-  dirty:  boolean
-  /** Anzeigename des Bereichs in der Rueckfrage, z. B. „Struktur". */
-  label?: string
-  /** Zaehler fuer die Rueckfrage („3 Änderungen"). */
-  count?: number
-  /** Speichert alles Offene; wirft bei Fehler. Ohne `save` gibt es nur „Verwerfen". */
-  save?:  () => Promise<unknown>
-}
-
-interface Ctx {
-  register:   (key: string, entry: { current: Entry }) => void
-  unregister: (key: string) => void
-  request:    (action: () => void) => void
-}
-
-const GuardContext = createContext<Ctx | null>(null)
 
 export function DirtyGuardProvider({ children }: { children: ReactNode }) {
-  const entries = useRef(new Map<string, { current: Entry }>())
+  const entries = useRef(new Map<string, { current: GuardEntry }>())
   const [pending, setPending] = useState<(() => void) | null>(null)
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
   const dirtyEntries = () => [...entries.current.values()].map(e => e.current).filter(e => e.dirty)
 
-  const register   = useCallback((key: string, entry: { current: Entry }) => { entries.current.set(key, entry) }, [])
+  const register   = useCallback((key: string, entry: { current: GuardEntry }) => { entries.current.set(key, entry) }, [])
   const unregister = useCallback((key: string) => { entries.current.delete(key) }, [])
   const request    = useCallback((action: () => void) => {
     if (dirtyEntries().length === 0) { action(); return }
@@ -114,23 +98,3 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
   )
 }
 
-/** Meldet einen bearbeitbaren Bereich beim Guard der Seite an. */
-export function useRegisterDirty(key: string, entry: Entry) {
-  const ctx = useContext(GuardContext)
-  const ref = useRef(entry)
-  ref.current = entry
-  useEffect(() => {
-    if (!ctx) return
-    ctx.register(key, ref)
-    return () => ctx.unregister(key)
-  }, [ctx, key])
-}
-
-/**
- * Liefert eine Funktion, die eine Aktion ausfuehrt — bei offenen Aenderungen
- * erst nach Rueckfrage. Ohne Provider wird die Aktion direkt ausgefuehrt.
- */
-export function useGuardedAction(): (action: () => void) => void {
-  const ctx = useContext(GuardContext)
-  return ctx?.request ?? ((action: () => void) => action())
-}

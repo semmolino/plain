@@ -1444,11 +1444,12 @@ export const HELP = {
   // dadurch praktisch unauffindbar. Der Hinweis in der Leiste macht sie
   // sichtbar, dieser Text erklaert, was dahinter steckt.
   'structure.contextmenu': {
-    title: 'Rechtsklick auf eine Zeile',
+    title: 'Funktionen zu einer Zeile',
     body: (
       <>
-        Ein <strong>Rechtsklick</strong> auf eine Zeile (auf dem Handy: langes Antippen) öffnet die
-        Funktionen zu genau diesem Element:
+        Das <strong>⋯ am Zeilenende</strong> (in der Angebotsstruktur: <strong>Rechtsklick</strong>, auf
+        dem Handy langes Antippen) öffnet die Funktionen zu genau diesem Element. Der Rechtsklick
+        funktioniert in der Projektstruktur weiterhin als Abkürzung:
         <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
           <li>
             <strong>Element anlegen</strong> — legt ein <em>untergeordnetes</em> Element darunter an.
@@ -1474,6 +1475,121 @@ export const HELP = {
           oberster Ebene an und setzt Zuschläge auf die Gesamtsumme. Sind mehrere Zeilen über die
           Kästchen ausgewählt, bezieht sich das Löschen auf die ganze Auswahl.
         </p>
+      </>
+    ),
+  },
+  // ── UI-Pilot 2026-09 ─────────────────────────────────────────────────────
+  'structure.save': {
+    title: 'Wann wird gespeichert?',
+    body: (
+      <>
+        Änderungen an Kürzel, Bezeichnung, Abrechnungsart, Honorar, Nebenkosten, Zuschlägen und
+        „Intern" werden <strong>gesammelt</strong> und erst mit <strong>Speichern</strong> (oder
+        Strg+S) übernommen. Geänderte Felder sind markiert; die Leiste unten zeigt, wie viele Elemente
+        offen sind. <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
+        Sofort wirken dagegen Befehle, die die Struktur selbst ändern: Element anlegen, löschen,
+        verschieben und Nebenkosten vererben — jeweils nach Rückfrage. Wer mit offenen Änderungen den
+        Reiter oder das Projekt wechselt, wird gefragt, ob gespeichert werden soll.
+      </>
+    ),
+  },
+  'bookings.quick': {
+    title: 'Zeit buchen',
+    body: (
+      <>
+        Bucht Arbeitszeit direkt auf ein Projekt-Element — von jeder Seite aus, ohne erst ins Projekt
+        zu wechseln. <strong>Zuletzt gebucht</strong> setzt Projekt und Leistung mit einem Tipp.
+        Die Dauer ergibt sich aus Von/Bis oder wird direkt eingegeben.<br /><br />
+        <strong>Stunden</strong> sind die geleistete Zeit (Kosten, Zeitkonto).
+        <strong> Zur Abrechnung</strong> ist, was dem Auftraggeber berechnet werden darf — meist
+        dasselbe, bei Kulanz weniger. Stundensatz und Kostensatz kommen aus der Preisliste des
+        Projekts bzw. dem Kostensatz-Verlauf des Mitarbeiters. In einem abgeschlossenen Monat ist
+        keine Buchung mehr möglich.
+      </>
+    ),
+  },
+  'timer.flow': {
+    title: 'Stempeluhr',
+    body: (
+      <>
+        Die Stempeluhr misst die Zeit, während du arbeitest. Jeder Abschnitt (Start → Nächste
+        Aufgabe → Beenden) wird als <strong>Entwurf</strong> gesammelt. Gebucht ist erst, was du in
+        der <strong>Tagesübersicht</strong> freigibst — dort lassen sich Entwürfe noch korrigieren.
+        Wer lieber nachträglich bucht, nimmt „Zeit buchen".
+      </>
+    ),
+  },
+  'dashboard.attention': {
+    title: 'Jetzt wichtig',
+    body: (
+      <>
+        Sammelt, was heute eine Handlung braucht: überfällige Rechnungen, fällige Mahnaktionen,
+        Projekte, deren Kosten über dem Leistungsstand liegen, und abrechenbare Leistung. Jede Zeile
+        führt direkt an die Stelle, an der du es erledigst. Ist die Liste leer, ist nichts überfällig.
+      </>
+    ),
+  },
+  'invoice.abschlag.projekt_vertrag': {
+    title: 'Projekt und Vertrag',
+    body: (
+      <>
+        Der Vertrag liefert Zahlungsziel, Skonto und Sicherheitseinbehalt als Vorbelegung. Hat das
+        Projekt nur einen Vertrag, ist er schon gewählt. Mit <strong>Weiter</strong> wird ein
+        <strong> Entwurf</strong> angelegt — er erscheint in der Rechnungsliste und lässt sich später
+        fortsetzen.
+      </>
+    ),
+  },
+  'invoice.abschlag.rechnungsdaten': {
+    title: 'Rechnungsdaten',
+    body: (
+      <>
+        Rechnungsdatum und Fälligkeit (aus dem Zahlungsziel vorbelegt), der abgerechnete
+        Leistungszeitraum und ein Kommentar fürs PDF. Die E-Rechnungsfelder braucht es nur, wenn der
+        Auftraggeber sie verlangt — bei öffentlichen Auftraggebern die Leitweg-ID.
+      </>
+    ),
+  },
+  'invoice.abschlag.betraege': {
+    title: 'Beträge',
+    body: (
+      <>
+        Der <strong>Vorschlag</strong> ist je Pauschal-/HOAI-Position der gemeldete Leistungsstand
+        abzüglich dessen, was bereits abgerechnet ist; negative Werte zählen nicht. Du kannst ihn
+        übernehmen oder einen eigenen Leistungsbetrag eintragen. Bei Positionen nach Aufwand wählst
+        du darunter die Buchungen aus, die in diese Rechnung gehen. Nebenkosten rechnet das System
+        im nächsten Schritt hinzu.
+      </>
+    ),
+  },
+  'invoice.abschlag.pruefen': {
+    title: 'Prüfen und buchen',
+    body: (
+      <>
+        Rechenweg: Netto → Nachlass I → Nachlass II (auf den Rest) → Skonto → zzgl. MwSt. → Brutto,
+        davon ggf. Sicherheitseinbehalt. Vor dem Buchen kannst du PDF und E-Rechnung ansehen.
+        <strong> Nach dem Buchen</strong> ist die Rechnung unveränderlich; Korrekturen laufen über
+        Storno.
+      </>
+    ),
+  },
+  'invoice.draft': {
+    title: 'Entwurf',
+    body: (
+      <>
+        Ein Entwurf ist noch keine Rechnung: er hat keine Nummer und zählt nicht als abgerechnet.
+        Er bleibt in der Rechnungsliste stehen, bis du ihn buchst oder löschst — auch wenn du den
+        Assistenten verlässt.
+      </>
+    ),
+  },
+  'einvoice.detailfelder': {
+    title: 'E-Rechnungs-Detailfelder',
+    body: (
+      <>
+        Zusätzliche Angaben für XRechnung/ZUGFeRD: Käuferreferenz bzw. Leitweg-ID (öffentliche
+        Auftraggeber), Bestellnummer, Kostenstelle, Zahlungsart, Verwendungszweck und die
+        Umsatzsteuer-Kategorie. Leer lassen, wenn der Auftraggeber nichts davon verlangt.
       </>
     ),
   },

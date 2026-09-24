@@ -9,6 +9,9 @@ interface Props {
   status?:    ReactNode
   /** Hebt den Zustand hervor (ungespeicherte Aenderungen). */
   dirty?:     boolean
+  /** Unter 1024px ausblenden (z. B. solange nichts zu speichern ist) — dort
+   *  kostet die feste Leiste sonst dauerhaft Platz ueber der Bottom-Nav. */
+  quiet?:     boolean
   className?: string
 }
 
@@ -30,12 +33,12 @@ interface Props {
  * die Leiste sitzt dann fest ueber der Bottom-Nav, und ein Platzhalter im
  * Fluss sorgt dafuer, dass sie die letzte Zeile nicht verdeckt.
  */
-export function ActionBar({ children, secondary, status, dirty, className }: Props) {
+export function ActionBar({ children, secondary, status, dirty, quiet, className }: Props) {
   return (
     <>
-      <div className="action-bar-spacer" aria-hidden="true" />
+      <div className={`action-bar-spacer${quiet ? ' action-bar-spacer--quiet' : ''}`} aria-hidden="true" />
       <div
-        className={`action-bar${dirty ? ' action-bar--dirty' : ''}${className ? ` ${className}` : ''}`}
+        className={`action-bar${dirty ? ' action-bar--dirty' : ''}${quiet ? ' action-bar--quiet' : ''}${className ? ` ${className}` : ''}`}
         role="region"
         aria-label="Seitenaktionen"
       >

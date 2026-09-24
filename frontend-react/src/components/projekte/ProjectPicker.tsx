@@ -11,6 +11,8 @@ interface Props {
   /** Optional: Button „Zur Projektliste →" im Dropdown (z.B. Tab-Wechsel auf Liste). */
   onGoToList?: () => void
   placeholder?: string
+  /** Feld beim Einblenden fokussieren und die Liste oeffnen (Projekt wechseln im Kopf). */
+  autoFocus?: boolean
 }
 
 const displayName = (p: ProjectOption) => p.ABBR + (p.NAME ? ` – ${p.NAME}` : '')
@@ -20,7 +22,7 @@ const displayName = (p: ProjectOption) => p.ABBR + (p.NAME ? ` – ${p.NAME}` : 
  * Beim Fokus: „Zuletzt verwendet" oben, darunter alle Projekte (scrollbar);
  * Tippen filtert. Optional ein Sprung „Zur Projektliste".
  */
-export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, placeholder = 'Projekt suchen …' }: Props) {
+export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, placeholder = 'Projekt suchen …', autoFocus }: Props) {
   const [input, setInput] = useState('')
   const [open,  setOpen]  = useState(false)
   const acRef = useRef<HTMLDivElement>(null)
@@ -84,6 +86,8 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
     <div ref={acRef} className="project-picker">
       <input
         type="text" className="list-search" placeholder={placeholder}
+        autoFocus={autoFocus}
+        aria-label={placeholder}
         value={input}
         onChange={e => { setInput(e.target.value); setOpen(true) }}
         onFocus={e => { setOpen(true); e.currentTarget.select() }}

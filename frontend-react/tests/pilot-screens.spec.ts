@@ -58,6 +58,13 @@ test('Übersicht Mitarbeiter', async ({ page }, info) => {
   await shoot(page, info.project.name, 'uebersicht-ma')
 })
 
+test('Projektliste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'projektliste')
+})
+
 test('Projekt – Struktur', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=struktur&projectId=1')
@@ -80,8 +87,8 @@ test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'Inline-Bearbeitung ist Desktop')
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=struktur&projectId=1')
-  const inputs = page.locator('table input[type="text"], table input:not([type])')
-  await inputs.nth(3).fill('Grundlagenermittlung und Bestandsaufnahme')
+  await page.getByRole('textbox', { name: 'Bezeichnung' }).nth(1).fill('Grundlagenermittlung und Bestandsaufnahme')
+  await page.getByRole('textbox', { name: 'Honorar' }).nth(1).fill('295000')
   await shoot(page, info.project.name, 'projekt-struktur-geaendert')
 })
 

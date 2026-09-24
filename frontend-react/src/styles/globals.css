@@ -4847,3 +4847,174 @@ th.doc-actions, td.doc-actions {
 @media (max-width: 640px), (pointer: coarse) {
   .density-toggle { display: none; }
 }
+
+/* Unter 1024px blendet `quiet` die Leiste aus, solange nichts ansteht —
+   dort liegt sie fest ueber der Bottom-Nav und kostet sonst dauerhaft Platz. */
+@media (max-width: 1023px) {
+  .action-bar--quiet, .action-bar-spacer--quiet { display: none; }
+}
+
+/* ── Projekt-Arbeitsbereich ─────────────────────────────────────────────── */
+.pw-root, .pw-list { padding-bottom: var(--space-2); }
+.pw-pending-hint {
+  font-size: 13px; color: var(--text-2);
+  padding: var(--space-2) var(--space-3); margin: 0 0 var(--space-3);
+  background: var(--info-bg); border-radius: var(--radius-md);
+}
+.pw-switch { position: relative; flex-shrink: 0; }
+.pw-switch-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; padding: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text-2); box-shadow: none;
+}
+.pw-switch-btn:hover, .pw-switch-btn[aria-expanded="true"] { background: var(--hover-bg); color: var(--text); }
+.pw-switch-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+  width: min(460px, calc(100vw - 32px));
+  padding: var(--space-2);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+}
+.pw-switch-pop .project-picker { max-width: none; min-width: 0; }
+.pw-more-btn { width: 38px; padding: 0; }
+
+.pw-kpis {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
+  margin: var(--space-1) 0 0; padding: var(--space-3) var(--space-4);
+  background: var(--surface); border: 1px solid var(--border-3); border-radius: var(--radius-md);
+}
+.pw-kpi { min-width: 0; }
+.pw-kpi dt {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 12px; font-weight: 600; color: var(--text-3); margin: 0 0 2px;
+}
+.pw-kpi dd {
+  margin: 0; font-size: 16px; font-weight: 700; color: var(--text);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.pw-kpis-more { margin-top: var(--space-2); }
+.pw-kpis-more .pw-kpis { margin-top: 0; }
+
+.pw-tab-divider {
+  flex: 0 0 1px; align-self: center; height: 18px;
+  background: var(--border); margin: 0 var(--space-2);
+}
+.pw-tab-more { position: relative; display: inline-flex; align-items: center; gap: 4px; }
+.pw-tab-more select {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; cursor: pointer; border: none; font-size: 16px;
+}
+
+@media (max-width: 640px) {
+  .pw-switch-btn, .pw-more-btn { width: 44px; height: 44px; }
+  .pw-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-3); padding: var(--space-3); }
+  .pw-kpi dd { font-size: 15px; white-space: normal; }
+  .pw-tabs .tab-btn { min-height: 44px; padding-left: 12px; padding-right: 12px; }
+  .pw-header .page-header-titles { flex-basis: 0; }
+  .pw-header .page-header-actions { width: auto; margin-left: auto; flex-wrap: nowrap; }
+}
+
+/* Rechnungsart-Auswahl (NewInvoiceMenu) */
+.invoice-kind-item { flex-direction: column; align-items: flex-start; gap: 1px; padding-top: 8px; padding-bottom: 8px; }
+.invoice-kind-label { font-weight: 600; }
+.invoice-kind-hint  { font-size: 12px; color: var(--text-3); }
+@media (max-width: 640px) { .invoice-kind-item { min-height: 48px; } }
+
+/* ── Projektstruktur: Dichte, Aenderungsmarken, Aufbau ──────────────────── */
+.sx-root {
+  --sx-row-h: 48px;
+  --sx-input-h: 36px;
+  --sx-font: 14px;
+  --sx-pad-y: 6px;
+  --sx-pad-x: 10px;
+  --sx-indent: 20px;
+}
+.sx-root[data-density="compact"] {
+  --sx-row-h: 34px;
+  --sx-input-h: 28px;
+  --sx-font: 13px;
+  --sx-pad-y: 2px;
+  --sx-pad-x: 6px;
+  --sx-indent: 14px;
+}
+/* Touch und Handy: immer luftig — 44-px-Ziele sind nicht verhandelbar. */
+@media (max-width: 640px), (pointer: coarse) {
+  .sx-root, .sx-root[data-density="compact"] {
+    --sx-row-h: 52px;
+    --sx-input-h: 40px;
+    --sx-font: 14px;
+    --sx-pad-y: 6px;
+    --sx-pad-x: 8px;
+    --sx-indent: 14px;
+  }
+}
+
+.sx-toolbar { align-items: center; }
+.sx-search { max-width: 280px; }
+.sx-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+
+.sx-table td, .sx-table th {
+  padding: var(--sx-pad-y) var(--sx-pad-x);
+  font-size: var(--sx-font);
+}
+.sx-table th { font-size: 12px; }
+.sx-table td { height: var(--sx-row-h); }
+.sx-table .sx-input { height: var(--sx-input-h); font-size: var(--sx-font); }
+.sx-input-abbr  { width: 60px; }
+.sx-input-parent { font-weight: 700; }
+.sx-input-name  { width: 100%; min-width: 110px; }
+.sx-input-num   { width: 104px; text-align: right; font-variant-numeric: tabular-nums; }
+.sx-input-pct   { width: 48px; text-align: right; }
+.sx-cell-name   { min-width: 150px; width: 100%; }
+.sx-input-bt    { width: 104px; }
+.sx-root[data-density="compact"] .sx-input-bt { width: 98px; }
+.sx-table th    { white-space: nowrap; }
+.sx-name-wrap   { display: flex; align-items: center; gap: var(--space-2); }
+.sx-name-text   { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-col-check   { width: 32px; }
+.sx-col-grip    { width: 24px; padding-left: 0 !important; padding-right: 0 !important; color: var(--text-3); }
+.sx-col-menu    { width: 44px; text-align: right; white-space: nowrap; }
+.sx-col-menu .row-action-btn { display: inline-flex; }
+.sx-muted  { color: var(--text-3); }
+.sx-strong { font-weight: 700; }
+
+.sx-root-row td {
+  background: var(--surface-2);
+  border-bottom: 2px solid var(--border);
+  font-weight: 700;
+}
+.sx-root-name { color: var(--text-2); }
+.sx-root-abbr { white-space: nowrap; }
+.sx-cell-abbr { white-space: nowrap; }
+.sx-add-form { display: block; }
+
+/* Geaenderte, noch nicht gespeicherte Werte. Die Zahl steht zusaetzlich in
+   der Aktionsleiste — die Markierung ist Orientierung, nicht der einzige
+   Hinweis. */
+.sx-table .sx-changed { background: var(--warning-bg); border-color: var(--warning); }
+.sx-row-changed > td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+
+.sx-row-internal .sx-input-name, .sx-row-internal .sx-name-text { color: var(--text-3); }
+.sx-internal-pill { flex-shrink: 0; }
+
+.sx-surcharge-btn {
+  min-width: 64px; height: var(--sx-input-h); padding: 0 6px;
+  border: 1px dashed var(--border); border-radius: var(--radius-sm);
+  background: transparent; box-shadow: none;
+  font-size: var(--sx-font); font-weight: 600; color: var(--text-2);
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+.sx-surcharge-btn:hover { background: var(--hover-bg); border-style: solid; color: var(--text); }
+.sx-panel-note { font-size: 12px; color: var(--text-3); margin-right: auto; }
+.surcharge-panel-actions .btn-secondary { height: 34px; }
+
+.sx-empty { padding: var(--space-6) var(--space-4); text-align: center; }
+.sx-empty .empty-note { margin-bottom: var(--space-2); }
+.sx-empty-why { font-size: 13px; color: var(--text-3); max-width: 520px; margin: 0 auto var(--space-4); line-height: 1.55; }
+
+.sx-add-context { font-size: 13px; color: var(--text-2); margin: 0 0 var(--space-3); }
+.sx-add-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 var(--space-3); }
+.sx-add-grid .form-group { margin-bottom: var(--space-3); }
+.sx-add-wide { grid-column: 1 / -1; }
+@media (max-width: 640px) { .sx-add-grid { grid-template-columns: 1fr; } }
