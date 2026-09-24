@@ -21,6 +21,12 @@ export default defineConfig({
   workers: 2,
   use: {
     ...base.use,
-    launchOptions: executablePath ? { executablePath } : undefined,
+    // Deutsche Systemsprache fuer den Browser: `locale` allein reicht nicht,
+    // Datumsfelder zeigten sonst „08/31/2026" statt „31.08.2026".
+    launchOptions: {
+      args: ['--lang=de-DE'],
+      env: { ...process.env, LANG: 'de_DE.UTF-8', LANGUAGE: 'de' },
+      ...(executablePath ? { executablePath } : {}),
+    },
   },
 })
