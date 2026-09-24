@@ -103,7 +103,10 @@ async function runMonatsabschluss(supabase, tenantId, { year, month, isTest = fa
   let snapshotCount = 0;
   for (const p of matchingProjects) {
     try {
-      await projekteSvc.progressSnapshot(supabase, { projectId: p.PROJECT_ID });
+      // Ohne tenantId warf assertInTenant bei jedem Projekt — der Fehler landete
+      // im catch darunter, der Monatsabschluss schrieb nie einen Stand, und der
+      // Stichtagsbericht (Teilfertige Leistungen) sah nur manuell gespeicherte.
+      await projekteSvc.progressSnapshot(supabase, { projectId: p.PROJECT_ID, tenantId });
       snapshotCount++;
     } catch (e) {
       console.error(`[MONATSABSCHLUSS] Snapshot failed for project ${p.PROJECT_ID}:`, e?.message || e);
