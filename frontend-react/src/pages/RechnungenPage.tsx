@@ -6,14 +6,15 @@ import { PageHeader }            from '@/components/ui/PageHeader'
 import { NewInvoiceMenu }        from '@/components/rechnungen/NewInvoiceMenu'
 import { useInvoiceKinds, type InvoiceKind } from '@/components/rechnungen/invoiceKinds'
 import { RechnungenListe }       from '@/pages/rechnungen/RechnungenListe'
-import { AbschlagWizard }        from '@/pages/rechnungen/AbschlagWizard'
-import { RechnungWizard }        from '@/pages/rechnungen/RechnungWizard'
+import { InvoiceWizard }         from '@/pages/rechnungen/InvoiceWizard'
 import { SchlussrechnungWizard } from '@/pages/rechnungen/SchlussrechnungWizard'
 import { MahnungenListe }        from '@/pages/rechnungen/MahnungenListe'
 import { Sicherheitseinbehalte } from '@/pages/projekte/Sicherheitseinbehalte'
 import { fetchProjectsShort }    from '@/api/projekte'
 import { useFilterTabs } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
+import { DirtyGuardProvider } from '@/components/ui/DirtyGuard'
+import { useGuardedAction } from '@/hooks/useDirtyGuard'
 
 type ListTab = 'liste' | 'mahnungen' | 'se'
 type Tab = ListTab | InvoiceKind
@@ -60,6 +61,13 @@ const WIZARD_TITLE: Record<InvoiceKind, [neu: string, entwurf: string]> = {
  * `location.state` mit `projectSearch`, `backProject`, `tab`, `openMahnung`.
  */
 export function RechnungenPage() {
+  // Die Assistenten melden offene Eingaben beim Guard — Seitennavigation und
+  // Browser-Zurueck fragen dann nach (Runde 2).
+  return <DirtyGuardProvider><RechnungenSeite /></DirtyGuardProvider>
+}
+
+function RechnungenSeite() {
+  const guarded      = useGuardedAction()
   const location     = useLocation()
   const navigate     = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -168,20 +176,21 @@ export function RechnungenPage() {
     return (
       <div className="master-page">
         <PageHeader
-          back={{ label: 'Rechnungen', onClick: () => goList() }}
+          back={{ label: 'Rechnungen', onClick: () => guarded(() => goList()) }}
           title={WIZARD_TITLE[wizardKind][isDraft ? 1 : 0]}
           meta={memDraft ? <span>{memDraft.projectLabel}{memDraft.contractLabel ? ` · ${memDraft.contractLabel}` : ''}</span> : undefined}
         />
         <div className="master-tab-content">
           {waitLabel ? null : (
             <>
-              {wizardKind === 'abschlag' && (
-                <AbschlagWizard key={wizardKey} resumeId={resumeId} {...prefill}
+              {wizardKind === 'schluss' ? (
+                <SchlussrechnungWizard key={wizardKey} resumeId={resumeId} {...prefill}
+                  onDraftCreated={handleDraftCreated} onExit={() => goList()} />
+              ) : (
+                // Abschlag, Einzelrechnung und Gutschrift: ein Assistent (Runde 2)
+                <InvoiceWizard key={wizardKey} kind={wizardKind} resumeId={resumeId} {...prefill}
                   onDraftCreated={handleDraftCreated} onExit={() => goList()} />
               )}
-              {wizardKind === 'rechnung'   && <RechnungWizard key={wizardKey} resumeId={resumeId} {...prefill} onDraftCreated={handleDraftCreated} />}
-              {wizardKind === 'schluss'    && <SchlussrechnungWizard key={wizardKey} resumeId={resumeId} {...prefill} onDraftCreated={handleDraftCreated} />}
-              {wizardKind === 'gutschrift' && <RechnungWizard key={wizardKey} resumeId={resumeId} {...prefill} onDraftCreated={handleDraftCreated} invoiceType="gutschrift" />}
             </>
           )}
         </div>

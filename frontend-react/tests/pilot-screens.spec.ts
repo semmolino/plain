@@ -305,3 +305,48 @@ test('Struktur – Handy Blatt', async ({ page }, info) => {
   await page.getByRole('dialog').waitFor()
   await shoot(page, info.project.name, 'struktur-blatt')
 })
+
+// Einzel- und Schlussrechnung (Runde 2, D2). Neu begonnen statt fortgesetzt —
+// „?draftId=" gab es am Ende von Runde 1 nur beim Abschlag, und die Szenen
+// laufen auch gegen diesen Stand (vorher2).
+async function nextStep(page: Page) {
+  await page.getByRole('button', { name: /^Weiter/ }).last().click()
+  await page.waitForTimeout(500)
+}
+
+test('Einzelrechnung – Schritte', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/rechnungen?tab=rechnung')
+  const dev = info.project.name
+  await page.locator('#pp-project, #rw-project').first().fill('P-2024')
+  await page.locator('.autocomplete-item').first().click()
+  await page.waitForTimeout(400)
+  await nextStep(page)
+  await shoot(page, dev, 'rechnung-2')
+  await nextStep(page)
+  await page.locator('table').first().waitFor()
+  await nextStep(page)
+  await shoot(page, dev, 'rechnung-4')
+})
+
+test('Schlussrechnung – Schritte', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/rechnungen?tab=schluss')
+  const dev = info.project.name
+  await page.locator('#sw-project').fill('P-2024')
+  await page.locator('.autocomplete-item').first().click()
+  await page.waitForTimeout(400)
+  await nextStep(page)
+  await nextStep(page)
+  await page.locator('table').first().waitFor()
+  await shoot(page, dev, 'schluss-3')
+  await nextStep(page)
+  await shoot(page, dev, 'schluss-4')
+  await nextStep(page)
+  await shoot(page, dev, 'schluss-5')
+  if (PHASE.startsWith('nachher')) {
+    await page.getByRole('button', { name: 'Jetzt buchen' }).click()
+    await page.getByRole('dialog').waitFor()
+    await shoot(page, dev, 'schluss-6-bestaetigen')
+  }
+})

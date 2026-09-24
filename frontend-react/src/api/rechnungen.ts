@@ -218,6 +218,8 @@ export const patchInvoice = (id: number, body: Partial<{
   se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
   se_basis_amt: number | null; se_amount: number | null
   se_release_total: number | null
+  /** Schlussrechnung im Entwurf: gewaehlte SE-Aufloesungen (Migration 0171) */
+  se_release_advance_ids: number[] | null
   // E-Rechnung Branch 1 — BT-Felder
   buyer_reference: string | null
   buyer_order_reference: string | null

@@ -287,6 +287,16 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
 
 - **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0.
 - **Invoice wizard**: draft invoice → assign performance amount + bookings → generate line items → finalize.
+  Abschlag, Einzelrechnung und Gutschrift laufen durch **einen** Assistenten
+  (`pages/rechnungen/InvoiceWizard.tsx`); was sich je Belegart unterscheidet
+  (Endpunkte, Datumsfeld, Sicherheitseinbehalt nur beim Abschlag), steht in
+  `wizardApi.ts`. Die Schlussrechnung hat zwei Schritte mehr und bleibt eine
+  eigene Datei im selben Muster. Summen (Nachlass I/II, Skonto, MwSt., SE)
+  rechnet **nur** `invoiceTotals.ts` — Anzeige, Speichern, PDF, XML und Buchen
+  nehmen dieselbe Nutzlast. PDF und XML speichern vorher die Nachlässe. Die
+  Auswahl der aufzulösenden Sicherheitseinbehalte einer Schlussrechnung merkt
+  sich der Entwurf in `INVOICE.SE_RELEASE_ADVANCE_IDS` (Migration `0171`);
+  maßgeblich beim Buchen bleibt, was der Buchungsaufruf mitschickt.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.

@@ -1602,18 +1602,18 @@ export const HELP = {
       </>
     ),
   },
-  'invoice.abschlag.projekt_vertrag': {
+  'invoice.wizard.projekt_vertrag': {
     title: 'Projekt und Vertrag',
     body: (
       <>
-        Der Vertrag liefert Zahlungsziel, Skonto und Sicherheitseinbehalt als Vorbelegung. Hat das
-        Projekt nur einen Vertrag, ist er schon gewählt. Mit <strong>Weiter</strong> wird ein
+        Der Vertrag liefert Zahlungsziel und Skonto als Vorbelegung, bei Abschlagsrechnungen auch den
+        Sicherheitseinbehalt. Hat das Projekt nur einen Vertrag, ist er schon gewählt. Mit <strong>Weiter</strong> wird ein
         <strong> Entwurf</strong> angelegt — er erscheint in der Rechnungsliste und lässt sich später
         fortsetzen.
       </>
     ),
   },
-  'invoice.abschlag.rechnungsdaten': {
+  'invoice.wizard.rechnungsdaten': {
     title: 'Rechnungsdaten',
     body: (
       <>
@@ -1623,7 +1623,7 @@ export const HELP = {
       </>
     ),
   },
-  'invoice.abschlag.betraege': {
+  'invoice.wizard.betraege': {
     title: 'Beträge',
     body: (
       <>
@@ -1635,14 +1635,49 @@ export const HELP = {
       </>
     ),
   },
-  'invoice.abschlag.pruefen': {
+  'invoice.wizard.pruefen': {
     title: 'Prüfen und buchen',
     body: (
       <>
         Rechenweg: Netto → Nachlass I → Nachlass II (auf den Rest) → Skonto → zzgl. MwSt. → Brutto,
-        davon ggf. Sicherheitseinbehalt. Vor dem Buchen kannst du PDF und E-Rechnung ansehen.
-        <strong> Nach dem Buchen</strong> ist die Rechnung unveränderlich; Korrekturen laufen über
-        Storno.
+        bei Abschlagsrechnungen davon ggf. der Sicherheitseinbehalt. Vor dem Buchen kannst du PDF und
+        E-Rechnung ansehen — beide mit den Nachlässen, die hier gerade stehen. Die Zusammenfassung
+        daneben zeigt denselben Betrag. <strong>Nach dem Buchen</strong> ist die Rechnung
+        unveränderlich; Korrekturen laufen über Storno.
+      </>
+    ),
+  },
+  'invoice.schluss.positionen': {
+    title: 'Positionen der Schlussrechnung',
+    body: (
+      <>
+        Je Element der Struktur der Leistungswert laut Leistungsstand, abzüglich dessen, was frühere
+        (Teil-)Schlussrechnungen schon abgerechnet haben. Abschlagsrechnungen zieht erst der nächste
+        Schritt ab. Nach dem Buchen gelten die gewählten Positionen als <strong>abgeschlossen</strong> —
+        eine Teilschlussrechnung wählt deshalb nur die fertigen Leistungsphasen.
+      </>
+    ),
+  },
+  'invoice.schluss.abzuege': {
+    title: 'Abschläge abziehen',
+    body: (
+      <>
+        Gebuchte Abschlagsrechnungen des Projekts, die noch nicht abgezogen sind. Vorgeschlagen ist
+        ihr Nettobetrag; du kannst ihn ändern, etwa wenn ein Abschlag nur teilweise zu den gewählten
+        Positionen gehört. Ein Hinweis erscheint, wenn ein Abschlag Positionen enthält, die hier nicht
+        abgerechnet werden.
+      </>
+    ),
+  },
+  'invoice.schluss.pruefen': {
+    title: 'Prüfen und buchen',
+    body: (
+      <>
+        Rechenweg: Positionen − Abschläge = Netto → Nachlass I → Nachlass II → Skonto → zzgl. MwSt. →
+        Brutto. Einbehaltene <strong>Sicherheitseinbehalte</strong> früherer Abschläge kommen zur
+        Zahlung dazu, wenn du sie auflöst; die Auswahl bleibt beim Entwurf gespeichert. PDF und
+        E-Rechnung zeigen den Stand, der hier gerade steht. Nach dem Buchen ist die Rechnung
+        unveränderlich; Korrekturen laufen über Storno.
       </>
     ),
   },

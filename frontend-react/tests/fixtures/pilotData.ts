@@ -280,6 +280,31 @@ const PROPOSAL = {
 }
 PROPOSAL.total_amount_gross = r2(PROPOSAL.total_amount_net * 1.19)
 
+// Schlussrechnung (Entwurf 701): drei Leistungsphasen unter LP1–4, zwei
+// gebuchte Abschlaege, zwei offene Sicherheitseinbehalte.
+const FINAL_PHASES = [
+  { ID: 101, FATHER_ID: null, ABBR: 'Gebäude', NAME: 'Objektplanung Gebäude' },
+  { ID: 102, FATHER_ID: 101, ABBR: 'LP1', NAME: 'Grundlagenermittlung', earned: 18_406.12, billed: 0, sel: true },
+  { ID: 103, FATHER_ID: 101, ABBR: 'LP2', NAME: 'Vorplanung', earned: 64_421.43, billed: 0, sel: true },
+  { ID: 104, FATHER_ID: 101, ABBR: 'LP3', NAME: 'Entwurfsplanung', earned: 110_433.21, billed: 0, sel: true },
+  { ID: 105, FATHER_ID: 101, ABBR: 'LP4', NAME: 'Genehmigungsplanung', earned: 27_609.18, billed: 0, sel: false },
+].map(p => ({
+  ID: p.ID, FATHER_ID: p.FATHER_ID, ABBR: p.ABBR, NAME: p.NAME, BILLING_TYPE_ID: 1,
+  REVENUE_COMPLETION: p.earned ?? null, EXTRAS_AMOUNT: null, TOTAL_EARNED: p.earned ?? null,
+  BILLED_FINAL: p.billed ?? null, ALREADY_BILLED: p.earned ? r2(p.earned * 0.8) : null,
+  AMOUNT_NET: null, AMOUNT_EXTRAS_NET: null, SELECTED: !!p.sel, CLOSED_BY_INVOICE_ID: null, CLOSED: false,
+}))
+
+const FINAL_DEDUCTIONS = [
+  { ID: 511, ADVANCE_INVOICE_NUMBER: 'AR-2025-0031', ADVANCE_INVOICE_DATE: '2025-06-30', AMOUNT_NET: 72_000, TOTAL_AMOUNT_NET: 72_000, DEDUCTION_AMOUNT_NET: 72_000, SELECTED: true, STRUCTURE_IDS: [102, 103] },
+  { ID: 512, ADVANCE_INVOICE_NUMBER: 'AR-2025-0058', ADVANCE_INVOICE_DATE: '2025-12-19', AMOUNT_NET: 81_500, TOTAL_AMOUNT_NET: 81_500, DEDUCTION_AMOUNT_NET: 81_500, SELECTED: true, STRUCTURE_IDS: [104, 105] },
+]
+
+const OPEN_SE = [
+  { ID: 511, ADVANCE_INVOICE_NUMBER: 'AR-2025-0031', ADVANCE_INVOICE_DATE: '2025-06-30', TOTAL_AMOUNT_NET: 72_000, TOTAL_AMOUNT_GROSS: 85_680, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', SE_BASIS_AMT: 85_680, SE_AMOUNT: 4_284 },
+  { ID: 512, ADVANCE_INVOICE_NUMBER: 'AR-2025-0058', ADVANCE_INVOICE_DATE: '2025-12-19', TOTAL_AMOUNT_NET: 81_500, TOTAL_AMOUNT_GROSS: 96_985, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', SE_BASIS_AMT: 96_985, SE_AMOUNT: 4_849.25 },
+]
+
 const CONTRACTS = [
   { ID: 11, ABBR: 'V-2024-001', NAME: 'Generalplanervertrag Kita Sonnenblume – Objektplanung Gebäude LP1–9', PROJECT_ID: 1,
     CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14, SE_ENABLED: true, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', SE_LEGAL_REFERENCE: '§ 17 VOB/B' },
@@ -497,27 +522,73 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   await get('partial-payments/\\d+/attachments', { data: [] })
   await byMethod('partial-payments/\\d+/book', { POST: r => r.fulfill(json({ success: true })) })
 
-  // Einzelrechnung (Entwurf 601) — Fortsetzen vom Server
-  let invPatched: Record<string, unknown> = {}
+  // Einzelrechnung (Entwurf 601) und Schlussrechnung (Entwurf 701) —
+  // Fortsetzen vom Server, mit Gedaechtnis je Entwurf.
+  const invPatched: Record<number, Record<string, unknown>> = {}
+  const INVOICE_DRAFTS: Record<number, Record<string, unknown>> = {
+    601: {
+      ID: 601, INVOICE_NUMBER: null, INVOICE_TYPE: 'rechnung', INVOICE_DATE: '2026-09-18', DUE_DATE: '2026-10-18',
+      STATUS_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11, COMMENT: 'Nebenleistung Brandschutz',
+      BILLING_PERIOD_START: '2026-08-01', BILLING_PERIOD_FINISH: '2026-08-31',
+      BUYER_REFERENCE: '04011000-12345-34', BUYER_ORDER_REFERENCE: 'BE-2024-0815', BUYER_ACCOUNTING_REFERENCE: 'KST 4711',
+      REMITTANCE_INFORMATION: null, PAYMENT_MEANS_ID: 2, VAT_CATEGORY: 'S',
+      DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0, CASH_DISCOUNT_PERCENT: 0, CASH_DISCOUNT_DAYS: 0,
+    },
+    701: {
+      ID: 701, INVOICE_NUMBER: null, INVOICE_TYPE: 'schlussrechnung', INVOICE_DATE: '2026-09-22', DUE_DATE: '2026-10-22',
+      STATUS_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11, COMMENT: 'Teilschlussrechnung LP1–LP4',
+      BILLING_PERIOD_START: '2024-03-01', BILLING_PERIOD_FINISH: '2026-08-31',
+      BUYER_REFERENCE: '04011000-12345-34', BUYER_ORDER_REFERENCE: 'BE-2024-0815', BUYER_ACCOUNTING_REFERENCE: null,
+      REMITTANCE_INFORMATION: null, PAYMENT_MEANS_ID: 2, VAT_CATEGORY: 'S',
+      DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0, CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14,
+      // Im Entwurf gespeichert: nur einer der zwei offenen Einbehalte wird aufgeloest.
+      SE_RELEASE_ADVANCE_IDS: [512],
+    },
+  }
+  const invId = (r: Route) => Number(r.request().url().match(/invoices\/(\d+)/)?.[1])
   await byMethod('invoices/\\d+', {
-    GET: r => r.fulfill(json({ data: {
-      inv: {
-        ID: 601, INVOICE_NUMBER: null, INVOICE_TYPE: 'rechnung', INVOICE_DATE: '2026-09-18', DUE_DATE: '2026-10-18',
-        STATUS_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11, COMMENT: 'Nebenleistung Brandschutz',
-        BILLING_PERIOD_START: '2026-08-01', BILLING_PERIOD_FINISH: '2026-08-31',
-        BUYER_REFERENCE: '04011000-12345-34', BUYER_ORDER_REFERENCE: 'BE-2024-0815', BUYER_ACCOUNTING_REFERENCE: 'KST 4711',
-        REMITTANCE_INFORMATION: null, PAYMENT_MEANS_ID: 2, VAT_CATEGORY: 'S',
-        DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0, CASH_DISCOUNT_PERCENT: 0, CASH_DISCOUNT_DAYS: 0, ...invPatched,
-      },
-      project:  { ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1' },
-      contract: { ABBR: CONTRACTS[0].ABBR, NAME: CONTRACTS[0].NAME },
-    } })),
+    GET: r => {
+      const id = invId(r)
+      return r.fulfill(json({ data: {
+        inv: { ...(INVOICE_DRAFTS[id] ?? INVOICE_DRAFTS[601]), ...(invPatched[id] ?? {}) },
+        project:  { ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1' },
+        contract: { ABBR: CONTRACTS[0].ABBR, NAME: CONTRACTS[0].NAME },
+      } }))
+    },
     PATCH: async r => {
+      const id = invId(r)
       const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>
-      invPatched = { ...invPatched, ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k.toUpperCase(), v])) }
+      invPatched[id] = { ...(invPatched[id] ?? {}), ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k.toUpperCase(), v])) }
       return r.fulfill(json({ ok: true }))
     },
+    DELETE: r => r.fulfill(json({ ok: true })),
   })
+  await byMethod('invoices/init', {
+    POST: r => r.fulfill(json({ id: (r.request().postDataJSON() as { invoice_type?: string })?.invoice_type === 'schlussrechnung' ? 701 : 601 })),
+  })
+  await byMethod('invoices/\\d+/book', { POST: r => r.fulfill(json({ success: true, invoice_number: 'R-2026-0042' })) })
+
+  // Schlussrechnung: Positionen, Abzuege, offene Sicherheitseinbehalte
+  await byMethod('final-invoices/\\d+/phases', {
+    GET:  r => r.fulfill(json({ data: FINAL_PHASES })),
+    POST: r => {
+      const ids = ((r.request().postDataJSON() ?? {}) as { structure_ids?: number[] }).structure_ids ?? []
+      const phaseTotal = r2(FINAL_PHASES.filter(p => ids.includes(p.ID)).reduce((s, p) => s + Math.max(0, (p.TOTAL_EARNED ?? 0) - (p.BILLED_FINAL ?? 0)), 0))
+      return r.fulfill(json({ ok: true, phaseTotal, deductionsTotal: 0, totalNet: phaseTotal, vatPercent: 19 }))
+    },
+  })
+  await byMethod('final-invoices/\\d+/deductions', {
+    GET:  r => r.fulfill(json({ data: FINAL_DEDUCTIONS })),
+    POST: r => {
+      const items = ((r.request().postDataJSON() ?? {}) as { items?: { deduction_amount_net: number }[] }).items ?? []
+      const phaseTotal = r2(FINAL_PHASES.filter(p => p.SELECTED).reduce((s, p) => s + Math.max(0, (p.TOTAL_EARNED ?? 0) - (p.BILLED_FINAL ?? 0)), 0))
+      const deductionsTotal = r2(items.reduce((s, i) => s + Number(i.deduction_amount_net || 0), 0))
+      const totalNet = r2(phaseTotal - deductionsTotal)
+      return r.fulfill(json({ ok: true, phaseTotal, deductionsTotal, totalNet, vatPercent: 19, taxAmountNet: r2(totalNet * 0.19), totalGross: r2(totalNet * 1.19) }))
+    },
+  })
+  await byMethod('final-invoices/\\d+/book', { POST: r => r.fulfill(json({ success: true, invoice_number: 'SR-2026-0007' })) })
+  await get('partial-payments/open-se', { data: OPEN_SE })
   await get('invoices/\\d+/billing-proposal', { data: PROPOSAL })
   await byMethod('invoices/\\d+/performance', { PUT: r => r.fulfill(json({ data: PROPOSAL })) })
   await byMethod('invoices/\\d+/tec', {
