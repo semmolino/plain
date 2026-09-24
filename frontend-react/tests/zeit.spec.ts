@@ -88,7 +88,7 @@ test.describe('Zeit buchen', () => {
     const label = info.project.name === 'mobile' ? /^\s*Stunden\s*$/ : 'Stunden buchen'
     await page.getByRole('button', { name: label }).click()
     const dialog = page.getByRole('dialog', { name: 'Zeit buchen' })
-    await expect(dialog.getByRole('textbox', { name: 'Projekt suchen …' })).toHaveValue(/P-2024-001/)
+    await expect(dialog.getByRole('combobox', { name: 'Projekt suchen …' })).toHaveValue(/P-2024-001/)
     // Vorher: fuenf Anlegen-Knoepfe in einer eigenen Zeile.
     await expect(page.getByRole('button', { name: /\+ Stückleistung|\+ Pauschale/ })).toHaveCount(0)
   })
@@ -106,7 +106,9 @@ test.describe('Zeit buchen', () => {
     await setup(page)
     await page.goto('/')
     await page.locator('.app-main').waitFor()
-    const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
+    // Gegen die Geraetebreite messen: waechst die Seite, waechst am Handy
+    // auch window.innerWidth mit, und der Vergleich damit sieht nichts.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth) - page.viewportSize()!.width
     expect(overflow).toBeLessThanOrEqual(2)
     for (const name of ['Zeit buchen', 'Stempeluhr']) {
       const box = await page.getByRole('button', { name }).first().boundingBox()

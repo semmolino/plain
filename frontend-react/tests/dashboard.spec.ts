@@ -35,7 +35,9 @@ test.describe('Übersicht', () => {
       const cta = await time.getByRole('button', { name: 'Zeit buchen' }).boundingBox()
       expect(cta!.y + cta!.height).toBeLessThan(vh(page) - 58)
       expect(cta!.height).toBeGreaterThanOrEqual(44)
-      const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
+      // Gegen die Geraetebreite messen: waechst die Seite, waechst am Handy
+    // auch window.innerWidth mit, und der Vergleich damit sieht nichts.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth) - page.viewportSize()!.width
       expect(overflow).toBeLessThanOrEqual(2)
     }
   })
@@ -50,7 +52,11 @@ test.describe('Übersicht', () => {
 
   test('Controller: keine doppelten Kacheln, Mahnaktionen führen zu den Mahnungen', async ({ page }) => {
     await setup(page, { role: 'controller' })
-    const labels = await page.locator('.dash-kpis .kpi-label').allInnerTexts()
+    // Die Kennzahlen kommen nach der Ueberschrift — erst warten, dann lesen
+    // (allInnerTexts wartet nicht und las unter Last eine leere Liste).
+    const kpiLabels = page.locator('.dash-kpis .kpi-label')
+    await expect(kpiLabels.nth(3)).toBeVisible()
+    const labels = await kpiLabels.allInnerTexts()
     expect(labels.length).toBeGreaterThan(3)
     expect(new Set(labels.map(l => l.trim().toLowerCase())).size).toBe(labels.length)
     await page.getByRole('region', { name: /Jetzt wichtig/ }).getByRole('link', { name: /Mahnaktionen fällig/ }).click()

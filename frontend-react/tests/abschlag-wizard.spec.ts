@@ -173,7 +173,9 @@ test.describe('Abschlagsrechnung', () => {
     expect(box!.x + box!.width).toBeLessThanOrEqual(page.viewportSize()!.width)
     await page.keyboard.press('Escape')
     await startNew(page)
-    const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
+    // Gegen die Geraetebreite messen: waechst die Seite, waechst am Handy
+    // auch window.innerWidth mit, und der Vergleich damit sieht nichts.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth) - page.viewportSize()!.width
     expect(overflow).toBeLessThanOrEqual(2)
   })
 })

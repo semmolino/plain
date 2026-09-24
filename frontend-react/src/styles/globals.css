@@ -4864,14 +4864,6 @@ th.doc-actions, td.doc-actions {
   padding: var(--space-2) var(--space-3); margin: 0 0 var(--space-3);
   background: var(--info-bg); border-radius: var(--radius-md);
 }
-.pw-switch { position: relative; flex-shrink: 0; }
-.pw-switch-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 32px; height: 32px; padding: 0;
-  border: 1px solid var(--border); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--text-2); box-shadow: none;
-}
-.pw-switch-btn:hover, .pw-switch-btn[aria-expanded="true"] { background: var(--hover-bg); color: var(--text); }
 .pw-switch-pop {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
   width: min(460px, calc(100vw - 32px));
@@ -4910,7 +4902,7 @@ th.doc-actions, td.doc-actions {
 }
 
 @media (max-width: 640px) {
-  .pw-switch-btn, .pw-more-btn { width: 44px; height: 44px; }
+  .pw-more-btn { width: 44px; height: 44px; }
   .pw-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2) var(--space-3); padding: var(--space-3); }
   .pw-kpi dd { font-size: 15px; white-space: normal; }
   .pw-tabs .tab-btn { min-height: 44px; padding-left: 12px; padding-right: 12px; }
@@ -5358,3 +5350,39 @@ div.dash-attn-link:hover { background: transparent; }
   .kpi-grid.dash-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .dash-kpis .kpi-value { font-size: 20px; }
 }
+
+/* ── Projekt wechseln über den Namen (Runde 2) ─────────────────────────── */
+.pw-header .page-header-titlerow { position: relative; }
+.pw-title-btn {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0;
+  margin: 0 0 0 -8px; padding: 2px 8px; border: 0; border-radius: var(--radius-sm);
+  background: transparent; box-shadow: none; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
+}
+.pw-title-btn:hover, .pw-title-btn[aria-expanded="true"] { background: var(--hover-bg); }
+.pw-title-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pw-title-chev { flex-shrink: 0; color: var(--text-3); transition: transform 0.15s; }
+.pw-title-btn[aria-expanded="true"] .pw-title-chev { transform: rotate(180deg); }
+.pw-switch-pop .project-ac-dropdown { max-height: 360px; }
+.pw-switch-hint { margin: var(--space-2) 0 0; font-size: 12px; color: var(--text-3); }
+.project-ac-option.kbd-active { background: var(--accent-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+.project-ac-current { font-weight: 500; color: var(--text-3); }
+.project-ac-tolist { display: flex; align-items: center; gap: 4px; }
+.project-picker--inline { max-width: none; min-width: 0; }
+.project-ac-dropdown--inline {
+  position: static; margin-top: var(--space-2); max-height: 60vh;
+  box-shadow: none; border-radius: var(--radius-md);
+}
+.project-ac-dropdown--inline .project-ac-option { min-height: 48px; justify-content: center; }
+.pw-switch-sheet .project-picker .list-search { font-size: 16px; min-height: 44px; }
+@media (max-width: 640px) {
+  .pw-title-text { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .pw-title-btn { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .pw-title-chev { transition: none; } }
+
+/* Scrollrahmen der Pilot-Tabellen als Bezug fuer absolut positionierte
+   Kinder: ein .sr-only-Text in der letzten Spalte lag sonst am
+   Dokumentrand (x ≈ 1100) und machte die Seite am Handy 1108 px breit —
+   Dialoge und Bottom-Nav liefen dann ueber den Bildschirm hinaus. */
+.sx-root .list-section, .bk-root .list-section { position: relative; }

@@ -92,9 +92,43 @@ test.describe('Projekt-Arbeitsbereich', () => {
     await mockPilot(page)
     await page.goto('/projekte?projectId=1&tab=struktur')
     await page.locator('.sx-table').waitFor()
-    const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
+    // Gegen die Geraetebreite messen: waechst die Seite, waechst am Handy
+    // auch window.innerWidth mit, und der Vergleich damit sieht nichts.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth) - page.viewportSize()!.width
     expect(overflow).toBeLessThanOrEqual(2)
     await expect(page.locator('.bottom-nav')).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Weitere Bereiche des Projekts' })).toBeAttached()
+  })
+
+  test('Projektname ist der Umschalter: Suchen, Pfeiltasten, Enter', async ({ page }) => {
+    await mockPilot(page)
+    await page.goto('/projekte?projectId=1&tab=leistungsstand')
+    const title = page.getByRole('button', { name: /Neubau Kindertagesstätte.*Projekt wechseln/ })
+    await title.click()
+    // Desktop: Aufklapper unter dem Namen, Handy: eigenes Blatt — beide als Dialog benannt.
+    const box = page.getByRole('dialog', { name: 'Projekt wechseln' })
+    const search = box.getByRole('combobox', { name: 'Projekt suchen …' })
+    await expect(search).toBeFocused()
+    // Leer statt mit dem aktuellen Namen — man will suchen, nicht löschen.
+    await expect(search).toHaveValue('')
+    await search.fill('P-2024-004')
+    await search.press('ArrowDown')
+    await expect(box.getByRole('option', { selected: true })).toContainText('P-2024-004')
+    await search.press('Enter')
+    // Der Reiter bleibt beim Wechsel erhalten.
+    await expect(page).toHaveURL(/projectId=4&tab=leistungsstand/)
+  })
+
+  test('Strg+K öffnet den Umschalter, Esc schließt und gibt den Fokus zurück', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Tastatur')
+    await mockPilot(page)
+    await page.goto('/projekte?projectId=1&tab=struktur')
+    await page.locator('h1').waitFor()
+    await page.keyboard.press('Control+k')
+    const box = page.getByRole('dialog', { name: 'Projekt wechseln' })
+    await expect(box.getByRole('combobox')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(box).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Projekt wechseln/ })).toBeFocused()
   })
 })

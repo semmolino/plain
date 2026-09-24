@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronsUpDown, BarChart3, Receipt } from 'lucide-react'
+import { ChevronDown, BarChart3, Receipt } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { RowMenu } from '@/components/ui/RowMenu'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { KpiValue } from '@/components/ui/KpiValue'
 import { Disclosure } from '@/components/ui/Disclosure'
+import { Modal } from '@/components/ui/Modal'
 import { ProjectPicker } from '@/components/projekte/ProjectPicker'
 import { NewInvoiceMenu } from '@/components/rechnungen/NewInvoiceMenu'
 import type { InvoiceKind } from '@/components/rechnungen/invoiceKinds'
@@ -62,18 +63,57 @@ export function ProjektHeader({ projectId, onBack, onSwitch }: {
 
   useTrackRecent('project', projectId, abbr ? [abbr, name].filter(Boolean).join(' · ') : null)
 
+  // Projekt wechseln: der Name selbst ist der Umschalter (Runde 2). Vorher
+  // sass daneben ein 32-px-Symbol, das kaum jemand als Umschalter erkannte.
   const [switching, setSwitching] = useState(false)
-  const switchRef = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
-    if (!switching) return
+    if (!switching || narrow) return
     function onDown(e: MouseEvent) {
-      if (switchRef.current && !switchRef.current.contains(e.target as Node)) setSwitching(false)
+      const t = e.target as Node
+      if (popRef.current?.contains(t) || btnRef.current?.contains(t)) return
+      setSwitching(false)
     }
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setSwitching(false) }
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      setSwitching(false)
+      btnRef.current?.focus()
+    }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey)
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
-  }, [switching])
+  }, [switching, narrow])
+
+  // Strg+K (Mac: ⌘K) oeffnet den Umschalter von ueberall im Arbeitsbereich —
+  // nicht hinter einem offenen Dialog.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'k' || e.altKey || e.shiftKey) return
+      if (document.querySelector('[role="dialog"]')) return
+      e.preventDefault()
+      setSwitching(true)
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [])
+
+  function pickProject(id: number) {
+    setSwitching(false)
+    if (id !== projectId) onSwitch(id)
+  }
+  const picker = (inline: boolean) => (
+    <ProjectPicker
+      projects={shortData?.data ?? []}
+      selectedId={projectId}
+      autoFocus
+      startEmpty
+      inline={inline}
+      placeholder="Projekt suchen …"
+      onSelect={pickProject}
+      onGoToList={() => { setSwitching(false); onBack() }}
+    />
+  )
 
   function openInvoice(kind: InvoiceKind) {
     navigate(`/rechnungen?tab=${kind}&projectId=${projectId}`)
@@ -108,27 +148,22 @@ export function ProjektHeader({ projectId, onBack, onSwitch }: {
         {full?.STATUS_NAME && <span className="status-pill">{full.STATUS_NAME}</span>}
         {full?.IS_INTERNAL && <span className="status-pill">Intern</span>}
       </>}
-      title={<span title={name}>{name || abbr}</span>}
-      titleAddon={
-        <div className="pw-switch" ref={switchRef}>
-          <button type="button" className="pw-switch-btn" aria-expanded={switching}
-            aria-label="Projekt wechseln" title="Projekt wechseln" onClick={() => setSwitching(s => !s)}>
-            <ChevronsUpDown size={16} strokeWidth={2} aria-hidden="true" />
-          </button>
-          {switching && (
-            <div className="pw-switch-pop">
-              <ProjectPicker
-                projects={shortData?.data ?? []}
-                selectedId={projectId}
-                autoFocus
-                placeholder="Anderes Projekt suchen …"
-                onSelect={id => { setSwitching(false); if (id !== projectId) onSwitch(id) }}
-                onGoToList={() => { setSwitching(false); onBack() }}
-              />
-            </div>
-          )}
-        </div>
+      title={
+        <button ref={btnRef} type="button" className="pw-title-btn"
+          aria-haspopup="dialog" aria-expanded={switching}
+          title={`${name || abbr} – Projekt wechseln (Strg+K)`}
+          onClick={() => setSwitching(s => !s)}>
+          <span className="pw-title-text">{name || abbr}</span>
+          <ChevronDown size={20} strokeWidth={2.25} className="pw-title-chev" aria-hidden="true" />
+          <span className="sr-only">, Projekt wechseln</span>
+        </button>
       }
+      titleAddon={switching && !narrow ? (
+        <div className="pw-switch-pop" ref={popRef} role="dialog" aria-label="Projekt wechseln">
+          {picker(false)}
+          <p className="pw-switch-hint">Pfeiltasten wählen · Enter öffnet · Esc schließt</p>
+        </div>
+      ) : undefined}
       meta={full && (<>
         {full.ADDRESS_NAME && <span><span className="page-header-meta-label">Auftraggeber</span>{full.ADDRESS_NAME}</span>}
         {full.MANAGER_NAME && <span><span className="page-header-meta-label">Projektleitung</span>{full.MANAGER_NAME}</span>}
@@ -166,6 +201,12 @@ export function ProjektHeader({ projectId, onBack, onSwitch }: {
       ) : (
         <dl className="pw-kpis">{kpis.map(kpiItem)}</dl>
       ))}
+      {/* Handy: Suche und Liste als eigenes Blatt, 44-px-Zeilen */}
+      {narrow && (
+        <Modal open={switching} onClose={() => setSwitching(false)} title="Projekt wechseln" className="pw-switch-sheet">
+          {picker(true)}
+        </Modal>
+      )}
     </PageHeader>
   )
 }

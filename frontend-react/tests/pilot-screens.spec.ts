@@ -123,6 +123,15 @@ test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
   await shoot(page, info.project.name, 'projekt-struktur-geaendert')
 })
 
+test('Projekt – wechseln über den Namen', async ({ page }, info) => {
+  test.skip(PHASE !== 'nachher', 'Umschalter über den Namen gibt es erst mit Runde 2')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.getByRole('button', { name: /Projekt wechseln/ }).click()
+  await page.getByRole('dialog', { name: 'Projekt wechseln' }).waitFor()
+  await shoot(page, info.project.name, 'projekt-wechseln')
+})
+
 test('Projekt – Buchungen', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=buchungen&projectId=1')
