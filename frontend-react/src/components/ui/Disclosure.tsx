@@ -6,6 +6,9 @@ interface Props {
   children:     ReactNode
   /** Kurzer Zustand rechts neben dem Titel, z. B. „2 ausgefüllt". */
   hint?:        ReactNode
+  /** Neben dem Knopf, nicht darin — z. B. ein HelpHint (ein Knopf im Knopf
+   *  ist ungueltiges HTML und oeffnet beim Antippen beides). */
+  help?:        ReactNode
   defaultOpen?: boolean
   /** Gesteuert: wenn gesetzt, gilt dieser Wert statt des eigenen Zustands. */
   open?:        boolean
@@ -21,7 +24,7 @@ interface Props {
  * ist, war fuer Screenreader nicht erkennbar. Hier traegt `aria-expanded`
  * den Zustand, das Icon dreht sich nur mit.
  */
-export function Disclosure({ title, children, hint, defaultOpen = false, open, onToggle, className }: Props) {
+export function Disclosure({ title, children, hint, help, defaultOpen = false, open, onToggle, className }: Props) {
   const [own, setOwn] = useState(defaultOpen)
   const isOpen = open ?? own
   const bodyId = useId()
@@ -32,13 +35,17 @@ export function Disclosure({ title, children, hint, defaultOpen = false, open, o
     onToggle?.(next)
   }
 
+  const btn = (
+    <button type="button" className="disclosure-btn" aria-expanded={isOpen} aria-controls={bodyId} onClick={toggle}>
+      <ChevronRight size={15} strokeWidth={2} className="disclosure-chevron" aria-hidden="true" />
+      <span className="disclosure-title">{title}</span>
+      {hint && <span className="disclosure-hint">{hint}</span>}
+    </button>
+  )
+
   return (
     <div className={`disclosure${isOpen ? ' disclosure--open' : ''}${className ? ` ${className}` : ''}`}>
-      <button type="button" className="disclosure-btn" aria-expanded={isOpen} aria-controls={bodyId} onClick={toggle}>
-        <ChevronRight size={15} strokeWidth={2} className="disclosure-chevron" aria-hidden="true" />
-        <span className="disclosure-title">{title}</span>
-        {hint && <span className="disclosure-hint">{hint}</span>}
-      </button>
+      {help ? <div className="disclosure-head">{btn}<span className="disclosure-help">{help}</span></div> : btn}
       {isOpen && <div className="disclosure-body" id={bodyId}>{children}</div>}
     </div>
   )

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreHorizontal } from 'lucide-react'
 
@@ -69,6 +69,25 @@ export function RowMenu({ children, label = 'Weitere Aktionen', triggerClassName
       window.removeEventListener('resize', close)
     }
   }, [open])
+
+  // Im Fenster halten: das Menue haengt rechtsbuendig unter dem Ausloeser.
+  // Steht der Ausloeser links (Seitenkopf am Handy) oder unten (Aktions-
+  // leiste ueber der Bottom-Nav), lief es aus dem Bild. Korrigiert wird
+  // direkt am Element und vor dem ersten Paint.
+  useLayoutEffect(() => {
+    if (!open || !pos) return
+    const el = dropdownRef.current
+    const trigger = triggerRef.current
+    if (!el || !trigger) return
+    const M  = 8
+    const t  = trigger.getBoundingClientRect()
+    const d  = el.getBoundingClientRect()
+    if (d.left < M) {
+      el.style.right = 'auto'
+      el.style.left  = `${Math.max(M, Math.min(t.left, window.innerWidth - d.width - M))}px`
+    }
+    if (d.bottom > window.innerHeight - M) el.style.top = `${Math.max(M, t.top - 4 - d.height)}px`
+  }, [open, pos])
 
   return (
     <>

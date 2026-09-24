@@ -467,13 +467,21 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     GET: r => r.fulfill(json({ data: { pp: {
       ID: 501, ADVANCE_INVOICE_NUMBER: null, ADVANCE_INVOICE_DATE: '2026-09-20', DUE_DATE: '2026-10-20',
       STATUS_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11,
-      PROJECT: 'P-2024-001 Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', CONTRACT: CONTRACTS[0].ABBR + ' ' + CONTRACTS[0].NAME,
       BILLING_PERIOD_START: '2026-08-01', BILLING_PERIOD_FINISH: '2026-08-31', COMMENT: '7. Abschlagsrechnung gemäß Zahlungsplan',
       BUYER_REFERENCE: '04011000-12345-34', BUYER_ORDER_REFERENCE: 'BE-2024-0815', BUYER_ACCOUNTING_REFERENCE: null,
       REMITTANCE_INFORMATION: null, VAT_CATEGORY: 'S', DISCOUNT_1_PERCENT: 0, DISCOUNT_2_PERCENT: 0,
       CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', ...ppPatched,
-    } } })),
-    PATCH: async r => { ppPatched = { ...ppPatched, ...(r.request().postDataJSON() ?? {}) }; return r.fulfill(json({ success: true })) },
+    },
+    // So antwortet der Server: Projekt und Vertrag getrennt, nicht im Beleg.
+    project:  { ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1' },
+    contract: { ABBR: CONTRACTS[0].ABBR, NAME: CONTRACTS[0].NAME },
+    } })),
+    PATCH: async r => {
+      // snake_case der Anfrage → Spaltennamen, damit ein erneutes Laden den Stand zeigt
+      const body = (r.request().postDataJSON() ?? {}) as Record<string, unknown>
+      ppPatched = { ...ppPatched, ...Object.fromEntries(Object.entries(body).map(([k, v]) => [k.toUpperCase(), v])) }
+      return r.fulfill(json({ success: true }))
+    },
     DELETE: r => r.fulfill(json({ ok: true })),
   })
   await get('partial-payments/\\d+/billing-proposal', { data: PROPOSAL })
@@ -483,4 +491,5 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     POST: r => r.fulfill(json({ data: PROPOSAL })),
   })
   await get('partial-payments/\\d+/attachments', { data: [] })
+  await byMethod('partial-payments/\\d+/book', { POST: r => r.fulfill(json({ success: true })) })
 }

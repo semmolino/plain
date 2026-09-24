@@ -1,18 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, FileText, ChevronDown } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
-import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { Modal }        from '@/components/ui/Modal'
+import { DialogFooter } from '@/components/ui/DialogFooter'
+import { ActionBar }    from '@/components/ui/ActionBar'
+import { RowMenu }      from '@/components/ui/RowMenu'
+import { Disclosure }   from '@/components/ui/Disclosure'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
+import { AmountInput }  from '@/components/ui/AmountInput'
 import { HelpHint }     from '@/components/ui/HelpHint'
 import { ValidationModal } from '@/components/ui/ValidationModal'
 import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
 import { BuchungsauswahlTable } from '@/components/rechnungen/BuchungsauswahlTable'
 import {
   searchContracts,
-  initPartialPayment, patchPartialPayment, getPpBillingProposal,
+  initPartialPayment, patchPartialPayment, getPartialPayment, getPpBillingProposal,
   putPpPerformance, getPpTec, postPpTec, bookPartialPayment, bookPartialPaymentForce, deletePartialPayment,
   openPpPdf, downloadPpEinvoice,
   VAT_CATEGORY_LABELS,
@@ -22,31 +27,75 @@ import {
 import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
 import { useAuthStore } from '@/store/authStore'
+import { usePermission } from '@/store/permissionsStore'
+import { useToast } from '@/store/toastStore'
 import { useDueDatePreset, useDefaultString } from '@/hooks/useTenantDefaults'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { fetchPaymentMeans } from '@/api/stammdaten'
-import { API_BASE }     from '@/api/client'
 import { fmtEur, money } from '@/utils/money'
+import { localIsoDate } from '@/utils/zeit'
 
-function todayIso() { return new Date().toISOString().slice(0, 10) }
+// Lokales Datum — das UTC-Datum ist zwischen 0 und 2 Uhr noch gestern.
+function todayIso() { return localIsoDate() }
 
-const STEPS = ['Init', 'Details', 'Beträge', 'Buchen']
-
-// StepIndicator liegt jetzt in components/ui/StepIndicator.tsx (war hier lokal).
+// Vorher: 'Init', 'Details', 'Beträge', 'Buchen' — „Init" ist Programmierer-
+// sprache, und „Buchen" verschwieg, dass man dort vor allem prueft.
+const STEPS = ['Projekt & Vertrag', 'Rechnungsdaten', 'Beträge', 'Prüfen & buchen']
+const STEP_HELP = ['invoice.abschlag.projekt_vertrag', 'invoice.abschlag.rechnungsdaten', 'invoice.abschlag.betraege', 'invoice.abschlag.pruefen'] as const
 
 interface DraftResume { id: number; projectId: number | null; contractId: number | null; projectLabel: string; contractLabel: string; d1Pct: number; d2Pct: number; d1Reason: string | null; d2Reason: string | null; cashDiscPct: number; cashDiscDays: number }
 
-export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectLabel, onPrefillConsumed }: {
+const r2 = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * Abschlagsrechnung (UI-Pilot 2026-09).
+ *
+ * Vorher: vier gleich breite Knoepfe unter jedem Schritt (Abbrechen, das den
+ * Entwurf loeschte, stand gleichrangig neben „Jetzt buchen"), die Leiste
+ * scrollte mit weg, „Jetzt buchen" wirkte ohne Rueckfrage und ohne Recht,
+ * und zwei Fehler kosteten Daten: Neuladen loeschte den Entwurf, und ein
+ * fortgesetzter Entwurf ueberschrieb Rechnungsdaten und E-Rechnungsfelder
+ * (Leitweg-ID, Bestellnummer) mit leeren Werten, weil sie nie geladen wurden.
+ *
+ * Jetzt:
+ *  - Schritte mit sprechenden Namen, auf dem Handy „Schritt 2 von 4";
+ *  - eine feste Aktionsleiste: links Abbrechen, rechts Zurueck ·
+ *    Entwurf speichern · Weiter bzw. Jetzt buchen (als einzige gefuellt);
+ *  - Fortsetzen laedt den ganzen Entwurf vom Server (`resumeId`, auch nach
+ *    Neuladen ueber `?draftId=` in der URL);
+ *  - Buchen nur mit `invoices.book` und nach Bestaetigung; PDF/XML nur mit
+ *    den jeweiligen Rechten;
+ *  - Abbrechen fragt bei einem neuen Entwurf, ob er bleiben soll.
+ */
+export function AbschlagWizard({ resumeId, initialDraft, initialProjectId, initialProjectLabel, onPrefillConsumed, onDraftCreated, onExit }: {
+  resumeId?: number
+  /** Veraltet: Entwurf aus der Liste — es zaehlt nur die ID, geladen wird vom Server. */
   initialDraft?: DraftResume
   initialProjectId?: number
   initialProjectLabel?: string
   onPrefillConsumed?: () => void
+  /** Neuer Entwurf angelegt — die Seite schreibt die ID in die URL. */
+  onDraftCreated?: (id: number) => void
+  /** Zurueck zur Rechnungsliste (nach Buchen oder Abbrechen). */
+  onExit?: () => void
 } = {}) {
-  const qc = useQueryClient()
+  const qc     = useQueryClient()
+  const toast  = useToast()
+  const narrow = useIsNarrow()
+  const canBook   = usePermission('invoices.book')
+  const canPdf    = usePermission('invoices.download_pdf')
+  const canXml    = usePermission('invoices.download_xml')
+  const canDelete = usePermission('invoices.delete')
+  const resumeTarget = resumeId ?? initialDraft?.id ?? null
+
   const [step,         setStep]         = useState(0)
   const [draftId,      setDraftId]      = useState<number | null>(null)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-  const isResumeRef = useRef(false)
+  const [origin]                        = useState<'new' | 'resumed'>(resumeTarget ? 'resumed' : 'new')
+  const [savedExplicitly, setSavedExplicitly] = useState(false)
+  const [leaveOpen,    setLeaveOpen]    = useState(false)
+  const [bookOpen,     setBookOpen]     = useState(false)
+  const [loadingResume, setLoadingResume] = useState(!!resumeTarget)
 
   // Step 0 fields
   const [projectId,    setProjectId]    = useState<number | null>(null)
@@ -56,16 +105,15 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
   const [contractLabel, setContractLabel] = useState('')
   const [contractsForProject, setContractsForProject] = useState<Array<{ ID: number; ABBR: string; NAME: string }>>([])
   const [employeeId,   setEmployeeId]   = useState(() => String(useAuthStore.getState().employeeId ?? ''))
+  const [changeEmployee, setChangeEmployee] = useState(false)
 
   // Step 1 fields
   const [detDate,  setDetDate]  = useState(todayIso())
   // Fälligkeit folgt der Vorbelegung „Zahlungsziel" (Einstellungen → Vorbelegungen).
-  const [dueDate, setDueDate, resetDueDate, paymentTermDays] = useDueDatePreset(detDate)
+  const [dueDate, setDueDate, , paymentTermDays] = useDueDatePreset(detDate)
   const [bpStart,  setBpStart]  = useState('')
   const [bpFinish, setBpFinish] = useState('')
   const [comment,  setComment]  = useState('')
-  // E-Rechnungs-Felder
-  const [showEinvoice,  setShowEinvoice]  = useState(false)
   // Zahlungsart (BT-81). Der Entwurf traegt die Vorbelegung schon aus dem
   // Backend; hier wird sie nur angezeigt, damit die Auswahl nicht leer
   // aussieht und ein Absenden sie nicht ueberschreibt.
@@ -107,11 +155,12 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
   const draftIdRef = useRef<number | null>(null)
   useEffect(() => { draftIdRef.current = draftId }, [draftId])
 
-  // Resume existing draft passed from the invoice list
+  // Fortsetzen: den ganzen Entwurf vom Server holen. Vorher kamen nur
+  // Projekt, Vertrag, Nachlaesse und Skonto aus der Liste mit — Schritt 1
+  // schickte dann das heutige Datum und leere E-Rechnungsfelder zurueck und
+  // ueberschrieb, was gespeichert war.
   useEffect(() => {
-    if (!initialDraft) {
-      // Kein Draft zum Resumen — aber evtl. Project-Vorbelegung aus
-      // "Abrechenbare Projekte" oder aehnlichem
+    if (!resumeTarget) {
       if (initialProjectId && initialProjectLabel) {
         setProjectId(initialProjectId)
         setProjectLabel(initialProjectLabel)
@@ -119,24 +168,45 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
       }
       return
     }
-    isResumeRef.current = true
-    setDraftId(initialDraft.id)
-    setProjectId(initialDraft.projectId)
-    setProjectLabel(initialDraft.projectLabel)
-    setContractId(initialDraft.contractId)
-    setContractLabel(initialDraft.contractLabel)
-    if (initialDraft.d1Pct > 0) { setShowDiscounts(true); setD1Pct(String(initialDraft.d1Pct)) }
-    if (initialDraft.d2Pct > 0) setD2Pct(String(initialDraft.d2Pct))
-    if (initialDraft.d1Reason) setD1Reason(initialDraft.d1Reason)
-    if (initialDraft.d2Reason) setD2Reason(initialDraft.d2Reason)
-    if (initialDraft.cashDiscPct > 0) { setShowSkonto(true); setCashDiscPct(String(initialDraft.cashDiscPct)) }
-    if (initialDraft.cashDiscDays > 0) setCashDiscDays(String(initialDraft.cashDiscDays))
-    // Reopened drafts start at step 1 (Rechnungsdetails) — proposal is loaded
-    // in the background so the wizard can advance through all steps with data
-    // already prefilled, instead of jumping to "Buchen".
-    getPpBillingProposal(initialDraft.id)
-      .then(r => { setProposal(r.data); setStep(1) })
-      .catch(() => setStep(1))
+    let cancelled = false
+    Promise.all([getPartialPayment(resumeTarget), getPpBillingProposal(resumeTarget).catch(() => null)])
+      .then(([res, prop]) => {
+        if (cancelled) return
+        const { pp, project, contract } = res.data
+        const label = (x?: { ABBR: string | null; NAME: string | null } | null) =>
+          x ? [x.ABBR, x.NAME].filter(Boolean).join(' – ') : ''
+        if (pp.STATUS_ID !== 1) {
+          setMsg({ text: 'Diese Abschlagsrechnung ist bereits gebucht und lässt sich nicht mehr bearbeiten.', type: 'error' })
+          setLoadingResume(false)
+          return
+        }
+        setDraftId(pp.ID)
+        setProjectId(pp.PROJECT_ID); setProjectLabel(label(project) || initialDraft?.projectLabel || '')
+        setContractId(pp.CONTRACT_ID); setContractLabel(label(contract) || initialDraft?.contractLabel || '')
+        if (pp.ADVANCE_INVOICE_DATE) setDetDate(pp.ADVANCE_INVOICE_DATE.slice(0, 10))
+        if (pp.DUE_DATE) setDueDate(pp.DUE_DATE.slice(0, 10))
+        setBpStart(pp.BILLING_PERIOD_START?.slice(0, 10) ?? '')
+        setBpFinish(pp.BILLING_PERIOD_FINISH?.slice(0, 10) ?? '')
+        setComment(pp.COMMENT ?? '')
+        setBuyerRef(pp.BUYER_REFERENCE ?? '')
+        setOrderRef(pp.BUYER_ORDER_REFERENCE ?? '')
+        setAccountingRef(pp.BUYER_ACCOUNTING_REFERENCE ?? '')
+        setRemittance(pp.REMITTANCE_INFORMATION ?? '')
+        if (pp.VAT_CATEGORY) setVatCategory(pp.VAT_CATEGORY)
+        setVatExemptCode(pp.VAT_EXEMPTION_REASON_CODE ?? '')
+        setVatExemptText(pp.VAT_EXEMPTION_REASON_TEXT ?? '')
+        if ((pp.DISCOUNT_1_PERCENT ?? 0) > 0) { setShowDiscounts(true); setD1Pct(String(pp.DISCOUNT_1_PERCENT)) }
+        if ((pp.DISCOUNT_2_PERCENT ?? 0) > 0) setD2Pct(String(pp.DISCOUNT_2_PERCENT))
+        setD1Reason(pp.DISCOUNT_1_REASON ?? ''); setD2Reason(pp.DISCOUNT_2_REASON ?? '')
+        if ((pp.CASH_DISCOUNT_PERCENT ?? 0) > 0) { setShowSkonto(true); setCashDiscPct(String(pp.CASH_DISCOUNT_PERCENT)) }
+        if ((pp.CASH_DISCOUNT_DAYS ?? 0) > 0) setCashDiscDays(String(pp.CASH_DISCOUNT_DAYS))
+        if (pp.SE_PERCENT != null) { setSeEnabled(true); setSePct(String(pp.SE_PERCENT)); setSeBasis(pp.SE_BASIS === 'NETTO' ? 'NETTO' : 'BRUTTO') }
+        if (prop) setProposal(prop.data)
+        setStep(1)
+        setLoadingResume(false)
+      })
+      .catch((e: Error) => { if (!cancelled) { setMsg({ text: e.message, type: 'error' }); setLoadingResume(false) } })
+    return () => { cancelled = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -147,18 +217,14 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
   // Cache contract SE defaults for pre-population
   const contractSeRef = useRef<Map<number, { enabled: boolean; pct: number | null; basis: 'BRUTTO' | 'NETTO' }>>(new Map())
 
-  // Show browser "leave?" dialog and delete draft when user closes/reloads
+  // Beim Schliessen/Neuladen nur nachfragen, nichts loeschen. Frueher ging
+  // hier sofort ein DELETE raus — noch vor der Antwort auf die Rueckfrage,
+  // und auch bei einem fortgesetzten Entwurf.
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
-      const id = draftIdRef.current
-      if (!id) return
+      if (!draftIdRef.current) return
       e.preventDefault()
       e.returnValue = ''
-      const token = useAuthStore.getState().token
-      fetch(`${API_BASE}/partial-payments/${id}`, {
-        method: 'DELETE', keepalive: true,
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
@@ -180,6 +246,8 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
           basis:   (c.SE_BASIS === 'NETTO' ? 'NETTO' : 'BRUTTO') as 'BRUTTO' | 'NETTO',
         })
       })
+      // Beim Fortsetzen steht der Vertrag schon fest — nicht ueberschreiben.
+      if (draftIdRef.current) return
       if (list.length === 1) {
         setContractId(list[0].ID)
         setContractLabel(`${list[0].ABBR} – ${list[0].NAME}`)
@@ -198,12 +266,72 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
 
   const { data: empData } = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const employees = empData?.data ?? []
+  const employee  = employees.find(e => String(e.ID) === employeeId)
+
+  // ── Berechnung Schritt 4 (eine Stelle statt dreier Kopien) ─────────────────
+  function totals() {
+    const base = proposal?.total_amount_net ?? 0
+    const vatPct = Number(proposal?.vat_percent ?? 0)
+    const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
+    const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
+    const d1Amt = r2(base * d1 / 100)
+    const d2Amt = r2((base - d1Amt) * d2 / 100)
+    const totalDisc = r2(d1Amt + d2Amt)
+    const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
+    const cdDays = showSkonto ? (Number(cashDiscDays) || 0) : 0
+    const cdAmt  = r2((base - totalDisc) * cdPct / 100)
+    const netAfter   = r2(base - totalDisc - cdAmt)
+    const taxAfter   = r2(netAfter * vatPct / 100)
+    const grossAfter = r2(netAfter + taxAfter)
+    const sePctNum   = seEnabled ? (Number(sePct) || 0) : 0
+    const seBasisAmt = seEnabled ? (seBasis === 'BRUTTO' ? grossAfter : netAfter) : 0
+    const seAmt      = r2(seBasisAmt * sePctNum / 100)
+    const payable    = r2(grossAfter - seAmt)
+    return { base, vatPct, d1, d2, d1Amt, d2Amt, totalDisc, cdPct, cdDays, cdAmt, netAfter, taxAfter, grossAfter, sePctNum, seBasisAmt, seAmt, payable }
+  }
+
+  function step3Body() {
+    const t = totals()
+    return {
+      discount_1_percent:    showDiscounts ? t.d1 : 0,
+      discount_1_reason:     showDiscounts ? (d1Reason.trim() || null) : null,
+      discount_2_percent:    showDiscounts ? t.d2 : 0,
+      discount_2_reason:     showDiscounts ? (d2Reason.trim() || null) : null,
+      total_discounts:       showDiscounts ? t.totalDisc : 0,
+      cash_discount_percent: showSkonto ? t.cdPct : 0,
+      cash_discount_days:    showSkonto ? t.cdDays : 0,
+      cash_discount_amount:  showSkonto ? t.cdAmt : 0,
+      se_percent:            seEnabled ? t.sePctNum : null,
+      se_basis:              seEnabled ? seBasis : null,
+      se_basis_amt:          seEnabled ? t.seBasisAmt : null,
+      se_amount:             seEnabled ? t.seAmt : null,
+    }
+  }
+
+  function step1Body() {
+    return {
+      advance_invoice_date:  detDate  || undefined,
+      due_date:              dueDate  || undefined,
+      billing_period_start:  bpStart  || undefined,
+      billing_period_finish: bpFinish || undefined,
+      comment:               comment  || undefined,
+      // E-Rechnungs-Felder
+      buyer_reference:             buyerRef.trim()      || null,
+      buyer_order_reference:       orderRef.trim()      || null,
+      buyer_accounting_reference:  accountingRef.trim() || null,
+      remittance_information:      remittance.trim()    || null,
+      ...(paymentMeansId ? { payment_means_id: Number(paymentMeansId) } : {}),
+      vat_category:                vatCategory,
+      vat_exemption_reason_code:   vatExemptCode.trim() || null,
+      vat_exemption_reason_text:   vatExemptText.trim() || null,
+    }
+  }
 
   // ── mutations ────────────────────────────────────────────────────────────────
 
   const initMut = useMutation({
     mutationFn: initPartialPayment,
-    onSuccess: async (res) => { setDraftId(res.id); setMsg(null); setStep(1) },
+    onSuccess: async (res) => { setDraftId(res.id); onDraftCreated?.(res.id); setMsg(null); setStep(1) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -218,7 +346,10 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
       setPerfInput(prev => prev !== '' ? prev : String(prop.data.performance_amount ?? ''))
       setTecList(tec.data)
       setHasBt2(tec.hasBt2 ?? tec.data.length > 0)
-      setSelected(prev => prev.size > 0 ? prev : new Set(tec.data.map(t => t.ID)))
+      // Ein fortgesetzter Entwurf behaelt seine Auswahl; ohne Zuordnung ist
+      // wie bisher alles vorgewaehlt.
+      const assigned = tec.data.filter(t => t.ASSIGNED)
+      setSelected(prev => prev.size > 0 ? prev : new Set((assigned.length ? assigned : tec.data).map(t => t.ID)))
       setStep(2)
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -239,44 +370,18 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
 
   const bookMut = useMutation({
     mutationFn: async (id: number) => {
-      const d1 = Number(d1Pct) || 0
-      const d2 = Number(d2Pct) || 0
-      const base = proposal?.total_amount_net ?? 0
-      const d1Amt = Math.round(base * d1 / 100 * 100) / 100
-      const d2Amt = Math.round((base - d1Amt) * d2 / 100 * 100) / 100
-      const totalDiscounts = Math.round((d1Amt + d2Amt) * 100) / 100
-      const cdPct = Number(cashDiscPct) || 0
-      const cdDays = Number(cashDiscDays) || 0
-      const cdAmt = Math.round((base - totalDiscounts) * cdPct / 100 * 100) / 100
-      const netAfter = Math.round((base - totalDiscounts - cdAmt) * 100) / 100
-      const vatPct = Number(proposal?.vat_percent ?? 0)
-      const taxAfter = Math.round(netAfter * vatPct / 100 * 100) / 100
-      const grossAfter = Math.round((netAfter + taxAfter) * 100) / 100
-      const sePctNum = seEnabled ? (Number(sePct) || 0) : 0
-      const seBasisAmt = seEnabled ? (seBasis === 'BRUTTO' ? grossAfter : netAfter) : 0
-      const seAmt = Math.round(seBasisAmt * sePctNum / 100 * 100) / 100
-      await patchPartialPayment(id, {
-        discount_1_percent:   showDiscounts ? d1 : 0,
-        discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
-        discount_2_percent:   showDiscounts ? d2 : 0,
-        discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
-        total_discounts:      showDiscounts ? totalDiscounts : 0,
-        cash_discount_percent: showSkonto ? cdPct : 0,
-        cash_discount_days:    showSkonto ? cdDays : 0,
-        cash_discount_amount:  showSkonto ? cdAmt : 0,
-        se_percent:           seEnabled ? sePctNum : null,
-        se_basis:             seEnabled ? seBasis : null,
-        se_basis_amt:         seEnabled ? seBasisAmt : null,
-        se_amount:            seEnabled ? seAmt : null,
-      })
+      await patchPartialPayment(id, step3Body())
       return bookPartialPayment(id)
     },
-    onSuccess: (res) => {
+    onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['partial-payments'] })
-      setMsg({ text: `Abschlagsrechnung ${res.success ? 'gebucht ✅' : ''}`, type: 'success' })
-      resetAll()
+      setBookOpen(false)
+      toast.success('Abschlagsrechnung gebucht')
+      draftIdRef.current = null
+      onExit?.()
     },
     onError: (e: Error) => {
+      setBookOpen(false)
       if (e instanceof ApiRequestError && e.status === 422) {
         const details = e.details as { validation?: ValidationResult } | undefined
         if (details?.validation) {
@@ -301,40 +406,39 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['partial-payments'] })
       setValidationOpen(false)
-      setMsg({ text: 'Abschlagsrechnung notgebucht ⚠️', type: 'success' })
-      resetAll()
+      toast.success('Abschlagsrechnung trotz Hinweisen gebucht')
+      draftIdRef.current = null
+      onExit?.()
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
   const deleteMut = useMutation({
     mutationFn: deletePartialPayment,
-    onSuccess: () => resetAll(),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+      draftIdRef.current = null
+      toast.success('Entwurf gelöscht')
+      onExit?.()
+    },
     onError:   (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
   // ── helpers ──────────────────────────────────────────────────────────────────
 
-  function resetAll() {
-    setStep(0); setDraftId(null); setProjectId(null); setProjectLabel('')
-    setCompanyId(null); setContractId(null); setContractLabel(''); setContractsForProject([])
-    setEmployeeId('')
-    setDetDate(todayIso()); resetDueDate(); setBpStart(''); setBpFinish(''); setComment('')
-    setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false)
-    setShowDiscounts(false); setD1Pct(''); setD2Pct(''); setShowSkonto(false); setCashDiscPct(''); setCashDiscDays(''); setSeEnabled(false); setSePct(''); setSeBasis('BRUTTO')
-    setMsg(null)
+  function leave() {
+    if (draftId) {
+      draftIdRef.current = null
+      toast.info('Der Entwurf bleibt in der Rechnungsliste.')
+    }
+    onExit?.()
   }
 
+  // Abbrechen: ein neuer, nie gespeicherter Entwurf fragt, ob er bleiben
+  // soll — sonst geht es ohne Rueckfrage zur Liste, der Entwurf bleibt.
   function handleCancel() {
-    if (isResumeRef.current) {
-      setConfirmState({ title: 'Wizard abbrechen', message: 'Bearbeitung abbrechen?', onConfirm: resetAll })
-    } else {
-      setConfirmState({
-        title: 'Entwurf löschen',
-        message: 'Entwurf wirklich löschen und Wizard abbrechen?',
-        onConfirm: () => { if (draftId) deleteMut.mutate(draftId); else resetAll() },
-      })
-    }
+    if (draftId && origin === 'new' && !savedExplicitly) { setLeaveOpen(true); return }
+    leave()
   }
 
   function goToStep(i: number) {
@@ -349,9 +453,9 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
 
   function submitStep0() {
     setMsg(null)
-    if (!projectId || !contractId || !employeeId) {
-      setMsg({ text: 'Bitte alle Felder ausfüllen', type: 'error' }); return
-    }
+    if (!projectId)  { setMsg({ text: 'Wähle ein Projekt.', type: 'error' }); return }
+    if (!contractId) { setMsg({ text: 'Wähle einen Vertrag.', type: 'error' }); return }
+    if (!employeeId) { setMsg({ text: 'Wähle, wer die Rechnung erstellt.', type: 'error' }); return }
     if (draftId) { setStep(1); return }
     initMut.mutate({
       company_id: companyId ?? 0, employee_id: Number(employeeId),
@@ -362,51 +466,118 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
   function submitStep1() {
     if (!draftId) return
     setMsg(null)
-    patchMut.mutate({ id: draftId, body: {
-      advance_invoice_date:  detDate  || undefined,
-      due_date:              dueDate  || undefined,
-      billing_period_start:  bpStart  || undefined,
-      billing_period_finish: bpFinish || undefined,
-      comment:               comment  || undefined,
-      // E-Rechnungs-Felder
-      buyer_reference:             buyerRef.trim()      || null,
-      buyer_order_reference:       orderRef.trim()      || null,
-      buyer_accounting_reference:  accountingRef.trim() || null,
-      remittance_information:      remittance.trim()    || null,
-      ...(paymentMeansId ? { payment_means_id: Number(paymentMeansId) } : {}),
-      vat_category:                vatCategory,
-      vat_exemption_reason_code:   vatExemptCode.trim() || null,
-      vat_exemption_reason_text:   vatExemptText.trim() || null,
-    }})
+    patchMut.mutate({ id: draftId, body: step1Body() })
+  }
+
+  async function saveStep2() {
+    if (!draftId) return
+    await perfMut.mutateAsync({ id: draftId, amount: Number(perfInput) })
+    if (hasBt2) {
+      const orig = new Set(tecList.filter(t => t.ASSIGNED).map(t => t.ID))
+      const ids_assign   = tecList.filter(t =>  selected.has(t.ID) && !orig.has(t.ID)).map(t => t.ID)
+      const ids_unassign = tecList.filter(t => !selected.has(t.ID) &&  orig.has(t.ID)).map(t => t.ID)
+      await tecMut.mutateAsync({ id: draftId, body: { ids_assign, ids_unassign } })
+      setTecList(prev => prev.map(t => ({ ...t, ASSIGNED: selected.has(t.ID) })))
+    }
   }
 
   async function handleWeiterStep2() {
     setMsg(null)
+    try { await saveStep2(); setStep(3) } catch { /* onError handlers set msg */ }
+  }
+
+  const [savingDraft, setSavingDraft] = useState(false)
+  async function saveDraft() {
     if (!draftId) return
+    setSavingDraft(true); setMsg(null)
     try {
-      await perfMut.mutateAsync({ id: draftId, amount: Number(perfInput) })
-      if (hasBt2) {
-        const orig = new Set(tecList.filter(t => t.ASSIGNED).map(t => t.ID))
-        const ids_assign   = tecList.filter(t =>  selected.has(t.ID) && !orig.has(t.ID)).map(t => t.ID)
-        const ids_unassign = tecList.filter(t => !selected.has(t.ID) &&  orig.has(t.ID)).map(t => t.ID)
-        await tecMut.mutateAsync({ id: draftId, body: { ids_assign, ids_unassign } })
-      }
-      setStep(3)
-    } catch { /* onError handlers set msg */ }
+      if (step === 1) await patchPartialPayment(draftId, step1Body())
+      if (step === 2) await saveStep2()
+      if (step === 3) await patchPartialPayment(draftId, step3Body())
+      setSavedExplicitly(true)
+      void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+      toast.success('Entwurf gespeichert')
+    } catch (e) {
+      setMsg({ text: (e as Error).message, type: 'error' })
+    } finally {
+      setSavingDraft(false)
+    }
+  }
+
+  async function previewPdf() {
+    if (!draftId) return
+    await patchPartialPayment(draftId, step3Body())
+    openPpPdf(draftId)
   }
 
   const singleContract = contractsForProject.length === 1
+  const busy = initMut.isPending || patchMut.isPending || perfMut.isPending || tecMut.isPending || bookMut.isPending || savingDraft
+  const einvoiceFilled = [buyerRef, orderRef, accountingRef, remittance].filter(v => v.trim()).length + (vatCategory !== 'S' ? 1 : 0)
+
+  // ── Aktionsleiste ───────────────────────────────────────────────────────────
+
+  function primaryAction() {
+    if (step === 0) return { label: initMut.isPending ? 'Legt Entwurf an …' : 'Weiter', run: submitStep0, icon: ChevronRight }
+    if (step === 1) return { label: patchMut.isPending ? 'Speichert …' : 'Weiter', run: submitStep1, icon: ChevronRight }
+    if (step === 2) return { label: perfMut.isPending || tecMut.isPending ? 'Speichert …' : 'Weiter', run: () => void handleWeiterStep2(), icon: ChevronRight }
+    if (canBook)    return { label: 'Jetzt buchen', run: () => setBookOpen(true), icon: Check }
+    return { label: savingDraft ? 'Speichert …' : 'Entwurf speichern', run: () => void saveDraft(), icon: Check }
+  }
+  const primary = primaryAction()
+  const PrimaryIcon = primary.icon
+  const showDraftSave = step >= 1 && !(step === 3 && !canBook)
+
+  const actionBar = (
+    <ActionBar
+      status={step >= 1 && draftId ? (savedExplicitly ? 'Entwurf gespeichert' : 'Entwurf – noch nicht gebucht') : undefined}
+      secondary={narrow ? (
+        step >= 1 ? (
+          <RowMenu label="Weitere Aktionen" triggerClassName="btn-secondary iw-more">
+            {showDraftSave && <button type="button" role="menuitem" className="row-menu-item" onClick={() => void saveDraft()}>Entwurf speichern</button>}
+            {step === 3 && canPdf && <button type="button" role="menuitem" className="row-menu-item" onClick={() => void previewPdf()}>PDF-Vorschau</button>}
+            <button type="button" role="menuitem" className="row-menu-item" onClick={handleCancel}>Abbrechen</button>
+          </RowMenu>
+        ) : <button type="button" className="btn-secondary" onClick={handleCancel}>Abbrechen</button>
+      ) : (
+        <button type="button" className="btn-secondary" onClick={handleCancel} disabled={busy}>Abbrechen</button>
+      )}
+    >
+      {step >= 1 && (
+        <button type="button" className="btn-secondary" onClick={() => goToStep(step - 1)} disabled={busy}>
+          <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" /> Zurück
+        </button>
+      )}
+      {!narrow && showDraftSave && (
+        <button type="button" className="btn-secondary" onClick={() => void saveDraft()} disabled={busy}>
+          {savingDraft ? 'Speichert …' : 'Entwurf speichern'}
+        </button>
+      )}
+      <button type="button" className="btn-primary" onClick={primary.run} disabled={busy || loadingResume}>
+        {primary.label} <PrimaryIcon size={15} strokeWidth={2.25} aria-hidden="true" />
+      </button>
+    </ActionBar>
+  )
 
   // ── render ───────────────────────────────────────────────────────────────────
 
-  return (
-    <div className="wizard-wrap">
-      <StepIndicator steps={STEPS} current={step} onStepClick={i => void goToStep(i)} />
+  if (loadingResume) {
+    return <div className="iw-root"><p className="empty-note">Lade Entwurf …</p></div>
+  }
 
-      {/* Step 0: Init */}
+  const stepTitle = (
+    <p className="wizard-step-title iw-step-title">
+      {STEPS[step]} <HelpHint id={STEP_HELP[step]} />
+    </p>
+  )
+
+  return (
+    <div className="wizard-wrap iw-root">
+      <StepIndicator steps={STEPS} current={step} onStepClick={i => void goToStep(i)} compactOnMobile />
+
+      {/* Schritt 1: Projekt & Vertrag */}
       {step === 0 && (
-        <div className="wizard-step-content">
-          <p className="wizard-step-title">Projekt & Vertrag wählen</p>
+        <div className="wizard-step-content iw-form">
+          {stepTitle}
           <Autocomplete
             label="Projekt*" htmlId="pp-project"
             value={projectLabel}
@@ -430,8 +601,9 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
           />
           {singleContract ? (
             <div className="form-group">
-              <label>Vertrag</label>
-              <input readOnly value={contractLabel} style={{ background: 'var(--dim)' }} />
+              <label htmlFor="pp-contract-ro">Vertrag</label>
+              <input id="pp-contract-ro" readOnly value={contractLabel} className="iw-readonly" />
+              <p className="form-field-hint">Das Projekt hat nur diesen Vertrag.</p>
             </div>
           ) : (
             <Autocomplete
@@ -469,32 +641,34 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
               placeholder={projectId ? 'Vertrag suchen …' : 'Erst Projekt wählen'}
             />
           )}
-          <div className="form-group">
-            <label>Mitarbeiter*</label>
-            <select value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
-              <option value="">Bitte wählen …</option>
-              {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
-            </select>
-          </div>
+          {changeEmployee ? (
+            <div className="form-group">
+              <label htmlFor="pp-emp">Erstellt von*</label>
+              <select id="pp-emp" value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
+                <option value="">Bitte wählen …</option>
+                {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
+              </select>
+            </div>
+          ) : (
+            <p className="iw-byline">
+              Erstellt von: <strong>{employee ? `${employee.FIRST_NAME} ${employee.LAST_NAME}` : '—'}</strong>
+              {' '}<button type="button" className="link-btn" onClick={() => setChangeEmployee(true)}>ändern</button>
+            </p>
+          )}
           <Message text={msg?.text ?? null} type={msg?.type} />
-          <div className="wizard-nav">
-            <button className="btn-primary" onClick={submitStep0} disabled={initMut.isPending}>
-              {initMut.isPending ? 'Erstelle …' : 'Weiter'}
-            </button>
-          </div>
         </div>
       )}
 
-      {/* Step 1: Details */}
+      {/* Schritt 2: Rechnungsdaten */}
       {step === 1 && (
-        <div className="wizard-step-content">
-          <p className="wizard-step-title">Rechnungsdetails</p>
+        <div className="wizard-step-content iw-form">
+          {stepTitle}
           <div className="form-row">
-            <FormField label="Datum"            id="ppd"  type="date" value={detDate}  onChange={e => setDetDate(e.target.value)} />
+            <FormField label="Rechnungsdatum" id="ppd"  type="date" value={detDate}  onChange={e => setDetDate(e.target.value)} />
             <FormField
-              label="Fälligkeitsdatum" id="ppdd" type="date"
+              label="Fällig am" id="ppdd" type="date"
               value={dueDate} onChange={e => setDueDate(e.target.value)}
-              hint={paymentTermDays !== null ? `Zahlungsziel: ${paymentTermDays} Kalendertage ab Rechnungsdatum` : undefined}
+              hint={paymentTermDays !== null ? `Zahlungsziel: ${paymentTermDays} Tage ab Rechnungsdatum` : undefined}
             />
           </div>
           <div className="form-row">
@@ -502,195 +676,146 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
             <FormField label="bis"                   id="ppbf" type="date" value={bpFinish} onChange={e => setBpFinish(e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Kommentar</label>
-            <textarea rows={2} value={comment} onChange={e => setComment(e.target.value)}
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15 }} />
+            <label htmlFor="pp-comment">Kommentar (erscheint auf der Rechnung)</label>
+            <textarea id="pp-comment" className="iw-textarea" rows={2} value={comment} onChange={e => setComment(e.target.value)} />
           </div>
 
           {/* E-Rechnungs-Felder (BT-10/13/19/83) */}
-          <div style={{ marginTop: 12, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
-            <button type="button" onClick={() => setShowEinvoice(s => !s)}
-              style={{ background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-2)', padding: 0 }}>
-              {showEinvoice ? '▼' : '▶'} E-Rechnungs-Detailfelder
-            </button>
-            {showEinvoice && (
-              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <FormField label="Käuferreferenz / Leitweg-ID" id="pp-buyer-ref"
-                  value={buyerRef} onChange={e => setBuyerRef(e.target.value)} />
-                <FormField label="Bestellnummer des Käufers" id="pp-order-ref"
-                  value={orderRef} onChange={e => setOrderRef(e.target.value)} />
-                <FormField label="Kostenstelle" id="pp-acc-ref"
-                  value={accountingRef} onChange={e => setAccountingRef(e.target.value)} />
-                <div className="form-group">
-                  <label htmlFor="pp-paymeans">Zahlungsart</label>
-                  <select id="pp-paymeans" value={paymentMeansId} onChange={e => setPmGewaehlt(e.target.value)}
-                    style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', width: '100%' }}>
-                    <option value="">— keine Angabe —</option>
-                    {paymentMeansList.map(pm => <option key={pm.ID} value={pm.ID}>{pm.NAME}</option>)}
-                  </select>
-                </div>
-                <FormField label="Verwendungszweck" id="pp-remit"
-                  value={remittance} onChange={e => setRemittance(e.target.value)} />
-
-                <div className="form-group">
-                  <label>Umsatzsteuer-Kategorie</label>
-                  <select value={vatCategory} onChange={e => setVatCategory(e.target.value as VatCategory)}
-                    style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border)', width: '100%' }}>
-                    {(Object.keys(VAT_CATEGORY_LABELS) as VatCategory[]).map(k => (
-                      <option key={k} value={k}>{VAT_CATEGORY_LABELS[k]}</option>
-                    ))}
-                  </select>
-                </div>
-                {vatCategory !== 'S' && (
-                  <>
-                    <FormField label="Begründung Code (optional)" id="pp-exempt-code"
-                      value={vatExemptCode} onChange={e => setVatExemptCode(e.target.value)} />
-                    <div className="form-group">
-                      <label>Begründungstext</label>
-                      <textarea rows={2} value={vatExemptText} onChange={e => setVatExemptText(e.target.value)}
-                        placeholder="Leer lassen für Standardtext"
-                        style={{ width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13 }} />
-                    </div>
-                  </>
-                )}
-
-                <p style={{ fontSize: 11, color: 'var(--text-3)', margin: 0 }}>
-                  Optional. Leitweg-ID nur bei öffentlichen Auftraggebern.
-                </p>
+          <Disclosure
+            title="E-Rechnungs-Detailfelder"
+            help={<HelpHint id="einvoice.detailfelder" />}
+            hint={einvoiceFilled ? `${einvoiceFilled} ausgefüllt` : 'optional'}
+            defaultOpen={einvoiceFilled > 0}
+          >
+            <div className="iw-einvoice">
+              <FormField label="Käuferreferenz / Leitweg-ID" id="pp-buyer-ref"
+                value={buyerRef} onChange={e => setBuyerRef(e.target.value)}
+                hint="Nur bei öffentlichen Auftraggebern Pflicht." />
+              <FormField label="Bestellnummer des Käufers" id="pp-order-ref"
+                value={orderRef} onChange={e => setOrderRef(e.target.value)} />
+              <FormField label="Kostenstelle" id="pp-acc-ref"
+                value={accountingRef} onChange={e => setAccountingRef(e.target.value)} />
+              <div className="form-group">
+                <label htmlFor="pp-paymeans">Zahlungsart</label>
+                <select id="pp-paymeans" value={paymentMeansId} onChange={e => setPmGewaehlt(e.target.value)}>
+                  <option value="">— keine Angabe —</option>
+                  {paymentMeansList.map(pm => <option key={pm.ID} value={pm.ID}>{pm.NAME}</option>)}
+                </select>
               </div>
-            )}
-          </div>
+              <FormField label="Verwendungszweck" id="pp-remit"
+                value={remittance} onChange={e => setRemittance(e.target.value)} />
+
+              <div className="form-group">
+                <label htmlFor="pp-vatcat">Umsatzsteuer-Kategorie</label>
+                <select id="pp-vatcat" value={vatCategory} onChange={e => setVatCategory(e.target.value as VatCategory)}>
+                  {(Object.keys(VAT_CATEGORY_LABELS) as VatCategory[]).map(k => (
+                    <option key={k} value={k}>{VAT_CATEGORY_LABELS[k]}</option>
+                  ))}
+                </select>
+              </div>
+              {vatCategory !== 'S' && (
+                <>
+                  <FormField label="Begründung Code (optional)" id="pp-exempt-code"
+                    value={vatExemptCode} onChange={e => setVatExemptCode(e.target.value)} />
+                  <div className="form-group">
+                    <label htmlFor="pp-exempt-text">Begründungstext</label>
+                    <textarea id="pp-exempt-text" className="iw-textarea" rows={2} value={vatExemptText} onChange={e => setVatExemptText(e.target.value)}
+                      placeholder="Leer lassen für Standardtext" />
+                  </div>
+                </>
+              )}
+            </div>
+          </Disclosure>
 
           <AnlagenSection base="partial-payments" docId={draftId} />
 
           <Message text={msg?.text ?? null} type={msg?.type} />
-          <div className="wizard-nav">
-            <button onClick={handleCancel}>Abbrechen</button>
-            <button onClick={() => void goToStep(0)}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
-            <button className="btn-primary" onClick={submitStep1} disabled={patchMut.isPending}>
-              {patchMut.isPending ? 'Speichert …' : 'Weiter'}
-            </button>
-          </div>
         </div>
       )}
 
-      {/* Step 2: Amounts */}
+      {/* Schritt 3: Beträge */}
       {step === 2 && (() => {
         const perfAmt        = perfInput !== '' ? Number(perfInput) : (proposal?.performance_amount ?? 0)
         const selectedTecSum = tecList.filter(t => selected.has(t.ID)).reduce((s, t) => s + (t.HOURLY_RATE_TOTAL ?? 0), 0)
         const liveNet        = perfAmt + selectedTecSum
         const vatFactor      = 1 + (proposal?.vat_percent ?? 0) / 100
         const liveGross      = liveNet * vatFactor
+        const suggested      = proposal?.performance_suggested ?? null
         return (
-          <div className="wizard-step-content">
-            <p className="wizard-step-title">Beträge & Leistungsnachweise</p>
+          <div className="wizard-step-content iw-form">
+            {stepTitle}
             {proposal && (
               <div className="billing-proposal-box">
-                <div className="bp-row"><span>Empfohlener Leistungsbetrag</span><strong>{money(proposal.performance_suggested)}</strong></div>
-                <div className="bp-row"><span>Leistungsbetrag (Netto)</span><strong>{money(perfAmt)}</strong></div>
-                {hasBt2 && <div className="bp-row"><span>Buchungen (ausgewählt)</span><strong>{money(selectedTecSum)}</strong></div>}
-                <div className="bp-row total"><span>Netto gesamt</span><strong>{money(liveNet)}</strong></div>
-                <div className="bp-row total"><span>Brutto gesamt</span><strong>{money(liveGross)}</strong></div>
+                <div className="bp-row">
+                  <span>Vorschlag aus dem Leistungsstand</span>
+                  <strong>{money(suggested)}</strong>
+                </div>
+                <div className="bp-row"><span>Leistungsbetrag (netto)</span><strong>{money(perfAmt)}</strong></div>
+                {hasBt2 && <div className="bp-row"><span>Buchungen nach Aufwand (ausgewählt)</span><strong>{money(selectedTecSum)}</strong></div>}
+                {/* Vorher „Netto gesamt" — die Nebenkosten rechnet der Server
+                    aber erst im naechsten Schritt dazu. */}
+                <div className="bp-row total"><span>Netto ohne Nebenkosten (vorläufig)</span><strong>{money(liveNet)}</strong></div>
+                <div className="bp-row"><span>Brutto ohne Nebenkosten (vorläufig)</span><strong>{money(liveGross)}</strong></div>
               </div>
             )}
-            <div style={{ marginTop: 12 }}>
-              <FormField label="Leistungsbetrag (Netto)" id="pppf" type="number"
-                value={perfInput} onChange={e => setPerfInput(e.target.value)} step="0.01" />
+            <div className="iw-perf">
+              <div className="form-group">
+                <label htmlFor="pppf">Leistungsbetrag (netto)</label>
+                <AmountInput id="pppf" value={perfInput} onChange={setPerfInput} />
+              </div>
+              {suggested != null && Number(perfInput) !== suggested && (
+                <button type="button" className="btn-secondary" onClick={() => setPerfInput(String(suggested))}>
+                  Vorschlag übernehmen ({fmtEur(suggested)})
+                </button>
+              )}
             </div>
             {hasBt2 && (
               <BuchungsauswahlTable tecList={tecList} selected={selected} setSelected={setSelected} />
             )}
             <Message text={msg?.text ?? null} type={msg?.type} />
-            <div className="wizard-nav">
-              <button onClick={handleCancel}>Abbrechen</button>
-              <button onClick={() => setStep(1)}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
-              <button className="btn-primary" onClick={handleWeiterStep2} disabled={perfMut.isPending || tecMut.isPending}>
-                {perfMut.isPending || tecMut.isPending ? 'Speichert …' : 'Weiter'}
-              </button>
-            </div>
           </div>
         )
       })()}
 
-      {/* Step 3: Book */}
+      {/* Schritt 4: Prüfen & buchen */}
       {step === 3 && (() => {
-        const base = proposal?.total_amount_net ?? 0
-        const vatPct = Number(proposal?.vat_percent ?? 0)
-        const d1 = showDiscounts ? (Number(d1Pct) || 0) : 0
-        const d2 = showDiscounts ? (Number(d2Pct) || 0) : 0
-        const d1Amt = Math.round(base * d1 / 100 * 100) / 100
-        const d2Amt = Math.round((base - d1Amt) * d2 / 100 * 100) / 100
-        const totalDisc = Math.round((d1Amt + d2Amt) * 100) / 100
-        const cdPct  = showSkonto ? (Number(cashDiscPct) || 0) : 0
-        const cdDays = showSkonto ? (Number(cashDiscDays) || 0) : 0
-        const cdAmt  = Math.round((base - totalDisc) * cdPct / 100 * 100) / 100
-        const netAfter = Math.round((base - totalDisc - cdAmt) * 100) / 100
-        // Sicherheitseinbehalt — calculated on Netto or Brutto AFTER discounts/skonto
-        const taxAfter   = Math.round(netAfter * vatPct / 100 * 100) / 100
-        const grossAfter = Math.round((netAfter + taxAfter) * 100) / 100
-        const sePctNum   = seEnabled ? (Number(sePct) || 0) : 0
-        const seBasisAmt = seEnabled ? (seBasis === 'BRUTTO' ? grossAfter : netAfter) : 0
-        const seAmt      = Math.round(seBasisAmt * sePctNum / 100 * 100) / 100
-        const payable    = Math.round((grossAfter - seAmt) * 100) / 100
-        async function saveDiscountsAndPreview() {
-          if (!draftId) return
-          await patchPartialPayment(draftId, {
-            discount_1_percent:   showDiscounts ? d1 : 0,
-            discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
-            discount_2_percent:   showDiscounts ? d2 : 0,
-            discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
-            total_discounts:      showDiscounts ? totalDisc : 0,
-            cash_discount_percent: showSkonto ? cdPct : 0,
-            cash_discount_days:    showSkonto ? cdDays : 0,
-            cash_discount_amount:  showSkonto ? cdAmt : 0,
-            se_percent:           seEnabled ? sePctNum : null,
-            se_basis:             seEnabled ? seBasis : null,
-            se_basis_amt:         seEnabled ? seBasisAmt : null,
-            se_amount:            seEnabled ? seAmt : null,
-          })
-          openPpPdf(draftId)
-        }
+        const t = totals()
         return (
-          <div className="wizard-step-content">
-            <p className="wizard-step-title">Abschlagsrechnung buchen</p>
+          <div className="wizard-step-content iw-form">
+            {stepTitle}
 
             {/* Discount section */}
-            <div style={{ background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', marginBottom: 16 }}>
-              <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Nachlässe und Skonto</p>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+            <div className="iw-discounts">
+              <p className="iw-section-title">Nachlässe, Skonto und Sicherheitseinbehalt</p>
+              <label className="iw-check">
                 <input type="checkbox" checked={showDiscounts} onChange={e => setShowDiscounts(e.target.checked)} />
                 Nachlässe angeben
               </label>
               {showDiscounts && (
-                <div style={{ paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <label style={{ fontSize: 13, minWidth: 80 }}>Nachlass I (%)</label>
-                    <input type="number" step="0.01" min="0" max="100" value={d1Pct}
-                      onChange={e => { setD1Pct(e.target.value); if (!e.target.value) { setD2Pct(''); setD2Reason('') } }}
-                      style={{ width: 90, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+                <div className="iw-sub">
+                  <div className="iw-line">
+                    <label htmlFor="pp-d1" className="iw-line-label">Nachlass I (%)</label>
+                    <input id="pp-d1" type="text" inputMode="decimal" className="iw-small" value={d1Pct}
+                      onChange={e => { const v = e.target.value.replace(',', '.'); setD1Pct(v); if (!v) { setD2Pct(''); setD2Reason('') } }}
                       placeholder="z. B. 3" />
-                    <input type="text" value={d1Reason} onChange={e => setD1Reason(e.target.value)}
-                      style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+                    <input type="text" aria-label="Bezeichnung Nachlass I" className="iw-grow" value={d1Reason} onChange={e => setD1Reason(e.target.value)}
                       placeholder="Bezeichnung (optional)" />
-                    {d1Pct && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>= {fmtEur(d1Amt)}</span>}
+                    {d1Pct && <span className="iw-amount">= {fmtEur(t.d1Amt)}</span>}
                   </div>
                   {d1Pct && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <label style={{ fontSize: 13, minWidth: 80 }}>Nachlass II (%)</label>
-                      <input type="number" step="0.01" min="0" max="100" value={d2Pct}
-                        onChange={e => setD2Pct(e.target.value)}
-                        style={{ width: 90, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
-                        placeholder="optional" />
-                      <input type="text" value={d2Reason} onChange={e => setD2Reason(e.target.value)}
-                        style={{ flex: 1, minWidth: 120, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
+                    <div className="iw-line">
+                      <label htmlFor="pp-d2" className="iw-line-label">Nachlass II (%)</label>
+                      <input id="pp-d2" type="text" inputMode="decimal" className="iw-small" value={d2Pct}
+                        onChange={e => setD2Pct(e.target.value.replace(',', '.'))} placeholder="optional" />
+                      <input type="text" aria-label="Bezeichnung Nachlass II" className="iw-grow" value={d2Reason} onChange={e => setD2Reason(e.target.value)}
                         placeholder="Bezeichnung (optional)" />
-                      {d2Pct && <span style={{ fontSize: 12, color: 'var(--text-3)' }}>= {fmtEur(d2Amt)}</span>}
+                      {d2Pct && <span className="iw-amount">= {fmtEur(t.d2Amt)}</span>}
                     </div>
                   )}
-                  {totalDisc > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Gesamt-Nachlass: <strong>{money(totalDisc)}</strong></div>}
                 </div>
               )}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
+              <div className="iw-check-row">
+              <label className="iw-check">
                 <input type="checkbox" checked={showSkonto} onChange={e => {
                   setShowSkonto(e.target.checked)
                   if (e.target.checked && contractId) {
@@ -701,149 +826,121 @@ export function AbschlagWizard({ initialDraft, initialProjectId, initialProjectL
                 }} />
                 Skonto angeben
               </label>
+              <HelpHint id="invoice.skonto" />
+              </div>
               {showSkonto && (
-                <div style={{ paddingLeft: 22, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <label style={{ fontSize: 13, minWidth: 80 }}>Skonto (%)</label>
-                    <input type="number" step="0.01" min="0" max="100" value={cashDiscPct}
-                      onChange={e => setCashDiscPct(e.target.value)}
-                      style={{ width: 90, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
-                      placeholder="z. B. 2" />
-                    <label style={{ fontSize: 13, minWidth: 80 }}>Zahlungsziel (Tage)</label>
-                    <input type="number" step="1" min="0" value={cashDiscDays}
-                      onChange={e => setCashDiscDays(e.target.value)}
-                      style={{ width: 70, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
-                      placeholder="z. B. 14" />
+                <div className="iw-sub">
+                  <div className="iw-line">
+                    <label htmlFor="pp-cd" className="iw-line-label">Skonto (%)</label>
+                    <input id="pp-cd" type="text" inputMode="decimal" className="iw-small" value={cashDiscPct}
+                      onChange={e => setCashDiscPct(e.target.value.replace(',', '.'))} placeholder="z. B. 2" />
+                    <label htmlFor="pp-cdd" className="iw-line-label">innerhalb (Tage)</label>
+                    <input id="pp-cdd" type="text" inputMode="numeric" className="iw-small" value={cashDiscDays}
+                      onChange={e => setCashDiscDays(e.target.value)} placeholder="z. B. 14" />
+                    {t.cdAmt > 0 && <span className="iw-amount">= {fmtEur(t.cdAmt)}</span>}
                   </div>
-                  {cdAmt > 0 && <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Skonto-Abzug: <strong>{money(cdAmt)}</strong></div>}
                 </div>
               )}
-              {(totalDisc > 0 || cdAmt > 0) && (
-                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border)', fontSize: 13 }}>
-                  Rechnungssumme netto nach Abzügen: <strong>{money(netAfter)}</strong>
+              <div className="iw-check-row">
+                <label className="iw-check">
+                  <input type="checkbox" checked={seEnabled} onChange={e => setSeEnabled(e.target.checked)} />
+                  Sicherheitseinbehalt einbehalten
+                </label>
+                <HelpHint id="invoice.sicherheitseinbehalt" />
+              </div>
+              {seEnabled && (
+                <div className="iw-sub">
+                  <div className="iw-line">
+                    <label htmlFor="pp-se" className="iw-line-label">Prozent (%)</label>
+                    <input id="pp-se" type="text" inputMode="decimal" className="iw-small" value={sePct}
+                      onChange={e => setSePct(e.target.value.replace(',', '.'))} placeholder="z. B. 5" />
+                    <span className="iw-line-label">vom</span>
+                    <label className="iw-radio"><input type="radio" checked={seBasis === 'BRUTTO'} onChange={() => setSeBasis('BRUTTO')} /> Brutto</label>
+                    <label className="iw-radio"><input type="radio" checked={seBasis === 'NETTO'} onChange={() => setSeBasis('NETTO')} /> Netto</label>
+                    {t.seAmt > 0 && <span className="iw-amount">= {fmtEur(t.seAmt)}</span>}
+                  </div>
                 </div>
               )}
+            </div>
 
-              {/* Sicherheitseinbehalt */}
-              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', marginBottom: 6 }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={seEnabled} onChange={e => setSeEnabled(e.target.checked)} />
-                    Sicherheitseinbehalt einbehalten
-                  </label>
-                  <HelpHint id="invoice.sicherheitseinbehalt" />
-                </div>
-                {seEnabled && (
-                  <div style={{ paddingLeft: 22, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-                      Prozent (%):
-                      <input type="number" step="0.01" min="0" max="100" value={sePct}
-                        onChange={e => setSePct(e.target.value)}
-                        style={{ width: 80, padding: '4px 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}
-                        placeholder="z. B. 5" />
-                    </label>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
-                      <span>Basis:</span>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input type="radio" checked={seBasis === 'BRUTTO'} onChange={() => setSeBasis('BRUTTO')} />
-                        Brutto
-                      </label>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <input type="radio" checked={seBasis === 'NETTO'} onChange={() => setSeBasis('NETTO')} />
-                        Netto
-                      </label>
-                    </div>
-                    {seAmt > 0 && <span style={{ fontSize: 12, color: 'var(--text-2)' }}>= <strong>{money(seAmt)}</strong></span>}
-                  </div>
+            {proposal && (
+              <div className="billing-proposal-box">
+                <div className="bp-row"><span>Leistungsbetrag netto</span><strong>{money(proposal.performance_amount)}</strong></div>
+                <div className="bp-row"><span>Buchungen netto</span><strong>{money(proposal.bookings_sum)}</strong></div>
+                <div className="bp-row"><span>Nebenkosten netto</span><strong>{money(proposal.amount_extras_net)}</strong></div>
+                <div className="bp-row"><span>Zwischensumme netto</span><strong>{money(t.base)}</strong></div>
+                {t.totalDisc > 0 && <div className="bp-row iw-minus"><span>./. Nachlässe</span><strong>− {fmtEur(t.totalDisc)}</strong></div>}
+                {t.cdAmt > 0 && <div className="bp-row iw-minus"><span>./. Skonto</span><strong>− {fmtEur(t.cdAmt)}</strong></div>}
+                <div className="bp-row total"><span>Netto gesamt{t.totalDisc > 0 || t.cdAmt > 0 ? ' (nach Abzügen)' : ''}</span><strong>{money(t.netAfter)}</strong></div>
+                {t.vatPct > 0 && <div className="bp-row"><span>zzgl. {t.vatPct}&thinsp;% MwSt.</span><strong>{money(t.taxAfter)}</strong></div>}
+                <div className="bp-row total"><span>Brutto gesamt</span><strong>{money(t.grossAfter)}</strong></div>
+                {seEnabled && t.seAmt > 0 && (
+                  <>
+                    <div className="bp-row iw-minus"><span>./. Sicherheitseinbehalt {t.sePctNum}&thinsp;% vom {seBasis === 'BRUTTO' ? 'Brutto' : 'Netto'}</span><strong>− {fmtEur(t.seAmt)}</strong></div>
+                    <div className="bp-row total"><span>Sofort fällig</span><strong>{money(t.payable)}</strong></div>
+                  </>
                 )}
               </div>
-            </div>
+            )}
 
-            {proposal && (() => {
-              const hasDeductions = totalDisc > 0 || cdAmt > 0
-              return (
-                <div className="billing-proposal-box">
-                  <div className="bp-row"><span>Leistungsbetrag Netto</span><strong>{money(proposal.performance_amount)}</strong></div>
-                  <div className="bp-row"><span>Buchungen Netto</span><strong>{money(proposal.bookings_sum)}</strong></div>
-                  <div className="bp-row"><span>Nebenkosten Netto</span><strong>{money(proposal.amount_extras_net)}</strong></div>
-                  <div className="bp-row"><span>Netto Zwischensumme</span><strong>{money(base)}</strong></div>
-                  {totalDisc > 0 && (
-                    <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
-                      <span>./. Nachlässe</span><strong>− {fmtEur(totalDisc)}</strong>
-                    </div>
-                  )}
-                  {cdAmt > 0 && (
-                    <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
-                      <span>./. Skonto</span><strong>− {fmtEur(cdAmt)}</strong>
-                    </div>
-                  )}
-                  <div className="bp-row total"><span>Netto gesamt{hasDeductions ? ' (nach Abzügen)' : ''}</span><strong>{money(netAfter)}</strong></div>
-                  {vatPct > 0 && (
-                    <div className="bp-row"><span>zzgl. {vatPct}&thinsp;% MwSt.</span><strong>{money(taxAfter)}</strong></div>
-                  )}
-                  <div className="bp-row total"><span>Brutto gesamt</span><strong>{money(grossAfter)}</strong></div>
-                  {seEnabled && seAmt > 0 && (
-                    <div className="bp-row" style={{ color: 'var(--danger-strong)' }}>
-                      <span>./. Sicherheitseinbehalt {sePctNum}&thinsp;% vom {seBasis === 'BRUTTO' ? 'Brutto' : 'Netto'}</span>
-                      <strong>− {fmtEur(seAmt)}</strong>
-                    </div>
-                  )}
-                  {seEnabled && seAmt > 0 && (
-                    <div className="bp-row total"><span>Sofort fällig</span><strong>{money(payable)}</strong></div>
-                  )}
-                </div>
-              )
-            })()}
-            {draftId && (
-              <div style={{ display: 'flex', gap: 8, margin: '12px 0 4px', flexWrap: 'wrap' }}>
-                <button className="btn-small" onClick={() => void saveDiscountsAndPreview()}>PDF ansehen</button>
-                <button className="btn-small" onClick={() => void downloadPpEinvoice(draftId, null, 'ubl')}>XRechnung herunterladen</button>
-                <button className="btn-small" onClick={() => void downloadPpEinvoice(draftId, null, 'cii')}>ZUGFeRD herunterladen</button>
+            {draftId && (canPdf || canXml) && (
+              <div className="iw-docs">
+                {canPdf && (
+                  <button type="button" className="btn-secondary" onClick={() => void previewPdf()}>
+                    <FileText size={14} strokeWidth={2} aria-hidden="true" /> PDF-Vorschau
+                  </button>
+                )}
+                {canXml && (
+                  <RowMenu label="E-Rechnung herunterladen" triggerClassName="btn-secondary"
+                    triggerContent={<>E-Rechnung <ChevronDown size={14} strokeWidth={2} aria-hidden="true" /></>}>
+                    <button type="button" role="menuitem" className="row-menu-item" onClick={() => void downloadPpEinvoice(draftId, null, 'ubl')}>XRechnung (UBL)</button>
+                    <button type="button" role="menuitem" className="row-menu-item" onClick={() => void downloadPpEinvoice(draftId, null, 'cii')}>ZUGFeRD (CII)</button>
+                  </RowMenu>
+                )}
               </div>
             )}
-            <p style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 8 }}>
-              Nach dem Buchen ist die Abschlagsrechnung unveränderlich. Vorher kann sie als Entwurf zwischengespeichert werden.
+            <p className="iw-note">
+              {canBook
+                ? 'Nach dem Buchen ist die Abschlagsrechnung unveränderlich. Bis dahin bleibt sie ein Entwurf in der Rechnungsliste.'
+                : 'Buchen darf in deinem Büro nur, wer das Recht dazu hat. Speichere den Entwurf – er bleibt in der Rechnungsliste.'}
             </p>
             <Message text={msg?.text ?? null} type={msg?.type} />
-            <div className="wizard-nav">
-              <button onClick={handleCancel}>Abbrechen</button>
-              <button onClick={() => setStep(2)}><ChevronLeft size={14} strokeWidth={2} />Zurück</button>
-              <button
-                onClick={async () => {
-                  if (!draftId) return
-                  await patchPartialPayment(draftId, {
-                    discount_1_percent:   showDiscounts ? d1 : 0,
-                    discount_1_reason:    showDiscounts ? (d1Reason.trim() || null) : null,
-                    discount_2_percent:   showDiscounts ? d2 : 0,
-                    discount_2_reason:    showDiscounts ? (d2Reason.trim() || null) : null,
-                    total_discounts:      showDiscounts ? totalDisc : 0,
-                    cash_discount_percent: showSkonto ? cdPct : 0,
-                    cash_discount_days:    showSkonto ? cdDays : 0,
-                    cash_discount_amount:  showSkonto ? cdAmt : 0,
-                    se_percent:           seEnabled ? sePctNum : null,
-                    se_basis:             seEnabled ? seBasis : null,
-                    se_basis_amt:         seEnabled ? seBasisAmt : null,
-                    se_amount:            seEnabled ? seAmt : null,
-                  })
-                  setMsg({ text: 'Als Entwurf gespeichert ✅', type: 'success' })
-                }}
-              >Speichern (Entwurf)</button>
-              <button className="btn-primary" onClick={() => { if (draftId) bookMut.mutate(draftId) }} disabled={bookMut.isPending}>
-                {bookMut.isPending ? 'Bucht …' : 'Jetzt buchen ✓'}
-              </button>
-            </div>
           </div>
         )
       })()}
 
-      <ConfirmModal
-        open={confirmState !== null}
-        title={confirmState?.title ?? ''}
-        message={confirmState?.message ?? ''}
-        confirmLabel="Bestätigen"
-        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
-        onCancel={() => setConfirmState(null)}
-      />
+      {actionBar}
+
+      {/* Rueckfrage beim Verlassen eines neuen Entwurfs */}
+      <Modal open={leaveOpen} onClose={() => setLeaveOpen(false)} title="Assistent verlassen?">
+        <p className="guard-text">
+          Der Entwurf ist angelegt, aber noch nicht gebucht. Du kannst ihn behalten und später in der
+          Rechnungsliste fortsetzen – oder löschen.
+        </p>
+        <DialogFooter secondary={canDelete ? (
+          <button type="button" className="btn-secondary iw-danger-text" disabled={deleteMut.isPending}
+            onClick={() => { if (draftId) deleteMut.mutate(draftId) }}>
+            Entwurf löschen
+          </button>
+        ) : undefined}>
+          <button type="button" className="btn-secondary" onClick={() => setLeaveOpen(false)}>Weiter bearbeiten</button>
+          <button type="button" className="btn-primary" onClick={() => { setLeaveOpen(false); leave() }}>Entwurf behalten</button>
+        </DialogFooter>
+      </Modal>
+
+      {/* Bestaetigung vor dem Buchen */}
+      <Modal open={bookOpen} onClose={() => setBookOpen(false)} title="Abschlagsrechnung buchen?">
+        <p className="guard-text">
+          Brutto <strong>{fmtEur(totals().grossAfter)}</strong>{seEnabled && totals().seAmt > 0 ? <>, sofort fällig <strong>{fmtEur(totals().payable)}</strong></> : null}.
+          Nach dem Buchen erhält die Rechnung ihre Nummer und ist unveränderlich – Korrekturen nur per Storno.
+        </p>
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={() => setBookOpen(false)} disabled={bookMut.isPending}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={bookMut.isPending} onClick={() => { if (draftId) bookMut.mutate(draftId) }}>
+            {bookMut.isPending ? 'Bucht …' : 'Jetzt buchen'}
+          </button>
+        </DialogFooter>
+      </Modal>
 
       <ValidationModal
         open={validationOpen}

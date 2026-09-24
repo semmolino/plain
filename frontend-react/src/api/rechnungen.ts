@@ -403,7 +403,11 @@ export const initPartialPayment = (body: {
 }) => apiClient.post<{ id: number }>('/partial-payments/init', body)
 
 export const getPartialPayment = (id: number) =>
-  apiClient.get<{ data: { pp: PartialPayment } }>(`/partial-payments/${id}`)
+  apiClient.get<{ data: {
+    pp: PartialPayment
+    project?:  { ABBR: string | null; NAME: string | null } | null
+    contract?: { ABBR: string | null; NAME: string | null } | null
+  } }>(`/partial-payments/${id}`)
 
 export const patchPartialPayment = (id: number, body: Partial<{
   advance_invoice_number: string; advance_invoice_date: string; due_date: string

@@ -4820,6 +4820,9 @@ th.doc-actions, td.doc-actions {
 .disclosure-title { min-width: 0; }
 .disclosure-hint { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text-3); }
 .disclosure-body { padding: var(--space-2) 0 var(--space-1) 27px; }
+.disclosure-head { display: flex; align-items: center; gap: var(--space-1); }
+.disclosure-head .disclosure-btn { flex: 1; min-width: 0; }
+.disclosure-help { flex-shrink: 0; }
 @media (max-width: 640px) {
   .disclosure-btn { min-height: 44px; }
   .disclosure-body { padding-left: 0; }
@@ -5180,4 +5183,73 @@ th.doc-actions, td.doc-actions {
 }
 @media (min-width: 641px) and (pointer: fine) {
   .bk-root[data-density="compact"] .bk-desc-text { -webkit-line-clamp: 1; }
+}
+
+/* ── Abschlagsrechnung (Pilot D) ────────────────────────────────────────── */
+/* Schrittanzeige: auf dem Handy „Schritt 2 von 4 · Name" mit Balken statt
+   vier gequetschter Kacheln, in denen „Projekt & Vertrag" umbrach. */
+.wizard-steps-mobile { display: none; }
+.wizard-steps-mobile-label { font-size: 13px; color: var(--text-2); }
+.wizard-steps-mobile-label strong { color: var(--text); }
+.wizard-steps-mobile-bar { display: flex; gap: 4px; }
+.wizard-steps-mobile-seg { flex: 1; height: 4px; border-radius: var(--radius-pill); background: var(--dim-2); }
+.wizard-steps-mobile-seg.done { background: var(--accent); }
+@media (max-width: 640px) {
+  .wizard-steps-mobile { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }
+  .wizard-steps--compact { display: none; }
+}
+
+/* Lesbare Zeilenlaenge: vorher lief jedes Feld ueber die volle Breite,
+   bei 1280px also rund 1000px fuer ein Datum. */
+.iw-form { max-width: 880px; }
+.iw-step-title { display: flex; align-items: center; gap: var(--space-1); }
+.form-group input.iw-readonly { background: var(--dim); }
+.iw-byline { font-size: 14px; color: var(--text-2); margin: 0 0 var(--space-4); }
+.iw-byline .link-btn { font-size: 14px; }
+.iw-textarea {
+  width: 100%; resize: vertical; font: inherit; font-size: 15px;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text);
+}
+.iw-root .disclosure { margin: var(--space-2) 0 var(--space-4); }
+.iw-einvoice { display: flex; flex-direction: column; gap: 0; padding-top: var(--space-3); }
+.iw-perf { display: flex; align-items: flex-end; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-4); }
+.iw-perf .form-group { flex: 0 1 260px; margin-bottom: 0; }
+.iw-perf .btn-secondary { height: 44px; }
+.iw-root .billing-proposal-box { margin-bottom: var(--space-4); }
+.iw-minus, .iw-minus strong { color: var(--text-2); }
+
+.iw-discounts {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4);
+  display: flex; flex-direction: column; gap: var(--space-2);
+}
+.iw-section-title { font-weight: 600; font-size: 14px; margin: 0 0 var(--space-1); }
+.iw-check { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 14px; min-height: 32px; cursor: pointer; }
+.iw-check input { width: 16px; height: 16px; }
+.iw-check-row { display: flex; align-items: center; gap: var(--space-1); }
+.iw-sub { padding-left: 24px; display: flex; flex-direction: column; gap: var(--space-2); }
+.iw-line { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.iw-line-label { font-size: 13px; color: var(--text-2); }
+.iw-line input[type="text"] {
+  height: 36px; padding: 0 10px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text);
+}
+.iw-line .iw-small { width: 80px; text-align: right; font-variant-numeric: tabular-nums; }
+.iw-line .iw-grow { flex: 1 1 180px; min-width: 0; }
+.iw-amount { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.iw-radio { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
+.iw-docs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-3); }
+.iw-docs .btn-secondary { display: inline-flex; align-items: center; gap: 6px; height: 36px; }
+.iw-note { font-size: 13px; color: var(--text-3); margin: 0 0 var(--space-2); }
+.iw-danger-text { color: var(--danger-strong); }
+.iw-more { min-width: 44px; }
+
+@media (max-width: 640px) {
+  /* 16px: kleiner zoomt iOS beim Antippen in das Feld hinein. */
+  .iw-root input, .iw-root select, .iw-root textarea, .iw-textarea { font-size: 16px; }
+  .iw-line input[type="text"] { height: 44px; }
+  .iw-sub { padding-left: 0; }
+  .iw-check { min-height: 44px; }
 }

@@ -140,4 +140,26 @@ test('Abschlagsrechnung – Schritte', async ({ page }, info) => {
   await page.getByRole('button', { name: /^Weiter/ }).last().click()
   await page.waitForTimeout(400)
   await shoot(page, dev, 'abschlag-4')
+  if (PHASE === 'nachher') {
+    await page.getByRole('button', { name: 'Jetzt buchen' }).click()
+    await page.getByRole('dialog').waitFor()
+    await shoot(page, dev, 'abschlag-5-bestaetigen')
+  }
+})
+
+test('Abschlagsrechnung – Entwurf fortsetzen', async ({ page }, info) => {
+  test.skip(PHASE !== 'nachher', 'Fortsetzen per URL gibt es erst mit dem Pilot')
+  await prepare(page, info.project.name)
+  await open(page, '/rechnungen?tab=abschlag&draftId=501')
+  await page.locator('#pp-buyer-ref').waitFor()
+  await shoot(page, info.project.name, 'abschlag-entwurf')
+})
+
+test('Rechnungen – Neue Rechnung', async ({ page }, info) => {
+  test.skip(PHASE !== 'nachher', 'Menü gibt es erst mit dem Pilot')
+  await prepare(page, info.project.name)
+  await open(page, '/rechnungen')
+  await page.getByRole('button', { name: /Neue Rechnung/ }).click()
+  await page.getByRole('menu').waitFor()
+  await shoot(page, info.project.name, 'rechnungen-neu')
 })
