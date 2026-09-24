@@ -173,10 +173,18 @@ const timeline = Array.from({ length: 24 }, (_, i) => {
   }
 })
 
+export interface DemoOptions {
+  /** Rolle der Uebersicht (geschaeftsleitung | controller | projektleiter | mitarbeiter). */
+  role?: string
+  /** Feste Rechteliste statt „unrestricted" — fuer Tests mit eingeschraenkten Rollen. */
+  permissions?: string[]
+}
+
 /** Registriert Auth + Beispieldaten. Reihenfolge wie in den anderen Specs:
  *  Catch-All zuerst, spezifische Routen danach. */
-export async function mockDemo(page: Page) {
-  await page.addInitScript(a => { localStorage.setItem('plain_auth', JSON.stringify(a)) }, AUTH)
+export async function mockDemo(page: Page, opts: DemoOptions = {}) {
+  const auth = opts.role ? { ...AUTH, state: { ...AUTH.state, dashboardRole: opts.role } } : AUTH
+  await page.addInitScript(a => { localStorage.setItem('plain_auth', JSON.stringify(a)) }, auth)
 
   const j = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
   await page.route('/api/v1/**', r => r.fulfill(j({ data: [] })))
@@ -185,7 +193,7 @@ export async function mockDemo(page: Page) {
   // sonst auch die Seiten-Navigation ab und liefert JSON statt der App.
   const routes: Array<[string, unknown]> = [
     ['auth/me',              { employee_id: 1, tenant_id: 1, email: 'simon@buero.de', abbr: 'SM', company_name: 'Messina Architekten GmbH' }],
-    ['permissions/me',       { keys: [], unrestricted: true }],
+    ['permissions/me',       opts.permissions ? { keys: opts.permissions, unrestricted: false } : { keys: [], unrestricted: true }],
     ['license/me',           { unrestricted: true, plan_id: null, state: null, capabilities: [], limits: {} }],
     ['projekte/list',        { data: projects }],
     ['projekte/statuses',    { data: named(['Angebot', 'Laufend', 'Pausiert', 'Abgeschlossen']) }],
