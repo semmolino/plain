@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useBlocker } from 'react-router-dom'
 import { GuardContext, type GuardEntry } from '@/hooks/useDirtyGuard'
 import { Modal } from './Modal'
 import { DialogFooter } from './DialogFooter'
@@ -17,10 +18,12 @@ import { Message } from './Message'
  * wenn etwas offen ist. Neuladen und Schliessen des Tabs faengt
  * `beforeunload` ab — nur als Rueckfrage, ohne Server-Aufruf.
  *
- * Grenze (bewusst, Runde 1): Klicks in der Seitennavigation und der
- * Zurueck-Knopf des Browsers laufen am Guard vorbei. Das zu fangen braucht
- * den Data-Router von React Router (`useBlocker`); die Umstellung ist ein
- * eigener Schritt.
+ * Seit Runde 2 (Data-Router, App.tsx) faengt `useBlocker` auch, was an der
+ * Seite vorbeilaeuft: ein Klick in die Seitennavigation (anderer Pfad) und
+ * Zurueck/Vor des Browsers. Seiteninterne Wechsel mit demselben Pfad
+ * (`?tab=…`, Korrekturen per `replace`) blockiert er nicht — die laufen
+ * ueber `useGuardedAction()`, und deren „Verwerfen" darf nicht ein zweites
+ * Mal fragen (`bypass`).
  */
 
 
@@ -34,11 +37,23 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
 
   const register   = useCallback((key: string, entry: { current: GuardEntry }) => { entries.current.set(key, entry) }, [])
   const unregister = useCallback((key: string) => { entries.current.delete(key) }, [])
+  // Eine bestaetigte (oder rueckfragefreie) Aktion laeuft am Blocker vorbei.
+  const bypass = useRef(false)
+  const runUnblocked = useCallback((action: () => void) => {
+    bypass.current = true
+    try { action() } finally { queueMicrotask(() => { bypass.current = false }) }
+  }, [])
   const request    = useCallback((action: () => void) => {
-    if (dirtyEntries().length === 0) { action(); return }
+    if (dirtyEntries().length === 0) { runUnblocked(action); return }
     setError(null)
     setPending(() => action)
-  }, [])
+  }, [runUnblocked])
+
+  const blocker = useBlocker(({ currentLocation, nextLocation, historyAction }) => {
+    if (bypass.current || dirtyEntries().length === 0) return false
+    return currentLocation.pathname !== nextLocation.pathname || historyAction === 'POP'
+  })
+  const blocked = blocker.state === 'blocked'
 
   useEffect(() => {
     function onBeforeUnload(e: BeforeUnloadEvent) {
@@ -50,16 +65,21 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload)
   }, [])
 
-  const open    = pending !== null
+  const open    = pending !== null || blocked
   const current = open ? dirtyEntries() : []
   const canSave = current.length > 0 && current.every(e => !!e.save)
   const what    = current.map(e => (e.count ? `${e.count} ${e.count === 1 ? 'Änderung' : 'Änderungen'}` : 'Änderungen')
     + (e.label ? ` in „${e.label}"` : '')).join(', ')
 
   function proceed() {
+    if (blocked) { blocker.proceed?.(); return }
     const action = pending
     setPending(null)
-    action?.()
+    if (action) runUnblocked(action)
+  }
+  function cancel() {
+    if (blocked) blocker.reset?.()
+    setPending(null)
   }
 
   async function saveAndProceed() {
@@ -77,7 +97,7 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
   return (
     <GuardContext.Provider value={{ register, unregister, request }}>
       {children}
-      <Modal open={open} onClose={() => setPending(null)} title="Ungespeicherte Änderungen">
+      <Modal open={open} onClose={cancel} title="Ungespeicherte Änderungen">
         <p className="guard-text">
           {what ? `${what} ${current.length === 1 && (current[0].count ?? 2) === 1 ? 'ist' : 'sind'} noch nicht gespeichert.` : 'Es gibt ungespeicherte Änderungen.'}
           {' '}Beim Wechseln gehen sie verloren.
@@ -86,7 +106,7 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
         <DialogFooter
           secondary={<button type="button" className="btn-secondary" onClick={proceed} disabled={saving}>Verwerfen</button>}
         >
-          <button type="button" className="btn-secondary" onClick={() => setPending(null)} disabled={saving}>Abbrechen</button>
+          <button type="button" className="btn-secondary" onClick={cancel} disabled={saving}>Abbrechen</button>
           {canSave && (
             <button type="button" className="btn-primary" onClick={() => void saveAndProceed()} disabled={saving}>
               {saving ? 'Speichert …' : 'Speichern und wechseln'}

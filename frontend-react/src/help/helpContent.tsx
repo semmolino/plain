@@ -1492,7 +1492,8 @@ export const HELP = {
         offen sind. <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
         Sofort wirken dagegen Befehle, die die Struktur selbst ändern: Element anlegen, löschen,
         verschieben und Nebenkosten vererben — jeweils nach Rückfrage. Wer mit offenen Änderungen den
-        Reiter oder das Projekt wechselt, wird gefragt, ob gespeichert werden soll.
+        Reiter oder das Projekt wechselt, die Seite über die Navigation verlässt oder im Browser
+        zurückgeht, wird gefragt, ob gespeichert werden soll.
       </>
     ),
   },
