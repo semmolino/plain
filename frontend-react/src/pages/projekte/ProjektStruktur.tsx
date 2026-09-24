@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, GripVertical } from 'lucide-react'
+import { Plus, GripVertical, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useAnchoredPosition } from '@/hooks/useAnchoredPosition'
 import { useCtrlS } from '@/hooks/useCtrlS'
@@ -14,6 +14,8 @@ import { RowMenu }       from '@/components/ui/RowMenu'
 import { AmountInput }   from '@/components/ui/AmountInput'
 import { DensityToggle } from '@/components/ui/DensityToggle'
 import { useDensity } from '@/hooks/useDensity'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
+import { StrukturMobile } from '@/pages/projekte/struktur/StrukturMobile'
 import { useRegisterDirty } from '@/hooks/useDirtyGuard'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import {
@@ -86,6 +88,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const canEditProject  = permProject && !readOnlyLicense
   const canCalc         = permCalc && featureCalc && !readOnlyLicense
   const [density, setDensity] = useDensity()
+  const narrow = useIsNarrow()
 
   const [edits, setEdits]               = useState<Record<number, RowEdit>>({})
   const [rootEdit, setRootEdit]         = useState<SurchargeEdit | null>(null)
@@ -107,6 +110,8 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const [kalkFatherId, setKalkFatherId]     = useState<number | null>(null)
   const [projectSurchargePanel, setProjectSurchargePanel] = useState<boolean>(false)
   const [elementSearch, setElementSearch]         = useState('')
+  // Zugeklappte Vaeter. Beim Filtern gilt das nicht — Treffer sollen sichtbar sein.
+  const [collapsed, setCollapsed]                 = useState<Set<number>>(new Set())
   const [contextMenu, setContextMenu]             = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
   const [saving, setSaving]                       = useState(false)
   const contextMenuRef                            = useRef<HTMLDivElement>(null)
@@ -135,7 +140,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const projectRow = projectData?.data ?? null
   const btypes    = btData?.data       ?? []
 
-  useEffect(() => { setEdits({}); setRootEdit(null); setAddForm(null); setSelectedIds(new Set()) }, [selectedPid])
+  useEffect(() => { setEdits({}); setRootEdit(null); setAddForm(null); setSelectedIds(new Set()); setCollapsed(new Set()) }, [selectedPid])
 
   const flatTree = structure.length ? flattenTree(buildStructureTree(structure)) : []
   // String keys avoid bigint vs number mismatches at runtime
@@ -144,9 +149,32 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
 
   const aggMap = aggregateStructure(structure)
 
+  const showInklCol = density === 'compact'
+  const hasParents  = parentIds.size > 0
+  const allCollapsed = hasParents && [...parentIds].every(id => collapsed.has(Number(id)))
+  function toggleCollapsed(id: number) {
+    setCollapsed(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  function toggleAllCollapsed() {
+    setCollapsed(allCollapsed ? new Set() : new Set([...parentIds].map(Number)))
+  }
+  function isHidden(id: number): boolean {
+    let cur = parentMap.get(String(id))
+    while (cur != null) { if (collapsed.has(Number(cur))) return true; cur = parentMap.get(cur) }
+    return false
+  }
+  function descendantCount(id: number): number {
+    let c = 0
+    for (const n of structure) {
+      let cur = n.FATHER_ID != null ? String(n.FATHER_ID) : null
+      while (cur != null) { if (cur === String(id)) { c++; break } cur = parentMap.get(cur) ?? null }
+    }
+    return c
+  }
+
   // These depend on parentMap and aggMap — declared AFTER them to avoid TDZ crash
   const filteredFlatTree = useMemo(() => {
-    if (!elementSearch) return flatTree
+    if (!elementSearch) return collapsed.size ? flatTree.filter(({ node }) => !isHidden(node.STRUCTURE_ID)) : flatTree
     const sq = elementSearch.toLowerCase()
     const matchIds = new Set(
       flatTree
@@ -161,7 +189,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       while (cursor != null) { matchIds.add(Number(cursor)); cursor = parentMap.get(cursor) }
     }
     return flatTree.filter(({ node }) => matchIds.has(node.STRUCTURE_ID))
-  }, [flatTree, elementSearch, parentMap])
+  }, [flatTree, elementSearch, parentMap, collapsed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!contextMenu) return
@@ -542,7 +570,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   }
 
   const addParent = addForm?.FATHER_ID ? nodeById.get(Number(addForm.FATHER_ID)) : undefined
-  const COLS = 12
+  const COLS = showInklCol ? 11 : 10
 
   // Zeilenmenue und Rechtsklick teilen sich dieselben Befehle.
   function rowCommands(node: StructureNode, isParent: boolean) {
@@ -571,7 +599,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
           {!isLoading && (
             <>
               {/* Bulk toolbar */}
-              {canEdit && selectedIds.size > 0 && (
+              {!narrow && canEdit && selectedIds.size > 0 && (
                 <div className="struct-bulk-bar">
                   <span>{selectedIds.size} ausgewählt</span>
                   <button className="btn-small" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }}
@@ -600,7 +628,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                   />
                 )}
                 <div className="sx-toolbar-right">
-                  <DensityToggle value={density} onChange={setDensity} />
+                  {!narrow && <DensityToggle value={density} onChange={setDensity} />}
                   {canEdit && (
                     <button className="btn-secondary" type="button" onClick={() => openAdd(null)}>
                       <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Neues Element
@@ -611,7 +639,13 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
 
               <Message text={errorMsg} type="error" />
 
-              {flatTree.length > 0 && (
+              {flatTree.length > 0 && narrow && selectedPid != null && (
+                <StrukturMobile projectId={selectedPid} flat={filteredFlatTree} parentIds={parentIds} aggMap={aggMap}
+                  billingTypes={btypes} canEdit={canEdit}
+                  root={currentProject ? { label: currentProject.ABBR, revenue: rootRevenueFinal, total: rootGesamt } : null}
+                  onAdd={openAdd} onDelete={askDelete} />
+              )}
+              {flatTree.length > 0 && !narrow && (
                 <div className="list-section">
                   <table className="master-table structure-table sx-table">
                     <thead>
@@ -621,12 +655,22 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             onChange={toggleAll} aria-label="Alle auswählen" />}
                         </th>
                         <th scope="col" className="sx-col-grip"><span className="sr-only">Verschieben</span></th>
-                        <th scope="col">Kürzel</th>
-                        <th scope="col">Bezeichnung</th>
+                        <th scope="col">
+                          <span className="sx-th-element">
+                            Element
+                            {hasParents && (
+                              <button type="button" className="sx-collapse-all" onClick={toggleAllCollapsed}
+                                aria-label={allCollapsed ? 'Alle Ebenen aufklappen' : 'Alle Ebenen zuklappen'}
+                                title={allCollapsed ? 'Alle aufklappen' : 'Alle zuklappen'}>
+                                {allCollapsed ? <ChevronsUpDown size={13} strokeWidth={2} aria-hidden="true" /> : <ChevronsDownUp size={13} strokeWidth={2} aria-hidden="true" />}
+                              </button>
+                            )}
+                          </span>
+                        </th>
                         <th scope="col">Abrechnung</th>
                         <th scope="col" className="num">Honorar €</th>
                         <th scope="col" className="num">Zuschläge €</th>
-                        <th scope="col" className="num" title="Honorar einschließlich Zuschlägen">inkl. Zuschl. €</th>
+                        {showInklCol && <th scope="col" className="num" title="Honorar einschließlich Zuschlägen">inkl. Zuschl. €</th>}
                         <th scope="col">NK %</th>
                         <th scope="col" className="num">Nebenkosten €</th>
                         <th scope="col" className="num">Gesamt €</th>
@@ -645,15 +689,17 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                         >
                           <td></td>
                           <td></td>
-                          <td className="sx-root-abbr">{currentProject.ABBR}</td>
-                          <td className="sx-root-name">Projekt gesamt</td>
+                          <td className="sx-cell-element">
+                            <span className="sx-root-abbr">{currentProject.ABBR}</span>
+                            <span className="sx-root-name">Projekt gesamt</span>
+                          </td>
                           <td className="sx-muted">—</td>
                           <td className="num sx-muted">{money(rootRevenue)}</td>
                           <td className="num">{rootSurcharges !== 0 ? money(rootSurcharges) : <span className="sx-muted">—</span>}</td>
-                          <td className="num">{money(rootRevenueFinal)}</td>
+                          {showInklCol && <td className="num">{money(rootRevenueFinal)}</td>}
                           <td className="sx-muted">—</td>
                           <td className="num sx-muted">{money(rootExtras)}</td>
-                          <td className="num sx-strong">{money(rootGesamt)}</td>
+                          <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}>{money(rootGesamt)}</td>
                           <td className="sx-col-menu">
                             {canEditProject && (
                               <RowMenu label="Aktionen zum Projekt" triggerClassName="row-action-btn">
@@ -735,19 +781,23 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                 ><GripVertical size={14} strokeWidth={2} aria-hidden="true" /></span>
                               )}
                             </td>
-                            <td className="sx-cell-abbr" style={{ paddingLeft: `calc(var(--sx-pad-x) + ${depth} * var(--sx-indent))` }}>
-                              {canEdit ? (
-                                <input
-                                  className={`tbl-input sx-input sx-input-abbr${isParent ? ' sx-input-parent' : ''}${ch('ABBR')}`}
-                                  aria-label="Kürzel"
-                                  value={nameShort}
-                                  onChange={e => editRow(node.STRUCTURE_ID, { nameShort: e.target.value })}
-                                />
-                              ) : <span className={isParent ? 'sx-strong' : undefined}>{nameShort}</span>}
-                              {isParent && <span className="struct-agg-badge" title="Summe der Unterelemente"> ∑</span>}
-                            </td>
-                            <td className="sx-cell-name">
-                              <div className="sx-name-wrap">
+                            <td className="sx-cell-element" style={{ paddingLeft: `calc(var(--sx-pad-x) + ${depth} * var(--sx-indent))` }}>
+                              <div className="sx-element">
+                                {isParent ? (
+                                  <button type="button" className="sx-twisty" onClick={() => toggleCollapsed(node.STRUCTURE_ID)}
+                                    aria-expanded={!collapsed.has(node.STRUCTURE_ID)}
+                                    aria-label={`${nameShort} ${collapsed.has(node.STRUCTURE_ID) ? 'aufklappen' : 'zuklappen'}`}>
+                                    <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                                  </button>
+                                ) : <span className="sx-twisty-space" aria-hidden="true" />}
+                                {canEdit ? (
+                                  <input
+                                    className={`tbl-input sx-input sx-input-abbr${isParent ? ' sx-input-parent' : ''}${ch('ABBR')}`}
+                                    aria-label="Kürzel"
+                                    value={nameShort}
+                                    onChange={e => editRow(node.STRUCTURE_ID, { nameShort: e.target.value })}
+                                  />
+                                ) : <span className={`sx-abbr-text${isParent ? ' sx-strong' : ''}`}>{nameShort}</span>}
                                 {canEdit ? (
                                   <input
                                     className={`tbl-input sx-input sx-input-name${ch('NAME')}`}
@@ -757,6 +807,9 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                     onChange={e => editRow(node.STRUCTURE_ID, { nameLong: e.target.value })}
                                   />
                                 ) : <span className="sx-name-text" title={nameLong}>{nameLong}</span>}
+                                {isParent && collapsed.has(node.STRUCTURE_ID) && (
+                                  <span className="sx-collapsed-count">{descendantCount(node.STRUCTURE_ID)} ausgeblendet</span>
+                                )}
                                 {internal && <span className={`status-pill sx-internal-pill${ch('IS_INTERNAL')}`}>Intern</span>}
                               </div>
                             </td>
@@ -799,10 +852,12 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                 ) : <span className={sv === 0 ? 'sx-muted' : undefined}>{label}</span>
                               })()}
                             </td>
-                            <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>
-                              {/* Honorar + Zuschläge = REVENUE (final, all surcharges included) */}
-                              {money(node.REVENUE ?? 0)}
-                            </td>
+                            {showInklCol && (
+                              <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>
+                                {/* Honorar + Zuschläge = REVENUE (final, all surcharges included) */}
+                                {money(node.REVENUE ?? 0)}
+                              </td>
+                            )}
                             <td>
                               {canEdit ? (
                                 <input className={`tbl-input sx-input sx-input-pct${ch('EXTRAS_PERCENT')}`} type="text" inputMode="decimal"
@@ -812,11 +867,17 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               ) : `${nkVal} %`}
                             </td>
                             <td className="num">{money(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
-                            <td className="num sx-strong">{(() => {
+                            {(() => {
                               const rev = Number(node.REVENUE ?? 0)
                               const ext = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.extras ?? 0) : Number(node.EXTRAS ?? 0)
-                              return fmtEur(rev + ext)
-                            })()}</td>
+                              // In der luftigen Dichte entfaellt „inkl. Zuschl." — die Aufteilung
+                              // steht dann im Tooltip der Gesamtsumme.
+                              return (
+                                <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rev)} + Nebenkosten ${fmtEur(ext)}`}>
+                                  {fmtEur(rev + ext)}
+                                </td>
+                              )
+                            })()}
                             <td className="sx-col-menu">
                               {cmds.length > 0 && (
                                 <RowMenu label={`Aktionen zu ${node.ABBR}`} triggerClassName="row-action-btn">
@@ -858,7 +919,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                 </div>
               )}
 
-              {canEdit && flatTree.length > 0 && (
+              {canEdit && flatTree.length > 0 && !narrow && (
                 <ActionBar
                   dirty={dirty}
                   quiet={!dirty}

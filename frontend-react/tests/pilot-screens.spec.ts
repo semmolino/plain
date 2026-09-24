@@ -15,6 +15,9 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
  * laufen nur in der Phase „nachher".
  */
 
+// vorher  = Stand vor dem Pilot (main), vorher2 = Stand nach Runde 1,
+// nachher = aktueller Stand. Szenen aus Runde 1 fehlen nur in „vorher",
+// Szenen aus Runde 2 in beiden Vorher-Phasen.
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
@@ -92,29 +95,29 @@ test('Übersicht Mitarbeiter', async ({ page }, info) => {
 test('Projektliste', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte')
-  await page.locator('table').first().waitFor()
+  await page.locator('.sx-table, .sxm-list, table').first().waitFor()
   await shoot(page, info.project.name, 'projektliste')
 })
 
 test('Projekt – Struktur', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=struktur&projectId=1')
-  await page.locator('table').first().waitFor()
+  await page.locator('.sx-table, .sxm-list, table').first().waitFor()
   await shoot(page, info.project.name, 'projekt-struktur')
 })
 
 for (const d of ['compact', 'comfortable'] as const) {
   test(`Projekt – Struktur (${d})`, async ({ page }, info) => {
-    test.skip(PHASE !== 'nachher', 'Dichte gibt es erst mit dem Pilot')
+    test.skip(PHASE === 'vorher', 'Dichte gibt es erst mit dem Pilot')
     await prepare(page, info.project.name, {}, d)
     await open(page, '/projekte?tab=struktur&projectId=1')
-    await page.locator('table').first().waitFor()
+    await page.locator('.sx-table, .sxm-list, table').first().waitFor()
     await shoot(page, info.project.name, `projekt-struktur-${d}`)
   })
 }
 
 test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
-  test.skip(PHASE !== 'nachher', 'Änderungszähler gibt es erst mit dem Pilot')
+  test.skip(PHASE === 'vorher', 'Änderungszähler gibt es erst mit dem Pilot')
   test.skip(info.project.name !== 'desktop', 'Inline-Bearbeitung ist Desktop')
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=struktur&projectId=1')
@@ -124,7 +127,7 @@ test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
 })
 
 test('Projekt – wechseln über den Namen', async ({ page }, info) => {
-  test.skip(PHASE !== 'nachher', 'Umschalter über den Namen gibt es erst mit Runde 2')
+  test.skip(!PHASE.startsWith('nachher'), 'Umschalter über den Namen gibt es erst mit Runde 2')
   await prepare(page, info.project.name)
   await open(page, '/projekte?projectId=1&tab=struktur')
   await page.getByRole('button', { name: /Projekt wechseln/ }).click()
@@ -135,7 +138,7 @@ test('Projekt – wechseln über den Namen', async ({ page }, info) => {
 test('Projekt – Buchungen', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=buchungen&projectId=1')
-  await page.locator('table').first().waitFor()
+  await page.locator('.sx-table, .sxm-list, table').first().waitFor()
   await shoot(page, info.project.name, 'projekt-buchungen')
 })
 
@@ -148,7 +151,7 @@ test('Stunden buchen – Dialog', async ({ page }, info) => {
 })
 
 test('Zeit buchen – aus dem Kopf', async ({ page }, info) => {
-  test.skip(PHASE !== 'nachher', 'Einstieg gibt es erst mit dem Pilot')
+  test.skip(PHASE === 'vorher', 'Einstieg gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/')
   await page.getByRole('button', { name: 'Zeit buchen' }).first().click()
@@ -174,12 +177,12 @@ test('Abschlagsrechnung – Schritte', async ({ page }, info) => {
   await page.waitForTimeout(400)
   await shoot(page, dev, 'abschlag-2')
   await page.getByRole('button', { name: /^Weiter/ }).last().click()
-  await page.locator('table').first().waitFor()
+  await page.locator('.sx-table, .sxm-list, table').first().waitFor()
   await shoot(page, dev, 'abschlag-3')
   await page.getByRole('button', { name: /^Weiter/ }).last().click()
   await page.waitForTimeout(400)
   await shoot(page, dev, 'abschlag-4')
-  if (PHASE === 'nachher') {
+  if (PHASE !== 'vorher') {
     await page.getByRole('button', { name: 'Jetzt buchen' }).click()
     await page.getByRole('dialog').waitFor()
     await shoot(page, dev, 'abschlag-5-bestaetigen')
@@ -187,7 +190,7 @@ test('Abschlagsrechnung – Schritte', async ({ page }, info) => {
 })
 
 test('Abschlagsrechnung – Entwurf fortsetzen', async ({ page }, info) => {
-  test.skip(PHASE !== 'nachher', 'Fortsetzen per URL gibt es erst mit dem Pilot')
+  test.skip(PHASE === 'vorher', 'Fortsetzen per URL gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/rechnungen?tab=abschlag&draftId=501')
   await page.locator('#pp-buyer-ref').waitFor()
@@ -195,7 +198,7 @@ test('Abschlagsrechnung – Entwurf fortsetzen', async ({ page }, info) => {
 })
 
 test('Rechnungen – Neue Rechnung', async ({ page }, info) => {
-  test.skip(PHASE !== 'nachher', 'Menü gibt es erst mit dem Pilot')
+  test.skip(PHASE === 'vorher', 'Menü gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/rechnungen')
   await page.getByRole('button', { name: /Neue Rechnung/ }).click()
@@ -292,4 +295,13 @@ test('Leistungsstände – Monatsrunde', async ({ page }, info) => {
   await page.getByLabel(/Neuer Stand LP5\.2/).fill('60')
   await page.getByLabel(/Neuer Stand LP6 /).fill('65')
   await shoot(page, info.project.name, 'monatsrunde')
+})
+
+test('Struktur – Handy Blatt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !PHASE.startsWith('nachher'), 'Blatt gibt es nur am Handy, erst mit Runde 2')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.getByRole('button', { name: /^LP5\.2 .*bearbeiten/ }).click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'struktur-blatt')
 })

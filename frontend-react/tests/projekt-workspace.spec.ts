@@ -91,7 +91,8 @@ test.describe('Projekt-Arbeitsbereich', () => {
     test.skip(info.project.name !== 'mobile')
     await mockPilot(page)
     await page.goto('/projekte?projectId=1&tab=struktur')
-    await page.locator('.sx-table').waitFor()
+    // Runde 2: am Handy eine Baumliste statt der Tabelle
+    await page.locator('.sxm-list').waitFor()
     // Gegen die Geraetebreite messen: waechst die Seite, waechst am Handy
     // auch window.innerWidth mit, und der Vergleich damit sieht nichts.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth) - page.viewportSize()!.width

@@ -5663,3 +5663,82 @@ div.dash-attn-link:hover { background: transparent; }
   /* Monatsrunde am Handy: zwei Knoepfe, kein gequetschter Zustandstext. */
   .lsr-bar .action-bar-status, .lsr-bar .lsr-discard { display: none; }
 }
+
+/* ── Projektstruktur, Runde 2: eine Spalte „Element", Auf-/Zuklappen ───────
+   Kürzel und Bezeichnung standen in zwei Spalten; zusammen mit „inkl.
+   Zuschl." war die Tabelle in der luftigen Dichte 1159 px breit bei 1048 px
+   Platz. Jetzt passt sie in beiden Dichten ohne Querscrollen (1280 px). */
+.sx-th-element { display: inline-flex; align-items: center; gap: 6px; }
+.sx-collapse-all {
+  display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; margin: 0;
+  border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; box-shadow: none; color: var(--text-3); cursor: pointer;
+}
+.sx-collapse-all:hover { background: var(--hover-bg); color: var(--text); }
+.sx-cell-element { width: 100%; min-width: 200px; }
+.sx-element { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sx-element .sx-input-name { flex: 1 1 120px; min-width: 96px; width: 0; }   /* width:0 — sonst zaehlt die Standardbreite des Feldes als Mindestbreite */
+.sx-element .sx-name-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-abbr-text { white-space: nowrap; }
+.sx-twisty {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; margin: 0; border: 0; border-radius: var(--radius-sm);
+  background: transparent; box-shadow: none; color: var(--text-3); cursor: pointer;
+}
+.sx-twisty:hover { background: var(--hover-bg); color: var(--text); }
+.sx-twisty svg { transition: transform 0.12s; transform: rotate(90deg); }
+.sx-twisty[aria-expanded="false"] svg { transform: rotate(0deg); }
+.sx-twisty-space { flex: 0 0 22px; }
+.sx-collapsed-count { flex: 0 0 auto; font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.sx-root-abbr + .sx-root-name { margin-left: 8px; }
+/* Griff zum Verschieben erst beim Ueberfahren oder mit Tastaturfokus in der Zeile */
+@media (hover: hover) {
+  .sx-table tbody tr:not(:hover):not(:focus-within) .ps-drag-handle { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .sx-twisty svg { transition: none; } }
+
+/* ── Projektstruktur am Handy: Baumliste + Bearbeiten-Blatt (Runde 2) ────── */
+.sxm { display: flex; flex-direction: column; gap: var(--space-2); }
+.sxm-root {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+  padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-2); border: 1px solid var(--border-3);
+  font-size: 14px; font-weight: 700;
+}
+.sxm-root-label { color: var(--text-2); }
+.sxm-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.sxm-row { display: flex; align-items: stretch; border-bottom: 1px solid var(--border-3); }
+.sxm-row:last-child { border-bottom: 0; }
+.sxm-row--parent { background: var(--surface-2); }
+.sxm-row--internal .sxm-name { color: var(--text-3); }
+.sxm-twisty, .sxm-open { margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: inherit; font: inherit; cursor: pointer; }
+.sxm-twisty { flex: 0 0 36px; display: inline-flex; align-items: center; justify-content: center; min-height: 52px; color: var(--text-3); }
+.sxm-twisty svg { transition: transform 0.12s; transform: rotate(90deg); }
+.sxm-twisty[aria-expanded="false"] svg { transform: rotate(0deg); }
+.sxm-twisty-space { flex: 0 0 36px; }
+.sxm-open {
+  flex: 1 1 auto; min-width: 0; min-height: 52px; display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-2) 0; text-align: left;
+}
+.sxm-el { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.sxm-abbr { font-size: 14px; font-weight: 700; color: var(--text); }
+.sxm-name { font-size: 13px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sxm-nums { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; font-variant-numeric: tabular-nums; }
+.sxm-fee { font-size: 12px; color: var(--text-3); }
+.sxm-total { font-size: 14px; font-weight: 700; }
+.sxm-readonly { margin: 0; min-height: 44px; display: flex; flex-direction: column; justify-content: center; font-size: 15px; font-variant-numeric: tabular-nums; }
+.sxm-sur { border: 1px solid var(--border-3); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); margin: 0 0 var(--space-3); }
+.sxm-sur legend { padding: 0 4px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.sxm-sur-row { display: grid; grid-template-columns: minmax(0, 1fr) 72px auto; align-items: center; gap: 6px var(--space-2); margin-bottom: var(--space-2); }
+.sxm-sur-row input { min-height: 44px; font-size: 16px; }
+.sxm-sur-eur { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; }
+.sxm-sur-cumul { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); min-height: 32px; }
+.sxm-sur-cumul input { width: auto; min-height: 0; }
+.sxm-icon-btn { min-width: 44px; padding: 0 10px !important; display: inline-flex; align-items: center; justify-content: center; }
+.modal-card.sxm-sheet .qb-form input, .modal-card.sxm-sheet .qb-form select { font-size: 16px; }
+@media (prefers-reduced-motion: reduce) { .sxm-twisty svg { transition: none; } }
+.sxm-sur-row input:not([type="checkbox"]) {
+  width: 100%; min-width: 0; padding: 0 12px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text); font: inherit;
+}
+.modal-card.sxm-sheet .modal-actions-secondary { align-self: flex-end; }
+.modal-card.sxm-sheet .sxm-icon-btn { height: 44px; align-self: flex-end; }
