@@ -1,6 +1,7 @@
 "use strict";
 
 const svc = require("../services/projekte");
+const runde = require("../services/leistungsstandRunde");
 
 async function getDepartments(req, res, supabase) {
   try {
@@ -322,23 +323,52 @@ async function getLeistungsstand(req, res, supabase) {
   if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
   try {
     const data = await svc.getLeistungsstand(supabase, { projectId: id, tenantId: req.tenantId });
-    res.json({ data });
+    // Fuer die Eingabe zum Stichtag: wofuer zuletzt gepflegt, und die
+    // Vorbelegungen (heute / Monatsende) in der App-Zeitzone statt im Browser.
+    const { data: proj } = await supabase
+      .from("PROJECT").select("PROGRESS_REVIEWED_AS_OF, PROGRESS_REVIEWED_AT")
+      .eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+    res.json({ data, meta: {
+      reviewed_as_of: proj?.PROGRESS_REVIEWED_AS_OF ?? null,
+      reviewed_at:    proj?.PROGRESS_REVIEWED_AT ?? null,
+      today:          runde.today(),
+      last_month_end: runde.lastMonthEnd(),
+    } });
   } catch (err) {
-    res.status(500).json({ error: err.message || err });
+    res.status(err.status || 500).json({ error: err.message || err });
   }
 }
 
 async function saveLeistungsstand(req, res, supabase) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: "Projekt-ID fehlt" });
-  const updates = (req.body || {}).updates;
+  const body = req.body || {};
+  const updates = body.updates ?? [];
   if (!Array.isArray(updates)) return res.status(400).json({ error: "updates muss ein Array sein" });
   try {
-    const result = await svc.saveLeistungsstand(supabase, { projectId: id, updates, tenantId: req.tenantId });
+    const result = await svc.saveLeistungsstand(supabase, {
+      projectId: id, updates, tenantId: req.tenantId,
+      asOfDate: body.as_of_date ?? null,
+      confirmUnchanged: body.confirm_unchanged === true,
+      employeeId: req.employeeId ?? null,
+    });
     res.json({ success: true, ...result });
   } catch (err) {
     const status = err.status || 500;
-    res.status(status).json({ error: err.message || err });
+    res.status(status).json({ error: err.message || err, code: err.code });
+  }
+}
+
+/** GET /projekte/leistungsstand/runde?as_of&scope=own|all — Arbeitsliste der Monatsrunde. */
+async function getLeistungsstandRunde(req, res, supabase) {
+  try {
+    const scope = req.query.scope === "all" ? "all" : "own";
+    const data = await runde.listRunde(supabase, {
+      tenantId: req.tenantId, employeeId: req.employeeId, asOf: req.query.as_of || null, scope,
+    });
+    res.json({ data });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || err });
   }
 }
 
@@ -428,6 +458,7 @@ module.exports = {
   deleteStructure,
   getLeistungsstand,
   saveLeistungsstand,
+  getLeistungsstandRunde,
   getContractByProject,
   patchContract,
   transferFatherToChild,

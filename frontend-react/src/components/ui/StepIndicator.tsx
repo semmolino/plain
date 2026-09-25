@@ -5,6 +5,9 @@ interface Props {
   current: number
   /** Wenn gesetzt, sind bereits erledigte Schritte anwaehlbar. */
   onStepClick?: (index: number) => void
+  /** Auf dem Handy „Schritt 2 von 4 · Name" mit Balken statt vier
+   *  gequetschter Kacheln (UI-Pilot 2026-09). */
+  compactOnMobile?: boolean
 }
 
 /**
@@ -21,11 +24,19 @@ interface Props {
  *   Vorher war der Fortschritt ausschliesslich farblich kodiert.
  * - Die Liste ist eine `<ol>`, damit die Reihenfolge auch vorgelesen wird.
  */
-export function StepIndicator({ steps, current, onStepClick }: Props) {
+export function StepIndicator({ steps, current, onStepClick, compactOnMobile }: Props) {
   return (
     <>
       <p className="sr-only">Schritt {current + 1} von {steps.length}: {steps[current]}</p>
-      <ol className="wizard-steps">
+      {compactOnMobile && (
+        <div className="wizard-steps-mobile" aria-hidden="true">
+          <span className="wizard-steps-mobile-label">Schritt {current + 1} von {steps.length} · <strong>{steps[current]}</strong></span>
+          <span className="wizard-steps-mobile-bar">
+            {steps.map((s, i) => <span key={s + i} className={`wizard-steps-mobile-seg${i <= current ? ' done' : ''}`} />)}
+          </span>
+        </div>
+      )}
+      <ol className={`wizard-steps${compactOnMobile ? ' wizard-steps--compact' : ''}`}>
         {steps.map((label, i) => {
           const state = i === current ? ' active' : i < current ? ' done' : ''
           const selectable = onStepClick && i < current

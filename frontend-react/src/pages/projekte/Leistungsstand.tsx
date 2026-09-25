@@ -1,296 +1,131 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import {
-  fetchProjectsShort, fetchLeistungsstand, saveLeistungsstand,
-  type LeistungsstandNode,
-} from '@/api/projekte'
-import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
-import type { StructureNode } from '@/api/projekte'
+import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ListChecks } from 'lucide-react'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { HelpHint } from '@/components/ui/HelpHint'
 import { Message } from '@/components/ui/Message'
-import { useTrackRecent } from '@/hooks/useTrackRecent'
-import { fmtEur, money } from '@/utils/money'
-
-const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtP    = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.format(v) + '\u202f%'
+import { useConfirm } from '@/hooks/useConfirm'
+import { useCtrlS } from '@/hooks/useCtrlS'
+import { useRegisterDirty } from '@/hooks/useDirtyGuard'
+import { usePermission } from '@/store/permissionsStore'
+import { fmtEur } from '@/utils/money'
+import { LeistungsstandTable } from '@/pages/projekte/leistungsstand/LeistungsstandTable'
+import { useLeistungsstandEditor } from '@/pages/projekte/leistungsstand/useLeistungsstandEditor'
+import { deDate } from '@/pages/projekte/leistungsstand/leistungsstandCalc'
 
 interface Props {
   initialProjectId?: number
 }
 
+/**
+ * Leistungsstände eines Projekts (Reiter im Projekt-Arbeitsbereich).
+ *
+ * Runde 2: Stichtag waehlbar (vorher galt der Stand ab dem Speichern), nur
+ * Geaendertes wird gespeichert, feste Aktionsleiste mit Zaehler, Rueckfrage
+ * bei offenen Aenderungen, „Unverändert bestätigen", und ohne
+ * `projects.performance.edit` gibt es keine Eingabefelder mehr (vorher liess
+ * sich tippen, das Speichern scheiterte dann am Server). Dieselbe Tabelle
+ * nutzt die Monatsrunde auf der Projektliste.
+ */
 export function Leistungsstand({ initialProjectId }: Props) {
-  const qc = useQueryClient()
-  const navigate = useNavigate()
-  const [pid,  setPid]  = useState<number | null>(initialProjectId ?? null)
-  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
-  useEffect(() => { setPid(initialProjectId ?? null); setMsg(null) }, [initialProjectId])
-  const [vals, setVals] = useState<Record<number, string>>({})
-  const [msg,           setMsg]         = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [elementSearch, setElementSearch] = useState('')
-  const inputRefs                       = useRef<Record<number, HTMLInputElement | null>>({})
+  // Neuer Zustand je Projekt — Eingaben gehoeren zu genau einem.
+  return <LeistungsstandProjekt key={initialProjectId ?? 'none'} projectId={initialProjectId ?? null} />
+}
 
-  const { data: projectsData } = useQuery({
-    queryKey: ['projects-short'],
-    queryFn: fetchProjectsShort,
-  })
+function LeistungsstandProjekt({ projectId }: { projectId: number | null }) {
+  const canEdit = usePermission('projects.performance.edit')
+  const [asOf, setAsOf] = useState<string | null>(null)
+  const [filter, setFilter] = useState('')
+  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const saveRef = useRef<HTMLButtonElement>(null)
+  const [confirm, confirmDialog] = useConfirm()
+  const ed = useLeistungsstandEditor(projectId, asOf)
+  const { summary, meta } = ed
+  const today = meta?.today ?? ''
 
-  const { data: lsData, isLoading, isError } = useQuery({
-    queryKey: ['leistungsstand', pid],
-    queryFn:  () => fetchLeistungsstand(pid!),
-    enabled:  pid !== null,
-  })
-
-  useEffect(() => {
-    if (!lsData?.data) return
-    const init: Record<number, string> = {}
-    for (const n of lsData.data) {
-      if (n.IS_LEAF) {
-        init[n.STRUCTURE_ID] = Number((n as LeistungsstandNode & { BILLING_TYPE_ID?: number }).BILLING_TYPE_ID) === 2
-          ? '100'
-          : String(n.REVENUE_COMPLETION_PERCENT ?? 0)
-      }
-    }
-    setVals(init)
-  }, [lsData?.data])
-
-  const saveMut = useMutation({
-    mutationFn: () => {
-      const updates = Object.entries(vals).map(([sid, v]) => ({
-        structure_id: Number(sid),
-        revenue_completion_percent: Math.min(100, Math.max(0, Number(v) || 0)),
-      }))
-      return saveLeistungsstand(pid!, updates)
-    },
-    onSuccess: () => {
-      setMsg({ text: 'Leistungsstände gespeichert ✅', type: 'success' })
-      void qc.invalidateQueries({ queryKey: ['leistungsstand', pid] })
-      void qc.invalidateQueries({ queryKey: ['structure', pid] })
-    },
-    onError: (err: unknown) =>
-      setMsg({ text: (err as { message?: string }).message || 'Fehler beim Speichern', type: 'error' }),
-  })
-
-  // Der Knopf "Projekt-Snapshot" ist hier entfallen. Snapshots entstehen
-  // ohnehin automatisch beim Monatsabschluss (Einstellungen → Monatsabschluss);
-  // ein zweiter, manueller Ausloeser direkt neben "Leistungsstände speichern"
-  // sah aus wie ein zweiter Speichern-Knopf und lud zum Verwechseln ein.
-  // Endpunkt und Permission bleiben unveraendert bestehen.
-
-  const handleSave = useCallback(() => {
-    if (pid && !saveMut.isPending) saveMut.mutate()
-  }, [pid, saveMut])
-
-  // Ctrl+S / Cmd+S global shortcut
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault()
-        handleSave()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleSave])
-
-  const projects  = projectsData?.data ?? []
-  const lsNodes   = (lsData?.data ?? []) as LeistungsstandNode[]
-  const tree      = buildStructureTree(lsNodes as StructureNode[])
-  const flatNodes = flattenTree(tree)
-
-  const parentMap = useMemo(
-    () => new Map(lsNodes.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null])),
-    [lsNodes]
-  )
-
-  const filteredFlatNodes = useMemo(() => {
-    if (!elementSearch.trim()) return flatNodes
-    const sq = elementSearch.toLowerCase().trim()
-    const matchIds = new Set(
-      flatNodes
-        .filter(({ node }) =>
-          node.ABBR.toLowerCase().includes(sq) ||
-          (node.NAME?.toLowerCase().includes(sq) ?? false)
-        )
-        .map(({ node }) => node.STRUCTURE_ID)
-    )
-    for (const id of [...matchIds]) {
-      let cursor = parentMap.get(String(id))
-      while (cursor != null) { matchIds.add(Number(cursor)); cursor = parentMap.get(cursor) }
-    }
-    return flatNodes.filter(({ node }) => matchIds.has(node.STRUCTURE_ID))
-  }, [flatNodes, elementSearch, parentMap])
-
-  const leafIds = filteredFlatNodes
-    .filter(fn => (fn.node as unknown as LeistungsstandNode).IS_LEAF)
-    .map(fn => fn.node.STRUCTURE_ID)
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>, sid: number) {
-    if (e.key !== 'Tab') return
-    const idx = leafIds.indexOf(sid)
-    if (idx === -1) return
-    const nextIdx = e.shiftKey ? idx - 1 : idx + 1
-    if (nextIdx < 0 || nextIdx >= leafIds.length) return
-    e.preventDefault()
-    inputRefs.current[leafIds[nextIdx]]?.focus()
-  }
-
-  function setVal(sid: number, raw: string) {
-    setVals(prev => ({ ...prev, [sid]: raw }))
+  async function save() {
     setMsg(null)
+    try {
+      const r = await ed.save()
+      setMsg({ type: 'success', text: `${r.saved === 1 ? '1 Element' : `${r.saved} Elemente`} gespeichert — Stand zum ${deDate(r.as_of)}.` })
+    } catch (e) {
+      setMsg({ type: 'error', text: (e as Error)?.message || 'Speichern fehlgeschlagen' })
+      throw e
+    }
   }
 
-  const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME].filter(Boolean).join(' · ') || null) : null)
+  async function confirmUnchanged() {
+    setMsg(null)
+    try {
+      const r = await ed.confirm()
+      setMsg({ type: 'success', text: `Unverändert bestätigt — Stand zum ${deDate(r.as_of)}.` })
+    } catch (e) {
+      setMsg({ type: 'error', text: (e as Error)?.message || 'Bestätigen fehlgeschlagen' })
+    }
+  }
+
+  async function discard() {
+    if (await confirm({ title: 'Änderungen verwerfen?', message: `${summary.changed} Änderung${summary.changed === 1 ? '' : 'en'} gehen verloren.`, confirmLabel: 'Verwerfen' })) ed.reset()
+  }
+
+  useRegisterDirty('leistungsstand', { dirty: ed.dirty, label: 'Leistungsstände', count: summary.changed, save })
+  useCtrlS(() => { if (ed.dirty && !ed.pending) void save().catch(() => {}) }, canEdit)
+
+  if (projectId == null) return <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>
+  if (ed.query.isLoading) return <p className="ls-empty">Lädt …</p>
+  if (ed.query.isError)   return <Message type="error" text="Leistungsstände konnten nicht geladen werden." />
+  if (!ed.rows.length)    return <p className="ls-empty">Dieses Projekt hat noch keine Struktur. Leistungsstände gibt es je Element der Struktur.</p>
+
+  const status = ed.pending === 'save' ? 'Speichert …'
+    : ed.pending === 'confirm' ? 'Bestätigt …'
+    : summary.errors ? `${summary.errors} ungültige${summary.errors === 1 ? 's Feld' : ' Felder'}`
+    : summary.changed ? `${summary.changed} ${summary.changed === 1 ? 'Element' : 'Elemente'} geändert · ${summary.delta > 0 ? '+' : ''}${fmtEur(summary.delta)}`
+    : meta?.reviewed_as_of ? `Zuletzt gepflegt zum ${deDate(meta.reviewed_as_of)}` : 'Keine Änderungen'
 
   return (
-    <div className="ls-wrap">
-      {pid !== null && currentProject && (
-        <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject.ABBR}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
-            Rechnungen →
+    <div className="lr-wrap">
+      <div className="lr-head">
+        <label className="lr-asof">
+          <span>Stand zum</span>
+          <input type="date" className="inline-date-input" value={ed.effAsOf ?? ''} max={today || undefined}
+            onChange={e => setAsOf(e.target.value || null)} disabled={!canEdit} />
+        </label>
+        <HelpHint id="performance.asof" size={14} />
+        {ed.lockedCount > 0 && (
+          <span className="lr-head-note">{ed.lockedCount} {ed.lockedCount === 1 ? 'Element hat' : 'Elemente haben'} schon einen späteren Stand</span>
+        )}
+        {ed.rows.length > 12 && (
+          <input type="search" className="list-search lr-filter" placeholder="Elemente filtern …" aria-label="Elemente filtern"
+            value={filter} onChange={e => setFilter(e.target.value)} />
+        )}
+        <Link to="/projekte?tab=leistungsstaende" className="lr-round-link">
+          <ListChecks size={14} strokeWidth={2} aria-hidden="true" /> Monatsrunde
+        </Link>
+      </div>
+
+      <Message type={msg?.type ?? 'info'} text={msg?.text ?? null} />
+
+      <LeistungsstandTable ed={ed} canEdit={canEdit} filter={filter} onLastEnter={() => saveRef.current?.focus()} />
+
+      {canEdit && (
+        <ActionBar
+          dirty={ed.dirty}
+          status={status}
+          secondary={ed.dirty ? <button type="button" className="btn-secondary" onClick={() => void discard()} disabled={!!ed.pending}>Verwerfen</button> : undefined}
+        >
+          <HelpHint id="performance.confirm" align="right" />
+          <button type="button" className="btn-secondary" onClick={() => void confirmUnchanged()}
+            disabled={ed.dirty || !!ed.pending}
+            title={ed.dirty ? 'Erst speichern oder verwerfen' : `Die heutigen Werte als Stand zum ${deDate(ed.effAsOf)} festhalten`}>
+            Unverändert bestätigen
           </button>
-          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
-            Projekt-Report →
+          <button ref={saveRef} type="button" className="btn-primary" onClick={() => void save().catch(() => {})}
+            disabled={!summary.changed || summary.errors > 0 || !!ed.pending}>
+            {ed.pending === 'save' ? 'Speichert …' : 'Speichern'}
           </button>
-        </div>
+        </ActionBar>
       )}
-
-      {msg && (
-        <div style={{ marginBottom: 12 }}>
-          <Message type={msg.type} text={msg.text} />
-        </div>
-      )}
-
-      {!pid && <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>}
-      {pid && isLoading && <p className="ls-empty">Lade Daten…</p>}
-      {pid && isError   && <p className="ls-empty" style={{ color: 'var(--danger)' }}>Fehler beim Laden.</p>}
-
-      {pid && !isLoading && lsNodes.length > 0 && (
-        <>
-          <div style={{ marginBottom: 8 }}>
-            <input type="search" className="list-search" placeholder="Elemente filtern …"
-              style={{ maxWidth: 260, fontSize: 13 }}
-              value={elementSearch} onChange={e => setElementSearch(e.target.value)} />
-          </div>
-          <div className="ls-table-wrap">
-            <table className="ls-table">
-              <thead>
-                <tr>
-                  <th scope="col" className="ls-th ls-col-short">Kürzel</th>
-                  <th scope="col" className="ls-th ls-col-name">Bezeichnung</th>
-                  <th scope="col" className="ls-th ls-col-num">Honorar</th>
-                  <th scope="col" className="ls-th ls-col-num">Letzter Stand</th>
-                  <th scope="col" className="ls-th ls-col-input">Neuer Stand</th>
-                  <th scope="col" className="ls-th ls-col-num">Neuer Wert</th>
-                  <th scope="col" className="ls-th ls-col-delta">Δ €</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredFlatNodes.map(({ node, depth }) => {
-                  const n      = node as unknown as LeistungsstandNode
-                  const sid    = n.STRUCTURE_ID
-                  const isLeaf = n.IS_LEAF
-
-                  const isNachweis = Number((n as LeistungsstandNode & { BILLING_TYPE_ID?: number }).BILLING_TYPE_ID) === 2
-                  const revenue   = Number(n.REVENUE ?? 0)
-                  const prevPct   = n.PREV_REVENUE_COMPLETION_PERCENT
-                  const curPct    = Number(n.REVENUE_COMPLETION_PERCENT ?? 0)
-                  const newPctRaw = isLeaf ? (isNachweis ? 100 : (Number(vals[sid]) || 0)) : curPct
-                  const oldVal    = (curPct / 100) * revenue
-                  const newVal    = (newPctRaw / 100) * revenue
-                  const deltaEur  = newVal - oldVal
-                  const isPrefill = isLeaf && prevPct !== null && Math.abs(prevPct - curPct) < 0.001
-
-                  return (
-                    <tr key={sid} className={isLeaf ? 'ls-row ls-row-leaf' : 'ls-row ls-row-parent'}>
-                      <td className="ls-td ls-col-short">
-                        <span style={{ paddingLeft: depth * 16 }}>{n.ABBR}</span>
-                      </td>
-                      <td className="ls-td ls-col-name">{n.NAME}</td>
-                      <td className="ls-td ls-col-num ls-right">{money(revenue)}</td>
-                      <td className="ls-td ls-col-num ls-right">
-                        {isLeaf ? (
-                          <span className="ls-prev-wrap">
-                            {fmtP(curPct)}
-                            {isPrefill && prevPct !== null && (
-                              <span className="ls-badge-prev" title="Wert aus letztem Eintrag vorbelegt">Vorwert</span>
-                            )}
-                          </span>
-                        ) : (
-                          <span className="ls-muted">{fmtP(curPct)}</span>
-                        )}
-                      </td>
-                      <td className="ls-td ls-col-input">
-                        {isLeaf ? (
-                          isNachweis ? (
-                            <div className="ls-input-wrap">
-                              <input
-                                type="number"
-                                className="ls-input ls-input-readonly"
-                                value="100"
-                                readOnly
-                                tabIndex={-1}
-                              />
-                              <span className="ls-input-unit">%</span>
-                            </div>
-                          ) : (
-                            <div className="ls-input-wrap">
-                              <input
-                                ref={el => { inputRefs.current[sid] = el }}
-                                type="number"
-                                min={0}
-                                max={100}
-                                step={1}
-                                className="ls-input"
-                                value={vals[sid] ?? ''}
-                                onChange={e => setVal(sid, e.target.value)}
-                                onKeyDown={e => handleKeyDown(e, sid)}
-                                onFocus={e => e.currentTarget.select()}
-                              />
-                              <span className="ls-input-unit">%</span>
-                            </div>
-                          )
-                        ) : (
-                          <span className="ls-muted ls-right">{fmtP(curPct)}</span>
-                        )}
-                      </td>
-                      <td className="ls-td ls-col-num ls-right">
-                        {isLeaf
-                          ? fmtEur(newVal)
-                          : <span className="ls-muted">{money(oldVal)}</span>}
-                      </td>
-                      <td className="ls-td ls-col-delta ls-right">
-                        {isLeaf && Math.abs(deltaEur) >= 0.5 ? (
-                          <span className={deltaEur > 0 ? 'ls-delta-pos' : 'ls-delta-neg'}>
-                            {deltaEur > 0 ? '+' : ''}{money(deltaEur)}
-                          </span>
-                        ) : (
-                          <span className="ls-muted">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="ls-footer">
-            <button
-              className="btn btn-primary"
-              disabled={saveMut.isPending}
-              onClick={handleSave}
-            >
-              {saveMut.isPending ? 'Speichern…' : 'Leistungsstände speichern'}
-            </button>
-          </div>
-        </>
-      )}
-
-      {pid && !isLoading && lsNodes.length === 0 && (
-        <p className="ls-empty">Keine Projektstruktur vorhanden.</p>
-      )}
+      {confirmDialog}
     </div>
   )
 }

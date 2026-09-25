@@ -1,135 +1,147 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { useQuery }       from '@tanstack/react-query'
 import { Tabs }           from '@/components/ui/Tabs'
+import { PageHeader }     from '@/components/ui/PageHeader'
+import { DirtyGuardProvider } from '@/components/ui/DirtyGuard'
+import { useGuardedAction } from '@/hooks/useDirtyGuard'
 import { ProjekteListe }  from '@/pages/projekte/ProjekteListe'
 import { HonorarTab }     from '@/pages/projekte/HonorarWizard'
 import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
+import { LeistungsstandRunde } from '@/pages/projekte/leistungsstand/LeistungsstandRunde'
 import { Vertraege }      from '@/pages/projekte/Vertraege'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 import { Budget }          from '@/pages/projekte/Budget'
 import { NachtraegeListe } from '@/pages/nachtraege/NachtraegeListe'
-import { ProjectPicker }  from '@/components/projekte/ProjectPicker'
-import { fetchProjectsShort } from '@/api/projekte'
-import { useFilterTabs } from '@/store/permissionsStore'
+import { ProjektHeader }  from '@/pages/projekte/ProjektHeader'
+import { ProjektTabs, type ProjektTabDef } from '@/pages/projekte/ProjektTabs'
+import {
+  resolveProjektView, serializeProjektView, SELECTED_PID_KEY,
+  type ProjektTab, type ListTab, type ProjektView,
+} from '@/pages/projekte/projektUrlState'
+import { useFilterTabs, usePermissionsStore } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
 
-type Tab = 'liste' | 'struktur' | 'leistungsstand' | 'buchungen' | 'budget' | 'mitarbeiter' | 'honorar' | 'vertraege' | 'nachtraege'
-
-const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[] = [
-  { id: 'liste',           label: 'Liste',           permissions: ['projects.view'] },
-  { id: 'struktur',        label: 'Projektstruktur', permissions: ['projects.structure.view'] },
-  { id: 'leistungsstand',  label: 'Leistungsstände', permissions: ['projects.performance.view'] },
-  { id: 'buchungen',       label: 'Buchungen',       permissions: ['projects.bookings.view'] },
-  { id: 'budget',          label: 'Interne Budgets', permissions: ['projects.budget.view'], feature: 'projects.budgets' },
-  { id: 'mitarbeiter',     label: 'Preislisten',     permissions: ['projects.hourly_rates.view'], feature: 'projects.hourly_rates' },
-  { id: 'honorar',         label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
-  { id: 'vertraege',       label: 'Verträge',        permissions: ['projects.contracts.view'], feature: 'projects.contracts' },
-  { id: 'nachtraege',      label: 'Nachträge',       permissions: ['nachtraege.view'], feature: 'nachtraege.management' },
+// Reihenfolge = Reihenfolge der Reiter. `group` trennt taegliche Arbeit von
+// Einrichtung (siehe ProjektTabs).
+const WORKSPACE_TABS: (ProjektTabDef & { permissions: string[]; feature?: string })[] = [
+  { id: 'struktur',       label: 'Struktur',        group: 'arbeit',      permissions: ['projects.structure.view'] },
+  { id: 'leistungsstand', label: 'Leistungsstände', group: 'arbeit',      permissions: ['projects.performance.view'] },
+  { id: 'buchungen',      label: 'Buchungen',       group: 'arbeit',      permissions: ['projects.bookings.view'] },
+  { id: 'nachtraege',     label: 'Nachträge',       group: 'arbeit',      permissions: ['nachtraege.view'], feature: 'nachtraege.management' },
+  { id: 'vertraege',      label: 'Verträge',        group: 'einrichtung', permissions: ['projects.contracts.view'], feature: 'projects.contracts' },
+  { id: 'honorar',        label: 'Kalkulationen',   group: 'einrichtung', permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
+  { id: 'mitarbeiter',    label: 'Preislisten',     group: 'einrichtung', permissions: ['projects.hourly_rates.view'], feature: 'projects.hourly_rates' },
+  { id: 'budget',         label: 'Interne Budgets', group: 'einrichtung', permissions: ['projects.budget.view'], feature: 'projects.budgets' },
 ]
 
-const VALID_TABS: Tab[] = ['liste','struktur','leistungsstand','buchungen','budget','mitarbeiter','honorar','vertraege','nachtraege']
-function parseTab(s: string | null): Tab | null {
-  return s && (VALID_TABS as string[]).includes(s) ? (s as Tab) : null
+const LIST_TABS: { id: ListTab; label: string; permissions: string[]; feature?: string }[] = [
+  { id: 'liste',            label: 'Projektliste',    permissions: ['projects.view'] },
+  { id: 'leistungsstaende', label: 'Leistungsstände', permissions: ['projects.performance.view'] },
+  { id: 'honorar',          label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
+]
+
+function savedPid(): number | null {
+  const raw = localStorage.getItem(SELECTED_PID_KEY)
+  const n = raw ? Number(raw) : NaN
+  return Number.isFinite(n) && n > 0 ? n : null
 }
 
 export function ProjektePage() {
-  const location = useLocation()
+  return (
+    <DirtyGuardProvider>
+      <ProjektePageInner />
+    </DirtyGuardProvider>
+  )
+}
+
+function ProjektePageInner() {
+  const location  = useLocation()
   const navigate  = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [params]  = useSearchParams()
+  const guarded   = useGuardedAction()
+  const permsLoaded = usePermissionsStore(s => s.loaded)
 
-  // Query-Parameter haben Vorrang vor location.state (notification deep links
-  // funktionieren so out of the box: /projekte?tab=leistungsstand&projectId=42)
-  const tabFromUrl   = parseTab(searchParams.get('tab'))
-  const pidFromUrl   = (() => {
-    const raw = searchParams.get('projectId')
-    const n = raw ? Number(raw) : NaN
-    return Number.isFinite(n) ? n : null
-  })()
+  const navState = location.state as { tab?: string; projectId?: number; search?: string } | null
+  const { view, canonical } = resolveProjektView(params, navState, savedPid())
+  // Suchbegriff aus Mahnungen („Projekt zu dieser Mahnung") — einmal lesen.
+  const [initialSearch] = useState(() => navState?.search)
 
-  const [tab, setTab] = useState<Tab>(() => {
-    if (tabFromUrl) return tabFromUrl
-    const s = location.state as { tab?: Tab } | null
-    return s?.tab ?? 'liste'
-  })
-  const [selectedProjectId, setSelectedProjectId] = useState<number | undefined>(() => {
-    if (pidFromUrl != null) return pidFromUrl
-    const s = location.state as { projectId?: number } | null
-    if (s?.projectId) return s.projectId
-    const saved = localStorage.getItem('projekte-selected-pid')
-    return saved ? Number(saved) : undefined
-  })
+  const workspaceTabs = useLicenseFilterTabs(useFilterTabs(WORKSPACE_TABS))
+  const listTabs      = useLicenseFilterTabs(useFilterTabs(LIST_TABS))
 
-  function persistProjectId(id: number | undefined) {
-    setSelectedProjectId(id)
-    if (id != null) localStorage.setItem('projekte-selected-pid', String(id))
-    else localStorage.removeItem('projekte-selected-pid')
+  function go(v: ProjektView, replace = false) {
+    const qs = serializeProjektView(v)
+    navigate({ pathname: '/projekte', search: qs ? `?${qs}` : '' }, { replace, state: null })
   }
 
-  // Apply navigation state (handles both initial mount and subsequent same-route navigations)
+  // URL auf ihre kanonische Form bringen (State → URL, Tab ergaenzen).
+  // `replace`: das ist eine Korrektur, kein Schritt, den Zurueck rueckgaengig
+  // machen sollte.
   useEffect(() => {
-    const state = location.state as { tab?: Tab; projectId?: number } | null
-    if (!state) return
-    if (state.tab) setTab(state.tab)
-    if (state.projectId != null) persistProjectId(state.projectId)
-    navigate('/projekte', { replace: true, state: null })
-  }, [location.key]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (canonical === null) return
+    navigate({ pathname: '/projekte', search: canonical ? `?${canonical}` : '' }, { replace: true, state: null })
+  }, [canonical]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // URL-Query-Parameter anwenden — sowohl beim Mount als auch wenn der
-  // Nutzer schon auf /projekte ist und ueber eine Notification ein
-  // weiteres Mal hierher navigiert (URL aendert sich, Komponente bleibt
-  // gemountet). Danach URL bereinigen, damit nachfolgende Tab-Wechsel
-  // nicht gegen die alte URL kaempfen.
+  // Ein Tab, den der Nutzer nicht sehen darf (oder den die Lizenz nicht
+  // enthaelt), faellt auf den ersten erlaubten zurueck — erst wenn die Rechte
+  // geladen sind, sonst wuerde jeder Deep-Link beim Laden umgeschrieben.
+  const tabAllowed = view.view !== 'workspace' || workspaceTabs.some(t => t.id === view.tab)
   useEffect(() => {
-    if (!tabFromUrl && pidFromUrl == null) return
-    if (tabFromUrl) setTab(tabFromUrl)
-    if (pidFromUrl != null) persistProjectId(pidFromUrl)
-    setSearchParams({}, { replace: true })
-  }, [tabFromUrl, pidFromUrl]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!permsLoaded || view.view !== 'workspace' || tabAllowed || !workspaceTabs.length) return
+    go({ ...view, tab: workspaceTabs[0].id }, true)
+  }, [permsLoaded, tabAllowed]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
-  const projects = projectsData?.data ?? []
+  // Zuletzt geoeffnetes Projekt merken — fuer Links, die nur einen Tab nennen.
+  const workspacePid = view.view === 'workspace' ? view.projectId : null
+  useEffect(() => {
+    if (workspacePid != null) localStorage.setItem(SELECTED_PID_KEY, String(workspacePid))
+  }, [workspacePid])
 
-  function openProject(id: number) {
-    persistProjectId(id)
-    setTab('struktur')
+  const pendingLabel = useMemo(() => {
+    if (view.view !== 'list' || !view.pendingTab) return null
+    return WORKSPACE_TABS.find(t => t.id === view.pendingTab)?.label ?? null
+  }, [view])
+
+  if (view.view === 'list') {
+    const openProject = (id: number) => go({ view: 'workspace', projectId: id, tab: view.pendingTab ?? 'struktur' })
+    return (
+      <div className="master-page pw-list">
+        <PageHeader title="Projekte" />
+        {listTabs.length > 1 && (
+          <Tabs tabs={listTabs} active={view.listTab} onChange={id => guarded(() => go({ view: 'list', listTab: id as ListTab, pendingTab: null }))} />
+        )}
+        {pendingLabel && (
+          <p className="pw-pending-hint">Wähle ein Projekt, um „{pendingLabel}" zu öffnen.</p>
+        )}
+        <div className="master-tab-content">
+          {view.listTab === 'liste'   && <ProjekteListe onSelectProject={openProject} onProjectCreated={id => go({ view: 'workspace', projectId: id, tab: 'struktur' })} initialSearch={initialSearch} />}
+          {view.listTab === 'honorar' && <HonorarTab />}
+          {view.listTab === 'leistungsstaende' && <LeistungsstandRunde />}
+        </div>
+      </div>
+    )
   }
 
-  const visibleTabs = useLicenseFilterTabs(useFilterTabs(TABS))
+  const pid = view.projectId
+  const setTab   = (tab: ProjektTab)  => { if (tab !== view.tab) guarded(() => go({ view: 'workspace', projectId: pid, tab })) }
+  const toList   = ()                 => guarded(() => go({ view: 'list', listTab: 'liste', pendingTab: null }))
+  const switchTo = (id: number)       => guarded(() => go({ view: 'workspace', projectId: id, tab: view.tab }))
 
   return (
-    <div className="master-page">
-      <h1 className="master-title">Projekte</h1>
-      <Tabs
-        tabs={visibleTabs}
-        active={tab}
-        onChange={id => setTab(id as Tab)}
-      />
-      {tab !== 'liste' && tab !== 'honorar' && (
-        <div className="project-context-strip">
-          <button className="project-context-back" onClick={() => { setTab('liste'); persistProjectId(undefined) }}>
-            ← Alle Projekte
-          </button>
-          <ProjectPicker
-            projects={projects}
-            selectedId={selectedProjectId ?? null}
-            onSelect={id => persistProjectId(id)}
-            onGoToList={() => setTab('liste')}
-          />
-        </div>
-      )}
+    <div className="master-page pw-root">
+      <ProjektHeader projectId={pid} onBack={toList} onSwitch={switchTo} />
+      <ProjektTabs tabs={workspaceTabs} active={view.tab} onChange={setTab} />
       <div className="master-tab-content">
-        {tab === 'liste'          && <ProjekteListe onSelectProject={openProject} onProjectCreated={id => { persistProjectId(id); setTab('struktur') }} />}
-        {tab === 'honorar'        && <HonorarTab initialProjectId={selectedProjectId} />}
-        {tab === 'struktur'       && <ProjektStruktur initialProjectId={selectedProjectId} />}
-        {tab === 'buchungen'      && <Buchungen initialProjectId={selectedProjectId} />}
-        {tab === 'leistungsstand' && <Leistungsstand initialProjectId={selectedProjectId} />}
-        {tab === 'vertraege'      && <Vertraege      initialProjectId={selectedProjectId} />}
-        {tab === 'budget'         && <Budget         initialProjectId={selectedProjectId} />}
-        {tab === 'mitarbeiter'    && <Mitarbeiter    initialProjectId={selectedProjectId} />}
-        {tab === 'nachtraege'     && <NachtraegeListe projectId={selectedProjectId} />}
+        {view.tab === 'struktur'       && <ProjektStruktur initialProjectId={pid} />}
+        {view.tab === 'buchungen'      && <Buchungen       initialProjectId={pid} />}
+        {view.tab === 'leistungsstand' && <Leistungsstand  initialProjectId={pid} />}
+        {view.tab === 'vertraege'      && <Vertraege       initialProjectId={pid} />}
+        {view.tab === 'budget'         && <Budget          initialProjectId={pid} />}
+        {view.tab === 'mitarbeiter'    && <Mitarbeiter     initialProjectId={pid} />}
+        {view.tab === 'honorar'        && <HonorarTab      initialProjectId={pid} />}
+        {view.tab === 'nachtraege'     && <NachtraegeListe projectId={pid} />}
       </div>
     </div>
   )

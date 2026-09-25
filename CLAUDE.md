@@ -287,6 +287,16 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
 
 - **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0.
 - **Invoice wizard**: draft invoice → assign performance amount + bookings → generate line items → finalize.
+  Abschlag, Einzelrechnung und Gutschrift laufen durch **einen** Assistenten
+  (`pages/rechnungen/InvoiceWizard.tsx`); was sich je Belegart unterscheidet
+  (Endpunkte, Datumsfeld, Sicherheitseinbehalt nur beim Abschlag), steht in
+  `wizardApi.ts`. Die Schlussrechnung hat zwei Schritte mehr und bleibt eine
+  eigene Datei im selben Muster. Summen (Nachlass I/II, Skonto, MwSt., SE)
+  rechnet **nur** `invoiceTotals.ts` — Anzeige, Speichern, PDF, XML und Buchen
+  nehmen dieselbe Nutzlast. PDF und XML speichern vorher die Nachlässe. Die
+  Auswahl der aufzulösenden Sicherheitseinbehalte einer Schlussrechnung merkt
+  sich der Entwurf in `INVOICE.SE_RELEASE_ADVANCE_IDS` (Migration `0171`);
+  maßgeblich beim Buchen bleibt, was der Buchungsaufruf mitschickt.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
@@ -302,6 +312,15 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   alte Satz und die Antwort sagt das); der Kostensatz bleibt, er hängt am
   Mitarbeiter. Die Vorschau ist derselbe Lauf mit `dryRun` — keine zweite Kopie
   der Prüfungen. Jede Umbuchung landet in `TEC_REBOOKING`.
+- **Monatsrunde Leistungsstände** (Projekte → Reiter „Leistungsstände",
+  `GET /projekte/leistungsstand/runde`, `services/leistungsstandRunde.js`):
+  Arbeitsliste der laufenden Projekte (Status aus Monatsabschluss), vorbelegt
+  „meine" und letztes Monatsende. Erledigt ist ein Projekt, sobald
+  `PROJECT.PROGRESS_REVIEWED_AS_OF ≥ Stichtag` — gesetzt von Speichern und
+  „Unverändert bestätigen" (`POST /projekte/:id/leistungsstand` mit
+  `as_of_date` / `confirm_unchanged`). Rechte: `projects.performance.view/edit`,
+  kein eigenes. „Jetzt wichtig" zeigt „Leistungsstände {Monat}: n von m offen"
+  (Alert-Typ `progress_round`).
 - **Teilfertige Leistungen** (`services/wipReport.js`, Report unter Projektdaten):
   der kaufmännische Abschluss. Je Projekt und Stichtag `unfertig = max(0,
   Leistungswert − abgerechnet)`, HGB-Ansatz `min(Kostenanteil, unfertig)`.
@@ -310,7 +329,12 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Abs. 2 HGB), und der HGB-Wert enthält **keinen** anteiligen Gewinn (§ 252
   Abs. 1 Nr. 4 HGB). Stichtagswerte in der Vergangenheit hängen an den
   `PROJECT_PROGRESS`-Snapshots — fehlt einer, weist der Report das aus statt
-  eine 0 zu zeigen. Optional daneben: ein zweiter Wertansatz für die
+  eine 0 zu zeigen. Maßgeblich ist der **Stichtag des Standes**
+  (`PROJECT_PROGRESS.AS_OF_DATE`, Migration `0170`), nicht `created_at`: je
+  Element steigt er nie ab — Fortschreibungen übernehmen ihn, ein Element mit
+  späterem Stand ist für einen früheren Stichtag gesperrt
+  (`services/leistungsstandRunde.js`). Wer neu in `PROJECT_PROGRESS` schreibt,
+  hält diese Regel ein: „heute" (Spaltenstandard) oder das Datum der Vorlage. Optional daneben: ein zweiter Wertansatz für die
   Steuerbilanz und eine Gegenprobe des Leistungsstands über eine
   Zielkostenquote — beide bleiben ohne gepflegte Einstellung ganz aus, statt
   eine 0 zu behaupten. Konzept: `docs/TEILFERTIGE_LEISTUNGEN_CONCEPT.md`.
@@ -508,6 +532,8 @@ Windows): `owner-console/README.md`.
 
 - Sitzungs-Rücknahme über `EMPLOYEE.SESSION_EPOCH` (`middleware/sessionGuard.js`): Passwortwechsel, Reset und Rollenänderung beenden laufende Sitzungen sofort. **Der Guard hängt in der authChain hinter `tenantScope`** — davor liegt kein Mandanten-Claim an, und die EMPLOYEE-Abfrage würde unter RLS null Zeilen liefern, also jeden aussperren.
 - Upload-Rechte nach `asset_type` (`routes/assets.js`): `AVATAR` ist Selbstbedienung, alles andere verlangt ein bestehendes Recht; unbekannte Arten fail-closed.
+- Buchungen: eine abgerechnete Buchung (`INVOICE_ID`/`ADVANCE_INVOICE_ID`) ist auch für `PATCH` gesperrt, und der Monatsabschluss gilt beim Ändern für den alten und den neuen Monat (`patchBuchung`). Timer-Entwürfe liest und bestätigt man nur für sich selbst; fremde nur mit `employees.bookings.view_all` (`controllers/buchungen.js`). Beides war bis Runde 2 des UI-Pilots offen.
+- „Eigene Zeit buchen" (`projects.bookings.own`, Migration `0169`): bucht nur für sich selbst (Mitarbeiter aus der Sitzung, Sätze vom Server), ändert/löscht nur eigene, offene Buchungen ohne Projektwechsel, und sieht Projekte/Leistungen nur über die Listen ohne Beträge (`/buchungen/eigen/*`, `services/eigeneZeit.js`). „Meine Zeit" (`GET /buchungen/mine`) braucht kein Recht, weil der Mitarbeiter nie aus der Anfrage kommt. Die Antwort von `PATCH /buchungen/:id` geht durch `stripBookingMoney` wie die Liste — vorher lieferte sie die ganze Zeile samt Sätzen.
 
 - Drosselung teurer Endpunkte (PDF, Reports) **pro Konto, nicht pro IP** (`middleware/rateLimit.js`) — ein Büro hinter einer NAT-Adresse darf sich nicht selbst aussperren. Die Limiter hängen deshalb hinter `authMiddleware`.
 - Progressive Verzögerung bei Fehlversuchen **je Konto** (`middleware/loginAttempts.js`) — bewusst keine Sperre: die wäre ein Weg, einen bekannten Nutzer gezielt auszusperren.

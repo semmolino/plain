@@ -1,32 +1,22 @@
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   X, ArrowDown, ArrowRight, HelpCircle,
   BookUser, FileSignature, FolderOpen, Receipt, type LucideIcon,
 } from 'lucide-react'
 import { BrandWordmark } from '@/components/brand/BrandLogo'
-import { useSession } from '@/hooks/useSession'
-
-const WELCOME_KEY = 'plansimple.welcome_dismissed'
+import { useWelcome } from '@/hooks/useWelcome'
 
 /**
- * Stateful Wrapper fürs Dashboard: zeigt das Orientierungs-Panel bis es pro
- * Organisation weggeklickt wurde; danach bleibt ein dezenter „Einführung
- * anzeigen"-Button zum erneuten Aufruf.
+ * Stateful Wrapper: zeigt das Orientierungs-Panel bis es pro Organisation
+ * weggeklickt wurde; danach bleibt ein dezenter „Einführung anzeigen"-Button.
+ * Die Uebersicht nutzt seit dem UI-Pilot `useWelcome` direkt und bietet das
+ * Wiederoeffnen im ⋯-Menue an.
  */
 export function WelcomeSection() {
-  const { tenantId } = useSession()
-  const key = `${WELCOME_KEY}_${tenantId ?? 'anon'}`
-  const [open, setOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem(key) !== '1' } catch { return true }
-  })
-  function dismiss() {
-    setOpen(false)
-    try { localStorage.setItem(key, '1') } catch { /* ignore */ }
-  }
+  const { open, dismiss, reopen } = useWelcome()
   if (open) return <WelcomePanel open onClose={dismiss} />
   return (
-    <button type="button" className="welcome-panel-reopen" onClick={() => setOpen(true)}>
+    <button type="button" className="welcome-panel-reopen" onClick={reopen}>
       <HelpCircle size={14} strokeWidth={2} /> Einführung anzeigen
     </button>
   )
@@ -87,9 +77,10 @@ export function WelcomePanel({ open, onClose }: { open: boolean; onClose: () => 
 
       <div className="welcome-panel-foot">
         <span className="welcome-panel-hint">
-          <ArrowDown size={14} strokeWidth={2} /> Dein Startpunkt: die Einrichtungs-Checkliste direkt darunter.
+          <ArrowDown size={14} strokeWidth={2} /> Die Einrichtungs-Checkliste findest du auf dieser Seite.
         </span>
-        <button className="btn-primary btn-small" onClick={onClose}>Los geht&rsquo;s</button>
+        {/* Sekundaer: auf der Startseite ist „Zeit buchen" die Hauptaktion. */}
+        <button type="button" className="btn-secondary btn-small" onClick={onClose}>Verstanden</button>
       </div>
     </div>
   )

@@ -33,6 +33,7 @@ module.exports = (supabase) => {
 
   // Static paths MUST come before /:id-style dynamic routes
   router.get("/search",                                (req, res) => ctrl.searchProjects(req, res, supabase));
+  router.get("/leistungsstand/runde",                  requirePermission("projects.performance.view"), (req, res) => ctrl.getLeistungsstandRunde(req, res, supabase));
   router.get("/contracts/search",                      (req, res) => ctrl.searchContracts(req, res, supabase));
   router.patch("/contract/:id",                        requirePermission("projects.contracts.edit"), (req, res) => ctrl.patchContract(req, res, supabase));
   router.patch("/structure/:id/completion-percents",   requirePermission("projects.performance.edit"), (req, res) => ctrl.patchStructureCompletionPercents(req, res, supabase));
@@ -48,7 +49,7 @@ module.exports = (supabase) => {
   router.get("/:id/structure",                         (req, res) => ctrl.getProjectStructure(req, res, supabase));
   router.post("/:id/structure",                        requirePermission("projects.structure.edit"), (req, res) => ctrl.createStructureNode(req, res, supabase));
   router.post("/:id/progress-snapshot",                requirePermission("projects.performance.snapshot"), (req, res) => ctrl.progressSnapshot(req, res, supabase));
-  router.get("/:id/leistungsstand",                    (req, res) => ctrl.getLeistungsstand(req, res, supabase));
+  router.get("/:id/leistungsstand",                    requirePermission("projects.performance.view"), (req, res) => ctrl.getLeistungsstand(req, res, supabase));
   router.post("/:id/leistungsstand",                   requirePermission("projects.performance.edit"), (req, res) => ctrl.saveLeistungsstand(req, res, supabase));
   router.get("/:id/contract",                          (req, res) => ctrl.getContractByProject(req, res, supabase));
   router.post("/:id/copy",                             requirePermission("projects.create"), (req, res) => ctrl.copyProject(req, res, supabase));

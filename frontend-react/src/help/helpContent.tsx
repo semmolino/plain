@@ -805,7 +805,10 @@ export const HELP = {
         Projekt-Snapshots. Liegt für ein Projekt kein Snapshot zum Stichtag vor,
         ist sein Leistungswert nicht belegt — die Spalte zeigt dann „fehlt".
         Snapshots entstehen automatisch beim Monatsabschluss (Einstellungen →
-        Monatsabschluss) oder von Hand über den Projekt-Snapshot im Projekt.
+        Monatsabschluss) und beim Pflegen der Leistungsstände — über die
+        Monatsrunde (Projekte → Leistungsstände) oder im Projekt. Maßgeblich ist
+        der <strong>Stichtag</strong>, zu dem ein Stand erfasst wurde, nicht der Tag
+        der Eingabe: der am 3. Oktober zum 30.09. eingetragene Stand gilt zum 30.09.
         Für den Stichtag „heute" wird der Live-Stand verwendet.
       </>
     ),
@@ -1444,11 +1447,12 @@ export const HELP = {
   // dadurch praktisch unauffindbar. Der Hinweis in der Leiste macht sie
   // sichtbar, dieser Text erklaert, was dahinter steckt.
   'structure.contextmenu': {
-    title: 'Rechtsklick auf eine Zeile',
+    title: 'Funktionen zu einer Zeile',
     body: (
       <>
-        Ein <strong>Rechtsklick</strong> auf eine Zeile (auf dem Handy: langes Antippen) öffnet die
-        Funktionen zu genau diesem Element:
+        Das <strong>⋯ am Zeilenende</strong> (in der Angebotsstruktur: <strong>Rechtsklick</strong>, auf
+        dem Handy langes Antippen) öffnet die Funktionen zu genau diesem Element. Der Rechtsklick
+        funktioniert in der Projektstruktur weiterhin als Abkürzung:
         <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
           <li>
             <strong>Element anlegen</strong> — legt ein <em>untergeordnetes</em> Element darunter an.
@@ -1474,6 +1478,226 @@ export const HELP = {
           oberster Ebene an und setzt Zuschläge auf die Gesamtsumme. Sind mehrere Zeilen über die
           Kästchen ausgewählt, bezieht sich das Löschen auf die ganze Auswahl.
         </p>
+      </>
+    ),
+  },
+  // ── UI-Pilot 2026-09 ─────────────────────────────────────────────────────
+  'structure.save': {
+    title: 'Wann wird gespeichert?',
+    body: (
+      <>
+        Änderungen an Kürzel, Bezeichnung, Abrechnungsart, Honorar, Nebenkosten, Zuschlägen und
+        „Intern" werden <strong>gesammelt</strong> und erst mit <strong>Speichern</strong> (oder
+        Strg+S) übernommen. Geänderte Felder sind markiert; die Leiste unten zeigt, wie viele Elemente
+        offen sind. <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
+        Sofort wirken dagegen Befehle, die die Struktur selbst ändern: Element anlegen, löschen,
+        verschieben und Nebenkosten vererben — jeweils nach Rückfrage. Wer mit offenen Änderungen den
+        Reiter oder das Projekt wechselt, die Seite über die Navigation verlässt oder im Browser
+        zurückgeht, wird gefragt, ob gespeichert werden soll.
+      </>
+    ),
+  },
+  'bookings.quick': {
+    title: 'Zeit buchen',
+    body: (
+      <>
+        Bucht Arbeitszeit direkt auf ein Projekt-Element — von jeder Seite aus, ohne erst ins Projekt
+        zu wechseln. <strong>Zuletzt gebucht</strong> setzt Projekt und Leistung mit einem Tipp.
+        Die Dauer ergibt sich aus Von/Bis oder wird direkt eingegeben.<br /><br />
+        <strong>Stunden</strong> sind die geleistete Zeit (Kosten, Zeitkonto).
+        <strong> Zur Abrechnung</strong> ist, was dem Auftraggeber berechnet werden darf — meist
+        dasselbe, bei Kulanz weniger. Stundensatz und Kostensatz kommen aus der Preisliste des
+        Projekts bzw. dem Kostensatz-Verlauf des Mitarbeiters. In einem abgeschlossenen Monat ist
+        keine Buchung mehr möglich.
+      </>
+    ),
+  },
+  'bookings.mine': {
+    title: 'Meine Zeit',
+    body: (
+      <>
+        Deine Woche auf einen Blick: je Tag die gebuchten Stunden und das Soll aus deinem
+        Arbeitszeitmodell (Urlaub, Krankheit und Feiertage werden angerechnet). Ein Tipp auf einen
+        Tag zeigt seine Buchungen.<br /><br />
+        <strong>Nochmal buchen</strong> öffnet „Zeit buchen" mit demselben Projekt, derselben Leistung
+        und derselben Beschreibung. Ändern und Löschen gehen, solange eine Buchung noch nicht
+        abgerechnet und der Monat nicht abgeschlossen ist — danach steht dort ein Schloss mit dem
+        Grund. Eine abgerechnete Buchung wird über Storno oder Gutschrift korrigiert.
+      </>
+    ),
+  },
+  'performance.asof': {
+    title: 'Stand zum Stichtag',
+    body: (
+      <>
+        Der Leistungsstand gilt zu dem Tag, den du hier wählst — nicht zu dem Tag, an dem du ihn
+        einträgst. Wer den September-Stand am 3. Oktober pflegt, wählt den <strong>30.09.</strong>;
+        der Bericht „Teilfertige Leistungen" zum 30.09. findet ihn dann.<br /><br />
+        Der Stichtag darf nicht in der Zukunft liegen. Ein Element, das schon einen späteren Stand hat,
+        ist für einen früheren Stichtag gesperrt (Schloss) — sonst würde der ältere Wert den neueren
+        überschreiben, und der Abrechnungsvorschlag rechnete mit dem falschen Stand.
+      </>
+    ),
+  },
+  'performance.confirm': {
+    title: 'Unverändert bestätigen',
+    body: (
+      <>
+        Hat sich in diesem Monat nichts bewegt, hältst du mit einem Klick fest, dass die heutigen Werte
+        auch zum Stichtag gelten. Das ist mehr als nichts zu tun: der Stichtagsbericht braucht für jedes
+        Monatsende einen Stand, und die Monatsrunde zählt das Projekt als erledigt.
+      </>
+    ),
+  },
+  'performance.round': {
+    title: 'Monatsrunde Leistungsstände',
+    body: (
+      <>
+        Die Arbeitsliste für den Monatsabschluss: alle laufenden Projekte (Status aus Einstellungen →
+        Monatsabschluss) mit Elementen, deren Leistungsstand man eingibt. Vorbelegt sind deine eigenen
+        Projekte (Projektleitung) und das letzte Monatsende.<br /><br />
+        Links wählst du das Projekt, rechts trägst du die Prozente ein. <strong>Speichern &amp;
+        nächstes</strong> (Strg+S) springt zum nächsten offenen Projekt, <strong>Unverändert
+        bestätigen</strong> gilt, wenn sich nichts bewegt hat, <strong>Überspringen</strong> merkt sich
+        das Projekt nur für diese Sitzung. Erledigt ist ein Projekt, sobald es für diesen oder einen
+        späteren Stichtag gepflegt ist. Nach Aufwand abgerechnete Elemente stehen immer auf 100 % und
+        erscheinen nicht als Eingabe.
+      </>
+    ),
+  },
+  'timer.flow': {
+    title: 'Stempeluhr',
+    body: (
+      <>
+        Die Stempeluhr misst die Zeit, während du arbeitest. Jeder Abschnitt wird als
+        <strong> Entwurf</strong> gesichert — beim Wechsel über „Nächste Aufgabe", beim Start einer
+        <strong> Pause</strong> (die Arbeitszeit bis dahin geht nicht verloren) und bei „Beenden".
+        Gebucht ist erst, was du in der <strong>Tagesübersicht</strong> freigibst — dort lassen sich
+        Entwürfe noch korrigieren. Die Uhr gehört dem angemeldeten Nutzer: meldet sich am selben
+        Rechner jemand anderes an, sieht er sie nicht. Wer lieber nachträglich bucht, nimmt „Zeit buchen".
+      </>
+    ),
+  },
+  'timer.review': {
+    title: 'Tagesübersicht',
+    body: (
+      <>
+        Zeigt alle Entwürfe der Stempeluhr von heute. Zeiten, Stunden und Beschreibung lassen sich
+        hier noch ändern, einzelne Einträge löschen. <strong>Freigeben</strong> macht aus den
+        Entwürfen Buchungen — erst dann zählen sie für Zeitkonto, Kosten und Abrechnung.<br /><br />
+        Ist die Arbeitszeitprüfung eingeschaltet (Einstellungen → Arbeitszeit), prüft die Übersicht
+        die Pausenpflicht nach § 4 ArbZG. Fehlt Pause, wählst du, ob sie vom letzten Arbeitsblock
+        abgezogen wird oder ob du sie gemacht, aber nicht gestempelt hast. „Später" schließt die
+        Übersicht, die Entwürfe bleiben erhalten.
+      </>
+    ),
+  },
+  'dashboard.attention': {
+    title: 'Jetzt wichtig',
+    body: (
+      <>
+        Sammelt, was heute eine Handlung braucht: überfällige Rechnungen, fällige Mahnaktionen,
+        Projekte, deren Kosten über dem Leistungsstand liegen, und abrechenbare Leistung. Jede Zeile
+        führt direkt an die Stelle, an der du es erledigst. Ist die Liste leer, ist nichts überfällig.
+      </>
+    ),
+  },
+  'invoice.wizard.projekt_vertrag': {
+    title: 'Projekt und Vertrag',
+    body: (
+      <>
+        Der Vertrag liefert Zahlungsziel und Skonto als Vorbelegung, bei Abschlagsrechnungen auch den
+        Sicherheitseinbehalt. Hat das Projekt nur einen Vertrag, ist er schon gewählt. Mit <strong>Weiter</strong> wird ein
+        <strong> Entwurf</strong> angelegt — er erscheint in der Rechnungsliste und lässt sich später
+        fortsetzen.
+      </>
+    ),
+  },
+  'invoice.wizard.rechnungsdaten': {
+    title: 'Rechnungsdaten',
+    body: (
+      <>
+        Rechnungsdatum und Fälligkeit (aus dem Zahlungsziel vorbelegt), der abgerechnete
+        Leistungszeitraum und ein Kommentar fürs PDF. Die E-Rechnungsfelder braucht es nur, wenn der
+        Auftraggeber sie verlangt — bei öffentlichen Auftraggebern die Leitweg-ID.
+      </>
+    ),
+  },
+  'invoice.wizard.betraege': {
+    title: 'Beträge',
+    body: (
+      <>
+        Der <strong>Vorschlag</strong> ist je Pauschal-/HOAI-Position der gemeldete Leistungsstand
+        abzüglich dessen, was bereits abgerechnet ist; negative Werte zählen nicht. Du kannst ihn
+        übernehmen oder einen eigenen Leistungsbetrag eintragen. Bei Positionen nach Aufwand wählst
+        du darunter die Buchungen aus, die in diese Rechnung gehen. Nebenkosten rechnet das System
+        im nächsten Schritt hinzu.
+      </>
+    ),
+  },
+  'invoice.wizard.pruefen': {
+    title: 'Prüfen und buchen',
+    body: (
+      <>
+        Rechenweg: Netto → Nachlass I → Nachlass II (auf den Rest) → Skonto → zzgl. MwSt. → Brutto,
+        bei Abschlagsrechnungen davon ggf. der Sicherheitseinbehalt. Vor dem Buchen kannst du PDF und
+        E-Rechnung ansehen — beide mit den Nachlässen, die hier gerade stehen. Die Zusammenfassung
+        daneben zeigt denselben Betrag. <strong>Nach dem Buchen</strong> ist die Rechnung
+        unveränderlich; Korrekturen laufen über Storno.
+      </>
+    ),
+  },
+  'invoice.schluss.positionen': {
+    title: 'Positionen der Schlussrechnung',
+    body: (
+      <>
+        Je Element der Struktur der Leistungswert laut Leistungsstand, abzüglich dessen, was frühere
+        (Teil-)Schlussrechnungen schon abgerechnet haben. Abschlagsrechnungen zieht erst der nächste
+        Schritt ab. Nach dem Buchen gelten die gewählten Positionen als <strong>abgeschlossen</strong> —
+        eine Teilschlussrechnung wählt deshalb nur die fertigen Leistungsphasen.
+      </>
+    ),
+  },
+  'invoice.schluss.abzuege': {
+    title: 'Abschläge abziehen',
+    body: (
+      <>
+        Gebuchte Abschlagsrechnungen des Projekts, die noch nicht abgezogen sind. Vorgeschlagen ist
+        ihr Nettobetrag; du kannst ihn ändern, etwa wenn ein Abschlag nur teilweise zu den gewählten
+        Positionen gehört. Ein Hinweis erscheint, wenn ein Abschlag Positionen enthält, die hier nicht
+        abgerechnet werden.
+      </>
+    ),
+  },
+  'invoice.schluss.pruefen': {
+    title: 'Prüfen und buchen',
+    body: (
+      <>
+        Rechenweg: Positionen − Abschläge = Netto → Nachlass I → Nachlass II → Skonto → zzgl. MwSt. →
+        Brutto. Einbehaltene <strong>Sicherheitseinbehalte</strong> früherer Abschläge kommen zur
+        Zahlung dazu, wenn du sie auflöst; die Auswahl bleibt beim Entwurf gespeichert. PDF und
+        E-Rechnung zeigen den Stand, der hier gerade steht. Nach dem Buchen ist die Rechnung
+        unveränderlich; Korrekturen laufen über Storno.
+      </>
+    ),
+  },
+  'invoice.draft': {
+    title: 'Entwurf',
+    body: (
+      <>
+        Ein Entwurf ist noch keine Rechnung: er hat keine Nummer und zählt nicht als abgerechnet.
+        Er bleibt in der Rechnungsliste stehen, bis du ihn buchst oder löschst — auch wenn du den
+        Assistenten verlässt.
+      </>
+    ),
+  },
+  'einvoice.detailfelder': {
+    title: 'E-Rechnungs-Detailfelder',
+    body: (
+      <>
+        Zusätzliche Angaben für XRechnung/ZUGFeRD: Käuferreferenz bzw. Leitweg-ID (öffentliche
+        Auftraggeber), Bestellnummer, Kostenstelle, Zahlungsart, Verwendungszweck und die
+        Umsatzsteuer-Kategorie. Leer lassen, wenn der Auftraggeber nichts davon verlangt.
       </>
     ),
   },

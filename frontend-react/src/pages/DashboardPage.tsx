@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, Children, type ReactNode } from 'react'
 import { DashboardLoading } from '@/components/ui/Skeleton'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import {
@@ -10,10 +10,22 @@ import {
 } from 'chart.js'
 import { Bar, Chart, Doughnut, Line } from 'react-chartjs-2'
 import { Link, useNavigate } from 'react-router-dom'
-import { TrendingUp, Banknote, HardHat, Clock, Check, type LucideIcon } from 'lucide-react'
+import { TrendingUp, Banknote, HardHat, Clock, Check, AlertTriangle, CheckCircle2, Info, ArrowRight, type LucideIcon } from 'lucide-react'
 import { BrandGlyph } from '@/components/brand/BrandGlyph'
 import { useSession } from '@/hooks/useSession'
-import { WelcomeSection } from '@/components/onboarding/WelcomePanel'
+import { WelcomePanel } from '@/components/onboarding/WelcomePanel'
+import { useWelcome } from '@/hooks/useWelcome'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { RowMenu } from '@/components/ui/RowMenu'
+import { Tabs } from '@/components/ui/Tabs'
+import { Disclosure } from '@/components/ui/Disclosure'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
+import { AttentionList, type AttentionItem } from '@/components/dashboard/AttentionList'
+import { QuickTimeCard } from '@/components/dashboard/QuickTimeCard'
+import { MeineZeitCard } from '@/components/zeit/MeineZeitCard'
+import { useQuickBooking } from '@/store/quickBookingStore'
+import { useCanBook } from '@/hooks/useBooking'
+import { localIsoDate } from '@/utils/zeit'
 import { computeEvm, fmtCpi, portfolioCpi } from '@/utils/projectForecasting'
 import { KpiValue } from '@/components/ui/KpiValue'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
@@ -56,7 +68,6 @@ import {
 } from '@/api/mitarbeiter'
 import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
 import { fetchDashboardOpenSe, fetchDashboardArbzgStats } from '@/api/reports'
-import { Can } from '@/components/ui/Can'
 import { usePermission } from '@/store/permissionsStore'
 import { RecentMixedList } from '@/components/recents/RecentList'
 import { useGamificationConfig } from '@/hooks/useGamificationConfig'
@@ -122,15 +133,49 @@ function computeDateRange(z: ZeitraumKey): { dateFrom: string; dateTo: string } 
 
 // ── Shared sub-components ────────────────────────────────────────────────────
 
-function KpiCard({ label, value, meta, accent, hint }: { label: string; value: string; meta?: string; accent?: boolean; hint?: React.ReactNode }) {
-  return (
-    <div className={`kpi-card${accent ? ' kpi-card-accent' : ''}`}>
+function KpiCard({ label, value, meta, accent, hint, to, state }: {
+  label: string; value: string; meta?: string; accent?: boolean; hint?: React.ReactNode
+  /** Ziel beim Klick (UI-Pilot 2026-09) — vorher waren Kacheln reine Anzeige. */
+  to?: string; state?: unknown
+}) {
+  const body = (
+    <>
       <div className="kpi-label" style={hint ? { display: 'flex', alignItems: 'center', gap: 4 } : undefined}>
         {label}{hint && <InfoHint>{hint}</InfoHint>}
       </div>
       <div className="kpi-value">{value}</div>
       {meta && <div className="kpi-meta">{meta}</div>}
-    </div>
+    </>
+  )
+  const cls = `kpi-card${accent ? ' kpi-card-accent' : ''}`
+  if (to) {
+    return (
+      <Link to={to} state={state} className={`${cls} kpi-card--link`}>
+        {body}
+        <ArrowRight size={14} strokeWidth={2} className="kpi-card-arrow" aria-hidden="true" />
+      </Link>
+    )
+  }
+  return <div className={cls}>{body}</div>
+}
+
+/**
+ * Kennzahlen-Raster (UI-Pilot 2026-09): Spalten nach Platz statt fest zwei
+ * (`minmax(200px, 1fr)`, damit 4,8 Mio. € nicht ueberlaufen). Auf dem Handy
+ * die ersten vier, der Rest hinter „Alle Kennzahlen" — vorher standen dort
+ * sieben Kacheln untereinander, bevor irgendein Inhalt kam.
+ */
+function KpiGrid({ children }: { children: ReactNode }) {
+  const narrow = useIsNarrow()
+  const cards = Children.toArray(children).filter(Boolean)
+  if (!narrow || cards.length <= 4) return <div className="kpi-grid dash-kpis">{cards}</div>
+  return (
+    <>
+      <div className="kpi-grid dash-kpis">{cards.slice(0, 4)}</div>
+      <Disclosure title="Alle Kennzahlen" hint={`${cards.length - 4} weitere`} className="dash-kpis-more">
+        <div className="kpi-grid dash-kpis">{cards.slice(4)}</div>
+      </Disclosure>
+    </>
   )
 }
 
@@ -401,27 +446,6 @@ function SetupSectionBlock({ title, section, expanded }: {
   )
 }
 
-// ── Alert strip ───────────────────────────────────────────────────────────────
-
-function AlertStrip({ alerts }: { alerts: DashboardAlert[] }) {
-  const navigate = useNavigate()
-  if (!alerts.length) return null
-  return (
-    <div className="alert-strip">
-      {alerts.map((a, i) => (
-        <button
-          key={i}
-          className={`alert-chip alert-chip-${a.severity}`}
-          onClick={() => navigate(a.action_url)}
-        >
-          <span className={`alert-dot alert-dot-${a.severity}`} />
-          {a.message}
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // ── Overdue invoices table ────────────────────────────────────────────────────
 
 type OverdueSortField = 'num' | 'invdate' | 'due' | 'days' | 'amount'
@@ -519,8 +543,8 @@ const ROLES: { id: string; icon: LucideIcon; title: string; desc: string }[] = [
 function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
   return (
     <div className="role-selector-wrap">
-      <h2 className="role-selector-title">Wählen Sie Ihre Dashboard-Ansicht</h2>
-      <p className="role-selector-sub">Die Auswahl wird lokal gespeichert und kann jederzeit geändert werden.</p>
+      <h2 className="role-selector-title">Welche Ansicht passt zu deiner Arbeit?</h2>
+      <p className="role-selector-sub">Die Auswahl wird gespeichert und lässt sich oben rechts unter „Ansicht" jederzeit ändern.</p>
       <div className="role-selector">
         {ROLES.map(({ id, icon: Icon, title, desc }) => (
           <button key={id} className="role-card" onClick={() => onSelect(id)}>
@@ -538,7 +562,7 @@ function RoleSelector({ onSelect }: { onSelect: (role: string) => void }) {
 
 function GeschaeftsleitungView({
   projects, byStatus, alerts, riskProjects, billingSummary, openPosten, snapshot, teamHours, dateFrom, dateTo,
-  subPage, onSubPageChange,
+  subPage, onSubPageChange, filterBar,
 }: {
   projects: DashboardProject[]; byStatus: DashboardByStatus[]; alerts: DashboardAlert[];
   riskProjects: RiskProject[]; billingSummary: BillingSummaryData | null;
@@ -546,6 +570,8 @@ function GeschaeftsleitungView({
   dateFrom: string; dateTo: string;
   subPage: 'uebersicht' | 'risiko' | 'abrechnung' | 'personal';
   onSubPageChange: (id: string) => void;
+  /** Filter gehoeren unter die Reiter, deren Inhalt sie filtern. */
+  filterBar?: ReactNode;
 }) {
   const honorar     = projects.reduce((s, p) => s + Number(p.BUDGET_TOTAL_NET    || 0), 0)
   const leistung    = projects.reduce((s, p) => s + Number(p.LEISTUNGSSTAND_VALUE || 0), 0)
@@ -557,8 +583,10 @@ function GeschaeftsleitungView({
 
   return (
     <>
-      <SubNav
-        options={[
+      {/* Gemeinsame Reiterleiste statt der eigenen gefuellten Knoepfe — die
+          sahen aus wie Aktionen, nicht wie Ansichten. */}
+      <Tabs
+        tabs={[
           { id: 'uebersicht',  label: 'Übersicht'     },
           { id: 'risiko',      label: 'Projekte'       },
           { id: 'abrechnung',  label: 'Abrechnung'     },
@@ -567,15 +595,14 @@ function GeschaeftsleitungView({
         active={subPage}
         onChange={onSubPageChange}
       />
+      {filterBar}
 
       {subPage === 'uebersicht' && (<>
-        <AlertStrip alerts={alerts} />
-
-        <div className="kpi-grid">
-          <KpiCard label="Honorar gesamt"   value={fmtEur(honorar)}    />
-          <KpiCard label="Offene Leistung"  value={fmtEur(offeneLeist)} />
-          <KpiCard label="Leistungsstand"   value={fmtEur(leistung)}   meta={`${fmtPct(leistPct)} des Honorars`} />
-          <KpiCard label="Aktive Projekte"  value={String(activeCount)} />
+        <KpiGrid>
+          <KpiCard label="Honorar gesamt"   value={fmtEur0(honorar)}    />
+          <KpiCard label="Offene Leistung"  value={fmtEur0(offeneLeist)} meta="zur Abrechnung" to="/rechnungen" />
+          <KpiCard label="Leistungsstand"   value={fmtEur0(leistung)}   meta={`${fmtPct(leistPct)} des Honorars`} />
+          <KpiCard label="Aktive Projekte"  value={String(activeCount)} to="/projekte" />
           <KpiCard
             label="Auftragsreichweite"
             value={fmtMonths(snapshot?.kpis?.auftragsreichweite ?? null)}
@@ -588,10 +615,10 @@ function GeschaeftsleitungView({
             const vacTotal = projects.reduce((s, p) => { const v = computeEvm(p).vac; return s + (v ?? 0) }, 0)
             return <>
               <KpiCard label="CPI (Cost-Performance-Index)" value={fmtCpi(cpi)} meta={cpi == null ? undefined : cpi >= 0.95 ? 'Effizient' : cpi >= 0.80 ? 'Leicht überbudget' : 'Überbudget'} accent={cpi != null && cpi < 0.80} />
-              <KpiCard label="Prognose-Ergebnis (VAC)" value={fmtEur(vacTotal)} meta={vacTotal >= 0 ? 'Projekte im Plan' : 'Progn. Überschreitung'} accent={vacTotal < 0} />
+              <KpiCard label="Prognose-Ergebnis (VAC)" value={fmtEur0(vacTotal)} meta={vacTotal >= 0 ? 'Projekte im Plan' : 'Progn. Überschreitung'} accent={vacTotal < 0} />
             </>
           })()}
-        </div>
+        </KpiGrid>
 
         <NarrativeBlock>
           Honorar gesamt: <strong>{money(honorar)}</strong>. Leistungsstand bei{' '}
@@ -661,8 +688,8 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
     <div className="dash-card">
       <div className="dash-card-title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>Offene Mahnvorgänge</span>
-        <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => navigate('/rechnungen?tab=mahnungen')}>
-          → Mahnungen öffnen
+        <button type="button" className="btn btn-sm" style={{ fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }} onClick={() => navigate('/rechnungen?tab=mahnungen')}>
+          Mahnungen öffnen <ArrowRight size={12} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
 
@@ -670,7 +697,7 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
       {stats.overdueActionsCount > 0 ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, padding: '10px 14px', background: 'var(--danger-bg)', borderRadius: 8, border: '1px solid var(--danger-bg)', cursor: 'pointer' }}
           onClick={() => navigate('/rechnungen?tab=mahnungen')}>
-          <span style={{ fontSize: 20, lineHeight: 1 }}>⚠️</span>
+          <AlertTriangle size={20} strokeWidth={2} style={{ color: 'var(--danger-strong)', flexShrink: 0 }} aria-hidden="true" />
           <div>
             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--danger-strong)' }}>
               {stats.overdueActionsCount} Aktion{stats.overdueActionsCount !== 1 ? 'en' : ''} fällig
@@ -682,12 +709,12 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
         </div>
       ) : stats.totalOverdue === 0 ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'rgba(34,197,94,0.07)', borderRadius: 8, border: '1px solid rgba(34,197,94,0.25)' }}>
-          <span style={{ color: 'var(--success)', fontSize: 14 }}>✓</span>
+          <CheckCircle2 size={15} strokeWidth={2} style={{ color: 'var(--success)', flexShrink: 0 }} aria-hidden="true" />
           <span style={{ fontSize: 13, color: 'var(--success)' }}>Keine überfälligen Rechnungen</span>
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, padding: '8px 12px', background: 'rgba(234,179,8,0.07)', borderRadius: 8, border: '1px solid rgba(234,179,8,0.3)' }}>
-          <span style={{ color: 'var(--warning)', fontSize: 14 }}>ℹ</span>
+          <Info size={15} strokeWidth={2} style={{ color: 'var(--warning-strong)', flexShrink: 0 }} aria-hidden="true" />
           <span style={{ fontSize: 13, color: 'var(--warning-strong)' }}>{stats.totalOverdue} überfällig, alle in Bearbeitung</span>
         </div>
       )}
@@ -740,9 +767,9 @@ function MahnungsStatusCard({ stats }: { stats: MahnungStats }) {
 }
 
 function ControllerView({
-  kpis, monthly, alerts, overdueInvoices, mahnStats, billingSummary,
+  kpis, monthly, overdueInvoices, mahnStats, billingSummary,
 }: {
-  kpis: DashboardKpis; monthly: DashboardMonthly[]; alerts: DashboardAlert[];
+  kpis: DashboardKpis; monthly: DashboardMonthly[];
   overdueInvoices: OverdueInvoice[]; mahnStats: MahnungStats | null; billingSummary: BillingSummaryData | null;
 }) {
   const openSeQ = useQuery({
@@ -766,30 +793,33 @@ function ControllerView({
 
   return (
     <>
-      <AlertStrip alerts={alerts} />
-
-      <div className="kpi-grid">
-        <KpiCard label="Abschlagsrechnungen"     value={fmtEur(kpis.ABSCHLAGSRECHNUNGEN)} />
-        <KpiCard label="Schlussgerechnet"         value={fmtEur(kpis.SCHLUSSGERECHNET)}   />
+      <KpiGrid>
+        {/* Handlungsbedarf zuerst. Vorher hiessen zwei Kacheln „Überfällige
+            Rechnungen" — die eine zaehlte Rechnungen, die andere Mahnvorgaenge. */}
         <KpiCard
           label="Überfällige Rechnungen"
           value={overdueInvoices.length > 0 ? String(overdueInvoices.length) : '—'}
-          meta={overdueInvoices.length > 0 ? fmtEur(overdueTotal) : undefined}
+          meta={overdueInvoices.length > 0 ? fmtEur0(overdueTotal) : undefined}
           accent={overdueInvoices.length > 0}
+          to="/rechnungen"
         />
         {mahnStats && (
           <KpiCard
-            label="Überfällige Rechnungen"
-            value={String(mahnStats.totalOverdue)}
-            meta={mahnStats.overdueActionsCount > 0 ? `${mahnStats.overdueActionsCount} Aktion(en) fällig` : mahnStats.noDunningCount > 0 ? `${mahnStats.noDunningCount} ungemahnt` : undefined}
+            label="Mahnaktionen fällig"
+            value={String(mahnStats.overdueActionsCount)}
+            meta={mahnStats.noDunningCount > 0 ? `${mahnStats.noDunningCount} noch ungemahnt` : `${mahnStats.totalOverdue} überfällig in Bearbeitung`}
             accent={mahnStats.overdueActionsCount > 0}
+            to="/rechnungen?tab=mahnungen"
           />
         )}
-        {!mahnStats && <KpiCard label="Offene Leistung" value={fmtEur(kpis.OFFENE_LEISTUNG)} />}
+        <KpiCard label="Abschlagsrechnungen"     value={fmtEur0(kpis.ABSCHLAGSRECHNUNGEN)} />
+        <KpiCard label="Schlussgerechnet"         value={fmtEur0(kpis.SCHLUSSGERECHNET)}   />
+        {!mahnStats && <KpiCard label="Offene Leistung" value={fmtEur0(kpis.OFFENE_LEISTUNG)} to="/rechnungen" />}
         {openSe && openSe.totalOpen > 0 && (
           <KpiCard
             label="Offene Sicherheitseinbehalte"
-            value={fmtEur(openSe.totalOpen)}
+            to="/rechnungen?tab=se"
+            value={fmtEur0(openSe.totalOpen)}
             meta={`${openSe.count} ${openSe.count === 1 ? 'Eintrag' : 'Einträge'} aus ${openSe.byProject.length} ${openSe.byProject.length === 1 ? 'Projekt' : 'Projekten'}`}
           />
         )}
@@ -807,7 +837,7 @@ function ControllerView({
             accent={arbzg.blockWeek > 0}
           />
         )}
-      </div>
+      </KpiGrid>
 
       <NarrativeBlock>
         {overdueInvoices.length > 0
@@ -988,10 +1018,11 @@ function BookingsTable({ bookings }: { bookings: DayBooking[] }) {
 }
 
 function MitarbeiterView({ employeeId }: { employeeId: number }) {
+  const { canBook } = useCanBook()
   const now   = new Date()
   const year  = now.getFullYear()
   const month = now.getMonth() + 1
-  const today = now.toISOString().slice(0, 10)
+  const today = localIsoDate(now)
 
   const { data: monthRes,   isLoading: l1 } = useQuery({
     queryKey: ['emp-balance', employeeId, year, month],
@@ -1029,12 +1060,14 @@ function MitarbeiterView({ employeeId }: { employeeId: number }) {
       <RecapCard />
       <StreakCard />
 
-      <div className="kpi-grid">
+      <KpiGrid>
+        <KpiCard label="Stunden heute"         value={fmtH(todayH)} />
         <KpiCard label="Stunden diesen Monat" value={fmtH(monthActual)} meta={`von ${fmtH(monthReq)} Soll`} />
         <KpiCard label="Saldo diesen Monat"   value={fmtSaldo(monthSaldo)} accent={monthSaldo < -8} />
         <KpiCard label="Laufender Saldo"       value={fmtSaldo(totalSaldo)} accent={totalSaldo < -8} />
-        <KpiCard label="Stunden heute"         value={fmtH(todayH)} />
-      </div>
+      </KpiGrid>
+
+      <MeineZeitCard employeeId={employeeId} />
 
       <NarrativeBlock>
         Diesen Monat: <strong>{fmtH(monthActual)}</strong> von <strong>{fmtH(monthReq)}</strong> Soll-Stunden gebucht
@@ -1048,26 +1081,32 @@ function MitarbeiterView({ employeeId }: { employeeId: number }) {
         <MitarbeiterBalanceChart months={months} />
       </div>
 
-      <div className="dash-card">
-        <div className="dash-card-title">Buchungen heute</div>
-        {todayBkgs.length > 0
-          ? <BookingsTable bookings={todayBkgs} />
-          : <p className="empty-note">Noch keine Buchungen für heute erfasst.</p>
-        }
-      </div>
+      {/* Wer buchen darf, bekommt „Meine Zeit" (Woche, Tag, Aendern/Loeschen)
+          statt der zwei Nur-Lese-Tabellen. Die bleiben fuer alle anderen. */}
+      {!canBook && (
+        <>
+          <div className="dash-card">
+            <div className="dash-card-title">Buchungen heute</div>
+            {todayBkgs.length > 0
+              ? <BookingsTable bookings={todayBkgs} />
+              : <p className="empty-note">Noch keine Buchungen für heute erfasst.</p>
+            }
+          </div>
 
-      {recentDays.length > 0 && (
-        <div className="dash-card">
-          <div className="dash-card-title">Letzte Buchungen dieses Monats</div>
-          {recentDays.map(d => (
-            <div key={d.date} style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
-                {fmtDateDE(d.date)} — {fmtH(d.actual)}
-              </div>
-              <BookingsTable bookings={d.bookings} />
+          {recentDays.length > 0 && (
+            <div className="dash-card">
+              <div className="dash-card-title">Letzte Buchungen dieses Monats</div>
+              {recentDays.map(d => (
+                <div key={d.date} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
+                    {fmtDateDE(d.date)} — {fmtH(d.actual)}
+                  </div>
+                  <BookingsTable bookings={d.bookings} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </>
   )
@@ -1106,28 +1145,6 @@ function ampelDot(ampel: string, size = 10) {
       background: AMPEL_COLORS[ampel] ?? 'var(--text-4)', flexShrink: 0,
       verticalAlign: 'middle',
     }} />
-  )
-}
-
-// ── Sub-navigation ────────────────────────────────────────────────────────────
-
-function SubNav({ options, active, onChange }: {
-  options: Array<{ id: string; label: string }>
-  active:  string
-  onChange: (id: string) => void
-}) {
-  return (
-    <div className="dash-subnav">
-      {options.map(o => (
-        <button
-          key={o.id}
-          className={`dash-subnav-btn${active === o.id ? ' active' : ''}`}
-          onClick={() => onChange(o.id)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
   )
 }
 
@@ -1754,7 +1771,7 @@ export function DashboardPage() {
       { queryKey: ['dashboard', 'projects', dateRange.dateFrom, dateRange.dateTo],   queryFn: () => fetchDashboardProjects(dateRange.dateFrom, dateRange.dateTo), staleTime: 300000, enabled: isGl },
       { queryKey: ['dashboard', 'monthly',  dateRange.dateFrom, dateRange.dateTo],   queryFn: () => fetchDashboardMonthly(dateRange.dateFrom, dateRange.dateTo),  staleTime: 300000, enabled: isController },
       { queryKey: ['dashboard', 'by-status'],                                        queryFn: fetchDashboardByStatus,          staleTime: 300000, enabled: isGl },
-      { queryKey: ['dashboard', 'alerts'],                                           queryFn: fetchDashboardAlerts,            staleTime: 120000, enabled: isGl || isController },
+      { queryKey: ['dashboard', 'alerts'],                                           queryFn: fetchDashboardAlerts,            staleTime: 120000, enabled: isGl || isController || isBl },
       { queryKey: ['dashboard', 'overdue-invoices'],                                 queryFn: fetchOverdueInvoices,            staleTime: 120000, enabled: isController },
       { queryKey: ['dashboard', 'mahnung-stats'],                                    queryFn: fetchMahnungStats,               staleTime: 120000, enabled: isController },
       { queryKey: ['dashboard', 'risk-projects', isBl ? 'own' : 'all'],              queryFn: () => fetchRiskProjects(isBl ? 'own' : undefined), staleTime: 300000, enabled: isGl || isBl },
@@ -1813,45 +1830,115 @@ export function DashboardPage() {
       .filter(p => !filters.status        || p.PROJECT_STATUS_NAME_SHORT === filters.status),
     [riskProjects, filters.abteilung, filters.projektleiter, filters.status])
 
-  const roleLabel = ROLES.find(r => r.id === dashboardRole)?.title ?? ''
+  const welcome = useWelcome()
+  const openQuickBooking = useQuickBooking(s => s.open)
+  const { canBook } = useCanBook()
+  const { companyName } = useSession()
+
+  // Eigenes Zeitkonto fuer „Jetzt wichtig" der Mitarbeiter-Ansicht — derselbe
+  // Cache wie MitarbeiterView und die Karte „Zeit buchen".
+  const nowD = new Date()
+  const { data: ownBal } = useQuery({
+    queryKey: ['emp-balance', employeeId, nowD.getFullYear(), nowD.getMonth() + 1],
+    queryFn:  () => fetchMonthBalance(employeeId!, nowD.getFullYear(), nowD.getMonth() + 1),
+    enabled:  isMitarbeiter && employeeId != null,
+    staleTime: 60000,
+  })
+
+  // ── „Jetzt wichtig" je Rolle ──
+  // Billig zu rechnen — bewusst ohne useMemo.
+  const attention: AttentionItem[] = (() => {
+    const items: AttentionItem[] = []
+    const lvl = { red: 'critical', amber: 'watch', blue: 'info' } as const
+    if (isGl || isController) {
+      alerts.forEach((a, i) => items.push({ id: `alert-${i}`, level: lvl[a.severity] ?? 'info', text: a.message, to: a.action_url }))
+    } else if (isBl) {
+      // Projektleitung: nur die Monatsrunde — Rechnungen und Mahnungen sind
+      // nicht ihre Liste.
+      alerts.filter(a => a.type === 'progress_round')
+        .forEach((a, i) => items.push({ id: `alert-pr-${i}`, level: lvl[a.severity] ?? 'info', text: a.message, to: a.action_url }))
+    }
+    if (isController && mahnStats && mahnStats.overdueActionsCount > 0) {
+      items.push({
+        id: 'mahn', level: 'critical', to: '/rechnungen?tab=mahnungen',
+        text: `${mahnStats.overdueActionsCount} Mahnaktion${mahnStats.overdueActionsCount !== 1 ? 'en' : ''} fällig`,
+      })
+    }
+    if (isBl) {
+      riskProjects.filter(p => p.ampel === 'rot' || p.ampel === 'orange').forEach(p => items.push({
+        id: `risk-${p.PROJECT_ID}`, level: p.ampel === 'rot' ? 'critical' : 'watch',
+        to: `/projekte?projectId=${p.PROJECT_ID}&tab=struktur`,
+        text: <><strong>{p.ABBR}</strong> · {p.flags.map(f => FLAG_LABELS[f]?.label ?? f).join(', ') || AMPEL_LABELS[p.ampel]}</>,
+      }))
+    }
+    if (isMitarbeiter && Array.isArray(ownBal?.data?.days)) {
+      const today = localIsoDate()
+      const wd = new Date().getDay()
+      const todayDay = ownBal.data.days.find(d => d.date === today)
+      if (canBook && wd >= 1 && wd <= 5 && (todayDay?.actual ?? 0) === 0) {
+        items.push({ id: 'today', level: 'watch', text: 'Heute noch keine Zeit gebucht', onClick: () => openQuickBooking({}) })
+      }
+      if ((ownBal.data.balance ?? 0) < -8) {
+        items.push({ id: 'saldo', level: 'info', text: <>Monatssaldo <strong>{fmtSaldo(ownBal.data.balance)}</strong></> })
+      }
+    }
+    return items
+  })()
+
+  const todayLabel = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(nowD)
+
+  const filterBar = dashboardRole && (isGl || isController || isBl) ? (
+    <DashboardFilterBar
+      filters={filters}
+      onChange={patch => setFilters(f => ({ ...f, ...patch }))}
+      abteilungen={abteilungen}
+      plOptions={plOptions}
+      statusOptions={statusOptions}
+      showDimensions={isGl}
+    />
+  ) : null
 
   return (
     <div className="dash-page">
-      <div className="dash-header">
-        <div>
-          <div className="dash-title">Übersicht</div>
-          {roleLabel && <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>{roleLabel}</div>}
+      <PageHeader
+        title="Übersicht"
+        meta={<span>{todayLabel}{companyName ? ` · ${companyName}` : ''}</span>}
+        actions={<>
+          {dashboardRole && canSwitchView && (
+            // Vorher „Ansicht wechseln": ein Klick leerte die Seite bis auf
+            // vier Karten zur Auswahl. Jetzt ein Auswahlfeld, das zeigt, wo man ist.
+            <label className="dash-role-select">
+              <span className="dash-role-select-label">Ansicht</span>
+              <select value={dashboardRole} onChange={e => setDashboardRole(e.target.value)}>
+                {ROLES.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+              </select>
+            </label>
+          )}
+          {!welcome.open && (
+            <RowMenu label="Weitere Aktionen" triggerClassName="btn-secondary dash-more">
+              <button type="button" role="menuitem" className="row-menu-item" onClick={welcome.reopen}>Einführung anzeigen</button>
+            </RowMenu>
+          )}
+        </>}
+      />
+
+      {/* Das Wichtigste zuerst: was ansteht, Zeit buchen, zuletzt Benutztes.
+          Vorher lagen Einfuehrung, Checkliste und acht „Zuletzt"-Karten davor. */}
+      {dashboardRole && (
+        <div className={`dash-band${isMitarbeiter ? ' dash-band--time-first' : ''}`}>
+          <AttentionList items={attention} emptyText={isMitarbeiter ? 'Nichts offen – dein Zeitkonto ist im Plan.' : undefined} />
+          <QuickTimeCard employeeId={employeeId} />
+          <div className="dash-band-recent"><RecentMixedList variant="list" limit={6} /></div>
         </div>
-        {dashboardRole && (
-          <Can permission="dashboard.view_switch">
-            <button
-              className="dash-role-switch"
-              onClick={() => setDashboardRole(null)}
-            >
-              Ansicht wechseln
-            </button>
-          </Can>
-        )}
-      </div>
+      )}
 
-      <DashboardHero />
+      <div className="dash-hero-slot"><DashboardHero /></div>
 
-      <WelcomeSection />
+      {welcome.open && <WelcomePanel open onClose={welcome.dismiss} />}
 
       <SetupChecklist />
 
-      <RecentMixedList limit={8} />
-
-      {dashboardRole && (isGl || isController || isBl) && (
-        <DashboardFilterBar
-          filters={filters}
-          onChange={patch => setFilters(f => ({ ...f, ...patch }))}
-          abteilungen={abteilungen}
-          plOptions={plOptions}
-          statusOptions={statusOptions}
-          showDimensions={isGl}
-        />
-      )}
+      {dashboardRole && (isController || isBl) && filterBar}
 
       {!dashboardRole && canSwitchView && <RoleSelector onSelect={setDashboardRole} />}
 
@@ -1864,11 +1951,12 @@ export function DashboardPage() {
           openPosten={openPosten} snapshot={snapshot} teamHours={teamHours}
           dateFrom={dateRange.dateFrom} dateTo={dateRange.dateTo}
           subPage={glSubPage} onSubPageChange={id => setGlSubPage(id as typeof glSubPage)}
+          filterBar={filterBar}
         />
       )}
 
       {!isLoading && kpis && dashboardRole === 'controller' && (
-        <ControllerView kpis={kpis} monthly={monthly} alerts={alerts} overdueInvoices={overdue} mahnStats={mahnStats} billingSummary={billingSummary} />
+        <ControllerView kpis={kpis} monthly={monthly} overdueInvoices={overdue} mahnStats={mahnStats} billingSummary={billingSummary} />
       )}
 
       {!isLoading && dashboardRole === 'bereichsleiter' && (
@@ -1878,6 +1966,10 @@ export function DashboardPage() {
       {isMitarbeiter && employeeId !== null && (
         <MitarbeiterView employeeId={employeeId} />
       )}
+
+      {/* Handy: Schnellzugriff am Ende statt im Band (dort zaehlt der Daumen-
+          weg zu „Zeit buchen" und „Jetzt wichtig"). */}
+      {dashboardRole && <div className="dash-mobile-only"><RecentMixedList variant="list" limit={6} /></div>}
     </div>
   )
 }
