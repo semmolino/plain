@@ -144,7 +144,14 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       const children = childrenOf.get(id) ?? []
       if (children.length === 0) {
         const n = nodeMap.get(id)!
-        const r = { extras: n?.EXTRAS ?? 0, surcharges: n?.SURCHARGES_TOTAL ?? 0, revenueBasis: n?.REVENUE_BASIS ?? n?.REVENUE ?? 0 }
+        // Bei Nachweis ist die Basis die Summe der Buchungen (TEC_SP_TOT_SUM).
+        // REVENUE_BASIS pflegt dort nur patchStructure — bei importierten und
+        // bei frisch gebuchten Zeilen steht es nicht drin, und REVENUE traegt
+        // bereits die Zuschlaege, gehoert also nicht in eine Basis.
+        const revenueBasis = Number(n?.BILLING_TYPE_ID) === 2
+          ? (n?.TEC_SP_TOT_SUM ?? 0)
+          : (n?.REVENUE_BASIS ?? n?.REVENUE ?? 0)
+        const r = { extras: n?.EXTRAS ?? 0, surcharges: n?.SURCHARGES_TOTAL ?? 0, revenueBasis }
         cache.set(id, r); return r
       }
       let extras = 0, surcharges = 0, revenueBasis = 0
@@ -925,7 +932,14 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               {/* Honorar € = pure leaf sum (REVENUE_BASIS) so it never includes surcharges */}
                               {isParent || isTec ? (
                                 <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                                  {money(isTec ? node.TEC_SP_TOT_SUM : (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0))}
+                                  {/* Ein Vater zeigt IMMER die Summe seines Teilbaums — auch wenn er
+                                      selbst auf Nachweis steht. Vorher gewann isTec, und dann stand
+                                      dort TEC_SP_TOT_SUM: die Buchungen des Vaters SELBST. Die hat er
+                                      keine, die haengen an den Kindern — also dauerhaft 0 €, waehrend
+                                      die Spalte daneben den richtigen Wert zeigte. */}
+                                  {money(isParent
+                                    ? (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0)
+                                    : (node.TEC_SP_TOT_SUM ?? 0))}
                                 </span>
                               ) : (
                                 <input className="tbl-input" type="number" min={0} step={100} style={{ width: 90, textAlign: 'right' }}

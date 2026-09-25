@@ -762,8 +762,16 @@ module.exports = (supabase) => {
 
     // Phase 6: Scope-Filter — ohne reports.scope.all nur eigene Projekte
     let rows = data || [];
+    // Wieviele Projekte VOR dem Scope-Filter da waren, und warum gefiltert
+    // wurde. Ohne diese Auskunft sieht eine leere Liste genauso aus wie ein
+    // Mandant ohne Projekte — die Oberflaeche behauptete dann „Keine Projekte
+    // vorhanden", obwohl es hunderte gibt, die dieser Nutzer nur nicht sehen
+    // darf. Unterschieden wird dabei Recht (Rolle) von Tarif (Lizenz): das
+    // eine aendert der Buerochef selbst, das andere kostet Geld.
+    const meta = { total: rows.length, scope: null };
     if (req.reportScopeProjectIds !== null) {
       rows = rows.filter(r => req.reportScopeProjectIds.has(r.PROJECT_ID));
+      meta.scope = req._licenseSuppressed?.has("reports.scope.all") ? "license" : "permission";
     }
 
     // Add parent-level surcharges per project
@@ -775,7 +783,7 @@ module.exports = (supabase) => {
       row.BUDGET_TOTAL_NET     = round2(Number(row.BUDGET_TOTAL_NET || 0) + sur);
       row.REMAINING_BUDGET_NET = round2(Number(row.REMAINING_BUDGET_NET || 0) + sur);
     }
-    res.json({ data: rows });
+    res.json({ data: rows, meta });
   });
 
   // Project progress timeline (for chart visualization)

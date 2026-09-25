@@ -175,9 +175,16 @@ export interface ProjectListRow {
   QTY_EXT_TOTAL:             number
 }
 
+/** Warum die Liste kürzer ist, als der Mandant Projekte hat.
+ *  `total` = Projekte vor dem Scope-Filter, `scope` = Grund der Kürzung. */
+export interface ProjectListMeta {
+  total: number
+  scope: 'permission' | 'license' | null
+}
+
 export const fetchProjectList = (filter: DateFilter = { mode: 'now' }) => {
   const qs = buildDateParams(filter)
-  return apiClient.get<{ data: ProjectListRow[] }>(`/reports/projects/list${qs ? `?${qs}` : ''}`)
+  return apiClient.get<{ data: ProjectListRow[]; meta?: ProjectListMeta }>(`/reports/projects/list${qs ? `?${qs}` : ''}`)
 }
 
 export const fetchProjectReportHeader = (projectId: number, filter: DateFilter = { mode: 'now' }) => {
