@@ -15,10 +15,13 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
  * laufen nur in der Phase „nachher".
  */
 
-// vorher  = Stand vor dem Pilot (main), vorher2 = Stand nach Runde 1,
-// nachher = aktueller Stand. Szenen aus Runde 1 fehlen nur in „vorher",
-// Szenen aus Runde 2 in beiden Vorher-Phasen.
+// vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
+// vorher3 = nach Runde 2, vorher4 = nach Runde 3, nachher = aktueller Stand.
+// since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
+// Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich.
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3 }
+const since = (round: number) => (RANK[PHASE] ?? 4) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -108,7 +111,7 @@ test('Projekt – Struktur', async ({ page }, info) => {
 
 for (const d of ['compact', 'comfortable'] as const) {
   test(`Projekt – Struktur (${d})`, async ({ page }, info) => {
-    test.skip(PHASE === 'vorher', 'Dichte gibt es erst mit dem Pilot')
+    test.skip(!since(1), 'Dichte gibt es erst mit dem Pilot')
     await prepare(page, info.project.name, {}, d)
     await open(page, '/projekte?tab=struktur&projectId=1')
     await page.locator('.sx-table, .sxm-list, table').first().waitFor()
@@ -117,7 +120,7 @@ for (const d of ['compact', 'comfortable'] as const) {
 }
 
 test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Änderungszähler gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Änderungszähler gibt es erst mit dem Pilot')
   test.skip(info.project.name !== 'desktop', 'Inline-Bearbeitung ist Desktop')
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=struktur&projectId=1')
@@ -127,7 +130,7 @@ test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
 })
 
 test('Projekt – wechseln über den Namen', async ({ page }, info) => {
-  test.skip(!PHASE.startsWith('nachher'), 'Umschalter über den Namen gibt es erst mit Runde 2')
+  test.skip(!since(2), 'Umschalter über den Namen gibt es erst mit Runde 2')
   await prepare(page, info.project.name)
   await open(page, '/projekte?projectId=1&tab=struktur')
   await page.getByRole('button', { name: /Projekt wechseln/ }).click()
@@ -151,7 +154,7 @@ test('Stunden buchen – Dialog', async ({ page }, info) => {
 })
 
 test('Zeit buchen – aus dem Kopf', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Einstieg gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Einstieg gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/')
   await page.getByRole('button', { name: 'Zeit buchen' }).first().click()
@@ -182,7 +185,7 @@ test('Abschlagsrechnung – Schritte', async ({ page }, info) => {
   await page.getByRole('button', { name: /^Weiter/ }).last().click()
   await page.waitForTimeout(400)
   await shoot(page, dev, 'abschlag-4')
-  if (PHASE !== 'vorher') {
+  if (since(1)) {
     await page.getByRole('button', { name: 'Jetzt buchen' }).click()
     await page.getByRole('dialog').waitFor()
     await shoot(page, dev, 'abschlag-5-bestaetigen')
@@ -190,7 +193,7 @@ test('Abschlagsrechnung – Schritte', async ({ page }, info) => {
 })
 
 test('Abschlagsrechnung – Entwurf fortsetzen', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Fortsetzen per URL gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Fortsetzen per URL gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/rechnungen?tab=abschlag&draftId=501')
   await page.locator('#pp-buyer-ref').waitFor()
@@ -198,7 +201,7 @@ test('Abschlagsrechnung – Entwurf fortsetzen', async ({ page }, info) => {
 })
 
 test('Rechnungen – Neue Rechnung', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Menü gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Menü gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/rechnungen')
   await page.getByRole('button', { name: /Neue Rechnung/ }).click()
@@ -266,7 +269,7 @@ test('Stempeluhr – Tagesübersicht', async ({ page }, info) => {
 })
 
 test('Meine Zeit – Buchung ändern', async ({ page }, info) => {
-  test.skip(!PHASE.startsWith('nachher'), 'gibt es erst mit Runde 2')
+  test.skip(!since(2), 'gibt es erst mit Runde 2')
   await prepare(page, info.project.name, { role: 'mitarbeiter' })
   await open(page, '/')
   await page.locator('.mz-row').first().getByRole('button', { name: /ändern/ }).click()
@@ -282,7 +285,7 @@ test('Leistungsstände – im Projekt', async ({ page }, info) => {
 })
 
 test('Leistungsstände – Monatsrunde', async ({ page }, info) => {
-  test.skip(!PHASE.startsWith('nachher'), 'gibt es erst mit Runde 2')
+  test.skip(!since(2), 'gibt es erst mit Runde 2')
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=leistungsstaende')
   await page.locator('.lsr-list').waitFor()
@@ -298,7 +301,7 @@ test('Leistungsstände – Monatsrunde', async ({ page }, info) => {
 })
 
 test('Struktur – Handy Blatt', async ({ page }, info) => {
-  test.skip(info.project.name !== 'mobile' || !PHASE.startsWith('nachher'), 'Blatt gibt es nur am Handy, erst mit Runde 2')
+  test.skip(info.project.name !== 'mobile' || !since(2), 'Blatt gibt es nur am Handy, erst mit Runde 2')
   await prepare(page, info.project.name)
   await open(page, '/projekte?projectId=1&tab=struktur')
   await page.getByRole('button', { name: /^LP5\.2 .*bearbeiten/ }).click()
@@ -344,7 +347,7 @@ test('Schlussrechnung – Schritte', async ({ page }, info) => {
   await shoot(page, dev, 'schluss-4')
   await nextStep(page)
   await shoot(page, dev, 'schluss-5')
-  if (PHASE.startsWith('nachher')) {
+  if (since(2)) {
     await page.getByRole('button', { name: 'Jetzt buchen' }).click()
     await page.getByRole('dialog').waitFor()
     await shoot(page, dev, 'schluss-6-bestaetigen')
@@ -356,7 +359,7 @@ test('Schlussrechnung – Schritte', async ({ page }, info) => {
 // aufgenommen als PILOT_PHASE=vorher3 aus einem Arbeitsbaum vor Runde 3.
 
 // Seit Runde 4 ist das Angebot ein Arbeitsbereich mit URL; davor ein Modul-Reiter.
-const OFFER_WORKSPACE = PHASE.startsWith('nachher')
+const OFFER_WORKSPACE = since(4)
 
 async function openOfferStructure(page: Page) {
   if (OFFER_WORKSPACE) {
@@ -377,7 +380,7 @@ test('Angebotsstruktur', async ({ page }, info) => {
 })
 
 test('Angebotsstruktur – kompakt', async ({ page }, info) => {
-  test.skip(info.project.name !== 'desktop' || !PHASE.startsWith('nachher'), 'Dichte gibt es erst mit Runde 3, nur am Desktop')
+  test.skip(info.project.name !== 'desktop' || !since(3), 'Dichte gibt es erst mit Runde 3, nur am Desktop')
   await prepare(page, info.project.name, {}, 'compact')
   await openOfferStructure(page)
   await shoot(page, info.project.name, 'angebot-struktur-kompakt')
@@ -387,14 +390,14 @@ test('Angebotsstruktur – Zuschläge', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'Zuschlags-Panel nur am Desktop')
   await prepare(page, info.project.name)
   await openOfferStructure(page)
-  if (PHASE.startsWith('nachher')) await page.getByRole('button', { name: 'Zuschläge von LP5 bearbeiten' }).click()
+  if (since(3)) await page.getByRole('button', { name: 'Zuschläge von LP5 bearbeiten' }).click()
   else await page.locator('tr[data-struct-id="206"] .row-action-btn').first().click()
   await page.locator('.surcharge-panel').waitFor()
   await shoot(page, info.project.name, 'angebot-struktur-zuschlag')
 })
 
 test('Angebotsstruktur – offene Änderungen', async ({ page }, info) => {
-  test.skip(info.project.name !== 'desktop' || !PHASE.startsWith('nachher'), 'Puffer und Aktionsleiste gibt es erst mit Runde 3')
+  test.skip(info.project.name !== 'desktop' || !since(3), 'Puffer und Aktionsleiste gibt es erst mit Runde 3')
   await prepare(page, info.project.name)
   await openOfferStructure(page)
   // Erst fokussieren, dann tippen: das Betragsfeld tauscht beim Fokus die
@@ -412,7 +415,7 @@ test('Angebotsstruktur – neues Element', async ({ page }, info) => {
   test.skip(info.project.name !== 'desktop', 'Dialog am Desktop')
   await prepare(page, info.project.name)
   await openOfferStructure(page)
-  const nachher = PHASE.startsWith('nachher')
+  const nachher = since(3)
   await page.getByRole('button', { name: nachher ? /Neues Element/ : /Neue Position/ }).first().click()
   const dialog = page.getByRole('dialog')
   await dialog.waitFor()
@@ -433,7 +436,7 @@ test('Angebotsstruktur – neues Element', async ({ page }, info) => {
 })
 
 test('Angebotsstruktur – Handy Blatt', async ({ page }, info) => {
-  test.skip(info.project.name !== 'mobile' || !PHASE.startsWith('nachher'), 'Blatt gibt es nur am Handy, erst mit Runde 3')
+  test.skip(info.project.name !== 'mobile' || !since(3), 'Blatt gibt es nur am Handy, erst mit Runde 3')
   await prepare(page, info.project.name)
   await openOfferStructure(page)
   await page.getByRole('button', { name: /^BL1 .*bearbeiten/ }).click()
@@ -470,4 +473,51 @@ test('Angebot – wechseln', async ({ page }, info) => {
   await page.locator('.pw-title-btn').click()
   await page.waitForTimeout(300)
   await shoot(page, info.project.name, 'angebot-wechseln')
+})
+
+// ── Runde 4: Rückmeldung zu Runde 3 ──────────────────────────────────────────
+// Ausschnitte in doppelter Aufloesung: Farbe und Buendigkeit der Zuschlaege
+// sind im ganzen Bild nicht zu erkennen.
+test.describe('Ausschnitte', () => {
+  test.use({ deviceScaleFactor: 2 })
+
+  async function clipTable(page: Page, name: string, rows: number) {
+    // Hoch genug, dass die feste Aktionsleiste unter dem Ausschnitt liegt.
+    await page.setViewportSize({ width: 1280, height: 1400 })
+    await hideDevtools(page)
+    await page.waitForTimeout(500)
+    const clip = await page.evaluate((n) => {
+      const t = document.querySelector('.sx-table') as HTMLElement
+      const trs = t.querySelectorAll('tbody tr')
+      const last = trs[Math.min(n, trs.length) - 1] as HTMLElement
+      const a = t.getBoundingClientRect(), b = last.getBoundingClientRect()
+      return { x: a.left, y: a.top, width: a.width, height: b.bottom - a.top }
+    }, rows)
+    await page.screenshot({ path: `${OUT}/desktop-${name}.png`, clip })
+  }
+
+  test('Zuschläge – Ausschnitt Angebot', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop' || !since(3), 'Tabelle am Desktop, erst mit Runde 3')
+    await prepare(page, info.project.name)
+    await openOfferStructure(page)
+    await clipTable(page, 'angebot-zuschlaege', 7)
+  })
+
+  test('Zuschläge – Ausschnitt Projekt', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop' || !since(2), 'Tabelle am Desktop, erst mit Runde 2')
+    await prepare(page, info.project.name)
+    await open(page, '/projekte?projectId=1&tab=struktur')
+    await page.locator('.sx-table').waitFor()
+    await clipTable(page, 'projekt-zuschlaege', 7)
+  })
+})
+
+test('Struktur – Spalten', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(4), 'Spaltenauswahl am Desktop, erst mit Runde 4')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.locator('.sx-table').waitFor()
+  await page.getByRole('button', { name: /Spalten/ }).click()
+  await page.waitForTimeout(200)
+  await shoot(page, info.project.name, 'struktur-spalten')
 })
