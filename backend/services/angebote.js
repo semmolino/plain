@@ -152,6 +152,7 @@ async function listOffers(supabase, { tenantId }) {
       TOTAL_AMOUNT:    totalMap.get(r.ID) ?? null,
       STATUS_NAME:     statusMap.get(r.OFFER_STATUS_ID)?.ABBR ?? null,
       OFFER_STATUS_ID: r.OFFER_STATUS_ID,
+      EMPLOYEE_ID:     r.EMPLOYEE_ID ?? null,
       EMPLOYEE_NAME:   emp
         ? `${emp.ABBR ? emp.ABBR + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()
         : null,
@@ -1232,11 +1233,25 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   // PROJECT_STRUCTURE — 2-pass to set FATHER_ID
   // Declared here so it's also accessible in the HOAI attachment block below
   const offerIdToNew = new Map();
+  // Plan (Migration 0173): ein Blatt nach Aufwand startet im Projekt bei 0 —
+  // gebucht wird, was anfaellt. Die Schaetzung aus den Aufwandszeilen geht als
+  // Plan mit (Stunden, Honorar vor Zuschlaegen), die Budgetwarnung vergleicht
+  // das Gebuchte damit. `transfer_plan: false` laesst ihn weg.
+  const transferPlan = b.transfer_plan !== false;
+  const hasChildren = new Set(offerStruct.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)));
+  const planOf = (n) => {
+    if (!transferPlan || Number(n.BILLING_TYPE_ID) !== 2 || hasChildren.has(String(n.ID))) return null;
+    const lines = nodeEffortLines(n);
+    const hours = fmt2(lines.reduce((sum, l) => sum + Number(l.hours || 0), 0));
+    const revenue = fmt2(lines.reduce((sum, l) => sum + lineAmount(l), 0));
+    return hours > 0 || revenue > 0 ? { PLAN_HOURS: hours, PLAN_REVENUE: revenue } : null;
+  };
   if (offerStruct.length) {
     const insertRows = offerStruct.map(n => {
       const btId  = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
       const isBt1 = btId === 1;
       return {
+      ...(planOf(n) || {}),
       ABBR:       String(n.ABBR || '').trim(),
       NAME:        String(n.NAME  || '').trim(),
       PROJECT_ID:       project.ID,
@@ -1274,10 +1289,11 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       if (r.error) {
         const msg = String(r.error.message || '');
         // Fallback: schema may be missing surcharge columns
-        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS')) {
+        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS') || msg.includes('PLAN_')) {
           const stripped = insertRows.map(row => {
             const c = { ...row };
             delete c.REVENUE_BASIS;
+            delete c.PLAN_HOURS; delete c.PLAN_REVENUE;
             delete c.SURCHARGE_1_LABEL; delete c.SURCHARGE_1_PCT; delete c.SURCHARGE_1_EUR; delete c.SURCHARGE_1_CUMUL;
             delete c.SURCHARGE_2_LABEL; delete c.SURCHARGE_2_PCT; delete c.SURCHARGE_2_EUR; delete c.SURCHARGE_2_CUMUL;
             delete c.SURCHARGE_3_LABEL; delete c.SURCHARGE_3_PCT; delete c.SURCHARGE_3_EUR; delete c.SURCHARGE_3_CUMUL;

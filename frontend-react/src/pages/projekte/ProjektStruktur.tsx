@@ -15,6 +15,7 @@ import { AmountInput }   from '@/components/ui/AmountInput'
 import { ColumnChooser } from '@/components/ui/ColumnChooser'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { StrukturMobile } from '@/pages/projekte/struktur/StrukturMobile'
+import { PlanDialog } from '@/pages/projekte/struktur/PlanDialog'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
 import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
 import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
@@ -31,8 +32,9 @@ import {
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import {
   surchargeDefault, sameSurcharge, surchargeBody, computeSurcharges, rowChanges,
-  aggregateStructure, rootTotals, type SurchargeEdit, type RowEdit, type PatchBody,
+  aggregateStructure, rootTotals, planStatus, type SurchargeEdit, type RowEdit, type PatchBody,
 } from '@/pages/projekte/struktur/strukturCalc'
+import { fmtHours } from '@/utils/zeit'
 import { fmtEur, money } from '@/utils/money'
 import { usePermission } from '@/store/permissionsStore'
 import { useFeature, useLicenseReadOnly } from '@/store/licenseStore'
@@ -110,6 +112,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const [addError, setAddError]         = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
+  const [planNode, setPlanNode] = useState<StructureNode | null>(null)
   const [kalkFatherId, setKalkFatherId]     = useState<number | null>(null)
   const [projectSurchargePanel, setProjectSurchargePanel] = useState<boolean>(false)
   const [elementSearch, setElementSearch]         = useState('')
@@ -582,6 +585,10 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     return [
       canEdit && { key: 'add',  label: 'Unterelement anlegen', run: () => openAdd(node.STRUCTURE_ID) },
       canEdit && { key: 'sur',  label: 'Zuschläge bearbeiten', run: () => setSurchargePanel(node.STRUCTURE_ID) },
+      canEdit && !isParent && Number(edits[node.STRUCTURE_ID]?.billingTypeId ?? node.BILLING_TYPE_ID) === 2 && {
+        key: 'plan', label: node.PLAN_REVENUE != null || node.PLAN_HOURS != null ? 'Plan bearbeiten …' : 'Plan festlegen …',
+        run: () => setPlanNode(node),
+      },
       canEdit && isParent && { key: 'inh', label: nkDirty ? 'NK vererben (erst speichern)' : 'NK % an Unterelemente vererben', disabled: nkDirty || inheritMut.isPending, run: () => void askInherit(node) },
       canCalc && { key: 'kalk', label: 'Kalkulation anlegen', run: () => setKalkFatherId(node.STRUCTURE_ID) },
       canEdit && { key: 'int',  label: internal ? 'Intern aufheben' : 'Als intern markieren', run: () => editRow(node.STRUCTURE_ID, { internal: !internal }) },
@@ -646,7 +653,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                 <StrukturMobile projectId={selectedPid} flat={filteredFlatTree} parentIds={parentIds} aggMap={aggMap}
                   billingTypes={btypes} canEdit={canEdit}
                   root={currentProject ? { label: currentProject.ABBR, revenue: rootRevenueFinal, total: rootGesamt } : null}
-                  onAdd={openAdd} onDelete={askDelete} />
+                  onAdd={openAdd} onDelete={askDelete} onPlan={setPlanNode} />
               )}
               {flatTree.length > 0 && !narrow && (
                 <div className="list-section">
@@ -828,7 +835,17 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             )}
                             <td className="num">
                               {/* Honorar € = pure leaf sum (REVENUE_BASIS) so it never includes surcharges */}
-                              {isParent || isTec || !canEdit ? (
+                              {isTec && !isParent && planStatus(node) ? (() => {
+                                // Plan aus dem Angebot (Runde 5): gebucht, darunter der Plan
+                                const p = planStatus(node)!
+                                return (
+                                  <span className="sx-tec-plan"
+                                    title={`Plan: ${p.hours != null ? `${fmtHours(p.hours)} h · ` : ''}${fmtEur(p.plan)} · gebucht ${fmtEur(p.booked)}${p.pct != null ? ` (${p.pct} %)` : ''}`}>
+                                    <span className="sx-muted">{money(p.booked)}</span>
+                                    <span className={`sx-plan-note${p.over ? ' sx-plan-over' : ''}`}>{p.over ? 'über Plan ' : 'Plan '}{fmtEur(p.plan)}</span>
+                                  </span>
+                                )
+                              })() : isParent || isTec || !canEdit ? (
                                 <span className="sx-muted">
                                   {/* Ein Vater zeigt IMMER die Summe seines Teilbaums — auch wenn er
                                       selbst auf Nachweis steht. */}
@@ -1082,6 +1099,9 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       )
     })()}
     {confirmDialog}
+    {planNode && selectedPid != null && (
+      <PlanDialog node={planNode} projectId={selectedPid} onClose={() => setPlanNode(null)} />
+    )}
     </div>
   )
 }

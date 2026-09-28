@@ -46,17 +46,31 @@ async function getSettings(supabase, tenantId) {
 
 // Lädt rekursiv alle Strukturknoten eines Projekts und liefert Maps:
 //   childrenOf:  Map<parentId(string), childIds[]>
-//   nodes:       Map<id(string), { ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL }>
+//   nodes:       Map<id(string), { ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL,
+//                                  BILLING_TYPE_ID, PLAN_REVENUE, BOOKED_REVENUE }>
+//
+// Plan (Migration 0173): ein Blatt nach Aufwand mit Plan aus dem Angebot hat
+// als Budget den Plan und als Verbrauch das gebuchte Honorar. Sein REVENUE ist
+// die Summe der Buchungen — als Budget waechst es mit jeder Buchung mit und
+// koennte nie warnen. Gebucht = Σ HOURLY_RATE_TOTAL der bestaetigten
+// Buchungen, dieselbe Quelle wie REVENUE (services/buchungen.js).
 async function loadProjectTree(supabase, projectId) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL')
+    .select('ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL, BILLING_TYPE_ID, PLAN_REVENUE')
     .eq('PROJECT_ID', projectId);
+  // Schema-Cache ohne die neue Spalte (Deploy vor dem Reload): wie bisher rechnen
+  if (error && /PLAN_REVENUE/.test(String(error.message || ''))) {
+    ({ data, error } = await supabase
+      .from('PROJECT_STRUCTURE')
+      .select('ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL, BILLING_TYPE_ID')
+      .eq('PROJECT_ID', projectId));
+  }
   if (error) throw new Error(error.message);
   const nodes = new Map();
   const childrenOf = new Map();
   for (const n of data || []) {
-    nodes.set(String(n.ID), n);
+    nodes.set(String(n.ID), { ...n });
     if (n.FATHER_ID != null) {
       const fid = String(n.FATHER_ID);
       const arr = childrenOf.get(fid) || [];
@@ -64,37 +78,69 @@ async function loadProjectTree(supabase, projectId) {
       childrenOf.set(fid, arr);
     }
   }
+  const planIds = [...nodes.values()]
+    .filter(n => hasPlan(n) && !(childrenOf.get(String(n.ID)) || []).length)
+    .map(n => n.ID);
+  if (planIds.length) {
+    const { data: bk, error: bkErr } = await supabase
+      .from('BOOKING')
+      .select('STRUCTURE_ID, HOURLY_RATE_TOTAL')
+      .in('STRUCTURE_ID', planIds)
+      .neq('STATUS', 'DRAFT');
+    if (bkErr) throw new Error(bkErr.message);
+    for (const id of planIds) nodes.get(String(id)).BOOKED_REVENUE = 0;
+    for (const r of bk || []) {
+      const n = nodes.get(String(r.STRUCTURE_ID));
+      if (n) n.BOOKED_REVENUE += Number(r.HOURLY_RATE_TOTAL ?? 0) || 0;
+    }
+  }
   return { nodes, childrenOf };
+}
+
+function hasPlan(n) {
+  return Number(n.BILLING_TYPE_ID) === 2 && Number(n.PLAN_REVENUE ?? 0) > 0;
 }
 
 // Aggregat (rekursiv) eines Knotens:
 //   - Budget = Σ REVENUE der Leaves im Subtree + eigene SURCHARGES_TOTAL der Parents
 //   - Verbrauch = Σ COSTS der Leaves im Subtree
+//   - Ausnahme Blatt nach Aufwand mit Plan: Budget = Plan, Verbrauch = gebucht
+//   - plan: 'none' | 'some' | 'all' — wie viele Blaetter nach Plan rechnen
+//     (fuer die Beschriftung in Uebersicht und Benachrichtigung)
 function aggregateSubtree(structureIdStr, nodes, childrenOf, cache = new Map()) {
   if (cache.has(structureIdStr)) return cache.get(structureIdStr);
   const node = nodes.get(structureIdStr);
-  if (!node) { const r = { budget: 0, verbrauch: 0 }; cache.set(structureIdStr, r); return r; }
+  if (!node) { const r = { budget: 0, verbrauch: 0, plan: 'none' }; cache.set(structureIdStr, r); return r; }
   const children = childrenOf.get(structureIdStr) || [];
   if (children.length === 0) {
-    // Leaf: REVENUE als Budget, COSTS als Verbrauch
-    const r = {
-      budget:    Number(node.REVENUE ?? 0),
-      verbrauch: Number(node.COSTS ?? 0),
-    };
+    const r = hasPlan(node)
+      ? { budget: round2(Number(node.PLAN_REVENUE)), verbrauch: round2(Number(node.BOOKED_REVENUE ?? 0)), plan: 'all' }
+      // Leaf: REVENUE als Budget, COSTS als Verbrauch
+      : { budget: Number(node.REVENUE ?? 0), verbrauch: Number(node.COSTS ?? 0), plan: 'none' };
     cache.set(structureIdStr, r);
     return r;
   }
   let b = 0, v = 0;
+  const plans = new Set();
   for (const cid of children) {
     const c = aggregateSubtree(cid, nodes, childrenOf, cache);
     b += c.budget;
     v += c.verbrauch;
+    plans.add(c.plan);
   }
   // Parent: eigene SURCHARGES_TOTAL dazu (Aufschlag des Parents auf Children)
   b += Number(node.SURCHARGES_TOTAL ?? 0);
-  const r = { budget: round2(b), verbrauch: round2(v) };
+  const plan = plans.size === 1 ? [...plans][0] : 'some';
+  const r = { budget: round2(b), verbrauch: round2(v), plan };
   cache.set(structureIdStr, r);
   return r;
+}
+
+/** Beschriftung von Budget und Verbrauch je nach Plan-Anteil. */
+function budgetLabels(plan) {
+  if (plan === 'all')  return { budget: 'Plan aus dem Angebot', verbrauch: 'Gebucht' };
+  if (plan === 'some') return { budget: 'Budget (Honorar bzw. Plan)', verbrauch: 'Verbraucht' };
+  return { budget: 'Honorar + Zuschläge', verbrauch: 'Verbraucht' };
 }
 
 // Liefert {budget, verbrauch} für ein Projekt insgesamt
@@ -138,7 +184,7 @@ async function loadStructureName(supabase, structureId) {
   return data || null;
 }
 
-async function notifyBudgetWarning(supabase, { rule, project, structure, budget, actual, limitEur, triggerEmployeeId, triggerTecId, tenantId }) {
+async function notifyBudgetWarning(supabase, { rule, project, structure, budget, actual, limitEur, plan = 'none', triggerEmployeeId, triggerTecId, tenantId }) {
   const recipients = new Set();
   if (rule.NOTIFY_PM && project?.PROJECT_MANAGER_ID) recipients.add(Number(project.PROJECT_MANAGER_ID));
   if (rule.NOTIFY_BOOKER && triggerEmployeeId)        recipients.add(Number(triggerEmployeeId));
@@ -157,12 +203,13 @@ async function notifyBudgetWarning(supabase, { rule, project, structure, budget,
   const projectLabel = `${project?.ABBR ?? ''}${project?.NAME ? ': ' + project.NAME : ''}`;
 
   const pctActual = budget > 0 ? round2(actual / budget * 100) : 0;
+  const labels = budgetLabels(plan);
   const title = `Budget ${Number(rule.THRESHOLD_PCT)} % erreicht – ${scopeLabel}`;
   const body  = [
     `Projekt ${projectLabel}`,
-    `Honorar + Zuschläge: ${fmtEur(budget)}`,
+    `${labels.budget}: ${fmtEur(budget)}`,
     `Schwellenwert: ${Number(rule.THRESHOLD_PCT)} % = ${fmtEur(limitEur)}`,
-    `Verbraucht: ${fmtEur(actual)} (${pctActual.toFixed(1).replace('.', ',')} %)`,
+    `${labels.verbrauch}: ${fmtEur(actual)} (${pctActual.toFixed(1).replace('.', ',')} %)`,
   ].join('\n');
 
   const link = `/projekte?tab=budget&projectId=${rule.PROJECT_ID ?? (structure?.PROJECT_ID ?? project?.ID ?? '')}`;
@@ -233,7 +280,7 @@ async function evaluateScopes(supabase, { tenantId, projectId, structureIds, tri
 
 async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCache, triggerEmployeeId, triggerTecId, tenantId }) {
   // Budget + Verbrauch für den Scope der Regel
-  let budget, verbrauch, structure = null;
+  let budget, verbrauch, structure = null, plan = 'none';
   if (rule.STRUCTURE_ID) {
     const sid = String(rule.STRUCTURE_ID);
     if (!nodes.has(sid)) {
@@ -243,16 +290,19 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
     const agg = aggregateSubtree(sid, nodes, childrenOf, aggCache);
     budget = agg.budget;
     verbrauch = agg.verbrauch;
+    plan = agg.plan;
     structure = await loadStructureName(supabase, rule.STRUCTURE_ID);
   } else {
     // Projekt-Ebene
     let b = 0, v = 0;
+    const plans = new Set();
     for (const node of nodes.values()) {
       if (node.FATHER_ID == null) {
         const r = aggregateSubtree(String(node.ID), nodes, childrenOf, aggCache);
-        b += r.budget; v += r.verbrauch;
+        b += r.budget; v += r.verbrauch; plans.add(r.plan);
       }
     }
+    plan = plans.size === 1 ? [...plans][0] : plans.size ? 'some' : 'none';
     try {
       const { data: proj } = await supabase
         .from('PROJECT').select('SURCHARGES_TOTAL').eq('ID', project.ID).maybeSingle();
@@ -310,7 +360,7 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
     }
     console.log(`[BUDGET_WARNING] rule ${rule.ID}: FIRE notification`);
     await notifyBudgetWarning(supabase, {
-      rule, project, structure, budget, actual: verbrauch, limitEur: limit,
+      rule, project, structure, budget, actual: verbrauch, limitEur: limit, plan,
       triggerEmployeeId, triggerTecId, tenantId,
     });
   } else if (!breached && open) {
@@ -398,6 +448,7 @@ async function getProjectOverview(supabase, { tenantId, projectId }) {
       FATHER_ID: n.FATHER_ID,
       budget:    agg.budget,
       verbrauch: agg.verbrauch,
+      plan:      agg.plan,
     };
   });
 

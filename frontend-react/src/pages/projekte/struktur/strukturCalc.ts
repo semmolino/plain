@@ -179,3 +179,19 @@ export function aggregateStructure(structure: StructureNode[]): Map<string, Agg>
 export function rootTotals(structure: StructureNode[], aggMap: Map<string, Agg>, projectSurchargesTotal: number) {
   return treeRootTotals(structure, n => n.STRUCTURE_ID, aggMap, projectSurchargesTotal)
 }
+
+/**
+ * Plan eines Elements nach Aufwand (Runde 5) gegen das Gebuchte — fuer die
+ * Anzeige in Tabelle und Blatt. null = kein Plan.
+ */
+export function planStatus(n: StructureNode) {
+  if (Number(n.BILLING_TYPE_ID) !== 2 || n.PLAN_REVENUE == null) return null
+  const plan   = Number(n.PLAN_REVENUE) || 0
+  const booked = Number(n.TEC_SP_TOT_SUM ?? 0) || 0
+  return {
+    plan, booked,
+    hours: n.PLAN_HOURS != null ? Number(n.PLAN_HOURS) : null,
+    pct:   plan > 0 ? Math.round(booked / plan * 100) : null,
+    over:  plan > 0 && booked > plan,
+  }
+}

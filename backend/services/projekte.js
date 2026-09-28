@@ -577,6 +577,45 @@ async function getProjectStructure(supabase, { projectId, tenantId }) {
   }));
 }
 
+/**
+ * Plan eines Elements nach Aufwand (Migration 0173): angebotene Stunden und
+ * angebotenes Honorar, beim Beauftragen aus den Aufwandszeilen uebernommen.
+ * Eigener, schmaler Weg: patchStructure schreibt bei jedem Aufruf einen
+ * Leistungsstand-Snapshot — eine Planaenderung ist kein neuer Stand.
+ * Leer (null) heisst: kein Plan, die Budgetwarnung rechnet wie bisher.
+ */
+async function patchStructurePlan(supabase, { structureId, tenantId, planHours, planRevenue }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
+  const toNum = (v, label) => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) throw { status: 400, message: `${label} muss eine Zahl ≥ 0 sein` };
+    return Math.round(n * 100) / 100;
+  };
+  const { data: cur, error: curErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID, PROJECT_ID, BILLING_TYPE_ID")
+    .eq("ID", structureId)
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
+  if (curErr) throw curErr;
+  if (!cur) throw { status: 404, message: "PROJECT_STRUCTURE nicht gefunden" };
+  if (Number(cur.BILLING_TYPE_ID) !== 2) {
+    throw { status: 400, message: "Einen Plan gibt es nur bei Abrechnung nach Aufwand" };
+  }
+  const patch = { PLAN_HOURS: toNum(planHours, "Plan-Stunden"), PLAN_REVENUE: toNum(planRevenue, "Plan-Honorar") };
+  const { error } = await supabase.from("PROJECT_STRUCTURE").update(patch).eq("ID", structureId).eq("TENANT_ID", tenantId);
+  if (error) throw error;
+  // Der Plan ist das Budget dieses Elements — Warnregeln neu bewerten.
+  try {
+    const { evaluateAfterTecChange } = require("./budgetWarnings");
+    await evaluateAfterTecChange(supabase, { tenantId, projectId: cur.PROJECT_ID, structureIds: new Set([Number(structureId)]) });
+  } catch (e) {
+    console.warn("[PLAN] Budgetwarnung nicht neu bewertet:", e?.message || e);
+  }
+  return patch;
+}
+
 async function patchStructureCompletionPercents(supabase, { structureId, revPct, exPct, tenantId }) {
   structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { error } = await supabase
@@ -1994,6 +2033,7 @@ module.exports = {
   checkParentForChild,
   createStructureNode,
   patchStructure,
+  patchStructurePlan,
   inheritStructure,
   moveStructure,
   deleteStructure,

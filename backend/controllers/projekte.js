@@ -231,6 +231,20 @@ async function createStructureNode(req, res, supabase) {
   }
 }
 
+// Plan eines Elements nach Aufwand (Stunden/Honorar aus dem Angebot)
+async function patchStructurePlan(req, res, supabase) {
+  try {
+    const b = req.body || {};
+    const data = await svc.patchStructurePlan(supabase, {
+      structureId: req.params.id, tenantId: req.tenantId,
+      planHours: b.plan_hours, planRevenue: b.plan_revenue,
+    });
+    res.json({ data });
+  } catch (e) {
+    res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 async function patchStructure(req, res, supabase) {
   const { id } = req.params;
   const structureId = id;
@@ -453,6 +467,7 @@ module.exports = {
   checkParentForChild,
   createStructureNode,
   patchStructure,
+  patchStructurePlan,
   inheritStructure,
   moveStructure,
   deleteStructure,

@@ -45,6 +45,9 @@ export interface StructureNode {
   REVENUE_COMPLETION:          number
   EXTRAS_COMPLETION:           number
   TEC_SP_TOT_SUM:              number
+  // Plan eines Elements nach Aufwand (Migration 0173): aus dem Angebot, änderbar
+  PLAN_HOURS?:                 number | null
+  PLAN_REVENUE?:               number | null
   IS_INTERNAL:                 boolean
   REVENUE_BASIS:               number | null
   SURCHARGE_1_LABEL:           string | null
@@ -193,6 +196,10 @@ export const patchStructureNode = (structureId: number, body: Partial<{
   SURCHARGE_2_LABEL: string | null; SURCHARGE_2_PCT: number | null; SURCHARGE_2_CUMUL: boolean
   SURCHARGE_3_LABEL: string | null; SURCHARGE_3_PCT: number | null; SURCHARGE_3_CUMUL: boolean
 }>) => apiClient.patch<{ data: StructureNode }>(`/projekte/structure/${structureId}`, body)
+
+/** Plan eines Elements nach Aufwand setzen oder leeren (null). Recht: projects.structure.edit */
+export const patchStructurePlan = (structureId: number, body: { plan_hours: number | null; plan_revenue: number | null }) =>
+  apiClient.patch<{ data: { PLAN_HOURS: number | null; PLAN_REVENUE: number | null } }>(`/projekte/structure/${structureId}/plan`, body)
 
 export const inheritStructureExtras = (structureId: number, extrasPercent: number) =>
   apiClient.patch<{ updated: number }>(`/projekte/structure/${structureId}/inherit`, { EXTRAS_PERCENT: extrasPercent })

@@ -47,6 +47,8 @@ export interface ConvertOfferPayload {
   project_manager_id: number
   project_type_id?:   number | null
   department_id?:     number | null
+  /** Schätzung der Elemente nach Aufwand als Plan übernehmen (Standard: ja) */
+  transfer_plan?:     boolean
   employee2project?:  Array<{
     employee_id:      number
     role_id?:         number | null
@@ -67,6 +69,8 @@ export interface OfferListItem {
   TOTAL_AMOUNT:    number | null
   STATUS_NAME:     string | null
   OFFER_STATUS_ID: number | null
+  /** Zustaendige Person — Vorschlag fuer die Projektleitung beim Beauftragen */
+  EMPLOYEE_ID?:    number | null
   EMPLOYEE_NAME:   string | null
   ADDRESS_NAME:    string | null
   CONTACT_NAME:    string | null

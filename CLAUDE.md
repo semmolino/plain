@@ -285,7 +285,9 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
 
 ## Key business domain patterns
 
-- **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0.
+- **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0 — ihre Schätzung geht als **Plan** mit (`PLAN_HOURS`/`PLAN_REVENUE`, Migration `0173`, abwählbar mit `transfer_plan: false`).
+- **Aufwandszeilen** (Migration `0173`): ein Angebotselement nach Aufwand trägt `EFFORT_LINES` (Rolle · Stunden · Satz, beliebig viele), das Honorar ist die Summe. `QUANTITY`/`HOURLY_RATE`/`ROLE_*` werden daraus abgeleitet (Satz und Rolle nur bei genau einer Zeile); `EFFORT_LINES = NULL` ist Altbestand und gilt als eine Zeile. Prüfen, ableiten und lesen **nur** über `services/effortLines.js` (`normalizeEffortLines`, `effortColumns`, `nodeEffortLines`) — Speichern, PDF, Auftragsbestätigung und Beauftragen gehen alle hindurch. Im Frontend dasselbe über `nodeLines`/`effectiveLines` in `offerStrukturCalc.ts`.
+- **Plan am Projekt-Element**: ein Blatt nach Aufwand mit `PLAN_REVENUE` rechnet in der Budgetwarnung mit dem Plan als Budget und dem **gebuchten Honorar** (Σ `HOURLY_RATE_TOTAL` bestätigter Buchungen) als Verbrauch (`services/budgetWarnings.js`). Ohne Plan bliebe das Budget die Summe der Buchungen selbst und könnte nie warnen. Geändert wird der Plan über `PATCH /projekte/structure/:id/plan` (`projects.structure.edit`) — **nicht** über `patchStructure`, das bei jedem Aufruf einen Leistungsstand-Snapshot schreibt.
 - **Invoice wizard**: draft invoice → assign performance amount + bookings → generate line items → finalize.
   Abschlag, Einzelrechnung und Gutschrift laufen durch **einen** Assistenten
   (`pages/rechnungen/InvoiceWizard.tsx`); was sich je Belegart unterscheidet

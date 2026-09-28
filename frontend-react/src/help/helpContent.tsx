@@ -1526,7 +1526,35 @@ export const HELP = {
         im Menü ⋯ der Zeile <strong>Aufwand nach Rollen</strong>. Das Honorar ist dann die Summe
         der Zeilen.<br /><br />
         Bei der Beauftragung starten solche Elemente in der Projektstruktur bei 0 — dort zählt, was
-        tatsächlich gebucht wird. Die Schätzung bleibt im Angebot stehen.
+        tatsächlich gebucht wird. Die Schätzung geht als <strong>Plan</strong> mit (Stunden und
+        Honorar); die Budgetwarnung vergleicht das Gebuchte damit.
+      </>
+    ),
+  },
+  'projects.structure.plan': {
+    title: 'Plan eines Elements nach Aufwand',
+    body: (
+      <>
+        Was für ein Element nach Aufwand <strong>angeboten</strong> war: Stunden und Honorar. Beim
+        Beauftragen kommt der Plan aus den Aufwandszeilen des Angebots; hier lässt er sich setzen,
+        ändern oder entfernen (Menü ⋯ → <strong>Plan bearbeiten</strong>).<br /><br />
+        Die Tabelle zeigt unter dem gebuchten Betrag den Plan, „über Plan", sobald mehr gebucht ist.
+        Die <strong>Budgetwarnung</strong> rechnet bei solchen Elementen mit dem Plan als Budget und dem
+        gebuchten Honorar als Verbrauch — ohne Plan wäre das Budget die Summe der Buchungen selbst und
+        könnte nie warnen.
+      </>
+    ),
+  },
+  'offers.convert.preview': {
+    title: 'Was ins Projekt übergeht',
+    body: (
+      <>
+        Die Struktur des Angebots wird die Projektstruktur. <strong>Pauschale</strong> Elemente
+        übernehmen ihr Honorar. Elemente <strong>nach Aufwand</strong> starten bei 0 — gebucht wird,
+        was anfällt — und bekommen die Schätzung aus dem Angebot als <strong>Plan</strong>, gegen den
+        die Budgetwarnung vergleicht.<br /><br />
+        Die Zuordnung der Mitarbeiter legt fest, wer mit welcher Rolle und welchem Satz auf das Projekt
+        bucht (Preisliste). Jede Rolle aus den Aufwandszeilen steht einmal zur Auswahl.
       </>
     ),
   },
@@ -1540,7 +1568,8 @@ export const HELP = {
         Das Honorar des Elements ist die <strong>Summe der Zeilen</strong>. Im Angebots-PDF und in
         der Auftragsbestätigung steht jede Zeile einzeln unter dem Element.<br /><br />
         Anders als ein Unterelement je Rolle bleibt es <strong>ein</strong> Element: nach der
-        Beauftragung bucht man auf dieses eine Projekt-Element, gleich in welcher Rolle.
+        Beauftragung bucht man auf dieses eine Projekt-Element, gleich in welcher Rolle. Die Summe
+        der Zeilen wird dort sein Plan.
       </>
     ),
   },

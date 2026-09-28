@@ -30,6 +30,7 @@ type NodeSpec = {
   bt: 1 | 2; nk: number
   basis?: number            // Pauschal-Blatt: Honorar vor Zuschlaegen
   tec?: number              // Nachweis-Blatt: Summe der Buchungen
+  plan?: { hours: number; revenue: number }   // Nachweis-Blatt: Plan aus dem Angebot (Runde 5)
   surcharges?: Surcharge[]
   internal?: boolean
 }
@@ -62,8 +63,9 @@ const SPECS: NodeSpec[] = [
     surcharges: [{ label: 'Nachlass Rahmenvertrag', pct: -3 }] },
   { id: 121, father: 117,  abbr: 'BL4',   name: 'Farb- und Materialkonzept',           bt: 1, nk: 0, basis: 9_750 },
   { id: 122, father: null, abbr: 'NA',    name: 'Leistungen nach Aufwand',             bt: 2, nk: 0 },
-  { id: 123, father: 122,  abbr: 'NA1',   name: 'Planungsänderungen auf Wunsch des Bauherrn', bt: 2, nk: 0, tec: 18_420.5 },
-  { id: 124, father: 122,  abbr: 'NA2',   name: 'Zusätzliche Baubesprechungen',        bt: 2, nk: 0, tec: 7_860 },
+  // NA1 liegt ueber dem Plan, NA2 bei 79 % — beide Faelle der Anzeige
+  { id: 123, father: 122,  abbr: 'NA1',   name: 'Planungsänderungen auf Wunsch des Bauherrn', bt: 2, nk: 0, tec: 18_420.5, plan: { hours: 180, revenue: 17_100 } },
+  { id: 124, father: 122,  abbr: 'NA2',   name: 'Zusätzliche Baubesprechungen',        bt: 2, nk: 0, tec: 7_860, plan: { hours: 104, revenue: 9_880 } },
 ]
 
 function buildStructure() {
@@ -108,6 +110,7 @@ function buildStructure() {
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
       REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
       TEC_SP_TOT_SUM: tec, IS_INTERNAL: !!s.internal,
+      PLAN_HOURS: s.plan?.hours ?? null, PLAN_REVENUE: s.plan?.revenue ?? null,
       ...sur.fields, SURCHARGES_TOTAL: sur.total,
     })
     return { revenue, basis, tec }
@@ -755,6 +758,13 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     DELETE: r => r.fulfill(json({ ok: true })),
   })
   await byMethod('angebote/\\d+/structure/\\d+/move', { PUT: r => r.fulfill(json({ ok: true })) })
+  // Beauftragen (Runde 5): legt „P-2026-009" an
+  await byMethod('angebote/\\d+/convert', {
+    POST: r => r.fulfill(json({ data: { projectId: 9, projectName: 'P-2026-009' } })),
+  })
+  await byMethod('projekte/structure/\\d+/plan', {
+    PATCH: r => { const b = r.request().postDataJSON() ?? {}; return r.fulfill(json({ data: { PLAN_HOURS: b.plan_hours ?? null, PLAN_REVENUE: b.plan_revenue ?? null } })) },
+  })
   await get('projekte/roles/active', { data: ROLES })
   await get('angebote', { data: DEMO_OFFERS.map(o => o.ID === 1 ? { ...o, TOTAL_AMOUNT: OFFER_TOTAL } : o) })
 }

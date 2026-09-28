@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Target, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { Message } from '@/components/ui/Message'
 import { AmountInput } from '@/components/ui/AmountInput'
 import { patchStructureNode, moveStructureNode, type StructureNode } from '@/api/projekte'
 import { fmtEur } from '@/utils/money'
-import { computeSurcharges, rowChanges, surchargeDefault, type Agg, type RowEdit, type SurchargeEdit } from './strukturCalc'
+import { fmtHours } from '@/utils/zeit'
+import { computeSurcharges, planStatus, rowChanges, surchargeDefault, type Agg, type RowEdit, type SurchargeEdit } from './strukturCalc'
 import { StructureTreeList, type TreeListItem } from './StructureTreeList'
 
 /**
@@ -20,7 +21,7 @@ import { StructureTreeList, type TreeListItem } from './StructureTreeList'
  * der Sammel-Puffer des Desktops (Aktionsleiste, Strg+S) passt nicht zu einem
  * Blatt, das man schliesst.
  */
-export function StrukturMobile({ projectId, flat, parentIds, aggMap, billingTypes, canEdit, root, onAdd, onDelete }: {
+export function StrukturMobile({ projectId, flat, parentIds, aggMap, billingTypes, canEdit, root, onAdd, onDelete, onPlan }: {
   projectId:    number
   flat:         { node: StructureNode; depth: number }[]
   parentIds:    Set<string>
@@ -30,6 +31,8 @@ export function StrukturMobile({ projectId, flat, parentIds, aggMap, billingType
   root:         { label: string; revenue: number; total: number } | null
   onAdd:        (fatherId: number | null) => void
   onDelete:     (node: StructureNode) => void
+  /** Plan eines Elements nach Aufwand bearbeiten (Runde 5) */
+  onPlan?:      (node: StructureNode) => void
 }) {
   const [openId, setOpenId] = useState<number | null>(null)
   const open = openId != null ? flat.find(f => f.node.STRUCTURE_ID === openId)?.node ?? null : null
@@ -57,7 +60,8 @@ export function StrukturMobile({ projectId, flat, parentIds, aggMap, billingType
           isParent={parentIds.has(String(open.STRUCTURE_ID))} flat={flat} billingTypes={billingTypes} canEdit={canEdit}
           onClose={() => setOpenId(null)}
           onAdd={() => { setOpenId(null); onAdd(open.STRUCTURE_ID) }}
-          onDelete={() => { setOpenId(null); onDelete(open) }} />
+          onDelete={() => { setOpenId(null); onDelete(open) }}
+          onPlan={onPlan ? () => { setOpenId(null); onPlan(open) } : undefined} />
       )}
     </div>
   )
@@ -65,12 +69,13 @@ export function StrukturMobile({ projectId, flat, parentIds, aggMap, billingType
 
 const TOP = '__top__'
 
-function ElementSheet({ projectId, node, isParent, flat, billingTypes, canEdit, onClose, onAdd, onDelete }: {
+function ElementSheet({ projectId, node, isParent, flat, billingTypes, canEdit, onClose, onAdd, onDelete, onPlan }: {
   projectId: number; node: StructureNode; isParent: boolean
   flat: { node: StructureNode; depth: number }[]
   billingTypes: { ID: number; ABBR: string }[]
   canEdit: boolean
   onClose: () => void; onAdd: () => void; onDelete: () => void
+  onPlan?: () => void
 }) {
   const qc = useQueryClient()
   const [e, setE] = useState<RowEdit>({})
@@ -80,6 +85,7 @@ function ElementSheet({ projectId, node, isParent, flat, billingTypes, canEdit, 
   const sur: SurchargeEdit = e.surcharge ?? surchargeDefault(node)
   const btId = e.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
   const isTec = Number(btId) === 2
+  const plan = !isParent ? planStatus(node) : null
   const base = isParent ? Number(node.REVENUE_BASIS ?? 0) : isTec ? Number(node.TEC_SP_TOT_SUM ?? 0) : Number(e.budget ?? node.REVENUE_BASIS ?? node.REVENUE ?? 0)
   const computed = computeSurcharges(base, sur)
   const changes = rowChanges(node, e)
@@ -139,7 +145,9 @@ function ElementSheet({ projectId, node, isParent, flat, billingTypes, canEdit, 
           <div className="form-group">
             <label htmlFor="sxm-fee">Honorar €</label>
             {isParent || isTec || ro ? (
-              <p className="sxm-readonly" id="sxm-fee">{fmtEur(base)}<span className="form-field-hint">{isParent ? 'Summe der Unterelemente' : isTec ? 'Summe der Buchungen' : ''}</span></p>
+              <p className="sxm-readonly" id="sxm-fee">{fmtEur(base)}<span className="form-field-hint">{isParent ? 'Summe der Unterelemente' : isTec ? 'Summe der Buchungen' : ''}</span>
+                {plan && <span className={`sx-plan-note${plan.over ? ' sx-plan-over' : ''}`}>{plan.over ? 'über Plan ' : 'Plan '}{fmtEur(plan.plan)}{plan.hours != null ? ` · ${fmtHours(plan.hours)} h` : ''}</span>}
+              </p>
             ) : (
               <AmountInput id="sxm-fee" value={e.budget ?? String(node.REVENUE_BASIS ?? node.REVENUE ?? 0)} onChange={v => set({ budget: v })} aria-label="Honorar" />
             )}
@@ -193,6 +201,11 @@ function ElementSheet({ projectId, node, isParent, flat, billingTypes, canEdit, 
             <button type="button" className="btn-secondary sxm-icon-btn" onClick={onAdd} aria-label="Unterelement anlegen" title="Unterelement anlegen">
               <Plus size={15} strokeWidth={2} aria-hidden="true" />
             </button>
+            {onPlan && !isParent && isTec && (
+              <button type="button" className="btn-secondary sxm-icon-btn" onClick={onPlan} aria-label="Plan bearbeiten" title="Plan bearbeiten">
+                <Target size={15} strokeWidth={2} aria-hidden="true" />
+              </button>
+            )}
           </>
         ) : undefined}>
           <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>{canEdit ? 'Abbrechen' : 'Schließen'}</button>
