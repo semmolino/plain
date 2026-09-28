@@ -92,13 +92,17 @@ const SELF_SCOPED = /\/me\b|text-snippets|read-all|:id\/read|subscribe|recents|\
 const KEIN_SCHREIBVORGANG = [
   { datei: /routes\/arbzg\.js$/, pfad: "/preflight" }, // Live-Validierung der Arbeitszeitregeln
 ];
-const HAT_GATE_DIREKT = /require(Any)?Permission\s*\(|hasPermission\s*\(/;
+// requireDraftEdit (middleware/draftEdit.js) ist ein Gate: es laesst durch mit
+// invoices.edit ODER dem Anlege-Recht der Belegart, solange der Beleg ein
+// Entwurf ist, und antwortet sonst genau wie requirePermission("invoices.edit").
+const HAT_GATE_DIREKT = /require(Any)?Permission\s*\(|requireDraftEdit\s*\(|hasPermission\s*\(/;
 
 /**
  * Gates haengen oft an einem BENANNTEN Zwischenstueck statt direkt an der
  * Route. Zwei Formen kommen vor:
  *
  *     const GUARD = requirePermission("import.manage")        // Konstante
+ *     const draftEdit = requireDraftEdit(supabase, "INVOICE")  // Konstante (Entwurf)
  *     function uploadGuard(req, res, next) { … hasPermission … }  // Funktion
  *     router.post("/x", GUARD, uploadGuard, …)
  *
@@ -109,7 +113,7 @@ const HAT_GATE_DIREKT = /require(Any)?Permission\s*\(|hasPermission\s*\(/;
 function gateKonstanten(inhalt) {
   const namen = [
     // const GUARD = requirePermission(…)
-    ...[...inhalt.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*require(?:Any)?Permission\s*\(/g)].map((m) => m[1]),
+    ...[...inhalt.matchAll(/(?:const|let|var)\s+(\w+)\s*=\s*require(?:(?:Any)?Permission|DraftEdit)\s*\(/g)].map((m) => m[1]),
     // function xyzGuard(req, res, next) { … hasPermission(…) … }
     ...[...inhalt.matchAll(/function\s+(\w+)\s*\([^)]*\bnext\b[^)]*\)\s*\{([\s\S]{0,600}?)\n\s*\}/g)]
       .filter((m) => /hasPermission\s*\(|require(?:Any)?Permission\s*\(/.test(m[2]))
