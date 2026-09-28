@@ -100,7 +100,7 @@ test.describe('Preislisten', () => {
     await dialog.getByLabel('Stundensatz (€/h)').fill('101,5')
     await dialog.getByRole('button', { name: 'Speichern' }).click()
     await expect(dialog).toBeHidden()
-    expect(patches[0].body).toMatchObject({ hourly_rate: 101.5, role_abbr: 'ARCH' })
+    expect(patches[0].body).toMatchObject({ hourly_rate: 101.5, role_abbr: 'AR' })
   })
 
   test('Rechte wie im Backend: Team ohne Satz-Recht schickt keinen Satz', async ({ page }) => {
@@ -115,7 +115,7 @@ test.describe('Preislisten', () => {
     await dialog.getByLabel('Rollenbezeichnung').fill('Architektin')
     await dialog.getByRole('button', { name: 'Speichern' }).click()
     await expect(dialog).toBeHidden()
-    expect(patches[0].body).toEqual({ role_id: 3, role_abbr: 'ARCH', role_name: 'Architektin' })
+    expect(patches[0].body).toEqual({ role_id: 3, role_abbr: 'AR', role_name: 'Architektin' })
   })
 
   test('nur lesen: keine Knöpfe zum Zuordnen oder Ändern', async ({ page }) => {

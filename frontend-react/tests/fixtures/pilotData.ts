@@ -1045,22 +1045,17 @@ async function mockVertragPreiseBudget(page: Page) {
     { ID: 1, FIRST_NAME: 'Petra', LAST_NAME: 'Albrecht' },
     { ID: 2, FIRST_NAME: 'Rainer', LAST_NAME: 'Vogt' },
   ] })
-  await get('projekte/roles/active', { data: [
-    { ID: 1, ABBR: 'GF', NAME: 'Geschäftsführung', HOURLY_RATE: 145 },
-    { ID: 2, ABBR: 'PL', NAME: 'Projektleitung', HOURLY_RATE: 115 },
-    { ID: 3, ABBR: 'ARCH', NAME: 'Architekt/in', HOURLY_RATE: 95 },
-    { ID: 4, ABBR: 'TZ', NAME: 'Technische/r Zeichner/in', HOURLY_RATE: 72 },
-  ] })
+  // Rollen kommen aus ROLES (mockPilot) — dieselben wie in der Angebotsstruktur
   const e2p = (id: number, emp: number, role: [number, string, string] | null, rate: number | null) => ({
     ID: id, EMPLOYEE_ID: emp, ROLE_ID: role?.[0] ?? null, ROLE_ABBR: role?.[1] ?? '', ROLE_NAME: role?.[2] ?? '', HOURLY_RATE: rate,
     EMPLOYEE_SHORT_NAME: EMPLOYEES[emp - 1].ABBR, EMPLOYEE_FIRST_NAME: EMPLOYEES[emp - 1].FIRST_NAME, EMPLOYEE_LAST_NAME: EMPLOYEES[emp - 1].LAST_NAME,
   })
   await get('employee2project/project/\\d+', { data: [
-    e2p(31, 1, [1, 'GF', 'Geschäftsführung'], 145),
-    e2p(32, 2, [2, 'PL', 'Projektleitung'], 115),
-    e2p(33, 3, [3, 'ARCH', 'Architekt/in'], 98.5),
-    e2p(34, 4, [3, 'ARCH', 'Architekt/in'], 95),
-    e2p(35, 6, [4, 'TZ', 'Technische/r Zeichner/in'], 72),
+    e2p(31, 1, [2, 'PL', 'Projektleitung'], 115),
+    e2p(32, 2, [2, 'PL', 'Projektleitung'], 110),
+    e2p(33, 3, [3, 'AR', 'Architekt/in'], 82.5),
+    e2p(34, 4, [3, 'AR', 'Architekt/in'], 78.5),
+    e2p(35, 6, [4, 'TZ', 'Technische/r Zeichner/in'], 68),
     e2p(36, 9, null, null),
   ] })
   await get('buchungen/booking-prices', { data: [
