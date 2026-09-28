@@ -130,3 +130,25 @@ export function costRatioLevel(ratio: number | null | undefined, t: CpiThreshold
   if (ratio == null || !Number.isFinite(ratio) || ratio <= 0) return 'unknown'
   return cpiLevel(1 / ratio, t)
 }
+
+/**
+ * Stufe zum verbrauchten Anteil eines internen Budgets (Runde 7).
+ *
+ * Ab 100 % „Handlungsbedarf". „Beobachten" beginnt bei der niedrigsten
+ * Warnregel des Projekts (`watchPct`) — die Schwelle, ab der das Büro selbst
+ * gewarnt werden will. Ohne Regel gibt es keine eigene Grenze; eine
+ * erfundene (etwa 75 %) behauptete dann eine Einschätzung, die niemand
+ * getroffen hat. Eine Regel ab 100 % oder höher fügt keine Stufe hinzu.
+ */
+export function budgetShareLevel(sharePct: number | null | undefined, watchPct: number | null | undefined): KpiLevel {
+  if (sharePct == null || !Number.isFinite(sharePct)) return 'unknown'
+  if (sharePct >= 100) return 'critical'
+  if (watchPct != null && Number.isFinite(watchPct) && watchPct > 0 && watchPct < 100 && sharePct >= watchPct) return 'watch'
+  return 'plan'
+}
+
+/** Niedrigste Schwelle der Warnregeln eines Projekts — ohne Regel `null`. */
+export function lowestRulePct(rules: { THRESHOLD_PCT: number | string }[] | null | undefined): number | null {
+  const pcts = (rules ?? []).map(r => Number(r.THRESHOLD_PCT)).filter(n => Number.isFinite(n) && n > 0)
+  return pcts.length ? Math.min(...pcts) : null
+}

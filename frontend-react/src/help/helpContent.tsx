@@ -1526,6 +1526,24 @@ export const HELP = {
         Möglich sind <strong>Teilfreigaben</strong> (nur bestimmte Positionen), Kürzungen „der Höhe nach"
         (anerkannter Betrag&nbsp;&lt;&nbsp;gefordert) und eine <strong>vorläufige Anordnung</strong>, wenn schon
         vor der endgültigen Einigung gearbeitet werden soll. Jede Freigabe wird protokolliert.
+        <br /><br />
+        Eine freigegebene Position steht im Projekt und lässt sich im Nachtrag <strong>nicht mehr ändern
+        oder löschen</strong> — auch nicht, wenn sie gekürzt anerkannt wurde; Korrekturen laufen dann im
+        Projekt. Positionen nach Aufwand starten im Projekt bei 0 und bringen ihre Schätzung als{' '}
+        <strong>Plan</strong> mit, wie beim Beauftragen eines Angebots.
+      </>
+    ),
+  },
+  'nachtrag.positionen': {
+    title: 'Positionen eines Nachtrags',
+    body: (
+      <>
+        Positionen beschreiben Leistung und Preis des Nachtrags — <strong>pauschal</strong> mit festem
+        Betrag oder <strong>nach Aufwand</strong> mit Stunden und Satz. Eine Position mit Unterpositionen
+        zählt deren Beträge zusammen. Die Summe aller Positionen ist der geforderte Betrag.
+        <br /><br />
+        Bearbeiten und löschen lässt sich eine Position, solange sie <strong>nicht freigegeben</strong> ist.
+        Freigegeben wird je Position; eine Position mit Unterpositionen gibt man über diese frei.
       </>
     ),
   },
@@ -1661,6 +1679,9 @@ export const HELP = {
         wüchse mit jeder mit. Budget ist deshalb der <strong>Plan</strong> aus dem Angebot, Verbrauch das
         gebuchte Honorar; daneben stehen geplante und gebuchte Stunden. Die Warnregeln unten rechnen mit
         denselben Werten.
+        <br /><br />
+        Der Anteil ist <strong>orange („beobachten")</strong> ab der niedrigsten Warnregel des Projekts und{' '}
+        <strong>rot („Handlungsbedarf")</strong> ab 100 %. Ohne Warnregel gibt es nur die Grenze bei 100 %.
       </>
     ),
   },

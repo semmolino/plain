@@ -90,7 +90,7 @@ async function updateStructureNode(req, res, supabase) {
   try {
     const nodeId = parseInt(req.params.nodeId, 10);
     if (!nodeId) return res.status(400).json({ error: 'Ungültige Node-ID' });
-    const data = await svc.updateStructureNode(supabase, { tenantId: req.tenantId, nodeId, body: req.body });
+    const data = await svc.updateStructureNode(supabase, { tenantId: req.tenantId, nachtragId: parseInt(req.params.id, 10), nodeId, body: req.body });
     return res.json({ data });
   } catch (e) {
     return res.status(e?.status || 500).json({ error: e?.message || String(e) });
@@ -101,7 +101,7 @@ async function deleteStructureNode(req, res, supabase) {
   try {
     const nodeId = parseInt(req.params.nodeId, 10);
     if (!nodeId) return res.status(400).json({ error: 'Ungültige Node-ID' });
-    await svc.deleteStructureNode(supabase, { tenantId: req.tenantId, nodeId });
+    await svc.deleteStructureNode(supabase, { tenantId: req.tenantId, nachtragId: parseInt(req.params.id, 10), nodeId });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(e?.status || 500).json({ error: e?.message || String(e) });

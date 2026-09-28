@@ -22,6 +22,7 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { usePermission } from '@/store/permissionsStore'
 import { fmtEur, money, NO_VALUE } from '@/utils/money'
 import { fmtHours } from '@/utils/zeit'
+import { budgetShareLevel, lowestRulePct } from '@/utils/kpiLevel'
 
 const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 const fmtPct = (v: number | null) => (v == null ? NO_VALUE : `${FMT_PCT.format(v)} %`)
@@ -34,6 +35,23 @@ const fmtDate = (s: string | null | undefined) => {
 
 /** Anteil verbraucht in %; ohne Budget nicht bewertbar. */
 const share = (verbrauch: number, budget: number) => (budget > 0 ? (verbrauch / budget) * 100 : null)
+
+const FMT_THRESHOLD = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
+
+/**
+ * Verbrauchter Anteil mit Ampel (utils/kpiLevel → budgetShareLevel):
+ * „beobachten" ab der niedrigsten Warnregel des Projekts, „Handlungsbedarf"
+ * ab 100 %. Farbe nie allein — KpiValue trägt Symbol und Klartext.
+ */
+function ShareValue({ pct, watchPct, suffix = '' }: { pct: number | null; watchPct: number | null; suffix?: string }) {
+  const level = budgetShareLevel(pct, watchPct)
+  const txt = `${fmtPct(pct)}${suffix}`
+  if (level === 'critical') return <KpiValue level="critical" reason={`Verbrauch ${fmtPct(pct)} des Budgets`}>{txt}</KpiValue>
+  if (level === 'watch') {
+    return <KpiValue level="watch" reason={`Verbrauch ${fmtPct(pct)} — ab ${FMT_THRESHOLD.format(watchPct!)} % meldet die erste Warnregel`}>{txt}</KpiValue>
+  }
+  return <span className="bud-share-pct">{txt}</span>
+}
 
 interface Props {
   initialProjectId?: number
@@ -157,6 +175,7 @@ function BudgetProjekt({ pid }: { pid: number }) {
 
   const agg = overview.projectAggregate
   const pct = share(agg.verbrauch, agg.budget)
+  const watchPct = lowestRulePct(overview.rules)
   const muted = overview.project.BUDGET_WARNINGS_MUTED
   const planLeaves = overview.structures.filter(s => s.leaf && s.plan === 'all')
   const planHours = planLeaves.reduce((a, s) => a + Number(s.planHours ?? 0), 0)
@@ -173,36 +192,34 @@ function BudgetProjekt({ pid }: { pid: number }) {
 
   return (
     <div className="ws-form">
-      <div className="bud-kpis">
-        <div className="bud-kpi">
-          <div className="bud-kpi-label">Budget</div>
-          <div className="bud-kpi-value">{money(agg.budget)}</div>
-          <div className="bud-kpi-sub">Honorar und Zuschläge, ohne Nebenkosten{planLeaves.length > 0 ? ' · teils nach Plan' : ''}</div>
+      <div className="ws-tiles">
+        <div className="ws-tile">
+          <div className="ws-tile-label">Budget</div>
+          <div className="ws-tile-value">{money(agg.budget)}</div>
+          <div className="ws-tile-sub">Honorar und Zuschläge, ohne Nebenkosten{planLeaves.length > 0 ? ' · teils nach Plan' : ''}</div>
         </div>
-        <div className="bud-kpi">
-          <div className="bud-kpi-label">Verbraucht</div>
-          <div className="bud-kpi-value">{money(agg.verbrauch)}</div>
-          <div className="bud-kpi-sub">
-            {pct != null && pct >= 100
-              ? <KpiValue level="critical" reason={`Verbrauch ${fmtPct(pct)} des Budgets`}>{fmtPct(pct)} des Budgets</KpiValue>
-              : pct != null ? `${fmtPct(pct)} des Budgets` : 'Kein Budget hinterlegt'}
+        <div className="ws-tile">
+          <div className="ws-tile-label">Verbraucht</div>
+          <div className="ws-tile-value">{money(agg.verbrauch)}</div>
+          <div className="ws-tile-sub">
+            {pct != null ? <ShareValue pct={pct} watchPct={watchPct} suffix=" des Budgets" /> : 'Kein Budget hinterlegt'}
           </div>
         </div>
         {planLeaves.length > 0 && (
-          <div className="bud-kpi">
-            <div className="bud-kpi-label">Stunden nach Plan</div>
-            <div className="bud-kpi-value">{fmtHours(bookedHours)} <span className="bud-kpi-unit">von {fmtHours(planHours)} h</span></div>
-            <div className="bud-kpi-sub">{planLeaves.length === 1 ? '1 Element' : `${planLeaves.length} Elemente`} nach Aufwand mit Plan</div>
+          <div className="ws-tile">
+            <div className="ws-tile-label">Stunden nach Plan</div>
+            <div className="ws-tile-value">{fmtHours(bookedHours)} <span className="ws-tile-unit">von {fmtHours(planHours)} h</span></div>
+            <div className="ws-tile-sub">{planLeaves.length === 1 ? '1 Element' : `${planLeaves.length} Elemente`} nach Aufwand mit Plan</div>
           </div>
         )}
-        <div className="bud-kpi">
-          <div className="bud-kpi-label">Warnungen</div>
-          <div className="bud-kpi-value bud-kpi-state">
+        <div className="ws-tile">
+          <div className="ws-tile-label">Warnungen</div>
+          <div className="ws-tile-value ws-tile-state">
             {muted ? <BellOff size={16} strokeWidth={2} aria-hidden="true" /> : <Bell size={16} strokeWidth={2} aria-hidden="true" />}
             {muted ? 'stumm geschaltet' : 'aktiv'}
           </div>
           {canEdit && (
-            <button type="button" className="btn-small bud-kpi-btn" onClick={() => muteMut.mutate(!muted)} disabled={muteMut.isPending}>
+            <button type="button" className="btn-small ws-tile-btn" onClick={() => muteMut.mutate(!muted)} disabled={muteMut.isPending}>
               {muted ? 'Wieder benachrichtigen' : 'Projekt stumm schalten'}
             </button>
           )}
@@ -211,7 +228,7 @@ function BudgetProjekt({ pid }: { pid: number }) {
 
       <Message type={msg?.type ?? 'info'} text={msg?.text ?? null} />
 
-      <BudgetJeElement overview={overview} />
+      <BudgetJeElement overview={overview} watchPct={watchPct} />
 
       <FormSection
         title="Warnregeln"
@@ -259,7 +276,7 @@ function BudgetProjekt({ pid }: { pid: number }) {
 
 // ── Budget je Element ──────────────────────────────────────────────────────────
 
-function BudgetJeElement({ overview }: { overview: BudgetWarningOverview }) {
+function BudgetJeElement({ overview, watchPct }: { overview: BudgetWarningOverview; watchPct: number | null }) {
   const rows = useMemo(() => inTreeOrder(overview.structures), [overview.structures])
   const hasPlan = overview.structures.some(s => s.plan && s.plan !== 'none')
 
@@ -285,7 +302,7 @@ function BudgetJeElement({ overview }: { overview: BudgetWarningOverview }) {
             <tbody>
               {rows.map(({ node: s, depth }) => {
                 const p = share(s.verbrauch, s.budget)
-                const over = p != null && p >= 100
+                const level = budgetShareLevel(p, watchPct)
                 const isPlan = s.leaf && s.plan === 'all'
                 return (
                   <tr key={s.ID} className={`ls-row${s.leaf ? '' : ' bud-row-parent'}`}>
@@ -306,11 +323,9 @@ function BudgetJeElement({ overview }: { overview: BudgetWarningOverview }) {
                     <td className="ls-td bud-col-share">
                       <div className="bud-share">
                         <span className="bud-bar" aria-hidden="true">
-                          <span className={`bud-bar-fill${over ? ' bud-bar-fill--over' : ''}`} style={{ width: `${Math.min(100, p ?? 0)}%` }} />
+                          <span className={`bud-bar-fill${level === 'critical' ? ' bud-bar-fill--over' : level === 'watch' ? ' bud-bar-fill--watch' : ''}`} style={{ width: `${Math.min(100, p ?? 0)}%` }} />
                         </span>
-                        {over
-                          ? <KpiValue level="critical" reason={`Verbrauch ${fmtPct(p)} des Budgets`}>{fmtPct(p)}</KpiValue>
-                          : <span className="bud-share-pct">{fmtPct(p)}</span>}
+                        <ShareValue pct={p} watchPct={watchPct} />
                       </div>
                     </td>
                   </tr>

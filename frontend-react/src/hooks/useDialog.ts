@@ -57,6 +57,10 @@ export function useDialog(open: boolean, onClose: () => void) {
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        // Eine offene Trefferliste (Adresssuche, role=combobox) schliesst
+        // Escape zuerst selbst — sonst ging mit der Liste das ganze Fenster zu.
+        const t = e.target as HTMLElement | null
+        if (t?.getAttribute?.('role') === 'combobox' && t.getAttribute('aria-expanded') === 'true') return
         e.stopPropagation()
         closeRef.current()
         return

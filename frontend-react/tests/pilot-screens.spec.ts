@@ -17,13 +17,13 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 
 // vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
 // vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
-// vorher6 = nach Runde 5, nachher = aktueller Stand.
+// vorher6 = nach Runde 5, vorher7 = nach Runde 6, nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5 }
-const since = (round: number) => (RANK[PHASE] ?? 6) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6 }
+const since = (round: number) => (RANK[PHASE] ?? 7) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -700,4 +700,46 @@ test('Kalkulation im Angebot – Übersicht', async ({ page }, info) => {
     await page.waitForLoadState('networkidle')
   }
   await shoot(page, info.project.name, 'kalk-angebot-uebersicht')
+})
+
+// ── Runde 7: Nachträge, Adresssuche ──────────────────────────────────────────
+
+test('Nachträge – im Projekt', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=nachtraege')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'nachtraege-liste')
+})
+
+test('Nachtrag – Detail', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/nachtraege/402')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'nachtrag-detail')
+})
+
+test('Nachtrag – Freigeben', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/nachtraege/402')
+  await page.getByRole('button', { name: /Freigeben/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'nachtrag-freigeben')
+})
+
+test('Nachtrag – Position hinzufügen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/nachtraege/402')
+  await page.getByRole('button', { name: /Position hinzufügen/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'nachtrag-position')
+})
+
+test('Adresssuche – Treffer mit Tastatur', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  const box = page.locator('#vt-address')
+  await box.fill('Sta')
+  await page.locator('.autocomplete-item').first().waitFor()
+  await box.press('ArrowDown'); await box.press('ArrowDown')
+  await shoot(page, info.project.name, 'adresssuche')
 })

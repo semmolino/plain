@@ -2015,7 +2015,13 @@ th.doc-actions, td.doc-actions {
   border-bottom: 1px solid var(--border-4);
 }
 .autocomplete-item:last-child { border-bottom: none; }
-.autocomplete-item:hover { background: var(--accent-bg); }
+.autocomplete-item:hover, .autocomplete-item--active { background: var(--accent-bg); }
+.autocomplete-item--active { box-shadow: inset 3px 0 0 var(--accent); }
+/* Runde 7: Tastatur (aktiver Treffer), „Keine Treffer", 44px am Handy */
+.autocomplete-empty { padding: 9px 12px; font-size: 13px; color: var(--text-3); }
+@media (max-width: 640px), (pointer: coarse) {
+  .autocomplete-item { min-height: 44px; display: flex; align-items: center; }
+}
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 .modal-backdrop {
@@ -4575,6 +4581,24 @@ th.doc-actions, td.doc-actions {
 .ws-form-intro { margin: 0; display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
 .ws-form-readonly { margin: 0; font-size: 13px; color: var(--text-3); }
 .ws-form-fields { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+/* Kennzahl-Kacheln über einem Reiter (Interne Budgets, Nachträge) */
+.ws-tiles { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.ws-tile {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.ws-tile-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.ws-tile-value { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.ws-tile-unit { font-size: 13px; font-weight: 600; color: var(--text-3); }
+.ws-tile-sub { font-size: 12px; color: var(--text-3); }
+.ws-tile-state { display: flex; align-items: center; gap: var(--space-2); font-size: 16px; }
+.ws-tile-btn { align-self: flex-start; margin-top: var(--space-2); }
+@media (max-width: 640px) {
+  /* Zwei Kacheln je Zeile — vier untereinander schoben den Inhalt aus dem ersten Bildschirm */
+  .ws-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .ws-tile { padding: var(--space-2) var(--space-3); }
+  .ws-tile-value { font-size: 17px; }
+}
 .form-section {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: var(--space-4) var(--space-5) var(--space-1);
@@ -5381,19 +5405,8 @@ fieldset:disabled .ws-check { cursor: default; }
 }
 
 /* ── Interne Budgets (Projekt-Reiter, .bud-*) ────────────────────────────────
-   Runde 6: die Kacheln trugen feste rgba-Toene (Orange, Gruen, Grau), die in
-   keinem Theme mitgingen; eine Regel hiess „Struktur #412". */
-.bud-kpis { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
-.bud-kpi {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
-  padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: 2px; min-width: 0;
-}
-.bud-kpi-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
-.bud-kpi-value { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
-.bud-kpi-unit { font-size: 13px; font-weight: 600; color: var(--text-3); }
-.bud-kpi-sub { font-size: 12px; color: var(--text-3); }
-.bud-kpi-state { display: flex; align-items: center; gap: var(--space-2); font-size: 16px; }
-.bud-kpi-btn { align-self: flex-start; margin-top: var(--space-2); }
+   Runde 6: die Kacheln (.ws-tile, oben bei den Seitenformularen) trugen feste
+   rgba-Toene, die in keinem Theme mitgingen; eine Regel hiess „Struktur #412". */
 .bud-row-parent .bud-el-abbr { font-weight: 700; }
 .bud-el { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
 .bud-el-abbr { font-weight: 600; color: var(--text); white-space: nowrap; }
@@ -5403,6 +5416,7 @@ fieldset:disabled .ws-check { cursor: default; }
 .bud-bar { flex: 1; max-width: 90px; height: 6px; border-radius: var(--radius-pill); background: var(--dim-2); overflow: hidden; }
 .bud-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .bud-bar-fill--over { background: var(--kpi-critical); }
+.bud-bar-fill--watch { background: var(--kpi-watch); }
 .bud-share-pct { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
 .bud-scope-project { font-weight: 700; }
 .bud-recipients { font-size: 12px; color: var(--text-2); }
@@ -5422,6 +5436,56 @@ fieldset:disabled .ws-check { cursor: default; }
   .bud-col-share { width: auto; }
   .bud-bar { display: none; }
   .bud-people .ws-check { min-height: 44px; }
+}
+
+/* ── Nachträge (.nt-*): Liste im Modul und im Projekt, Detailseite ──────────
+   Runde 7: Status-Plaketten waren weisse Schrift auf eigener Farbe (auf Gelb
+   und Hellgrün unter 2:1), Kennzahlen eigene Kästen, Dialoge ohne Abbrechen. */
+.nt-list, .nt-detail { display: flex; flex-direction: column; gap: var(--space-4); }
+.nt-list .list-toolbar { margin-bottom: 0; }
+.nt-new, .nt-btn { display: inline-flex; align-items: center; gap: 6px; width: auto; }
+.nt-empty-icon { color: var(--text-4); margin-bottom: var(--space-2); }
+.nt-row { cursor: pointer; }
+.nt-link { display: flex; flex-direction: column; gap: 1px; color: var(--text); text-decoration: none; }
+.nt-link:hover .nt-name { text-decoration: underline; }
+.nt-abbr { font-size: 12px; font-weight: 600; color: var(--text-3); }
+.nt-name { font-weight: 600; }
+.nt-sum td { font-weight: 600; }
+.nt-status {
+  display: inline-block; padding: 2px 10px; border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  background: var(--surface-2); color: var(--text-2);
+}
+.nt-status--info     { background: var(--info-bg);    color: var(--info-strong); }
+.nt-status--progress { background: var(--accent-bg);  color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-ring); }
+.nt-status--done     { background: var(--success-bg); color: var(--success-strong); }
+.nt-status--problem  { background: var(--danger-bg);  color: var(--danger-strong); }
+.nt-project-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+.nt-facts {
+  margin: 0; display: grid; gap: var(--space-3) var(--space-5);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+}
+.nt-facts dt { display: flex; align-items: center; gap: var(--space-1); font-size: 12px; font-weight: 600; color: var(--text-2); }
+.nt-facts dd { margin: 2px 0 0; font-size: 14px; color: var(--text); }
+.nt-status-field select { min-height: 36px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font: inherit; }
+.nt-approval { font-size: 12px; color: var(--text-3); }
+.nt-approval--done { color: var(--success-strong); font-weight: 600; }
+.nt-row-parent .prl-name { font-weight: 700; }
+.nt-note { white-space: pre-line; }
+.nt-danger-zone { display: flex; justify-content: flex-start; }
+.nt-btn-danger { color: var(--danger-strong); }
+.nt-dialog { max-width: none; min-width: min(460px, 100%); }
+.nt-dialog-intro { margin: 0 0 var(--space-3); }
+.nt-check { width: 18px; height: 18px; accent-color: var(--accent); }
+.nt-amount { width: 120px; text-align: right; }
+.nt-release-sum { margin: var(--space-2) 0 var(--space-3); font-size: 13px; color: var(--text-2); text-align: right; }
+.nt-review { gap: var(--space-1); }
+@media (max-width: 640px) {
+  .nt-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nt-check { width: 22px; height: 22px; }
+  .nt-status-field select { min-height: 44px; }
 }
 
 /* ── Leistungsstände: Eingabetabelle (Reiter und Monatsrunde) ────────────── */
