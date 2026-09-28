@@ -592,7 +592,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="sx-root" data-density="comfortable">
+    <div className="sx-root">
       {selectedPid === null && <p className="empty-note">Kein Projekt gewählt.</p>}
 
       {selectedPid !== null && (

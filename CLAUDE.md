@@ -639,6 +639,7 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Modulseiten (Übersicht, Adressen, Projekte, Rechnungen, Angebote, …) zeigen **keinen sichtbaren Seitentitel** — welches Modul offen ist, sagt die Seitennavigation. Die `<h1>` bleibt für Screenreader: `<PageHeader title="…" srTitle />` bzw. `<h1 className="sr-only">`. Eine Hauptaktion ohne Kopf steht rechts neben den Reitern (`.module-tabs-row`). Sichtbar bleiben Titel, die ein **Objekt** benennen (Projektkopf, Adresse, Nachtrag, Assistent).
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
+- Stile für Bausteine (PageHeader, ActionBar, Disclosure …) und die Arbeitsbereiche stehen in `globals.css` im Abschnitt „Arbeitsbereiche und gemeinsame Bausteine“, **gegliedert nach Baustein, nicht nach Runde**. Ein Nachtrag gehört an die bestehende Regel, nicht als zweite Regel ans Dateiende: genau so standen `max-width` des Titel-Knopfs und die Breite des Umschalters zweimal da, und die zweite Regel gewann still.
 
 **Keine hartkodierten Farben — geprüft, nicht erhofft.** `npm run check:design`
 lässt jede Hex-Farbe im TSX fehlschlagen. Es gibt genau drei legitime Ausnahmen,

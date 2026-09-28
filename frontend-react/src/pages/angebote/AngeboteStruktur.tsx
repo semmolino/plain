@@ -581,7 +581,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="sx-root" data-density="comfortable">
+    <div className="sx-root">
       {oid === null && (
         <div className="sx-empty">
           <p className="empty-note">Kein Angebot gewählt.</p>

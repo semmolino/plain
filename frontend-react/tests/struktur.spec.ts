@@ -22,7 +22,9 @@ test.describe('Struktur am Desktop', () => {
     // Eine frueher gewaehlte kompakte Dichte darf die Struktur nicht mehr aendern.
     await open(page, 'compact')
     await page.locator('.sx-table').waitFor()
-    await expect(page.locator('.sx-root')).toHaveAttribute('data-density', 'comfortable')
+    // Luftig heisst 48 px je Zeile (--sx-row-h), kompakt waren es 34 px.
+    const rowH = await page.locator('.sx-table tbody tr').first().evaluate(r => r.getBoundingClientRect().height)
+    expect(rowH).toBeGreaterThanOrEqual(47)
     await expect(page.getByRole('button', { name: 'Kompakt' })).toHaveCount(0)
     const { table, box } = await page.evaluate(() => {
       const t = document.querySelector('.sx-table') as HTMLElement

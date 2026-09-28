@@ -5,7 +5,8 @@ export type Density = 'compact' | 'comfortable'
 /**
  * Anzeigedichte fuer Tabellen und Formulare (UI-Pilot 2026-09), pro Nutzer
  * gespeichert. Wirkt nur auf Bausteine, die sie ausdruecklich lesen
- * (`[data-density] .sx-…`, `.bk-…`) — bestehende Listen aendern sich nicht.
+ * (`.bk-root[data-density]`, die Buchungen) — die Strukturen sind seit
+ * Runde 3 immer luftig, bestehende Listen aendern sich nicht.
  *
  * Auf dem Handy und bei Touch-Bedienung gilt immer die luftige Variante;
  * dort blendet CSS den Umschalter aus, weil 44-px-Ziele nicht verhandelbar
