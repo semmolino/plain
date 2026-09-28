@@ -13,6 +13,7 @@ import { angebotHref } from '@/pages/angebote/angebotUrlState'
 import { money } from '@/utils/money'
 import { HonorarWizard, HONORAR_WIZARD_GUARD } from './HonorarWizard'
 import { KalkulationActions } from './KalkulationActions'
+import { SurchargeAmount } from './struktur/SurchargeAmount'
 
 type WizardMode = null | { mode: 'create' } | { mode: 'edit'; id: number }
 type SortCol = 'nameShort' | 'nameLong' | 'project' | 'grundhonorar' | 'gesamthonorar'
@@ -203,7 +204,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                         : '—'}
                   </td>
                   <td className="num">{money(r.grundhonorar)}</td>
-                  <td className="num">{(r.zuschlaegeSum ?? 0) !== 0 ? money(r.zuschlaegeSum) : '—'}</td>
+                  <td className="num"><SurchargeAmount value={r.zuschlaegeSum ?? 0} /></td>
                   <td className="num" style={{ fontWeight: 600 }}>{money(r.gesamthonorar)}</td>
                   <td>
                     <KalkulationActions

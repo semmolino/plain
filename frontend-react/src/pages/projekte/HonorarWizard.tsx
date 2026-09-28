@@ -31,6 +31,7 @@ import { ZonenPunkteRechner } from '@/pages/projekte/ZonenPunkteRechner'
 import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent, type RecentEntry } from '@/api/recents'
 import { fmtEur, money } from '@/utils/money'
+import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
 
 const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
 type KX = typeof KX_OPTIONS[number]
@@ -1409,8 +1410,9 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                           <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--text-3)' }}>
                             {money(effect?.effectiveBase)}
                           </td>
+                          {/* Farbig wie in den Strukturen: Zuschlag gruen, Nachlass rot */}
                           <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                            {money(effect?.amount)}
+                            <SurchargeAmount value={effect?.amount ?? 0} />
                           </td>
                           <td style={{ textAlign: 'center' }}>
                             <button type="button" className="btn-small hw-details" aria-expanded={isExpanded}
@@ -1500,7 +1502,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
                   <tr>
                     <th scope="col" colSpan={4}>Summe Zuschläge / Nachlässe</th>
                     <th scope="col" style={{ textAlign: 'right' }}>
-                      {money(totalSurchargeAmt)}
+                      <SurchargeAmount value={totalSurchargeAmt} />
                     </th>
                     <th scope="col" colSpan={2}></th>
                   </tr>
