@@ -1,6 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect, Fragment } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
-import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { SortTh } from '@/components/ui/SortTh'
 import { useFitColumns } from '@/hooks/useFitColumns'
@@ -15,19 +14,15 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { usePermission } from '@/store/permissionsStore'
 import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
 import { Modal }         from '@/components/ui/Modal'
-import { Message }       from '@/components/ui/Message'
 import { ConfirmModal }  from '@/components/ui/ConfirmModal'
 import { useToast }      from '@/store/toastStore'
-import { Autocomplete }  from '@/components/ui/Autocomplete'
-import { useCtrlS }      from '@/hooks/useCtrlS'
 import { ProjekteAnlegen } from '@/pages/projekte/ProjekteAnlegen'
 import {
-  fetchProjectListFull, updateProject, deleteProject, fetchContractByProject, patchContract,
+  fetchProjectListFull, updateProject, deleteProject,
   fetchProjectStatuses, fetchProjectTypes, fetchProjectManagers, fetchDepartments,
   cascadeProjectInternal, copyProject,
   type Project,
 } from '@/api/projekte'
-import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
 import { rowClickHandler } from '@/utils/rowClick'
 
 const PAGE_SIZE = 25
@@ -49,12 +44,14 @@ const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set(), 
 // null = all, true = only internal, false = only external
 type InternalFilter = null | boolean
 
-
-type ContactOption = { ID: number; FIRST_NAME: string; LAST_NAME: string }
-type ContractConfirm = { contractId: number; addressId: number | null; contactId: number | null }
-
-export function ProjekteListe({ onSelectProject, onProjectCreated, initialSearch }: {
+export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated, initialSearch }: {
   onSelectProject?: (id: number) => void
+  /**
+   * Stift in der Zeile: öffnet den Reiter „Projektdaten" (Runde 8). Vorher
+   * stand hier ein eigener Dialog mit denselben Feldern — ohne verknüpfte
+   * Beschriftungen und ohne Prüfung des Namens.
+   */
+  onEditProject?: (id: number) => void
   onProjectCreated?: (id: number) => void
   /** Vorbelegte Suche, z. B. aus „Projekt zu dieser Mahnung" (Mahnungen). */
   initialSearch?: string
@@ -96,22 +93,6 @@ export function ProjekteListe({ onSelectProject, onProjectCreated, initialSearch
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
   }, [colPanelOpen])
-
-  // edit modal state
-  const [editRow, setEditRow] = useState<Project | null>(null)
-  const [editForm, setEditForm] = useState({
-    abbr: '', name: '',
-    project_status_id: '', project_type_id: '', project_manager_id: '',
-    department_id: '',
-    address_id: '', address_text: '',
-    contact_id: '',
-    is_internal: false,
-  })
-  const [contacts, setContacts] = useState<ContactOption[]>([])
-  const [contractConfirm, setContractConfirm] = useState<ContractConfirm | null>(null)
-  const [editMsg, setEditMsg] = useState<{ text: string; type: 'success'|'error' } | null>(null)
-
-  const editFormRef = useRef<HTMLFormElement>(null)
 
   const { data: listData, isLoading } = useQuery({ queryKey: ['projects-full'], queryFn: fetchProjectListFull })
   const { data: statusData }          = useQuery({ queryKey: ['project-statuses'], queryFn: fetchProjectStatuses })
@@ -224,41 +205,6 @@ export function ProjekteListe({ onSelectProject, onProjectCreated, initialSearch
     })
   }
 
-  const updateMut = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateProject>[1] }) =>
-      updateProject(id, body),
-    onSuccess: async (_data, variables) => {
-      void qc.invalidateQueries({ queryKey: ['projects-full'] })
-
-      const origAddressId = editRow?.ADDRESS_ID ? String(editRow.ADDRESS_ID) : ''
-      const origContactId = editRow?.CONTACT_ID ? String(editRow.CONTACT_ID) : ''
-      const addrChanged   = editForm.address_id !== origAddressId
-      const ctctChanged   = editForm.contact_id !== origContactId
-
-      if (addrChanged || ctctChanged) {
-        try {
-          const res = await fetchContractByProject(variables.id)
-          const contract = res.data
-          if (contract?.ID) {
-            setEditMsg({ text: 'Projekt gespeichert ✅', type: 'success' })
-            setContractConfirm({
-              contractId: contract.ID,
-              addressId:  editForm.address_id ? Number(editForm.address_id) : null,
-              contactId:  editForm.contact_id ? Number(editForm.contact_id) : null,
-            })
-            return
-          }
-        } catch {
-          // contract not found — just close
-        }
-      }
-
-      setEditMsg({ text: 'Gespeichert ✅', type: 'success' })
-      setTimeout(() => closeEdit(), 800)
-    },
-    onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
-  })
-
   const cascadeMut = useMutation({
     mutationFn: ({ id, val }: { id: number; val: boolean }) => cascadeProjectInternal(id, val),
   })
@@ -283,91 +229,6 @@ export function ProjekteListe({ onSelectProject, onProjectCreated, initialSearch
     },
     onError: (e: Error) => toast.error(e.message),
   })
-
-  async function applyToContract(confirm: ContractConfirm) {
-    try {
-      await patchContract(confirm.contractId, {
-        INVOICE_ADDRESS_ID: confirm.addressId,
-        INVOICE_CONTACT_ID: confirm.contactId,
-      })
-    } catch (e: unknown) {
-      setEditMsg({ text: `Vertrag konnte nicht aktualisiert werden: ${e instanceof Error ? e.message : String(e)}`, type: 'error' })
-    } finally {
-      setContractConfirm(null)
-      closeEdit()
-    }
-  }
-
-  function closeEdit() {
-    setEditRow(null)
-    setContractConfirm(null)
-    setContacts([])
-    setEditMsg(null)
-  }
-
-  async function openEdit(p: Project) {
-    setEditForm({
-      abbr:         p.ABBR ?? '',
-      name:          p.NAME  ?? '',
-      project_status_id:  String(p.PROJECT_STATUS_ID  ?? ''),
-      project_type_id:    String(p.PROJECT_TYPE_ID    ?? ''),
-      project_manager_id: String(p.PROJECT_MANAGER_ID ?? ''),
-      department_id:      String(p.DEPARTMENT_ID      ?? ''),
-      address_id:         String(p.ADDRESS_ID         ?? ''),
-      address_text:       p.ADDRESS_NAME              ?? '',
-      contact_id:         String(p.CONTACT_ID         ?? ''),
-      is_internal:        p.IS_INTERNAL ?? false,
-    })
-    setContacts([])
-    setContractConfirm(null)
-    setEditMsg(null)
-    setEditRow(p)
-    if (p.ADDRESS_ID) {
-      try {
-        const r = await fetchContactsByAddress(p.ADDRESS_ID)
-        setContacts(r.data ?? [])
-      } catch { /* ignore */ }
-    }
-  }
-
-  function submitEdit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!editRow) return
-    updateMut.mutate({
-      id: editRow.ID,
-      body: {
-        abbr:         editForm.abbr,
-        name:          editForm.name,
-        project_status_id:  editForm.project_status_id  ? Number(editForm.project_status_id)  : undefined,
-        project_type_id:    editForm.project_type_id    ? Number(editForm.project_type_id)    : null,
-        project_manager_id: editForm.project_manager_id ? Number(editForm.project_manager_id) : undefined,
-        department_id:      editForm.department_id      ? Number(editForm.department_id)      : null,
-        address_id:         editForm.address_id         ? Number(editForm.address_id)         : null,
-        contact_id:         editForm.contact_id         ? Number(editForm.contact_id)         : null,
-        is_internal:        editForm.is_internal,
-      },
-    })
-  }
-
-  useCtrlS(() => editFormRef.current?.requestSubmit(), editRow !== null && contractConfirm === null)
-
-  const setE = (k: keyof typeof editForm) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setEditForm(f => ({ ...f, [k]: e.target.value }))
-
-  const searchAddresses = useCallback(async (q: string) => {
-    const r = await searchAddressesApi(q)
-    return (r.data ?? []).map(a => ({ id: a.ID, label: a.ADDRESS_NAME_1 }))
-  }, [])
-
-  async function handleAddressSelect(id: string | number, label: string) {
-    setEditForm(f => ({ ...f, address_id: String(id), address_text: label, contact_id: '' }))
-    setContacts([])
-    try {
-      const r = await fetchContactsByAddress(Number(id))
-      setContacts(r.data ?? [])
-    } catch { /* ignore */ }
-  }
 
   const sortProps = { sortKey, dir: sortDir, onSort: toggleSort }
   // Frueher gab es zusaetzlich eine „Oeffnen"-Spalte; die Zeile selbst ist
@@ -604,11 +465,14 @@ export function ProjekteListe({ onSelectProject, onProjectCreated, initialSearch
                       </td>
                     )}
                     <td className="doc-actions">
-                      <Can permission="projects.edit">
-                        <button className="row-action-btn" onClick={() => openEdit(p)} title="Bearbeiten">
-                          <Pencil size={14} strokeWidth={2} />
-                        </button>
-                      </Can>
+                      {onEditProject && (
+                        <Can permission="projects.edit">
+                          <button type="button" className="row-action-btn" onClick={() => onEditProject(p.ID)}
+                            title="Projektdaten bearbeiten" aria-label={`Projektdaten ${p.ABBR} bearbeiten`}>
+                            <Pencil size={14} strokeWidth={2} />
+                          </button>
+                        </Can>
+                      )}
                       <Can permission="projects.create">
                         <button className="row-action-btn" onClick={() => copyMut.mutate(p.ID)} disabled={copyMut.isPending} title="Kopieren">
                           <Copy size={14} strokeWidth={2} />
@@ -660,104 +524,6 @@ export function ProjekteListe({ onSelectProject, onProjectCreated, initialSearch
         onConfirm={() => confirmState?.onConfirm()}
         onCancel={() => setConfirmState(null)}
       />
-
-      <Modal open={editRow !== null} onClose={closeEdit} title="Projekt bearbeiten">
-        {contractConfirm ? (
-          <div className="master-form">
-            <p style={{ marginBottom: 16 }}>
-              Soll die Adresse / der Kontakt auch im Vertrag übernommen werden?
-            </p>
-            <Message text={editMsg?.text ?? null} type={editMsg?.type} />
-            <DialogFooter>
-              <button type="button" className="btn-secondary" onClick={closeEdit}>Nein</button>
-              <button className="btn-primary" onClick={() => applyToContract(contractConfirm)}>
-                Ja, übernehmen
-              </button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
-            <div className="form-group">
-              <label>Kürzel</label>
-              <input value={editForm.abbr} onChange={setE('abbr')} />
-            </div>
-            <div className="form-group">
-              <label>Name</label>
-              <input value={editForm.name} onChange={setE('name')} />
-            </div>
-            <div className="form-group">
-              <label>Status</label>
-              <select value={editForm.project_status_id} onChange={setE('project_status_id')}>
-                <option value="">—</option>
-                {statuses.map(s => <option key={s.ID} value={s.ID}>{s.ABBR}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Typ</label>
-              <select value={editForm.project_type_id} onChange={setE('project_type_id')}>
-                <option value="">—</option>
-                {types.map(t => <option key={t.ID} value={t.ID}>{t.ABBR}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Projektleitung</label>
-              <select value={editForm.project_manager_id} onChange={setE('project_manager_id')}>
-                <option value="">—</option>
-                {managers.map(m => <option key={m.ID} value={m.ID}>{m.ABBR}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Abteilung</label>
-              <select value={editForm.department_id} onChange={setE('department_id')}>
-                <option value="">—</option>
-                {departments.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
-              </select>
-            </div>
-            <Autocomplete
-              label="Adresse"
-              htmlId="edit-proj-address"
-              value={editForm.address_text}
-              onChange={text => setEditForm(f => ({ ...f, address_text: text, address_id: '', contact_id: '' }))}
-              onSelect={handleAddressSelect}
-              search={searchAddresses}
-              placeholder="Name eingeben …"
-            />
-            <div className="form-group">
-              <label>Kontakt</label>
-              <select
-                value={editForm.contact_id}
-                onChange={setE('contact_id')}
-                disabled={!editForm.address_id}
-              >
-                <option value="">—</option>
-                {contacts.map(c => (
-                  <option key={c.ID} value={c.ID}>
-                    {`${c.FIRST_NAME} ${c.LAST_NAME}`.trim()}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group" style={{ marginTop: 12 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={editForm.is_internal}
-                  onChange={e => setEditForm(f => ({ ...f, is_internal: e.target.checked }))}
-                />
-                <span>Internes Projekt</span>
-                <span style={{ fontSize: 11, color: 'var(--text-3)' }}>(nicht Teil von Verträgen / Rechnungen)</span>
-              </label>
-            </div>
-            <Message text={editMsg?.text ?? null} type={editMsg?.type} />
-            <DialogFooter>
-              <button type="button" className="btn-secondary" onClick={closeEdit}>Abbrechen</button>
-              <button className="btn-primary" type="submit" disabled={updateMut.isPending}>
-                {updateMut.isPending ? 'Speichert …' : 'Speichern'}
-              </button>
-            </DialogFooter>
-          </form>
-        )}
-      </Modal>
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neues Projekt anlegen" className="modal-wide">
         <ProjekteAnlegen onProjectCreated={id => { setShowCreate(false); onProjectCreated?.(id) }} />

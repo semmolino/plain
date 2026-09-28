@@ -50,9 +50,9 @@ test.describe('Adresssuche', () => {
   test('im Dialog schliesst Escape erst die Liste, dann das Fenster', async ({ page }) => {
     await mockPilot(page)
     await page.goto('/projekte')
-    await page.getByRole('button', { name: 'Bearbeiten', exact: true }).first().click()
-    const dialog = page.getByRole('dialog', { name: 'Projekt bearbeiten' })
-    const box = dialog.getByRole('combobox', { name: 'Adresse' })
+    await page.getByRole('button', { name: '+ Neues Projekt' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Neues Projekt anlegen' })
+    const box = dialog.getByRole('combobox', { name: 'Rechnungsadresse*' })
     await box.fill('Stadt')
     const hits = dialog.getByRole('listbox', { name: 'Treffer', exact: true })
     await expect(hits.getByRole('option').first()).toBeVisible()

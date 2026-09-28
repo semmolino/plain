@@ -1653,6 +1653,19 @@ export const HELP = {
       </>
     ),
   },
+  'projects.internal': {
+    title: 'Internes Projekt',
+    body: (
+      <>
+        Für Büroarbeit ohne Auftraggeber — Akquise, Verwaltung, Fortbildung. Stunden darauf zählen in der
+        <strong> Produktivität</strong> der Mitarbeiter nicht als Projektarbeit.<br /><br />
+        Abgerechnet wird je Element: Rechnungen lassen ein Element aus, sobald <strong>es selbst</strong>
+        intern ist. Nach dem Speichern fragt plan&amp;simple deshalb, ob die Elemente der Struktur
+        mitgehen sollen. Einzelne Elemente lassen sich in der Struktur auch ohne das ganze Projekt als
+        intern markieren.
+      </>
+    ),
+  },
   'projects.hourly_rates': {
     title: 'Stundensätze im Projekt',
     body: (

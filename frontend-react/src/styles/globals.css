@@ -4623,6 +4623,12 @@ th.doc-actions, td.doc-actions {
 .ws-radio-group legend { padding: 0; margin-bottom: var(--space-1); font-weight: 600; }
 .ws-radio-group .ws-check { display: inline-flex; margin: 0 var(--space-5) 0 0; }
 fieldset:disabled .ws-check { cursor: default; }
+/* Nur-Lese-Angaben in einem Abschnitt (Projektdaten → Herkunft) */
+.ws-facts { margin: 0 0 var(--space-3); display: grid; gap: var(--space-3) var(--space-5); grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.ws-facts dt { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.ws-facts dd { margin: 2px 0 0; font-size: 14px; color: var(--text); }
+.ws-facts-link { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; text-decoration: none; }
+.ws-facts-link:hover { text-decoration: underline; }
 @media (min-width: 900px) { .form-section-body { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .form-section { padding: var(--space-3) var(--space-3) var(--space-1); } }
 

@@ -31,11 +31,18 @@ const PROJECTS = [
   ['P-2025-014', 'Brandschutzertüchtigung Schulzentrum', 'Laufend', 'Sanierung', 'T. Kern', 'Landkreis Bodenseekreis'],
 ]
 
+const STATUS_NAMES  = ['Angebot', 'Laufend', 'Pausiert', 'Abgeschlossen']
+const TYPE_NAMES    = ['Neubau', 'Sanierung', 'Umbau', 'Studie', 'Innenausbau']
+const MANAGER_NAMES = ['M. Messina', 'T. Kern', 'S. Braun']
+
 const projects = PROJECTS.map(([short, long, status, typ, mgr, addr], i) => ({
   ID: i + 1,
   ABBR: short, NAME: long,
-  PROJECT_STATUS_ID: i % 4 + 1, PROJECT_TYPE_ID: i % 5 + 1,
-  PROJECT_MANAGER_ID: i % 3 + 1, DEPARTMENT_ID: 1,
+  // IDs passend zu den Namen (Reihenfolge wie projekte/statuses, /types,
+  // /managers) — vorher i % 4 + 1: der Kopf sagte „Laufend", das Formular
+  // „Angebot".
+  PROJECT_STATUS_ID: STATUS_NAMES.indexOf(status) + 1, PROJECT_TYPE_ID: TYPE_NAMES.indexOf(typ) + 1,
+  PROJECT_MANAGER_ID: MANAGER_NAMES.indexOf(mgr) + 1, DEPARTMENT_ID: 1,
   ADDRESS_ID: i + 1, CONTACT_ID: i + 1, IS_INTERNAL: false,
   STATUS_NAME: status, TYPE_NAME: typ, MANAGER_NAME: mgr,
   ADDRESS_NAME: addr, CONTACT_NAME: 'A. Ansprechpartner', DEPARTMENT_NAME: 'Hochbau',
@@ -197,9 +204,9 @@ export async function mockDemo(page: Page, opts: DemoOptions = {}) {
     ['permissions/me',       opts.permissions ? { keys: opts.permissions, unrestricted: false } : { keys: [], unrestricted: true }],
     ['license/me',           { unrestricted: true, plan_id: null, state: null, capabilities: [], limits: {} }],
     ['projekte/list',        { data: projects }],
-    ['projekte/statuses',    { data: named(['Angebot', 'Laufend', 'Pausiert', 'Abgeschlossen']) }],
-    ['projekte/types',       { data: named(['Neubau', 'Sanierung', 'Umbau', 'Studie', 'Innenausbau']) }],
-    ['projekte/managers',    { data: named(['M. Messina', 'T. Kern', 'S. Braun']) }],
+    ['projekte/statuses',    { data: named(STATUS_NAMES) }],
+    ['projekte/types',       { data: named(TYPE_NAMES) }],
+    ['projekte/managers',    { data: named(MANAGER_NAMES) }],
     ['projekte/departments', { data: named(['Hochbau', 'Tiefbau']) }],
     ['invoices',             { data: invoices }],
     // Die Adressliste ruft /stammdaten/addresses/list, nicht /adressen. Der

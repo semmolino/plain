@@ -17,13 +17,14 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 
 // vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
 // vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
-// vorher6 = nach Runde 5, vorher7 = nach Runde 6, nachher = aktueller Stand.
+// vorher6 = nach Runde 5, vorher7 = nach Runde 6, vorher8 = nach Runde 7,
+// nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6 }
-const since = (round: number) => (RANK[PHASE] ?? 7) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7 }
+const since = (round: number) => (RANK[PHASE] ?? 8) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -742,4 +743,20 @@ test('Adresssuche – Treffer mit Tastatur', async ({ page }, info) => {
   await page.locator('.autocomplete-item').first().waitFor()
   await box.press('ArrowDown'); await box.press('ArrowDown')
   await shoot(page, info.project.name, 'adresssuche')
+})
+
+// ── Runde 8: Projektdaten, Kalkulation am Handy, Adressen und Kontakte ──────
+
+test('Projektdaten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) {
+    await open(page, '/projekte?projectId=1&tab=daten')
+    await page.locator('#pd-name').waitFor()
+  } else {
+    // Vorher: Dialog in der Projektliste
+    await open(page, '/projekte')
+    await page.getByRole('button', { name: 'Bearbeiten', exact: true }).first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await shoot(page, info.project.name, 'projektdaten')
 })

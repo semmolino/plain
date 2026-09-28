@@ -457,6 +457,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     ID: 1, ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1',
     PROJECT_STATUS_ID: 2, PROJECT_TYPE_ID: 1, PROJECT_MANAGER_ID: 1, DEPARTMENT_ID: 1,
     ADDRESS_ID: 1, CONTACT_ID: 1, IS_INTERNAL: false,
+    created_at: '2024-03-12T09:14:00Z', OFFER_ID: 1, COMPANY_ID: 1,
     SURCHARGE_1_LABEL: null, SURCHARGE_1_PCT: null, SURCHARGE_1_EUR: null, SURCHARGE_1_CUMUL: true,
     SURCHARGE_2_LABEL: null, SURCHARGE_2_PCT: null, SURCHARGE_2_EUR: null, SURCHARGE_2_CUMUL: true,
     SURCHARGE_3_LABEL: null, SURCHARGE_3_PCT: null, SURCHARGE_3_EUR: null, SURCHARGE_3_CUMUL: true,
