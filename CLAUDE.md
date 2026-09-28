@@ -10,7 +10,7 @@ plan&simple is a **multi-tenant business management tool** for architects and pl
 
 | Layer | Technology |
 |---|---|
-| Backend | Node.js 20 + Express, `@supabase/supabase-js` (service-role client) |
+| Backend | Node.js 22 + Express, `@supabase/supabase-js` (service-role client) |
 | Database | **Scalingo PostgreSQL** über lokales PostgREST (`127.0.0.1:3001`), angesprochen mit dem supabase-js-Client — kein rohes SQL im App-Code. RLS ist aktiv und erzwungen (`is_system_request()` / `current_tenant_id()`). Das alte Supabase-Projekt hängt nur noch als Altbestand in den Variablen und enthält einen **veralteten Datenstand** — nicht dorthin schreiben. |
 | Auth | Custom JWT (`jsonwebtoken` + `bcryptjs`), 8h expiry, secret from `JWT_SECRET` env var |
 | Frontend | React 18, TypeScript, Vite, Tanstack Query v5, Zustand, React Router v6 |
