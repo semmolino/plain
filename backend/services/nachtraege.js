@@ -250,10 +250,37 @@ async function getStructure(supabase, { tenantId, nachtragId }) {
   return data || [];
 }
 
+/**
+ * Ist eine Position schon freigegeben (steht als Knoten im Projekt)?
+ * PARTIAL heisst „der Höhe nach gekürzt anerkannt" — ebenso erledigt. Vorher
+ * galt nur APPROVED als erledigt: eine gekürzte Position liess sich ein
+ * zweites Mal freigeben, legte einen zweiten Projektknoten an und zählte den
+ * Betrag doppelt; der Nachtrag wurde nie „beauftragt".
+ */
+function isReleased(node) {
+  return node?.RELEASED_STRUCTURE_ID != null || node?.APPROVAL_STATE === 'APPROVED' || node?.APPROVAL_STATE === 'PARTIAL';
+}
+
+const RELEASED_MSG = 'Diese Position ist schon freigegeben und steht im Projekt. Änderungen laufen dort, nicht mehr im Nachtrag.';
+
+/** Position laden und prüfen, dass sie zu genau diesem Nachtrag gehört. */
+async function loadNode(supabase, { tenantId, nachtragId, nodeId }) {
+  const { data, error } = await supabase.from('NACHTRAG_STRUCTURE')
+    .select('*').eq('ID', nodeId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (error) throw error;
+  // Die Nachtrags-ID der URL wurde vorher nicht geprüft — jede Position des
+  // Mandanten liess sich über jeden Nachtrag ändern.
+  if (!data || (nachtragId != null && Number(data.NACHTRAG_ID) !== Number(nachtragId))) {
+    throw { status: 404, message: 'Position nicht gefunden' };
+  }
+  return data;
+}
+
 async function addStructureNode(supabase, { tenantId, nachtragId, body }) {
   const b    = body || {};
   const btId = b.billing_type_id ? parseInt(String(b.billing_type_id), 10) : null;
   if (!btId) throw { status: 400, message: 'billing_type_id ist erforderlich' };
+  await get(supabase, { tenantId, nachtragId }); // 404-Guard + Mandantentrennung
 
   const isHourly = btId === 2;
   const quantity = isHourly ? (Number(b.quantity) || 0) : null;
@@ -262,6 +289,12 @@ async function addStructureNode(supabase, { tenantId, nachtragId, body }) {
   const extPct   = Number(b.extras_percent) || 0;
   const extras   = fmt2(revenue * extPct / 100);
   const fatherId = b.father_id ? parseInt(String(b.father_id), 10) : null;
+  if (fatherId !== null) {
+    const father = await loadNode(supabase, { tenantId, nachtragId, nodeId: fatherId });
+    // Unter einer freigegebenen Position würde sie zum Vater — ihr Wert im
+    // Projekt stimmte dann nicht mehr mit dem Nachtrag überein.
+    if (isReleased(father)) throw { status: 409, message: 'Unter einer freigegebenen Position lassen sich keine Positionen mehr anlegen.' };
+  }
 
   const sibQuery = supabase.from('NACHTRAG_STRUCTURE').select('SORT_ORDER').eq('NACHTRAG_ID', nachtragId);
   const { data: siblings } = fatherId !== null ? await sibQuery.eq('FATHER_ID', fatherId) : await sibQuery.is('FATHER_ID', null);
@@ -293,7 +326,9 @@ async function addStructureNode(supabase, { tenantId, nachtragId, body }) {
   return data;
 }
 
-async function updateStructureNode(supabase, { tenantId, nodeId, body }) {
+async function updateStructureNode(supabase, { tenantId, nachtragId, nodeId, body }) {
+  const current = await loadNode(supabase, { tenantId, nachtragId, nodeId });
+  if (isReleased(current)) throw { status: 409, message: RELEASED_MSG };
   const b        = body || {};
   const r2       = (n) => Math.round(n * 100) / 100;
   const btId     = b.billing_type_id != null ? parseInt(String(b.billing_type_id), 10) : undefined;
@@ -361,15 +396,26 @@ async function updateStructureNode(supabase, { tenantId, nodeId, body }) {
   return data;
 }
 
-async function deleteStructureNode(supabase, { tenantId, nodeId }) {
-  const { data: nd } = await supabase.from('NACHTRAG_STRUCTURE').select('FATHER_ID, NACHTRAG_ID').eq('ID', nodeId).eq('TENANT_ID', tenantId).maybeSingle();
-  const fatherId  = nd?.FATHER_ID ?? null;
-  const nachtragId = nd?.NACHTRAG_ID ?? null;
-  await supabase.from('NACHTRAG_STRUCTURE').delete().eq('FATHER_ID', nodeId).eq('TENANT_ID', tenantId);
-  const { error } = await supabase.from('NACHTRAG_STRUCTURE').delete().eq('ID', nodeId).eq('TENANT_ID', tenantId);
+async function deleteStructureNode(supabase, { tenantId, nachtragId, nodeId }) {
+  const nd = await loadNode(supabase, { tenantId, nachtragId, nodeId });
+  const fatherId = nd.FATHER_ID ?? null;
+  const ownerId  = nd.NACHTRAG_ID;
+
+  // Den ganzen Zweig einsammeln — vorher fiel nur eine Ebene darunter mit,
+  // Enkel blieben ohne Vater zurück und zählten in keiner Summe mehr.
+  const all = await getStructure(supabase, { tenantId, nachtragId: ownerId });
+  const kids = new Map();
+  for (const r of all) if (r.FATHER_ID != null) kids.set(r.FATHER_ID, [...(kids.get(r.FATHER_ID) || []), r]);
+  const branch = [];
+  const walk = (n) => { branch.push(n); for (const c of kids.get(n.ID) || []) walk(c); };
+  walk(all.find(r => r.ID === nd.ID) || nd);
+  if (branch.some(isReleased)) throw { status: 409, message: RELEASED_MSG };
+
+  const ids = branch.map(n => n.ID);
+  const { error } = await supabase.from('NACHTRAG_STRUCTURE').delete().in('ID', ids).eq('TENANT_ID', tenantId);
   if (error) throw error;
   if (fatherId != null) await recalcParent(supabase, { parentId: fatherId });
-  if (nachtragId) await recomputeHeadTotals(supabase, { tenantId, nachtragId });
+  await recomputeHeadTotals(supabase, { tenantId, nachtragId: ownerId });
 }
 
 async function recalcParent(supabase, { parentId }) {
@@ -466,13 +512,13 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
     for (const p of b.positions) {
       const node = byId.get(parseInt(String(p.nachtrag_structure_id), 10));
       if (!node) continue;
-      if (node.APPROVAL_STATE === 'APPROVED') continue; // schon übernommen
+      if (isReleased(node)) continue; // schon übernommen (auch gekürzt)
       const approvedAmount = p.approved_amount_net != null && p.approved_amount_net !== ''
         ? fmt2(Number(p.approved_amount_net)) : null;
       selection.push({ node, approvedAmount });
     }
   } else if (kind === 'FULL') {
-    selection = leaves.filter(l => l.APPROVAL_STATE !== 'APPROVED').map(node => ({ node, approvedAmount: null }));
+    selection = leaves.filter(l => !isReleased(l)).map(node => ({ node, approvedAmount: null }));
   } else {
     throw { status: 400, message: 'Bitte Positionen auswählen (oder Voll-Freigabe wählen).' };
   }
@@ -510,15 +556,28 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
     const extras = isBt1 ? fmt2(revenue * extrasPct / 100) : 0;
     releaseSum += isBt1 ? (revenue + extras) : 0;
 
-    const { data: ps, error: psErr } = await supabase.from('PROJECT_STRUCTURE').insert([{
+    // Die Rollenspalten (ROLE_ABBR/ROLE_NAME/ROLE_ID) gibt es im Projekt nicht —
+    // der Insert scheiterte daran mit 500, jede Freigabe brach ab. Wer mit
+    // welcher Rolle bucht, steht im Projekt an EMPLOYEE2PROJECT, wie beim
+    // Beauftragen eines Angebots. Stattdessen geht bei Positionen nach
+    // Aufwand die Schätzung als Plan mit (Migration 0173, wie beim
+    // Beauftragen): das Element startet bei 0, die Budgetwarnung vergleicht
+    // gegen den Plan.
+    const row = {
       ABBR: node.ABBR, NAME: node.NAME, PROJECT_ID: nachtrag.PROJECT_ID,
       FATHER_ID: groupId, BILLING_TYPE_ID: node.BILLING_TYPE_ID, NACHTRAG_ID: nachtragId,
       REVENUE_BASIS: isBt1 ? revenue : 0, REVENUE: revenue, EXTRAS_PERCENT: extrasPct, EXTRAS: extras, COSTS: 0,
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
       SORT_ORDER: (sortOrder += 10),
-      ROLE_ABBR: node.ROLE_ABBR || null, ROLE_NAME: node.ROLE_NAME || null, ROLE_ID: node.ROLE_ID || null,
       TENANT_ID: tenantId,
-    }]).select('ID').single();
+    };
+    const planHours = Number(node.QUANTITY || 0), planRevenue = fullRevenue;
+    const plan = !isBt1 && (planHours > 0 || planRevenue > 0) ? { PLAN_HOURS: planHours, PLAN_REVENUE: planRevenue } : null;
+    let { data: ps, error: psErr } = await supabase.from('PROJECT_STRUCTURE').insert([{ ...row, ...(plan || {}) }]).select('ID').single();
+    // Schema-Cache ohne die Plan-Spalten (Deploy vor dem Reload): ohne Plan übernehmen
+    if (psErr && plan && /PLAN_/.test(String(psErr.message || ''))) {
+      ({ data: ps, error: psErr } = await supabase.from('PROJECT_STRUCTURE').insert([row]).select('ID').single());
+    }
     if (psErr) throw { status: 500, message: 'Position konnte nicht übernommen werden: ' + psErr.message };
 
     // PROJECT_PROGRESS-Zeile (soft)
@@ -550,7 +609,7 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
 
   // Kopf: freigegebene Summe fortschreiben + Status bestimmen
   const newApproved = fmt2(Number(nachtrag.AMOUNT_APPROVED_NET || 0) + releaseSum);
-  const remainingOpen = leaves.filter(l => l.APPROVAL_STATE !== 'APPROVED' && !selection.find(s => s.node.ID === l.ID)).length;
+  const remainingOpen = leaves.filter(l => !isReleased(l) && !selection.find(s => s.node.ID === l.ID)).length;
   const targetCode = remainingOpen === 0 ? 'COMMISSIONED' : 'PARTIALLY_COMMISSIONED';
   const targetStatus = await statusByCode(supabase, targetCode);
   await supabase.from('NACHTRAG').update({

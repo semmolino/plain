@@ -16,13 +16,13 @@
  *   haelt jede geschriebene Spalte gegen db/schema/inventar_*.txt und
  *   antwortet sonst wie PostgREST.
  *
- * WARUM `test.failing`
- *   Der Fehler ist noch nicht behoben - ob die Rolleninformation im Projekt
- *   ueberhaupt erhalten bleiben soll, ist eine fachliche Frage (dann braucht es
- *   eine Migration; sonst reicht es, die drei Felder zu streichen). Bis dahin
- *   haelt `test.failing` den Zustand fest, ohne CI rot zu faerben, und schlaegt
- *   an, sobald jemand den Fehler behebt: dann besteht der Test unerwartet und
- *   Jest meldet das. Beim Beheben: `test.failing` in `test` aendern.
+ * BEHOBEN (UI-Pilot Runde 7)
+ *   Die drei Rollenfelder sind aus dem Insert gestrichen. Wer mit welcher
+ *   Rolle bucht, steht im Projekt an EMPLOYEE2PROJECT — wie beim Beauftragen
+ *   eines Angebots, das die Rollen ebenfalls nicht in die Struktur schreibt.
+ *   Positionen nach Aufwand bringen stattdessen ihre Schaetzung als Plan mit
+ *   (PLAN_HOURS/PLAN_REVENUE, Migration 0173). Bis dahin stand hier
+ *   `test.failing`.
  */
 
 const { makeFakeSupabase } = require("./helpers/fakeSupabase");
@@ -74,7 +74,7 @@ describe("Nachtrag: Freigabe uebernimmt Positionen ins Projekt", () => {
     expect(inv.get("OFFER_STRUCTURE").has("ROLE_ABBR")).toBe(true);
   });
 
-  test.failing("legt die freigegebene Position als Knoten im Projekt an", async () => {
+  test("legt die freigegebene Position als Knoten im Projekt an", async () => {
     const supabase = fixture();
 
     await svc.release(supabase, {
