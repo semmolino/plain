@@ -1150,7 +1150,6 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
         title={confirmState?.title ?? ''}
         message={confirmState?.message ?? ''}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />

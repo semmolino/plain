@@ -367,7 +367,6 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
       title={confirmState?.title ?? ''}
       message={confirmState?.message ?? ''}
       confirmLabel={confirmState?.confirmLabel ?? 'Bestätigen'}
-      confirmClass="danger"
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />

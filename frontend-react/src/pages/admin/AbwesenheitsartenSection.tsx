@@ -140,7 +140,6 @@ export function AbwesenheitsartenSection() {
         title="Abwesenheitsart löschen"
         message={`Art „${confirmState?.label ?? ''}" löschen? Ist sie noch in Verwendung, wird sie stattdessen deaktiviert.`}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { if (confirmState) delMut.mutate(confirmState.id); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />

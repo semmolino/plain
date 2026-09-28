@@ -105,7 +105,6 @@ export function BuchungstextvorlagenSection() {
         title="Textvorlage löschen"
         message={`Textvorlage „${delConfirm?.label ?? ''}" löschen?`}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { if (delConfirm) delMut.mutate(delConfirm.id); setDelConfirm(null) }}
         onCancel={() => setDelConfirm(null)}
       />

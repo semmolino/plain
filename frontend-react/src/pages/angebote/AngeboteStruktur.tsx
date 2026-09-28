@@ -1098,7 +1098,6 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
         title={confirmState?.title ?? ''}
         message={confirmState?.message ?? ''}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
