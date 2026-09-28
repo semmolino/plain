@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test'
-import { mockDemo, offers as DEMO_OFFERS, type DemoOptions } from './demoData'
+import { mockDemo, offers as DEMO_OFFERS, addresses as DEMO_ADDRESSES, type DemoOptions } from './demoData'
 
 /**
  * Zusatzdaten fuer die Pilot-Ansichten (UI-Pilot 2026-09): Projekt-
@@ -776,6 +776,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   await get('angebote', { data: DEMO_OFFERS.map(o => o.ID === 1 ? { ...o, TOTAL_AMOUNT: OFFER_TOTAL } : o) })
   await mockKalkulationen(page)
   await mockVertragPreiseBudget(page)
+  await mockAdressen(page)
   await mockNachtraege(page)
 }
 
@@ -1167,4 +1168,79 @@ async function mockNachtraege(page: Page) {
   ] : [] })))
   await r('nachtraege/\\d+/release', route => route.fulfill(json({ data: { release_no: 2, amount_net: 4_920, approved_total_net: 17_720, status_code: 'PARTIALLY_COMMISSIONED', group_structure_id: 1 } })))
   await r('nachtraege/\\d+/review', route => route.fulfill(json({ data: ntDetail(id(route)) })))
+}
+
+// ── Adressen und Kontakte (Runde 8) ─────────────────────────────────────────
+// Die Kontakte aus demoData tragen weder Anrede noch Adressnamen (ADDRESS) —
+// die Liste zeigte damit überall „—". Hier dieselben Adressen mit
+// vollständigen Kontakten und der Detailantwort einer Adresse.
+
+export const SALUTATIONS = [{ ID: 1, SALUTATION: 'Frau' }, { ID: 2, SALUTATION: 'Herr' }, { ID: 3, SALUTATION: 'Guten Tag' }]
+export const GENDERS = [{ ID: 1, GENDER: 'weiblich' }, { ID: 2, GENDER: 'männlich' }, { ID: 3, GENDER: 'divers' }]
+
+const contact = (ID: number, ADDRESS_ID: number, first: string, last: string, gender: 1 | 2, extra: Record<string, unknown> = {}) => ({
+  ID, TITLE: null, FIRST_NAME: first, LAST_NAME: last, NAME: `${first} ${last}`,
+  EMAIL: `${first.toLowerCase()}.${last.toLowerCase().replace(/[^a-z]/g, '')}@kunde-${ADDRESS_ID}.de`,
+  MOBILE: `0170 55${ID}0${ID}`, PHONE: null, SALUTATION_ID: gender, GENDER_ID: gender,
+  SALUTATION: gender === 1 ? 'Frau' : 'Herr', GENDER: gender === 1 ? 'weiblich' : 'männlich',
+  ADDRESS_ID, ADDRESS: DEMO_ADDRESSES.find(a => a.ID === ADDRESS_ID)?.ADDRESS_NAME_1 ?? '',
+  POSITION: null, DEPARTMENT: null, IS_PRIMARY: 0, NOTES: null, ...extra,
+})
+
+export const CONTACTS_ALL = [
+  contact(21, 1, 'Petra', 'Albrecht', 1, { POSITION: 'Amtsleitung', DEPARTMENT: 'Hochbauamt', IS_PRIMARY: 1, TITLE: 'Dr.' }),
+  contact(22, 1, 'Rainer', 'Vogt', 2, { POSITION: 'Sachbearbeitung', DEPARTMENT: 'Hochbauamt' }),
+  contact(23, 2, 'Julia', 'Neumann', 1, { POSITION: 'Geschäftsführung', IS_PRIMARY: 1, PHONE: '07541 3030-10' }),
+  contact(24, 2, 'Ben', 'Okafor', 2, { POSITION: 'Projektleitung', DEPARTMENT: 'Technik' }),
+  contact(25, 2, 'Miriam', 'Schäfer-Lindqvist', 1, { POSITION: 'Buchhaltung', DEPARTMENT: 'Finanzen', NOTES: 'Rechnungen bitte nur als E-Rechnung.' }),
+  contact(26, 3, 'Klaus', 'Riedl', 2, { POSITION: 'Liegenschaften', IS_PRIMARY: 1 }),
+  contact(27, 4, 'Anna', 'Weber', 1, { POSITION: 'Inhaberin', IS_PRIMARY: 1 }),
+]
+
+export function addressDetail(id: number) {
+  const address = DEMO_ADDRESSES.find(a => a.ID === id) ?? DEMO_ADDRESSES[0]
+  const withLinks = id === 2
+  return {
+    address,
+    contacts: CONTACTS_ALL.filter(c => c.ADDRESS_ID === address.ID),
+    projects:   withLinks ? [{ ID: 2, ABBR: 'P-2024-002', NAME: 'Sanierung Altbau Bahnhofstraße 14' }] : [],
+    offers:     withLinks ? [{ ID: 2, ABBR: 'A-2025-015', NAME: 'Sanierung Altbau Bahnhofstraße 14' }] : [],
+    contracts:  withLinks ? [{ ID: 12, ABBR: 'V-2024-002', NAME: 'Generalplanervertrag Sanierung Bahnhofstraße 14', PROJECT_ID: 2 }] : [],
+    invoices:   withLinks ? [
+      { ID: 2, INVOICE_NUMBER: 'RE-2026-0042', INVOICE_DATE: '2026-07-08', PROJECT_ID: 2 },
+      { ID: 10, INVOICE_NUMBER: 'RE-2026-0050', INVOICE_DATE: '2026-08-14', PROJECT_ID: 2 },
+    ] : [],
+    partials:   withLinks ? [{ ID: 3, ADVANCE_INVOICE_NUMBER: 'AR-2026-0003', ADVANCE_INVOICE_DATE: '2026-03-31', PROJECT_ID: 2 }] : [],
+    nachtraege: withLinks ? [{ ID: 403, ABBR: 'N-003', NAME: 'Erweiterte Bestandsaufnahme Dachstuhl', PROJECT_ID: 2 }] : [],
+    visible: { contacts: true, projects: true, offers: true, contracts: true, invoices: true, partials: true, nachtraege: true },
+  }
+}
+
+async function mockAdressen(page: Page) {
+  const get = (re: string, body: unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), r => r.fulfill(json(body)))
+  await get('stammdaten/salutations', { data: SALUTATIONS })
+  await get('stammdaten/genders', { data: GENDERS })
+  await get('stammdaten/contacts/list', { data: CONTACTS_ALL })
+  await page.route(/\/api\/v1\/stammdaten\/addresses\/(\d+)(\?|$)/, r => {
+    const id = Number(r.request().url().match(/addresses\/(\d+)/)?.[1])
+    const m = r.request().method()
+    if (m === 'GET') return r.fulfill(json({ data: addressDetail(id) }))
+    if (m === 'PATCH') return r.fulfill(json({ data: { ...addressDetail(id).address, ...(r.request().postDataJSON() ?? {}) } }))
+    if (m === 'DELETE') return id === 2
+      ? r.fulfill(json({ error: 'Adresse „Wohnbau Süd GmbH" kann nicht gelöscht werden — verwendet in 3 Kontakten, 1 Projekt (P-2024-002) und 2 Rechnungen (RE-2026-0042, RE-2026-0050).' }, 409))
+      : r.fulfill(json({ ok: true }))
+    return r.fulfill(json({ ok: true }))
+  })
+  await page.route(/\/api\/v1\/stammdaten\/address(\?|$)/, r => r.fulfill(json({ data: { ID: 42, ADDRESS_NAME_1: (r.request().postDataJSON() ?? {}).address_name_1 } })))
+  await page.route(/\/api\/v1\/stammdaten\/contacts(\?|$)/, r => r.request().method() === 'POST'
+    ? r.fulfill(json({ data: { ID: 900, ADDRESS_ID: (r.request().postDataJSON() ?? {}).address_id } }))
+    : r.fulfill(json({ data: CONTACTS_ALL })))
+  await page.route(/\/api\/v1\/stammdaten\/contacts\/(\d+)(\?|$)/, r => {
+    const id = Number(r.request().url().match(/contacts\/(\d+)/)?.[1])
+    const c = CONTACTS_ALL.find(x => x.ID === id)
+    if (r.request().method() === 'DELETE') return id === 23
+      ? r.fulfill(json({ error: 'Kontakt „Julia Neumann" kann nicht gelöscht werden — verwendet in 1 Vertrag (V-2024-002).' }, 409))
+      : r.fulfill(json({ ok: true }))
+    return r.fulfill(json({ data: { ...c, ...(r.request().postDataJSON() ?? {}) } }))
+  })
 }

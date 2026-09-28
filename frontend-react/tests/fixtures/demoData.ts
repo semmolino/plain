@@ -124,7 +124,7 @@ export const offers = OFFERS.map(([short, long, status, prob, total], i) => ({
 // Fassung hiess NAME_1 / ZIP / COUNTRY und passte zu keinem Feld, das die
 // Liste liest. Zusammen mit der falschen Route (siehe unten) war die
 // Adressliste dadurch in JEDEM Test leer und damit nie sichtbar geprüft.
-const addresses = PROJECTS.map(([, , , , , addr], i) => ({
+export const addresses = PROJECTS.map(([, , , , , addr], i) => ({
   ID: i + 1,
   ADDRESS_NAME_1: addr as string,
   ADDRESS_NAME_2: i % 3 === 0 ? 'Abteilung Hochbau, Zimmer 214' : null,

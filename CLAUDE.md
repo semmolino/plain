@@ -352,6 +352,19 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Vertrag, „intern" an die Elemente) kommen **nach** dem Speichern und nur,
   wenn sie etwas ändern. Das Kennzeichen „intern" am Projekt wirkt auf die
   Produktivität; Rechnungen lassen nur **Elemente** aus, die selbst intern sind.
+- **Adressen als Arbeitsbereich** (`/adressen/:id?tab=kontakte|daten|verwendung`,
+  `pages/adressen/AddressDetailPage.tsx`): Kopf mit Anschrift/Telefon/E-Mail,
+  Reiter Kontakte · Adressdaten · Verwendet in. Bearbeitet wird **nur** dort
+  (Stift, „Zuletzt verwendet" und alte `state.openAddressId`-Einstiege führen
+  hin); Felder einmal in `AddressFields.tsx`, Kontakte über `ContactDialog.tsx`
+  (Liste und Seite), Neuanlage über `AddressCreateDialog.tsx` mit Rückfrage bei
+  gleichem Namen (seit `0164` keine UNIQUE-Regel mehr). Welche Belege an einer
+  Adresse hängen, rechnet `services/adressen.js` (`addressLinks`, je Recht des
+  Moduls); die Löschprüfung steht in `dependencyCheck.js` und wird von
+  `tests/dependencyCheck.columns.test.js` gegen das Schema gehalten.
+  Rechnungen führen die Adresse als `INVOICE_ADDRESS_ID`, Abschläge als
+  `ADVANCE_INVOICE_ADDRESS_ID` — nicht `ADDRESS_ID`. Je Adresse gibt es einen
+  Hauptansprechpartner (`ensureSinglePrimary`).
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch

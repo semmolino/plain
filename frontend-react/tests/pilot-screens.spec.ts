@@ -807,3 +807,55 @@ test('Kalkulation am Handy – Blatt im Angebot', async ({ page }, info) => {
   await page.getByRole('dialog', { name: /LPH 5/ }).waitFor()
   await shoot(page, info.project.name, 'kalk-handy-blatt-angebot')
 })
+
+// Adressen und Kontakte
+test('Adressen – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'adressen-liste')
+})
+
+test('Adresse – Seite', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen/2')
+  await page.getByRole('heading', { level: 1, name: /Wohnbau Süd/ }).waitFor()
+  await shoot(page, info.project.name, 'adresse')
+})
+
+test('Adresse – bearbeiten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) {
+    await open(page, '/adressen/2?tab=daten')
+    await page.getByLabel('Name 1*').waitFor()
+  } else {
+    await open(page, '/adressen/2')
+    // Der Kopf-Knopf — die Stifte der Kontaktzeilen heissen auch „Bearbeiten"
+    await page.getByRole('button', { name: 'Bearbeiten', exact: true }).first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await shoot(page, info.project.name, 'adresse-bearbeiten')
+})
+
+test('Adresse – Kontakt anlegen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen/2')
+  await page.getByRole('button', { name: since(8) ? 'Kontakt hinzufügen' : 'Kontakt' }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'kontakt-neu')
+})
+
+test('Adresse – verwendet in', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, since(8) ? '/adressen/2?tab=verwendung' : '/adressen/2')
+  await page.getByText('P-2024-002').first().waitFor()
+  await shoot(page, info.project.name, 'adresse-verwendung')
+})
+
+test('Kontakte – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) await open(page, '/adressen?tab=kontakte')
+  else { await open(page, '/adressen'); await page.getByRole('tab', { name: 'Kontakte' }).click() }
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'kontakte-liste')
+})
