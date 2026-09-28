@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft } from 'lucide-react'
 import { Tabs }                 from '@/components/ui/Tabs'
 import { Modal }                from '@/components/ui/Modal'
 import { AngeboteListe }        from '@/pages/angebote/AngeboteListe'
@@ -10,6 +11,8 @@ import { AngeboteHoai }         from '@/pages/angebote/AngeboteHoai'
 import { fetchOffer }           from '@/api/angebote'
 import { useFilterTabs }        from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
+import { DirtyGuardProvider }   from '@/components/ui/DirtyGuard'
+import { useGuardedAction }     from '@/hooks/useDirtyGuard'
 
 type Tab = 'liste' | 'struktur' | 'hoai'
 
@@ -22,6 +25,14 @@ const TABS: { id: Tab; label: string; permissions: string[]; feature?: string }[
 const STORAGE_KEY = 'angebote-selected-oid'
 
 export function AngebotePage() {
+  // Die Angebotsstruktur meldet offene Eingaben beim Guard — Reiter- und
+  // Angebotswechsel, Seitennavigation und Browser-Zurueck fragen dann nach
+  // (UI-Pilot Runde 3, wie Projekte und Rechnungen in Runde 2).
+  return <DirtyGuardProvider><AngeboteSeite /></DirtyGuardProvider>
+}
+
+function AngeboteSeite() {
+  const guarded  = useGuardedAction()
   const location = useLocation()
   const navigate  = useNavigate()
 
@@ -73,12 +84,12 @@ export function AngebotePage() {
   return (
     <div className="master-page">
       <h1 className="master-title">Angebote</h1>
-      <Tabs tabs={useLicenseFilterTabs(useFilterTabs(TABS))} active={tab} onChange={id => setTab(id as Tab)} />
+      <Tabs tabs={useLicenseFilterTabs(useFilterTabs(TABS))} active={tab} onChange={id => { if (id !== tab) guarded(() => setTab(id as Tab)) }} />
 
       {selectedOfferId && tab !== 'liste' && (
         <div className="project-context-strip">
-          <button className="project-context-back" onClick={() => { setTab('liste'); persistOfferId(undefined) }}>
-            ← Angebotsliste
+          <button type="button" className="project-context-back" onClick={() => guarded(() => { setTab('liste'); persistOfferId(undefined) })}>
+            <ArrowLeft size={14} strokeWidth={2} aria-hidden="true" /> Angebotsliste
           </button>
           <span className="project-context-name">{offerName}</span>
         </div>

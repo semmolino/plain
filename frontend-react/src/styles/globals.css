@@ -5837,3 +5837,37 @@ div.dash-attn-link:hover { background: transparent; }
   .sw-table .sw-amount { width: 110px; height: 44px; font-size: 16px; }
   .sw-table input[type="checkbox"] { width: 22px; height: 22px; }
 }
+
+/* ── UI-Pilot Runde 3: Angebotsstruktur (ox-*) — Muster der Projektstruktur (sx-*) ── */
+.ox-offer-bar { align-items: center; }
+.ox-offer-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.ox-offer-ac { position: relative; flex: 1 1 280px; max-width: 420px; }
+.ox-offer-ac .list-search { width: 100%; max-width: none; }
+.ox-offer-none { color: var(--text-3); font-style: italic; }
+.ox-offer-current { background: var(--accent-bg); }
+.ox-pdf-btn { display: inline-flex; align-items: center; gap: 6px; }
+.ox-hours { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.ox-th-fee { justify-content: flex-end; }
+.ox-role {
+  flex: 0 0 auto; padding: 0 6px; border-radius: var(--radius-pill); background: var(--surface-2);
+  border: 1px solid var(--border-3); font-size: 11px; font-weight: 600; line-height: 18px; color: var(--text-2);
+}
+.sx-table .ox-input-hours { width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+.sx-table .ox-input-rate  { width: 68px; text-align: right; font-variant-numeric: tabular-nums; }
+.ox-times { font-size: 12px; color: var(--text-3); }
+@media (max-width: 1023px) {
+  .ox-offer-ac { max-width: none; }
+  .ox-offer-ac .list-search, .ox-pdf-btn { min-height: 44px; }
+}
+/* Handy: Angebotsfeld und PDF in einer Zeile — die Beschriftung bleibt fuer
+   Screenreader, sichtbar sagt das Feld selbst, was es ist. */
+@media (max-width: 640px) {
+  .ox-offer-bar { flex-wrap: nowrap; gap: var(--space-2); }
+  .ox-offer-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ox-offer-ac { flex: 1 1 auto; min-width: 0; }
+  .ox-offer-ac .list-search { min-width: 0; }
+  .ox-pdf-btn { flex: 0 0 auto; }
+}
+/* Struktur-Blaetter am Handy: die Fusszeile klebt sonst um das Innenpolster
+   des Dialogs (20 px) ueber dem Rand, und darunter scrollt Inhalt durch. */
+.modal-card.sxm-sheet .modal-actions { bottom: calc(-1 * var(--space-5)); }

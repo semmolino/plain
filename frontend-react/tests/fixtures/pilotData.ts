@@ -120,6 +120,91 @@ export const STRUCTURE = buildStructure()
 const STRUCT_BY_ID = new Map(STRUCTURE.map(n => [n.STRUCTURE_ID as number, n]))
 const PROJECT_TOTAL = r2(STRUCTURE.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE as number), 0))
 
+// ── Angebotsstruktur (Runde 3) ───────────────────────────────────────────────
+
+type OfferSpec = {
+  id: number; father: number | null; abbr: string; name: string
+  bt: 1 | 2; nk: number
+  basis?: number                                  // Pauschal-Blatt
+  hours?: number; rate?: number; role?: string    // Aufwand-Blatt: Stunden × Satz
+  surcharges?: Surcharge[]
+}
+
+// Angebot A-2025-014 (Neubau Kita, LP1–5) — Werte wie aus dem Backend
+// (recalcOfferParent): Vater-Basis = Summe der Kinder-REVENUE, Zuschlaege
+// darauf, NK = REVENUE × eigene NK %. Der Aufwand-Block traegt Stunden × Satz.
+const OFFER_SPECS: OfferSpec[] = [
+  { id: 201, father: null, abbr: 'LPH',  name: 'Leistungsphasen 1–5 HOAI § 34 Gebäude', bt: 1, nk: 5 },
+  { id: 202, father: 201,  abbr: 'LP1',  name: 'Grundlagenermittlung',        bt: 1, nk: 5, basis: 4_150.2 },
+  { id: 203, father: 201,  abbr: 'LP2',  name: 'Vorplanung',                  bt: 1, nk: 5, basis: 14_525.7 },
+  { id: 204, father: 201,  abbr: 'LP3',  name: 'Entwurfsplanung',             bt: 1, nk: 5, basis: 31_127.35 },
+  { id: 205, father: 201,  abbr: 'LP4',  name: 'Genehmigungsplanung',         bt: 1, nk: 5, basis: 6_225.47 },
+  { id: 206, father: 201,  abbr: 'LP5',  name: 'Ausführungsplanung inkl. Detailplanung Fassade und Sonnenschutz', bt: 1, nk: 5, basis: 51_878.91,
+    surcharges: [{ label: 'Erhöhter Detaillierungsgrad', pct: 10 }] },
+  { id: 210, father: null, abbr: 'BL',   name: 'Besondere Leistungen nach Aufwand', bt: 2, nk: 0 },
+  { id: 211, father: 210,  abbr: 'BL1',  name: 'Bestandsaufnahme Nachbarbebauung', bt: 2, nk: 0, hours: 24, rate: 95, role: 'PL' },
+  { id: 212, father: 210,  abbr: 'BL2',  name: 'Abstimmung Fördermittelgeber KfW-Effizienzhaus 40', bt: 2, nk: 0, hours: 16, rate: 78.5, role: 'AR' },
+  { id: 213, father: 210,  abbr: 'BL3',  name: 'Zusätzliche Varianten Freianlagen', bt: 2, nk: 0, hours: 12, rate: 68, role: 'TZ' },
+]
+const OFFER_SURCHARGE: Surcharge = { label: 'Nachlass Rahmenvertrag', pct: -3 }
+
+function offerSurchargeFields(list: Surcharge[] | undefined, base: number) {
+  const f: Record<string, unknown> = {}
+  let run = base, total = 0
+  for (let i = 0; i < 3; i++) {
+    const s = list?.[i]
+    const eur = s ? r2((s.cumul === false ? base : run) * s.pct / 100) : null
+    if (eur != null) { run += eur; total += eur }
+    f[`SURCHARGE_${i + 1}_LABEL`] = s?.label ?? null
+    f[`SURCHARGE_${i + 1}_PCT`]   = s?.pct ?? null
+    f[`SURCHARGE_${i + 1}_EUR`]   = eur
+    f[`SURCHARGE_${i + 1}_CUMUL`] = s?.cumul ?? true
+  }
+  return { fields: f, total: r2(total) }
+}
+
+function buildOfferStructure() {
+  const kids = new Map<number, OfferSpec[]>()
+  for (const s of OFFER_SPECS) if (s.father != null) kids.set(s.father, [...(kids.get(s.father) ?? []), s])
+  const out = new Map<number, Record<string, unknown>>()
+  function visit(s: OfferSpec, sort: number): number {
+    const children = kids.get(s.id) ?? []
+    const basis = children.length
+      ? r2(children.reduce((sum, c, i) => sum + visit(c, i + 1), 0))
+      : s.bt === 2 ? r2((s.hours ?? 0) * (s.rate ?? 0)) : (s.basis ?? 0)
+    const sur = offerSurchargeFields(s.surcharges, basis)
+    const revenue = r2(basis + sur.total)
+    out.set(s.id, {
+      ID: s.id, OFFER_ID: 1, TENANT_ID: 1, FATHER_ID: s.father, SORT_ORDER: sort * 10,
+      ABBR: s.abbr, NAME: s.name, BILLING_TYPE_ID: s.bt,
+      REVENUE_BASIS: basis, REVENUE: revenue,
+      EXTRAS_PERCENT: s.nk, EXTRAS: r2(revenue * s.nk / 100),
+      QUANTITY: s.hours ?? null, HOURLY_RATE: s.rate ?? null,
+      ROLE_ID: s.role ? { PL: 2, AR: 3, TZ: 4 }[s.role] : null, ROLE_ABBR: s.role ?? null,
+      ROLE_NAME: s.role ? { PL: 'Projektleitung', AR: 'Architekt/in', TZ: 'Technische/r Zeichner/in' }[s.role] : null,
+      ...sur.fields, SURCHARGES_TOTAL: sur.total,
+    })
+    return revenue
+  }
+  OFFER_SPECS.filter(s => s.father == null).forEach((s, i) => visit(s, i + 1))
+  return OFFER_SPECS.map(s => out.get(s.id)!)
+}
+
+export const OFFER_STRUCTURE = buildOfferStructure()
+const OFFER_ROOT_SUM = r2(OFFER_STRUCTURE.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE as number), 0))
+const offerSur = offerSurchargeFields([OFFER_SURCHARGE], OFFER_ROOT_SUM)
+export const OFFER_DETAIL = {
+  ID: 1, ABBR: 'A-2025-014', NAME: 'Neubau Kindertagesstätte Sonnenblume — Leistungsphasen 1–5',
+  EMPLOYEE_ID: 1, PROBABILITY: 78, OFFER_STATUS_ID: 2, COMPANY_ID: 1, ADDRESS_ID: 1, CONTACT_ID: 1, TENANT_ID: 1,
+  OFFER_DATE: '2025-07-01', VALID_UNTIL: '2025-09-01', PROJECT_ID: null,
+  ...offerSur.fields, SURCHARGES_TOTAL: offerSur.total,
+}
+export const ROLES = [
+  { ID: 2, ABBR: 'PL', NAME: 'Projektleitung', HOURLY_RATE: 95 },
+  { ID: 3, ABBR: 'AR', NAME: 'Architekt/in', HOURLY_RATE: 78.5 },
+  { ID: 4, ABBR: 'TZ', NAME: 'Technische/r Zeichner/in', HOURLY_RATE: 68 },
+]
+
 // ── Mitarbeiter ──────────────────────────────────────────────────────────────
 
 export const EMPLOYEES = [
@@ -648,6 +733,24 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     PATCH:  r => r.fulfill(json({ data: { ID: Number(r.request().url().match(/buchungen\/(\d+)/)?.[1]) } })),
     DELETE: r => r.fulfill(json({ success: true })),
   })
+
+  // Angebotsstruktur (Runde 3). Gilt fuer jedes Angebot — die Bilder und
+  // Tests oeffnen A-2025-014.
+  const offerNode = (r: Route) => OFFER_STRUCTURE.find(n => n.ID === Number(r.request().url().match(/structure\/(\d+)/)?.[1])) ?? {}
+  await byMethod('angebote/\\d+', {
+    GET: r => r.fulfill(json({ data: OFFER_DETAIL })),
+    PUT: r => r.fulfill(json({ data: { ...OFFER_DETAIL, ...(r.request().postDataJSON() ?? {}) } })),
+  })
+  await byMethod('angebote/\\d+/structure', {
+    GET:  r => r.fulfill(json({ data: OFFER_STRUCTURE })),
+    POST: r => r.fulfill(json({ data: { ID: 299, ...(r.request().postDataJSON() ?? {}) } })),
+  })
+  await byMethod('angebote/\\d+/structure/\\d+', {
+    PUT:    r => r.fulfill(json({ data: offerNode(r) })),
+    DELETE: r => r.fulfill(json({ ok: true })),
+  })
+  await byMethod('angebote/\\d+/structure/\\d+/move', { PUT: r => r.fulfill(json({ ok: true })) })
+  await get('projekte/roles/active', { data: ROLES })
 }
 
 // ── Leistungsstände / Monatsrunde ───────────────────────────────────────────

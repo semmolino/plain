@@ -1450,9 +1450,9 @@ export const HELP = {
     title: 'Funktionen zu einer Zeile',
     body: (
       <>
-        Das <strong>⋯ am Zeilenende</strong> (in der Angebotsstruktur: <strong>Rechtsklick</strong>, auf
-        dem Handy langes Antippen) öffnet die Funktionen zu genau diesem Element. Der Rechtsklick
-        funktioniert in der Projektstruktur weiterhin als Abkürzung:
+        Das <strong>⋯ am Zeilenende</strong> öffnet die Funktionen zu genau diesem Element — in der
+        Projekt- wie in der Angebotsstruktur. Rechtsklick (auf dem Handy langes Antippen) funktioniert
+        weiterhin als Abkürzung:
         <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
           <li>
             <strong>Element anlegen</strong> — legt ein <em>untergeordnetes</em> Element darunter an.
@@ -1469,8 +1469,9 @@ export const HELP = {
             Element; die ermittelten Beträge fließen als Unterelemente zurück in die Struktur.
           </li>
           <li>
-            <strong>Element löschen</strong> — löscht das Element samt Kind-Elementen. Nicht möglich,
-            solange Buchungen oder Rechnungen darauf verweisen.
+            <strong>Element löschen</strong> — in der Projektstruktur samt Kind-Elementen; nicht
+            möglich, solange Buchungen oder Rechnungen darauf verweisen. In der Angebotsstruktur erst,
+            wenn das Element keine Unterelemente mehr hat.
           </li>
         </ul>
         <p style={{ margin: '8px 0 0' }}>
@@ -1494,6 +1495,35 @@ export const HELP = {
         verschieben und Nebenkosten vererben — jeweils nach Rückfrage. Wer mit offenen Änderungen den
         Reiter oder das Projekt wechselt, die Seite über die Navigation verlässt oder im Browser
         zurückgeht, wird gefragt, ob gespeichert werden soll.
+      </>
+    ),
+  },
+  // ── UI-Pilot Runde 3: Angebotsstruktur im Muster der Projektstruktur ─────
+  'offers.structure.save': {
+    title: 'Wann wird gespeichert?',
+    body: (
+      <>
+        Änderungen an Kürzel, Bezeichnung, Abrechnungsart, Honorar, Stunden × Satz, Nebenkosten und
+        Zuschlägen — auch an den Angebotszuschlägen in der obersten Zeile — werden{' '}
+        <strong>gesammelt</strong> und erst mit <strong>Speichern</strong> (oder Strg+S) übernommen.
+        Geänderte Felder sind markiert; die Leiste unten zeigt, wie viele Elemente offen sind.{' '}
+        <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
+        Sofort wirken dagegen Anlegen, Löschen und Verschieben — jeweils nach Rückfrage. Wer mit
+        offenen Änderungen das Angebot oder den Reiter wechselt, die Seite verlässt oder im Browser
+        zurückgeht, wird gefragt, ob gespeichert werden soll. Am Handy wird jedes Element einzeln in
+        seinem Blatt gespeichert.
+      </>
+    ),
+  },
+  'offers.structure.hours': {
+    title: 'Aufwand: Stunden × Satz',
+    body: (
+      <>
+        Elemente mit der Abrechnungsart <strong>nach Aufwand</strong> tragen im Angebot eine{' '}
+        <strong>Schätzung</strong>: Stunden × Stundensatz ergibt das Honorar. Der Satz wird beim
+        Anlegen aus der gewählten Rolle vorbelegt und lässt sich je Element ändern.<br /><br />
+        Bei der Beauftragung starten solche Elemente in der Projektstruktur bei 0 — dort zählt, was
+        tatsächlich gebucht wird. Die Schätzung bleibt im Angebot stehen.
       </>
     ),
   },

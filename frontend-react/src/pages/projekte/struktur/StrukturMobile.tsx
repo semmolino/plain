@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { Message } from '@/components/ui/Message'
 import { AmountInput } from '@/components/ui/AmountInput'
 import { patchStructureNode, moveStructureNode, type StructureNode } from '@/api/projekte'
-import { money, fmtEur } from '@/utils/money'
+import { fmtEur } from '@/utils/money'
 import { computeSurcharges, rowChanges, surchargeDefault, type Agg, type RowEdit, type SurchargeEdit } from './strukturCalc'
+import { StructureTreeList, type TreeListItem } from './StructureTreeList'
 
 /**
  * Projektstruktur am Handy (UI-Pilot Runde 2).
@@ -30,15 +31,7 @@ export function StrukturMobile({ projectId, flat, parentIds, aggMap, billingType
   onAdd:        (fatherId: number | null) => void
   onDelete:     (node: StructureNode) => void
 }) {
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
   const [openId, setOpenId] = useState<number | null>(null)
-  const parentOf = useMemo(() => new Map(flat.map(f => [f.node.STRUCTURE_ID, f.node.FATHER_ID])), [flat])
-  const hidden = (id: number) => {
-    let cur = parentOf.get(id)
-    while (cur != null) { if (collapsed.has(Number(cur))) return true; cur = parentOf.get(Number(cur)) }
-    return false
-  }
-  const toggle = (id: number) => setCollapsed(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
   const open = openId != null ? flat.find(f => f.node.STRUCTURE_ID === openId)?.node ?? null : null
 
   const gesamt = (n: StructureNode, isParent: boolean) =>
@@ -46,43 +39,19 @@ export function StrukturMobile({ projectId, flat, parentIds, aggMap, billingType
   const honorar = (n: StructureNode, isParent: boolean) =>
     isParent ? (aggMap.get(String(n.STRUCTURE_ID))?.revenueBasis ?? 0)
       : Number(n.BILLING_TYPE_ID) === 2 ? Number(n.TEC_SP_TOT_SUM ?? 0) : Number(n.REVENUE_BASIS ?? n.REVENUE ?? 0)
+  const items: TreeListItem[] = flat.map(({ node, depth }) => {
+    const isParent = parentIds.has(String(node.STRUCTURE_ID))
+    return {
+      id: node.STRUCTURE_ID, fatherId: node.FATHER_ID != null ? Number(node.FATHER_ID) : null, depth,
+      abbr: node.ABBR, name: node.NAME ?? '', isParent, muted: !!node.IS_INTERNAL,
+      fee: honorar(node, isParent), total: gesamt(node, isParent),
+    }
+  })
 
   return (
     <div className="sxm">
-      {root && (
-        <div className="sxm-root">
-          <span className="sxm-root-label">{root.label} · Projekt gesamt</span>
-          <span>{money(root.total)}</span>
-        </div>
-      )}
-      <ul className="sxm-list" aria-label="Elemente der Projektstruktur">
-        {flat.filter(f => !hidden(f.node.STRUCTURE_ID)).map(({ node, depth }) => {
-          const isParent = parentIds.has(String(node.STRUCTURE_ID))
-          const isOpen = !collapsed.has(node.STRUCTURE_ID)
-          return (
-            <li key={node.STRUCTURE_ID} className={`sxm-row${isParent ? ' sxm-row--parent' : ''}${node.IS_INTERNAL ? ' sxm-row--internal' : ''}`}
-              style={{ paddingLeft: `calc(var(--space-2) + ${depth} * 14px)` }}>
-              {isParent ? (
-                <button type="button" className="sxm-twisty" aria-expanded={isOpen}
-                  aria-label={`${node.ABBR} ${isOpen ? 'zuklappen' : 'aufklappen'}`} onClick={() => toggle(node.STRUCTURE_ID)}>
-                  <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
-                </button>
-              ) : <span className="sxm-twisty-space" aria-hidden="true" />}
-              <button type="button" className="sxm-open" onClick={() => setOpenId(node.STRUCTURE_ID)}
-                aria-label={`${node.ABBR} ${node.NAME ?? ''} ${canEdit ? 'bearbeiten' : 'ansehen'}`}>
-                <span className="sxm-el">
-                  <span className="sxm-abbr">{node.ABBR}</span>
-                  <span className="sxm-name">{node.NAME}</span>
-                </span>
-                <span className="sxm-nums">
-                  <span className="sxm-fee">{fmtEur(honorar(node, isParent))}</span>
-                  <span className="sxm-total">{money(gesamt(node, isParent))}</span>
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
+      <StructureTreeList items={items} listLabel="Elemente der Projektstruktur" canEdit={canEdit} onOpen={setOpenId}
+        root={root ? { label: `${root.label} · Projekt gesamt`, total: root.total } : null} />
       {open && (
         <ElementSheet key={open.STRUCTURE_ID} projectId={projectId} node={open}
           isParent={parentIds.has(String(open.STRUCTURE_ID))} flat={flat} billingTypes={billingTypes} canEdit={canEdit}

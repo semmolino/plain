@@ -297,6 +297,17 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Auswahl der aufzulösenden Sicherheitseinbehalte einer Schlussrechnung merkt
   sich der Entwurf in `INVOICE.SE_RELEASE_ADVANCE_IDS` (Migration `0171`);
   maßgeblich beim Buchen bleibt, was der Buchungsaufruf mitschickt.
+- **Projekt- und Angebotsstruktur** teilen Bedienung und Rechnung: Summen
+  (Honorar-Basis, Zuschlaege, NK je Vater) rechnet **nur**
+  `pages/projekte/struktur/strukturCalc.ts` (`aggregateTree`,
+  `treeRootTotals`); `pages/angebote/struktur/offerStrukturCalc.ts` legt nur
+  fest, was beim Angebot anders ist (Blatt-Basis ohne Buchungen, Aufwand =
+  Stunden × Satz, Speicher-Nutzlast kleingeschrieben plus `SURCHARGE_*` in
+  einem PUT). Beide Tabellen puffern Eingaben bis „Speichern" (ActionBar,
+  `useRegisterDirty`); Anlegen, Loeschen, Verschieben wirken sofort. Ein
+  Angebotselement mit Unterelementen loescht das Backend nicht
+  (`dependencyCheck.checkOfferStructure`, 409) — die Oberflaeche sagt das
+  vorher, statt es „samt Unterelementen" zu versprechen.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.

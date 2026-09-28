@@ -350,3 +350,86 @@ test('Schlussrechnung – Schritte', async ({ page }, info) => {
     await shoot(page, dev, 'schluss-6-bestaetigen')
   }
 })
+
+// ── Runde 3: Angebotsstruktur ────────────────────────────────────────────────
+// Vorher-Stand ist derselbe wie in main (Runde 1 und 2 liessen sie unberuehrt);
+// aufgenommen als PILOT_PHASE=vorher3 aus einem Arbeitsbaum vor Runde 3.
+
+async function openOfferStructure(page: Page) {
+  await page.addInitScript(() => localStorage.setItem('angebote-selected-oid', '1'))
+  await open(page, '/angebote')
+  await page.getByRole('tab', { name: 'Angebotsstruktur' }).click()
+  await page.waitForLoadState('networkidle')
+  await page.locator('.structure-table, .sxm-list').first().waitFor()
+}
+
+test('Angebotsstruktur', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  await shoot(page, info.project.name, 'angebot-struktur')
+})
+
+test('Angebotsstruktur – kompakt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !PHASE.startsWith('nachher'), 'Dichte gibt es erst mit Runde 3, nur am Desktop')
+  await prepare(page, info.project.name, {}, 'compact')
+  await openOfferStructure(page)
+  await shoot(page, info.project.name, 'angebot-struktur-kompakt')
+})
+
+test('Angebotsstruktur – Zuschläge', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Zuschlags-Panel nur am Desktop')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  if (PHASE.startsWith('nachher')) await page.getByRole('button', { name: 'Zuschläge von LP5 bearbeiten' }).click()
+  else await page.locator('tr[data-struct-id="206"] .row-action-btn').first().click()
+  await page.locator('.surcharge-panel').waitFor()
+  await shoot(page, info.project.name, 'angebot-struktur-zuschlag')
+})
+
+test('Angebotsstruktur – offene Änderungen', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !PHASE.startsWith('nachher'), 'Puffer und Aktionsleiste gibt es erst mit Runde 3')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  // Erst fokussieren, dann tippen: das Betragsfeld tauscht beim Fokus die
+  // Anzeige gegen den Rohwert — ein sofortiges fill() haengte sonst an.
+  const fee = page.locator('tr[data-struct-id="203"]').getByRole('textbox', { name: 'Honorar' })
+  await fee.click()
+  await page.waitForTimeout(100)
+  await fee.fill('15800')
+  await page.getByRole('textbox', { name: 'Stunden BL1' }).fill('30')
+  await page.getByRole('textbox', { name: 'Stunden BL3' }).click()
+  await shoot(page, info.project.name, 'angebot-struktur-geaendert')
+})
+
+test('Angebotsstruktur – neues Element', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Dialog am Desktop')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  const nachher = PHASE.startsWith('nachher')
+  await page.getByRole('button', { name: nachher ? /Neues Element/ : /Neue Position/ }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('input').first().fill('BL4')
+  await dialog.locator('select').first().selectOption('2')
+  if (nachher) {
+    await dialog.getByLabel('Bezeichnung').fill('Mitwirkung Nachbarschaftsbeteiligung')
+    await dialog.getByLabel('Rolle').selectOption('2')
+    await dialog.getByLabel('Stunden').fill('8')
+    await dialog.getByLabel('Übergeordnetes Element').selectOption('210')
+  } else {
+    await dialog.locator('input').nth(1).fill('Mitwirkung Nachbarschaftsbeteiligung')
+    await dialog.locator('select').nth(1).selectOption('2')
+    await dialog.locator('input[type="number"]').first().fill('8')
+    await dialog.locator('select').last().selectOption('210')
+  }
+  await shoot(page, info.project.name, 'angebot-neu')
+})
+
+test('Angebotsstruktur – Handy Blatt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !PHASE.startsWith('nachher'), 'Blatt gibt es nur am Handy, erst mit Runde 3')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  await page.getByRole('button', { name: /^BL1 .*bearbeiten/ }).click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'angebot-blatt')
+})
