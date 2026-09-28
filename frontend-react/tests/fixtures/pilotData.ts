@@ -775,6 +775,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   await get('angebote', { data: DEMO_OFFERS.map(o => o.ID === 1 ? { ...o, TOTAL_AMOUNT: OFFER_TOTAL } : o) })
   await mockKalkulationen(page)
   await mockVertragPreiseBudget(page)
+  await mockNachtraege(page)
 }
 
 // ── Kalkulationen (HOAI-Assistent, Runde 5) ─────────────────────────────────
@@ -1081,4 +1082,88 @@ async function mockVertragPreiseBudget(page: Page) {
       DEFAULT_SP_RATE: 3200, DEFAULT_CP_RATE: null, PROJECT_SP_RATE: null, PROJECT_CP_RATE: null, EFFECTIVE_SP_RATE: 3200, EFFECTIVE_CP_RATE: null },
   ] })
   await get('budget-warnings/projects/\\d+', { data: budgetOverview() })
+}
+
+// ── Nachträge (Runde 7) ──────────────────────────────────────────────────────
+
+export const NACHTRAG_STATUSES = [
+  { ID: 1, CODE: 'DRAFT', ABBR: 'Entwurf', SORT_ORDER: 1, IS_TERMINAL: false, ALLOWS_RELEASE: false },
+  { ID: 2, CODE: 'ANNOUNCED', ABBR: 'Angekündigt', SORT_ORDER: 2, IS_TERMINAL: false, ALLOWS_RELEASE: false },
+  { ID: 3, CODE: 'SUBMITTED', ABBR: 'Eingereicht', SORT_ORDER: 3, IS_TERMINAL: false, ALLOWS_RELEASE: true },
+  { ID: 4, CODE: 'IN_REVIEW', ABBR: 'In Prüfung', SORT_ORDER: 4, IS_TERMINAL: false, ALLOWS_RELEASE: true },
+  { ID: 5, CODE: 'PARTIALLY_COMMISSIONED', ABBR: 'Teilweise beauftragt', SORT_ORDER: 5, IS_TERMINAL: false, ALLOWS_RELEASE: true },
+  { ID: 6, CODE: 'COMMISSIONED', ABBR: 'Beauftragt', SORT_ORDER: 6, IS_TERMINAL: true, ALLOWS_RELEASE: false },
+  { ID: 7, CODE: 'REJECTED', ABBR: 'Abgelehnt', SORT_ORDER: 7, IS_TERMINAL: true, ALLOWS_RELEASE: false },
+  { ID: 8, CODE: 'WITHDRAWN', ABBR: 'Zurückgezogen', SORT_ORDER: 8, IS_TERMINAL: true, ALLOWS_RELEASE: false },
+  { ID: 9, CODE: 'DISPUTED', ABBR: 'Strittig', SORT_ORDER: 9, IS_TERMINAL: false, ALLOWS_RELEASE: false },
+]
+const PNAME = 'P-2024-001 Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1'
+const ntItem = (ID: number, ABBR: string, NAME: string, CATEGORY: string, statusId: number, claimed: number, approved: number, due: string | null) => {
+  const st = NACHTRAG_STATUSES.find(x => x.ID === statusId)!
+  return { ID, ABBR, NAME, NACHTRAG_TYPE: 'OWN', CATEGORY, STATUS_CODE: st.CODE, STATUS_NAME: st.ABBR, NACHTRAG_STATUS_ID: statusId,
+    PROJECT_ID: 1, PROJECT_NAME: PNAME, EMPLOYEE_NAME: 'S. Messina', ADDRESS_NAME: 'Stadt Musterstadt – Hochbauamt',
+    REVIEW_DUE_DATE: due, AMOUNT_CLAIMED_NET: claimed, AMOUNT_APPROVED_NET: approved, CREATED_AT: '2026-08-01T09:00:00Z' }
+}
+export const NACHTRAEGE = [
+  ntItem(401, 'N-001', 'Zusätzliche Tiefgaragenebene', 'CHANGED', 4, 48_600, 0, '2026-10-12'),
+  ntItem(402, 'N-002', 'Fassadenvariante Holz-Alu', 'ADDITIONAL', 5, 21_400, 12_800, '2026-09-20'),
+  ntItem(403, 'N-003', 'Mehraufwand Baugrundgutachten', 'CIRCUMSTANCE', 6, 6_250, 6_250, null),
+  ntItem(404, 'N-004', 'Verlängerte Bauzeit Rohbau', 'DISRUPTION', 1, 0, 0, null),
+  ntItem(405, 'N-005', 'Zusatztermine Nutzerabstimmung', 'ADDITIONAL', 7, 3_200, 0, null),
+]
+const ntPos = (ID: number, NACHTRAG_ID: number, FATHER_ID: number | null, ABBR: string, NAME: string, bt: number | null, REVENUE: number,
+  state: 'OPEN' | 'APPROVED' | 'PARTIAL', approved: number | null = null, qty: number | null = null, rate: number | null = null, sort = ID) => ({
+  ID, ABBR, NAME, NACHTRAG_ID, FATHER_ID, SORT_ORDER: sort, BILLING_TYPE_ID: bt, REVENUE_BASIS: REVENUE, REVENUE, EXTRAS_PERCENT: 0, EXTRAS: 0,
+  QUANTITY: qty, HOURLY_RATE: rate, ROLE_ABBR: null, ROLE_NAME: null, ROLE_ID: null, SURCHARGES_TOTAL: 0,
+  APPROVAL_STATE: state, APPROVED_AMOUNT_NET: approved, RELEASED_STRUCTURE_ID: state === 'OPEN' ? null : 9000 + ID,
+})
+export const NACHTRAG_POSITIONS: Record<number, ReturnType<typeof ntPos>[]> = {
+  401: [
+    ntPos(4101, 401, null, '1', 'Tiefgarage Ebene −2', null, 42_300, 'OPEN'),
+    ntPos(4102, 401, 4101, '1.1', 'Entwurfs- und Genehmigungsplanung', 1, 26_800, 'OPEN'),
+    ntPos(4103, 401, 4101, '1.2', 'Ausführungsplanung Rohbau', 1, 15_500, 'OPEN'),
+    ntPos(4104, 401, null, '2', 'Abstimmung Tragwerksplanung', 2, 6_300, 'OPEN', null, 60, 105),
+  ],
+  402: [
+    ntPos(4201, 402, null, '1', 'Fassade Holz-Alu', null, 16_480, 'OPEN'),
+    ntPos(4202, 402, 4201, '1.1', 'Entwurf Holz-Alu-Variante', 1, 8_000, 'APPROVED', 8_000),
+    ntPos(4203, 402, 4201, '1.2', 'Werkplanung Fassade', 1, 6_200, 'PARTIAL', 4_800),
+    ntPos(4204, 402, 4201, '1.3', 'Bemusterung', 2, 2_280, 'OPEN', null, 24, 95),
+    ntPos(4205, 402, null, '2', 'Brandschutznachweis Fassade', 1, 4_920, 'OPEN'),
+  ],
+}
+function ntDetail(id: number) {
+  const it = NACHTRAEGE.find(n => n.ID === id) ?? NACHTRAEGE[0]
+  return { ID: it.ID, TENANT_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11, OFFER_ID: null, ABBR: it.ABBR, NAME: it.NAME,
+    NACHTRAG_TYPE: 'OWN', NACHTRAG_STATUS_ID: it.NACHTRAG_STATUS_ID, CATEGORY: it.CATEGORY,
+    CLAIM_BASIS: it.ID === 402 ? '§ 650b BGB, § 10 HOAI' : '§ 650b BGB', REASON: null, IS_GRANTED_BASIS: false,
+    EMPLOYEE_ID: 1, ADDRESS_ID: 1, CONTACT_ID: 2, COMPANY_ID: 1, VAT_ID: 1,
+    ANNOUNCED_DATE: '2026-08-04', SUBMITTED_DATE: '2026-08-18', REVIEW_DUE_DATE: it.REVIEW_DUE_DATE,
+    DECISION_DATE: it.ID === 402 ? '2026-09-10' : null,
+    AMOUNT_CLAIMED_NET: it.AMOUNT_CLAIMED_NET, AMOUNT_APPROVED_NET: it.AMOUNT_APPROVED_NET,
+    REVIEW_FORMAL: it.ID === 402, REVIEW_CONTENT: it.ID === 402, REVIEW_CALCULATION: false,
+    REVIEW_NOTE: it.ID === 402 ? 'Stunden der Bemusterung noch belegen lassen.' : null,
+    REVIEW_RECOMMENDATION: it.ID === 402 ? 'REDUCE' : null,
+    REVIEWED_AT: it.ID === 402 ? '2026-09-05T10:00:00Z' : null, REVIEWED_BY: it.ID === 402 ? 1 : null, CREATED_AT: it.CREATED_AT }
+}
+
+async function mockNachtraege(page: Page) {
+  const r = (re: string, h: (route: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
+  const id = (route: Route) => Number(route.request().url().match(/nachtraege\/(\d+)/)?.[1])
+  await r('nachtraege/statuses', route => route.fulfill(json({ data: NACHTRAG_STATUSES })))
+  await r('nachtraege', route => route.request().method() === 'POST'
+    ? route.fulfill(json({ data: { ...ntDetail(401), ID: 406 } }))
+    : route.fulfill(json({ data: NACHTRAEGE })))
+  await r('nachtraege/\\d+', route => route.request().method() === 'GET'
+    ? route.fulfill(json({ data: ntDetail(id(route)) }))
+    : route.fulfill(json({ data: ntDetail(id(route)) })))
+  await r('nachtraege/\\d+/structure(/\\d+)?', route => route.request().method() === 'GET'
+    ? route.fulfill(json({ data: NACHTRAG_POSITIONS[id(route)] ?? [] }))
+    : route.fulfill(json({ data: {} })))
+  await r('nachtraege/\\d+/releases', route => route.fulfill(json({ data: id(route) === 402 ? [
+    { ID: 1, NACHTRAG_ID: 402, RELEASE_NO: 1, RELEASE_KIND: 'PARTIAL', RELEASE_BASIS: 'WRITTEN', AMOUNT_NET: 12_800, RELEASED_BY: 1,
+      RELEASED_AT: '2026-09-10T11:00:00Z', NOTE: 'Schreiben des Bauherrn vom 08.09.; Werkplanung gekürzt anerkannt.' },
+  ] : [] })))
+  await r('nachtraege/\\d+/release', route => route.fulfill(json({ data: { release_no: 2, amount_net: 4_920, approved_total_net: 17_720, status_code: 'PARTIALLY_COMMISSIONED', group_structure_id: 1 } })))
+  await r('nachtraege/\\d+/review', route => route.fulfill(json({ data: ntDetail(id(route)) })))
 }

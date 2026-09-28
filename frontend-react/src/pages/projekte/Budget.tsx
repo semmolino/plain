@@ -192,34 +192,34 @@ function BudgetProjekt({ pid }: { pid: number }) {
 
   return (
     <div className="ws-form">
-      <div className="bud-kpis">
-        <div className="bud-kpi">
-          <div className="bud-kpi-label">Budget</div>
-          <div className="bud-kpi-value">{money(agg.budget)}</div>
-          <div className="bud-kpi-sub">Honorar und Zuschläge, ohne Nebenkosten{planLeaves.length > 0 ? ' · teils nach Plan' : ''}</div>
+      <div className="ws-tiles">
+        <div className="ws-tile">
+          <div className="ws-tile-label">Budget</div>
+          <div className="ws-tile-value">{money(agg.budget)}</div>
+          <div className="ws-tile-sub">Honorar und Zuschläge, ohne Nebenkosten{planLeaves.length > 0 ? ' · teils nach Plan' : ''}</div>
         </div>
-        <div className="bud-kpi">
-          <div className="bud-kpi-label">Verbraucht</div>
-          <div className="bud-kpi-value">{money(agg.verbrauch)}</div>
-          <div className="bud-kpi-sub">
+        <div className="ws-tile">
+          <div className="ws-tile-label">Verbraucht</div>
+          <div className="ws-tile-value">{money(agg.verbrauch)}</div>
+          <div className="ws-tile-sub">
             {pct != null ? <ShareValue pct={pct} watchPct={watchPct} suffix=" des Budgets" /> : 'Kein Budget hinterlegt'}
           </div>
         </div>
         {planLeaves.length > 0 && (
-          <div className="bud-kpi">
-            <div className="bud-kpi-label">Stunden nach Plan</div>
-            <div className="bud-kpi-value">{fmtHours(bookedHours)} <span className="bud-kpi-unit">von {fmtHours(planHours)} h</span></div>
-            <div className="bud-kpi-sub">{planLeaves.length === 1 ? '1 Element' : `${planLeaves.length} Elemente`} nach Aufwand mit Plan</div>
+          <div className="ws-tile">
+            <div className="ws-tile-label">Stunden nach Plan</div>
+            <div className="ws-tile-value">{fmtHours(bookedHours)} <span className="ws-tile-unit">von {fmtHours(planHours)} h</span></div>
+            <div className="ws-tile-sub">{planLeaves.length === 1 ? '1 Element' : `${planLeaves.length} Elemente`} nach Aufwand mit Plan</div>
           </div>
         )}
-        <div className="bud-kpi">
-          <div className="bud-kpi-label">Warnungen</div>
-          <div className="bud-kpi-value bud-kpi-state">
+        <div className="ws-tile">
+          <div className="ws-tile-label">Warnungen</div>
+          <div className="ws-tile-value ws-tile-state">
             {muted ? <BellOff size={16} strokeWidth={2} aria-hidden="true" /> : <Bell size={16} strokeWidth={2} aria-hidden="true" />}
             {muted ? 'stumm geschaltet' : 'aktiv'}
           </div>
           {canEdit && (
-            <button type="button" className="btn-small bud-kpi-btn" onClick={() => muteMut.mutate(!muted)} disabled={muteMut.isPending}>
+            <button type="button" className="btn-small ws-tile-btn" onClick={() => muteMut.mutate(!muted)} disabled={muteMut.isPending}>
               {muted ? 'Wieder benachrichtigen' : 'Projekt stumm schalten'}
             </button>
           )}

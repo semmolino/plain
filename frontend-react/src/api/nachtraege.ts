@@ -192,6 +192,10 @@ export const fetchNachtragStructure = (id: number) =>
 export const addNachtragStructureNode = (id: number, body: AddNachtragStructureNodePayload) =>
   apiClient.post<{ data: NachtragStructureNode }>(`/nachtraege/${id}/structure`, body)
 
+/** Position ändern — nur solange sie nicht freigegeben ist (sonst 409). */
+export const updateNachtragStructureNode = (id: number, nodeId: number, body: Partial<AddNachtragStructureNodePayload>) =>
+  apiClient.put<{ data: NachtragStructureNode }>(`/nachtraege/${id}/structure/${nodeId}`, body)
+
 export const deleteNachtragStructureNode = (id: number, nodeId: number) =>
   apiClient.delete<{ ok: boolean }>(`/nachtraege/${id}/structure/${nodeId}`)
 

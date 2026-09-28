@@ -340,6 +340,14 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   `services/feeAllocation.js` (`computeSurchargeAllocations`, `leafValues`):
   Phase + Zuschlagsanteil, darauf die **eigenen** Zuschläge und NK des
   Elements, `REVENUE_BASIS` zieht mit.
+- **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
+  Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
+  (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
+  gekürzt `PARTIAL`, bzw. mit `RELEASED_STRUCTURE_ID` — ist erledigt: nicht erneut freigebbar, im
+  Nachtrag nicht mehr änderbar oder löschbar (409), Korrekturen laufen im Projekt. Dieselbe Regel
+  steht einmal im Backend (`isReleased`) und einmal im Frontend (`nachtragStatus.ts`). Positionen
+  nach Aufwand starten im Projekt bei 0 und bringen ihre Schätzung als Plan mit (wie beim
+  Beauftragen); Rollen gehen **nicht** in die Projektstruktur, die hat keine Rollenspalten.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
