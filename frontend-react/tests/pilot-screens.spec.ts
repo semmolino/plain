@@ -760,3 +760,50 @@ test('Projektdaten', async ({ page }, info) => {
   }
   await shoot(page, info.project.name, 'projektdaten')
 })
+
+/** Bestehende Kalkulation 71 (mit Besonderer Leistung und Zuschlag) bis Schritt `upto`. */
+async function kalkBestand(page: Page, upto: 3 | 4 | 5) {
+  await open(page, '/projekte?projectId=1&tab=honorar')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).first().click()
+  // Im Projekt steht der Assistent auf der Seite, im Angebot im Dialog
+  const wizard = page.locator('.hw-root')
+  await wizard.waitFor()
+  await page.waitForLoadState('networkidle')
+  for (let s = 2; s < upto; s++) {
+    // exakt: „Weitere Aktionen" (Handy) beginnt auch mit „Weiter"
+    await wizard.getByRole('button', { name: 'Weiter', exact: true }).click()
+    await page.waitForLoadState('networkidle')
+  }
+  return wizard
+}
+
+for (const [upto, name] of [[3, 'leistungsphasen'], [4, 'bl'], [5, 'zuschlaege']] as const) {
+  test(`Kalkulation am Handy – ${name}`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'Handy')
+    await prepare(page, info.project.name)
+    await kalkBestand(page, upto)
+    await shoot(page, info.project.name, `kalk-handy-${name}`)
+  })
+}
+
+test('Kalkulation am Handy – Blatt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !since(8), 'Blatt gibt es erst mit Runde 8')
+  await prepare(page, info.project.name)
+  await kalkBestand(page, 5)
+  await page.getByRole('list', { name: 'Zuschläge und Nachlässe' }).getByRole('button').first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'kalk-handy-blatt')
+})
+
+test('Kalkulation am Handy – Blatt im Angebot', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !since(8), 'Blatt gibt es erst mit Runde 8')
+  await prepare(page, info.project.name)
+  await open(page, '/angebote?offerId=1&tab=kalkulationen')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).click()
+  const wizard = page.locator('.hw-root')
+  await wizard.waitFor()
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click()
+  await page.getByRole('list', { name: 'Leistungsphasen' }).getByRole('button').nth(4).click()
+  await page.getByRole('dialog', { name: /LPH 5/ }).waitFor()
+  await shoot(page, info.project.name, 'kalk-handy-blatt-angebot')
+})

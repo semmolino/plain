@@ -4989,6 +4989,47 @@ fieldset:disabled .ws-check { cursor: default; }
 .sxm-icon-btn { min-width: 44px; padding: 0 10px !important; display: inline-flex; align-items: center; justify-content: center; }
 .modal-card.sxm-sheet .qb-form input, .modal-card.sxm-sheet .qb-form select { font-size: 16px; }
 @media (prefers-reduced-motion: reduce) { .sxm-twisty svg { transition: none; } }
+
+/* ── Kalkulation am Handy: Liste + Blatt je Zeile (Runde 8) ────────────────
+   Leistungsphasen, Besondere Leistungen, Zuschläge. Vorher dieselbe
+   Tabelle wie am Desktop, seitwärts zu schieben. Das Blatt nutzt .sxm-sheet
+   (Struktur am Handy). */
+.km { margin-bottom: var(--space-3); }
+.km-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.km-list li + li { border-top: 1px solid var(--border-3); }
+.km-row {
+  width: 100%; margin: 0; min-height: 56px; padding: var(--space-2) var(--space-3);
+  display: flex; align-items: center; gap: var(--space-3);
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.km-row:hover { background: var(--hover-bg); }
+.km-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.km-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.km-sub { font-size: 12px; color: var(--text-3); }
+.km-value { flex: 0 0 auto; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.km-chev { flex: 0 0 auto; color: var(--text-4); }
+.km-total { margin: var(--space-2) 0 0; padding: 0 var(--space-3); }
+.km-total div { display: flex; justify-content: space-between; gap: var(--space-3); padding: 6px 0; font-size: 13px; }
+.km-total div + div { border-top: 1px solid var(--border-3); }
+.km-total dt { color: var(--text-2); }
+.km-total dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.km-facts { margin: 0 0 var(--space-3); display: grid; gap: var(--space-2); }
+.km-facts div { display: flex; justify-content: space-between; gap: var(--space-3); font-size: 13px; }
+.km-facts dt { color: var(--text-3); }
+.km-facts dd { margin: 0; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.km-result {
+  margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  background: var(--surface-2); border-radius: var(--radius-md); font-size: 14px;
+}
+.km-result strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+.km-group { border: 0; padding: 0; margin: 0 0 var(--space-3); min-width: 0; }
+.km-group legend { padding: 0; margin-bottom: var(--space-1); font-size: 13px; font-weight: 600; color: var(--text-2); }
+.km-check-actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-1); }
+.km-check-actions .btn-small { min-height: 44px; }
+.km-checks .ws-check { min-height: 44px; }
+.km-remove { color: var(--danger-strong); }
 .sxm-sur-row input:not([type="checkbox"]) {
   width: 100%; min-width: 0; padding: 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius-md);
