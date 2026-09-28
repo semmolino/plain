@@ -1522,8 +1522,25 @@ export const HELP = {
         Elemente mit der Abrechnungsart <strong>nach Aufwand</strong> tragen im Angebot eine{' '}
         <strong>Schätzung</strong>: Stunden × Stundensatz ergibt das Honorar. Der Satz wird beim
         Anlegen aus der gewählten Rolle vorbelegt und lässt sich je Element ändern.<br /><br />
+        Mehrere Rollen in einem Element (z. B. Projektleitung und Bauzeichnung mit eigenen Sätzen):
+        im Menü ⋯ der Zeile <strong>Aufwand nach Rollen</strong>. Das Honorar ist dann die Summe
+        der Zeilen.<br /><br />
         Bei der Beauftragung starten solche Elemente in der Projektstruktur bei 0 — dort zählt, was
         tatsächlich gebucht wird. Die Schätzung bleibt im Angebot stehen.
+      </>
+    ),
+  },
+  'offers.structure.effort': {
+    title: 'Aufwand nach Rollen',
+    body: (
+      <>
+        Ein Element nach Aufwand kann mehrere <strong>Aufwandszeilen</strong> tragen: je Zeile eine
+        Rolle, die geschätzten Stunden und der Satz. Die Rolle belegt den Satz vor; ein selbst
+        eingetragener Satz bleibt stehen.<br /><br />
+        Das Honorar des Elements ist die <strong>Summe der Zeilen</strong>. Im Angebots-PDF und in
+        der Auftragsbestätigung steht jede Zeile einzeln unter dem Element.<br /><br />
+        Anders als ein Unterelement je Rolle bleibt es <strong>ein</strong> Element: nach der
+        Beauftragung bucht man auf dieses eine Projekt-Element, gleich in welcher Rolle.
       </>
     ),
   },

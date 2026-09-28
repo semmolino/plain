@@ -74,6 +74,21 @@ export interface OfferListItem {
   PROJECT_NAME:    string | null
 }
 
+/**
+ * Eine Aufwandszeile eines Angebotselements nach Aufwand (Migration 0173).
+ * Das Honorar des Elements ist die Summe der Zeilen; QUANTITY/HOURLY_RATE/
+ * ROLE_* leitet der Server daraus ab (Satz und Rolle nur bei genau einer
+ * Zeile). NULL an EFFORT_LINES ist Altbestand: dann gilt QUANTITY ×
+ * HOURLY_RATE als die eine Zeile.
+ */
+export interface EffortLine {
+  role_id:   number | null
+  role_abbr: string | null
+  role_name: string | null
+  hours:     number
+  rate:      number
+}
+
 export interface OfferStructureNode {
   ID:              number
   ABBR:      string | null
@@ -91,6 +106,7 @@ export interface OfferStructureNode {
   ROLE_ABBR: string | null
   ROLE_NAME:  string | null
   ROLE_ID:         number | null
+  EFFORT_LINES?:   EffortLine[] | null
   TENANT_ID:       number | null
   SURCHARGE_1_LABEL: string | null
   SURCHARGE_1_PCT:   number | null
@@ -165,6 +181,7 @@ export interface AddStructureNodePayload {
   role_id?:          string | number
   role_abbr?:  string
   role_name?:   string
+  effort_lines?:     EffortLine[]
   father_id?:        string | number | null
 }
 
@@ -179,6 +196,7 @@ export interface UpdateStructureNodePayload {
   role_id?:          string | number | null
   role_abbr?:  string
   role_name?:   string
+  effort_lines?:     EffortLine[]
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────

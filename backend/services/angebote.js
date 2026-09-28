@@ -1,6 +1,7 @@
 'use strict';
 
 const { contractDefaults } = require('./contractDefaults');
+const { normalizeEffortLines, effortColumns, nodeEffortLines, lineAmount } = require('./effortLines');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -248,9 +249,11 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
   const insertRows = draft.map((n, i) => {
     const btId     = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
     const isHourly = btId === 2;
-    const quantity    = isHourly ? (Number(n.QUANTITY)   || 0) : null;
-    const spRate      = isHourly ? (Number(n.HOURLY_RATE)     || 0) : null;
-    const revenue     = isHourly ? fmt2((quantity || 0) * (spRate || 0)) : fmt2(Number(n.REVENUE) || 0);
+    // Aufwand: eine Zeile aus den Einzelfeldern der Vorlage (Migration 0173)
+    const eff = isHourly ? effortColumns(normalizeEffortLines(Array.isArray(n.effort_lines) ? n.effort_lines : [{
+      role_id: n.ROLE_ID || null, role_abbr: n.ROLE_ABBR, role_name: n.ROLE_NAME, hours: n.QUANTITY, rate: n.HOURLY_RATE,
+    }])) : null;
+    const revenue     = isHourly ? eff.basis : fmt2(Number(n.REVENUE) || 0);
     const extPct      = Number(n.EXTRAS_PERCENT) || 0;
     const extras      = fmt2(revenue * extPct / 100);
 
@@ -264,11 +267,12 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
       EXTRAS_PERCENT:  extPct,
       EXTRAS:          extras,
       SORT_ORDER:      i * 10,
-      QUANTITY:        quantity,
-      HOURLY_RATE:         spRate,
-      ROLE_ABBR: n.ROLE_ABBR ? String(n.ROLE_ABBR) : null,
-      ROLE_NAME:  n.ROLE_NAME  ? String(n.ROLE_NAME)  : null,
-      ROLE_ID:         n.ROLE_ID ? parseInt(String(n.ROLE_ID), 10) : null,
+      QUANTITY:        isHourly ? eff.QUANTITY    : null,
+      HOURLY_RATE:     isHourly ? eff.HOURLY_RATE : null,
+      ROLE_ABBR:       isHourly ? eff.ROLE_ABBR   : null,
+      ROLE_NAME:       isHourly ? eff.ROLE_NAME   : null,
+      ROLE_ID:         isHourly ? eff.ROLE_ID     : null,
+      EFFORT_LINES:    isHourly ? eff.EFFORT_LINES : null,
       TENANT_ID:       tenantId,
     };
   });
@@ -405,9 +409,11 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
   if (!btId) throw { status: 400, message: 'billing_type_id ist erforderlich' };
 
   const isHourly  = btId === 2;
-  const quantity  = isHourly ? (Number(b.quantity)  || 0) : null;
-  const spRate    = isHourly ? (Number(b.hourly_rate)    || 0) : null;
-  const revenue   = isHourly ? fmt2((quantity || 0) * (spRate || 0)) : fmt2(Number(b.revenue) || 0);
+  // Aufwand: Zeilen aus effort_lines, sonst eine Zeile aus den Einzelfeldern
+  const eff = isHourly ? effortColumns(normalizeEffortLines(b.effort_lines !== undefined ? b.effort_lines : [{
+    role_id: b.role_id, role_abbr: b.role_abbr, role_name: b.role_name, hours: b.quantity, rate: b.hourly_rate,
+  }])) : null;
+  const revenue   = isHourly ? eff.basis : fmt2(Number(b.revenue) || 0);
   const extPct    = Number(b.extras_percent) || 0;
   const extras    = fmt2(revenue * extPct / 100);
   const fatherId  = b.father_id ? parseInt(String(b.father_id), 10) : null;
@@ -435,11 +441,12 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
       EXTRAS_PERCENT:  extPct,
       EXTRAS:          extras,
       SORT_ORDER:      maxSort + 10,
-      QUANTITY:        quantity,
-      HOURLY_RATE:         spRate,
-      ROLE_ABBR: b.role_abbr || null,
-      ROLE_NAME:  b.role_name  || null,
-      ROLE_ID:         b.role_id ? parseInt(String(b.role_id), 10) : null,
+      QUANTITY:        isHourly ? eff.QUANTITY    : null,
+      HOURLY_RATE:     isHourly ? eff.HOURLY_RATE : null,
+      ROLE_ABBR:       isHourly ? eff.ROLE_ABBR   : null,
+      ROLE_NAME:       isHourly ? eff.ROLE_NAME   : null,
+      ROLE_ID:         isHourly ? eff.ROLE_ID     : null,
+      EFFORT_LINES:    isHourly ? eff.EFFORT_LINES : null,
       TENANT_ID:       tenantId,
     }])
     .select('*')
@@ -478,22 +485,56 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
   const hasSurchargeChange = b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined ||
     b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined ||
     b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined;
-  const hasRevenueChange = isHourly || b.quantity !== undefined || b.hourly_rate !== undefined || b.revenue !== undefined;
+  // Einzelfelder (Altweg) oder Aufwandszeilen (Migration 0173)
+  const singleEffortChange = b.quantity !== undefined || b.hourly_rate !== undefined ||
+    b.role_id !== undefined || b.role_abbr !== undefined || b.role_name !== undefined;
+  const effortChange = b.effort_lines !== undefined || singleEffortChange;
+  const hasRevenueChange = isHourly || effortChange || b.revenue !== undefined;
+
+  // Wechsel weg von „nach Aufwand": die Zeilen gehoeren nicht mehr dazu.
+  if (btId !== undefined && btId !== 2) patch.EFFORT_LINES = null;
 
   if (hasRevenueChange || hasSurchargeChange || patch.EXTRAS_PERCENT !== undefined) {
     const { data: cur } = await supabase
       .from('OFFER_STRUCTURE')
-      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, HOURLY_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+      .select('BILLING_TYPE_ID, REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, HOURLY_RATE, ROLE_ID, ROLE_ABBR, ROLE_NAME, EFFORT_LINES, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
       .eq('ID', nodeId)
+      .eq('TENANT_ID', tenantId)
       .maybeSingle();
 
+    const effectiveBt = btId !== undefined ? btId : Number(cur?.BILLING_TYPE_ID);
+    const lineCount = Array.isArray(b.effort_lines) ? b.effort_lines.length : 0;
+    if (effectiveBt !== 2 && b.effort_lines !== undefined && lineCount > 0) {
+      throw { status: 400, message: 'Aufwandszeilen gibt es nur bei Abrechnung nach Aufwand' };
+    }
+
     let revenueBasis;
-    if (isHourly || b.quantity !== undefined || b.hourly_rate !== undefined) {
-      const q = Number(b.quantity ?? cur?.QUANTITY ?? 0);
-      const s = Number(b.hourly_rate  ?? cur?.HOURLY_RATE  ?? 0);
-      if (b.quantity !== undefined) patch.QUANTITY = q;
-      if (b.hourly_rate  !== undefined) patch.HOURLY_RATE  = s;
-      revenueBasis = r2(q * s);
+    if (effectiveBt === 2 && (isHourly || effortChange)) {
+      let lines;
+      if (b.effort_lines !== undefined) {
+        lines = normalizeEffortLines(b.effort_lines);
+      } else {
+        const curLines = nodeEffortLines(cur);
+        if (singleEffortChange && curLines.length > 1) {
+          throw { status: 409, message: 'Dieses Element hat mehrere Aufwandszeilen – bitte die Zeilen bearbeiten.' };
+        }
+        const base = curLines[0] || { role_id: null, role_abbr: null, role_name: null, hours: 0, rate: 0 };
+        lines = singleEffortChange ? normalizeEffortLines([{
+          role_id:   b.role_id   !== undefined ? b.role_id   : base.role_id,
+          role_abbr: b.role_abbr !== undefined ? b.role_abbr : base.role_abbr,
+          role_name: b.role_name !== undefined ? b.role_name : base.role_name,
+          hours:     b.quantity    !== undefined ? b.quantity    : base.hours,
+          rate:      b.hourly_rate !== undefined ? b.hourly_rate : base.rate,
+        }]) : curLines;
+      }
+      const eff = effortColumns(lines);
+      patch.EFFORT_LINES = eff.EFFORT_LINES;
+      patch.QUANTITY     = eff.QUANTITY;
+      patch.HOURLY_RATE  = eff.HOURLY_RATE;
+      patch.ROLE_ID      = eff.ROLE_ID;
+      patch.ROLE_ABBR    = eff.ROLE_ABBR;
+      patch.ROLE_NAME    = eff.ROLE_NAME;
+      revenueBasis = eff.basis;
     } else if (b.revenue !== undefined) {
       revenueBasis = r2(Number(b.revenue));
     } else {
@@ -790,6 +831,13 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       extras:          Number(n.EXTRAS         || 0),
       total:           fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
       roleName:        n.ROLE_NAME || n.ROLE_ABBR || '',
+      // Aufwandszeilen einzeln unter dem Element (Runde 5, Entscheidung „einzeln")
+      effortLines:     Number(n.BILLING_TYPE_ID) === 2
+        ? nodeEffortLines(n).filter(l => l.hours > 0).map(l => ({
+            hours: l.hours, rate: l.rate, amount: lineAmount(l),
+            roleName: l.role_name || l.role_abbr || '',
+          }))
+        : [],
       surchargesTotal: Number(n.SURCHARGES_TOTAL || 0),
     })),
     hasExtras,

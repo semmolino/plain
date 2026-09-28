@@ -284,9 +284,9 @@ body {
         <td style="padding-left: {{ row.depth * 5 + 2 }}mm">{{ row.nameShort }}</td>
         <td>
           {{ row.nameLong }}
-          {% if row.isHourly and row.quantity > 0 %}
-          <div class="sub-info">{{ row.quantity }}&thinsp;h &times; {{ row.spRate | money }}/h{% if row.roleName %} ({{ row.roleName }}){% endif %}</div>
-          {% endif %}
+          {% for l in row.effortLines %}
+          <div class="sub-info">{{ l.hours }}&thinsp;h &times; {{ l.rate | money }}/h{% if l.roleName %} {{ l.roleName }}{% endif %}{% if row.effortLines.length > 1 %} = {{ l.amount | money }}{% endif %}</div>
+          {% endfor %}
         </td>
         <td class="r">{{ row.revenue | money }}</td>
         {% if hasExtras %}

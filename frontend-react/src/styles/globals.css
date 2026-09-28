@@ -4869,6 +4869,53 @@ th.doc-actions, td.doc-actions {
 .sx-table .ox-input-hours { width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
 .sx-table .ox-input-rate  { width: 68px; text-align: right; font-variant-numeric: tabular-nums; }
 .ox-times { font-size: 12px; color: var(--text-3); }
+.sx-table .ox-effort-btn { min-width: 0; white-space: nowrap; }
+
+/* Aufwand nach Rollen (Runde 5): Panel unter der Zeile und Blatt am Handy.
+   Eine Zeile: Rolle · Stunden · Satz · Betrag · Entfernen. */
+.ox-effort-title { display: flex; align-items: center; gap: 6px; }
+.ox-effort { max-width: 640px; }
+.ox-effort-head, .ox-effort-line {
+  display: grid; align-items: center; gap: 6px var(--space-2);
+  grid-template-columns: minmax(160px, 1fr) 72px 96px 104px 36px;
+}
+.ox-effort-head > span {
+  font-size: var(--fs-label); font-weight: var(--fw-heading); color: var(--text-3);
+  text-transform: uppercase; letter-spacing: var(--ls-eyebrow);
+  padding-bottom: 4px; border-bottom: 1px solid var(--border);
+}
+.ox-effort-head > span:nth-child(n+2):nth-child(-n+4) { text-align: right; }
+.ox-effort-list { list-style: none; margin: 0; padding: 0; }
+.ox-effort-line { padding: 4px 0; }
+.ox-effort-hours, .ox-effort-rate { width: 100%; text-align: right; font-variant-numeric: tabular-nums; }
+.ox-effort-role { width: 100%; min-width: 0; }
+.ox-effort-amount { text-align: right; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ox-effort-remove { justify-self: end; }
+.ox-effort-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap;
+  margin-top: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border);
+}
+.ox-effort-add { display: inline-flex; align-items: center; gap: 5px; }
+.ox-effort-sum { margin-left: auto; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.ox-effort-sum strong { color: var(--text); }
+/* Im Blatt am Handy: Rolle ueber die ganze Breite, darunter die Zahlen. */
+.sxm-effort .ox-effort-head { display: none; }
+.sxm-effort .ox-effort-line {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 88px;
+  grid-template-areas: "role role remove" "hours rate amount";
+  padding: var(--space-2) 0; border-bottom: 1px solid var(--border-3);
+}
+.sxm-effort .ox-effort-role   { grid-area: role; }
+.sxm-effort .ox-effort-hours  { grid-area: hours; }
+.sxm-effort .ox-effort-rate   { grid-area: rate; }
+.sxm-effort .ox-effort-amount { grid-area: amount; }
+.sxm-effort .ox-effort-remove { grid-area: remove; justify-self: end; min-width: 44px; min-height: 44px; }
+.sxm-effort-hint { margin: 0 0 var(--space-1); }
+.sxm-effort select, .sxm-effort input { min-height: 44px; font-size: 16px; }
+.sxm-effort .ox-effort-add { min-height: 44px; }
+@media (max-width: 640px) {
+  .ox-effort-head { display: none; }
+}
 
 /* ═══ Zeiterfassung ═══════════════════════════════════════════════════════ */
 
