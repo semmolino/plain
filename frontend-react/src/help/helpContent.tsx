@@ -1588,8 +1588,9 @@ export const HELP = {
         Projekte (Projektleitung) und das letzte Monatsende.<br /><br />
         Links wählst du das Projekt, rechts trägst du die Prozente ein. <strong>Speichern &amp;
         nächstes</strong> (Strg+S) springt zum nächsten offenen Projekt, <strong>Unverändert
-        bestätigen</strong> gilt, wenn sich nichts bewegt hat, <strong>Überspringen</strong> merkt sich
-        das Projekt nur für diese Sitzung. Erledigt ist ein Projekt, sobald es für diesen oder einen
+        bestätigen</strong> gilt, wenn sich nichts bewegt hat, <strong>Überspringen</strong> stellt das
+        Projekt ans Ende der Runde — gemerkt für diesen Stichtag, auch wenn du den Browser schließt;
+        zum nächsten Monatsende ist es wieder offen. Erledigt ist ein Projekt, sobald es für diesen oder einen
         späteren Stichtag gepflegt ist. Nach Aufwand abgerechnete Elemente stehen immer auf 100 % und
         erscheinen nicht als Eingabe.
       </>

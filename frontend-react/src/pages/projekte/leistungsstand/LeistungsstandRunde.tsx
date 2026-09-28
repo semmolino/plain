@@ -11,19 +11,23 @@ import { useCtrlS } from '@/hooks/useCtrlS'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { useGuardedAction, useRegisterDirty } from '@/hooks/useDirtyGuard'
 import { usePermission } from '@/store/permissionsStore'
+import { useStickyState } from '@/hooks/useStickyState'
 import { money, fmtEur, negativeStyle } from '@/utils/money'
 import { LeistungsstandTable } from './LeistungsstandTable'
 import { useLeistungsstandEditor } from './useLeistungsstandEditor'
 import { deDate, monthLabel } from './leistungsstandCalc'
 
 type Scope = 'own' | 'all'
-const SS_KEY = 'plain:lsrunde'
+/** Uebersprungene Projekte je Stichtag (ISO-Datum → Projekt-IDs). */
+type SkipMap = Record<string, number[]>
 
-function readSession(): { scope?: Scope; skipped?: number[] } {
-  try { return JSON.parse(sessionStorage.getItem(SS_KEY) ?? '{}') } catch { return {} }
-}
-function writeSession(v: { scope?: Scope; skipped?: number[] }) {
-  try { sessionStorage.setItem(SS_KEY, JSON.stringify({ ...readSession(), ...v })) } catch { /* privat */ }
+/**
+ * Nur die juengsten Stichtage behalten — die Runde gilt je Monat, aeltere
+ * Eintraege braucht niemand mehr und sie sollen sich nicht ansammeln.
+ */
+function pruneSkips(m: SkipMap, keep = 6): SkipMap {
+  const keys = Object.keys(m).filter(k => m[k]?.length).sort().reverse().slice(0, keep)
+  return Object.fromEntries(keys.map(k => [k, m[k]]))
 }
 
 const FMT_PCT = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
@@ -45,8 +49,11 @@ export function LeistungsstandRunde() {
   const guarded = useGuardedAction()
   const canEdit = usePermission('projects.performance.edit')
   const [asOf, setAsOf]         = useState<string | null>(null)
-  const [scope, setScopeState]  = useState<Scope | null>(() => readSession().scope ?? null)
-  const [skipped, setSkipped]   = useState<Set<number>>(() => new Set(readSession().skipped ?? []))
+  // Beides je Mitarbeiter im Browser gemerkt, nicht nur fuer die Sitzung
+  // (Rueckmeldung Runde 2/3). „Uebersprungen" gilt je Stichtag: zum naechsten
+  // Monatsende ist wieder alles offen.
+  const [scope, setScopeState]  = useStickyState<Scope | null>('lsrunde.scope', null)
+  const [skipMap, setSkipMap]   = useStickyState<SkipMap>('lsrunde.skipped', {})
   const [selected, setSelected] = useState<number | null>(null)
   const [search, setSearch]     = useState('')
   const [lastSaved, setLastSaved] = useState<{ id: number; kind: 'saved' | 'confirmed' } | null>(null)
@@ -59,6 +66,9 @@ export function LeistungsstandRunde() {
   const r = data?.data
   // Wer keine Projekte leitet, bekommt „Alle laufenden" — einmal, ohne Umweg.
   if (scope === null && r && r.scope === 'own' && r.mine_count === 0) setScopeState('all')
+  const skipKey = r?.as_of ?? asOf ?? ''
+  const skipped = useMemo(() => new Set(skipMap[skipKey] ?? []), [skipMap, skipKey])
+  const writeSkipped = (s: Set<number>) => setSkipMap(prev => pruneSkips({ ...prev, [skipKey]: [...s] }))
 
   const projects = useMemo(() => r?.projects ?? [], [r])
   const visible = useMemo(() => {
@@ -71,7 +81,7 @@ export function LeistungsstandRunde() {
   const current = selected != null ? projects.find(p => p.ID === selected) ?? null : (!narrow ? firstOpen : null)
 
   function setScope(s: Scope) {
-    guarded(() => { setScopeState(s); writeSession({ scope: s }); setSelected(null) })
+    guarded(() => { setScopeState(s); setSelected(null) })
   }
   function pick(id: number) {
     if (id === current?.ID) return
@@ -85,12 +95,12 @@ export function LeistungsstandRunde() {
   }
   function skip(id: number) {
     const s = new Set(skipped); s.add(id)
-    setSkipped(s); writeSession({ skipped: [...s] })
+    writeSkipped(s)
     setSelected(nextOpen(id, s)); setLastSaved(null)
   }
   function onDone(id: number, kind: 'saved' | 'confirmed') {
     setLastSaved({ id, kind })
-    if (skipped.has(id)) { const s = new Set(skipped); s.delete(id); setSkipped(s); writeSession({ skipped: [...s] }) }
+    if (skipped.has(id)) { const s = new Set(skipped); s.delete(id); writeSkipped(s) }
     const next = nextOpen(id)
     setSelected(next ?? id)
   }

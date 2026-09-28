@@ -41,9 +41,14 @@ function offerToForm(o: Offer): EditForm {
 interface Props {
   initialOfferId?: number
   onOfferChange?: (_id: number | null) => void
+  /**
+   * Im Angebots-Arbeitsbereich stehen PDF, Kopieren, Beauftragt und
+   * Auftragsbestaetigung im Kopf — hier waeren sie doppelt.
+   */
+  hideActions?: boolean
 }
 
-export function AngeboteStammdaten({ initialOfferId }: Props) {
+export function AngeboteStammdaten({ initialOfferId, hideActions = false }: Props) {
   const qc = useQueryClient()
   const [oid, setOid]         = useState<number | null>(initialOfferId ?? null)
   const [form, setForm]       = useState<EditForm | null>(null)
@@ -159,6 +164,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
     <div className="ls-wrap">
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        {!hideActions && (<>
         <button className="btn-small" onClick={() => openOfferPdf(oid)}>PDF öffnen</button>
         <button className="btn-small" onClick={() => copyMut.mutate()} disabled={copyMut.isPending}>
           {copyMut.isPending ? '…' : 'Kopieren'}
@@ -176,6 +182,7 @@ export function AngeboteStammdaten({ initialOfferId }: Props) {
             Beauftragt
           </button>
         )}
+        </>)}
         <SaveBadge state={saveState.state} />
       </div>
 

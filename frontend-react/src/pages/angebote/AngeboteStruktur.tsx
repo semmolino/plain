@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, GripVertical, ChevronRight, ChevronsDownUp, ChevronsUpDown, FileText } from 'lucide-react'
+import { Plus, GripVertical, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useAnchoredPosition } from '@/hooks/useAnchoredPosition'
 import { useCtrlS } from '@/hooks/useCtrlS'
@@ -14,14 +14,15 @@ import { RowMenu }       from '@/components/ui/RowMenu'
 import { AmountInput }   from '@/components/ui/AmountInput'
 import { ColumnChooser } from '@/components/ui/ColumnChooser'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
+import { useRegisterDirty } from '@/hooks/useDirtyGuard'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
-import { STRUKTUR_SPALTEN, useStrukturSpalten, SurchargeAmount } from '@/pages/projekte/struktur/strukturSpalten'
+import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
+import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
 import { OfferStrukturMobile } from '@/pages/angebote/struktur/OfferStrukturMobile'
 import {
   fetchOffer, fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
-  deleteOfferStructureNode, moveOfferStructureNode, patchOfferRootSurcharges, openOfferPdf,
+  deleteOfferStructureNode, moveOfferStructureNode, patchOfferRootSurcharges,
   type OfferStructureNode,
 } from '@/api/angebote'
 import { fetchBillingTypes, fetchActiveRoles, type StructureNode } from '@/api/projekte'
@@ -90,15 +91,14 @@ function depthOf(id: string, parentMap: Map<string, string | null>): number {
   return d
 }
 
-const offerLabel = (o: { ABBR: string | null; NAME: string }) => (o.ABBR ?? '') + (o.NAME ? ` – ${o.NAME}` : '')
+// Welches Angebot, bestimmt der Arbeitsbereich (AngebotePage) — gewechselt
+// wird ueber den Kopf, nicht mehr ueber ein eigenes Suchfeld hier.
+interface Props { initialOfferId?: number }
 
-interface Props { initialOfferId?: number; onOfferChange?: (id: number | null) => void }
-
-export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
+export function AngeboteStruktur({ initialOfferId }: Props) {
   const [confirm, confirmDialog] = useConfirm()
   const qc = useQueryClient()
   const toast = useToast()
-  const guarded = useGuardedAction()
   const oid = initialOfferId ?? null
 
   const readOnlyLicense = useLicenseReadOnly()
@@ -128,9 +128,6 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const [collapsed, setCollapsed]                 = useState<Set<number>>(new Set())
   const [contextMenu, setContextMenu]             = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
   const [saving, setSaving]                       = useState(false)
-  const [offerInput, setOfferInput]               = useState('')
-  const [offerDropdownOpen, setOfferDropdownOpen] = useState(false)
-  const offerAcRef      = useRef<HTMLDivElement>(null)
   const contextMenuRef  = useRef<HTMLDivElement>(null)
   const longPressRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
   const parentMapRef    = useRef<Map<string, string | null>>(new Map())
@@ -169,18 +166,6 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     setEdits({}); setRootEdit(null); setAddForm(null); setSelectedIds(new Set()); setCollapsed(new Set())
     setSurchargePanel(null); setOfferSurchargePanel(false); setErrorMsg(null)
   }
-  // Geschlossen zeigt das Feld das gewaehlte Angebot, offen die Suche.
-  const currentLabel = currentOffer ? offerLabel(currentOffer) : ''
-  const offerInputValue = offerDropdownOpen ? offerInput : currentLabel
-
-  useEffect(() => {
-    if (!offerDropdownOpen) return
-    function onDown(e: MouseEvent) {
-      if (offerAcRef.current && !offerAcRef.current.contains(e.target as Node)) setOfferDropdownOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [offerDropdownOpen])
 
   useEffect(() => {
     if (!contextMenu) return
@@ -190,18 +175,6 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [contextMenu])
-
-  const filteredOffers = useMemo(() => {
-    const sq = offerInput.toLowerCase().trim()
-    if (!offerDropdownOpen || !sq || offerInput === currentLabel) return offers
-    return offers.filter(o => o.ABBR?.toLowerCase().includes(sq) || o.NAME?.toLowerCase().includes(sq))
-  }, [offers, offerInput, offerDropdownOpen, currentLabel])
-
-  function pickOffer(id: number) {
-    setOfferDropdownOpen(false)
-    if (id === oid) return
-    guarded(() => onOfferChange?.(id))
-  }
 
   // ── Baum ─────────────────────────────────────────────────────────────────
 
@@ -608,57 +581,11 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="sx-root" data-density="comfortable">
-      <div className="list-toolbar ox-offer-bar">
-        <label className="ox-offer-label" htmlFor="ox-offer-input">Angebot</label>
-        <div ref={offerAcRef} className="project-ac-wrap ox-offer-ac">
-          <input
-            id="ox-offer-input"
-            className="list-search"
-            placeholder="Angebot suchen …"
-            autoComplete="off"
-            role="combobox"
-            aria-expanded={offerDropdownOpen}
-            aria-controls="ox-offer-list"
-            value={offerInputValue}
-            onFocus={e => {
-              setOfferInput(currentLabel); setOfferDropdownOpen(true)
-              const el = e.currentTarget
-              setTimeout(() => { if (document.activeElement === el) el.select() }, 0)
-            }}
-            onChange={e => { setOfferInput(e.target.value); setOfferDropdownOpen(true) }}
-            onKeyDown={e => {
-              if (e.key === 'Escape') { setOfferDropdownOpen(false); e.currentTarget.blur() }
-              if (e.key === 'Enter' && filteredOffers.length === 1) { e.preventDefault(); pickOffer(filteredOffers[0].ID) }
-            }}
-          />
-          {offerDropdownOpen && (
-            <div className="project-ac-dropdown" id="ox-offer-list" role="listbox" aria-label="Angebote">
-              {filteredOffers.length === 0 && (
-                <div className="project-ac-option ox-offer-none">Keine Treffer</div>
-              )}
-              {filteredOffers.map(o => (
-                <div key={o.ID} role="option" aria-selected={o.ID === oid}
-                  className={`project-ac-option${o.ID === oid ? ' ox-offer-current' : ''}`}
-                  onMouseDown={e => { e.preventDefault(); pickOffer(o.ID) }}>
-                  <span className="project-ac-short">{o.ABBR}</span>
-                  {o.NAME && <span className="project-ac-long">{o.NAME}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        {oid != null && (
-          <button type="button" className="btn-secondary ox-pdf-btn" onClick={() => openOfferPdf(oid)} title="Angebot als PDF öffnen">
-            <FileText size={15} strokeWidth={2} aria-hidden="true" /> PDF
-          </button>
-        )}
-      </div>
-
+    <div className="sx-root">
       {oid === null && (
         <div className="sx-empty">
           <p className="empty-note">Kein Angebot gewählt.</p>
-          <p className="sx-empty-why">Oben ein Angebot suchen oder in der Angebotsliste eines öffnen. Die Struktur gliedert das Honorar des Angebots — sie wird bei der Beauftragung zur Projektstruktur.</p>
+          <p className="sx-empty-why">In der Angebotsliste ein Angebot öffnen. Die Struktur gliedert das Honorar des Angebots — sie wird bei der Beauftragung zur Projektstruktur.</p>
         </div>
       )}
 

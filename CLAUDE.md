@@ -306,11 +306,18 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   einem PUT). Beide Tabellen puffern Eingaben bis „Speichern" (ActionBar,
   `useRegisterDirty`); Anlegen, Loeschen, Verschieben wirken sofort. Beide
   sind immer luftig (keine Dichte-Umschaltung); welche Spalten sichtbar sind,
-  waehlt jeder ueber „Spalten" (`struktur/strukturSpalten.tsx`, je Mitarbeiter
+  waehlt jeder ueber „Spalten" (`struktur/strukturSpalten.ts`, je Mitarbeiter
   gemerkt). Ein
   Angebotselement mit Unterelementen loescht das Backend nicht
   (`dependencyCheck.checkOfferStructure`, 409) — die Oberflaeche sagt das
   vorher, statt es „samt Unterelementen" zu versprechen.
+- **Angebote als Arbeitsbereich** (wie die Projekte): `/angebote` ist die
+  Liste, `/angebote?offerId=…&tab=struktur|kalkulationen|daten` das Angebot
+  mit Kopf (`AngebotHeader.tsx`: Name als Umschalter, Strg+K) und Reitern.
+  Der Zustand steht in der URL (`angebote/angebotUrlState.ts`); Links von
+  anderen Seiten bauen `angebotHref(id, tab)`, alte `state: { offerId }`-
+  Einstiege werden umgeschrieben. „Als beauftragt markieren" laeuft in Liste
+  und Kopf ueber denselben `BeauftragtDialog`.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
@@ -632,6 +639,7 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Modulseiten (Übersicht, Adressen, Projekte, Rechnungen, Angebote, …) zeigen **keinen sichtbaren Seitentitel** — welches Modul offen ist, sagt die Seitennavigation. Die `<h1>` bleibt für Screenreader: `<PageHeader title="…" srTitle />` bzw. `<h1 className="sr-only">`. Eine Hauptaktion ohne Kopf steht rechts neben den Reitern (`.module-tabs-row`). Sichtbar bleiben Titel, die ein **Objekt** benennen (Projektkopf, Adresse, Nachtrag, Assistent).
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
+- Stile für Bausteine (PageHeader, ActionBar, Disclosure …) und die Arbeitsbereiche stehen in `globals.css` im Abschnitt „Arbeitsbereiche und gemeinsame Bausteine“, **gegliedert nach Baustein, nicht nach Runde**. Ein Nachtrag gehört an die bestehende Regel, nicht als zweite Regel ans Dateiende: genau so standen `max-width` des Titel-Knopfs und die Breite des Umschalters zweimal da, und die zweite Regel gewann still.
 
 **Keine hartkodierten Farben — geprüft, nicht erhofft.** `npm run check:design`
 lässt jede Hex-Farbe im TSX fehlschlagen. Es gibt genau drei legitime Ausnahmen,

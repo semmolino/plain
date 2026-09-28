@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { angebotHref } from '@/pages/angebote/angebotUrlState'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useConfirm } from '@/hooks/useConfirm'
 import { ChevronLeft, ChevronRight, Trash2, Check } from 'lucide-react'
@@ -1762,7 +1763,7 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
                       )}
                       {r.OFFER_ID != null && r.PROJECT_ID == null && (
                         <button type="button" className="btn-small" title="Zum Angebot"
-                          onClick={() => navigate('/angebote', { state: { offerId: r.OFFER_ID } })}>
+                          onClick={() => navigate(angebotHref(r.OFFER_ID!, 'kalkulationen'))}>
                           → Angebot
                         </button>
                       )}

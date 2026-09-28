@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { angebotHref } from '@/pages/angebote/angebotUrlState'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Clock, TrendingUp } from 'lucide-react'
@@ -35,7 +36,7 @@ const TARGET: Record<RecentEntityType, (e: RecentEntry) => Target> = {
   project:                     (e) => ({ to: `/projekte?projectId=${e.ENTITY_ID}&tab=struktur` }),
   invoice:                     (e) => ({ to: '/rechnungen', state: { projectSearch: numberOf(e) } }),
   partial_payment:             (e) => ({ to: '/rechnungen', state: { projectSearch: numberOf(e) } }),
-  offer:                       (e) => ({ to: '/angebote',   state: { tab: 'struktur', offerId: e.ENTITY_ID } }),
+  offer:                       (e) => ({ to: angebotHref(e.ENTITY_ID) }),
   mahnung:                     (e) => {
     const sourceType = meta(e).source_type
     return typeof sourceType === 'string'

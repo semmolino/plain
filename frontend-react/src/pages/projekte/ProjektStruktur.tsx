@@ -16,7 +16,8 @@ import { ColumnChooser } from '@/components/ui/ColumnChooser'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { StrukturMobile } from '@/pages/projekte/struktur/StrukturMobile'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
-import { STRUKTUR_SPALTEN, useStrukturSpalten, SurchargeAmount } from '@/pages/projekte/struktur/strukturSpalten'
+import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
+import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
 import { useRegisterDirty } from '@/hooks/useDirtyGuard'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import {
@@ -591,7 +592,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="sx-root" data-density="comfortable">
+    <div className="sx-root">
       {selectedPid === null && <p className="empty-note">Kein Projekt gewählt.</p>}
 
       {selectedPid !== null && (
