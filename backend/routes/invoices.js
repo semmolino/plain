@@ -7,20 +7,23 @@ const { renderDocumentPdf } = require("../services_pdf_render");
 const { sendMail }          = require("../services/emailService");
 const emailTemplates        = require("../services/emailTemplates");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
+const { requireDraftEdit } = require("../middleware/draftEdit");
 
 module.exports = (supabase) => {
   const router = express.Router();
+  // Entwurf: invoices.edit ODER Anlege-Recht der Belegart (middleware/draftEdit.js)
+  const draftEdit = requireDraftEdit(supabase, "INVOICE");
 
   // Phase 2: gesamte invoices-Routes erfordern invoices.view
   router.use(requirePermission("invoices.view"));
 
   router.get("/",                              (req, res) => ctrl.listInvoices(req, res, supabase));
   router.post("/init",                         requireAnyPermission("invoices.create_single","invoices.create_final","invoices.create_credit"), (req, res) => ctrl.initInvoice(req, res, supabase));
-  router.patch("/:id",                         requirePermission("invoices.edit"), (req, res) => ctrl.patchInvoice(req, res, supabase));
+  router.patch("/:id",                         draftEdit, (req, res) => ctrl.patchInvoice(req, res, supabase));
   router.get("/:id/billing-proposal",          (req, res) => ctrl.getBillingProposal(req, res, supabase));
-  router.put("/:id/performance",               requirePermission("invoices.edit"), (req, res) => ctrl.putPerformance(req, res, supabase));
+  router.put("/:id/performance",               draftEdit, (req, res) => ctrl.putPerformance(req, res, supabase));
   router.get("/:id/tec",                       (req, res) => ctrl.getTec(req, res, supabase));
-  router.post("/:id/tec",                      requirePermission("invoices.edit"), (req, res) => ctrl.postTec(req, res, supabase));
+  router.post("/:id/tec",                      draftEdit, (req, res) => ctrl.postTec(req, res, supabase));
   router.get("/:id/einvoice/ubl",              requirePermission("invoices.download_xml"), (req, res) => ctrl.getEinvoiceUbl(req, res, supabase));
   router.post("/:id/einvoice/ubl/snapshot",    requirePermission("invoices.edit"), (req, res) => ctrl.postEinvoiceUblSnapshot(req, res, supabase));
   router.get("/:id/einvoice/cii",              requirePermission("invoices.download_xml"), (req, res) => ctrl.getEinvoiceCii(req, res, supabase));
@@ -35,9 +38,9 @@ module.exports = (supabase) => {
 
   // Anlagen (Branch 9) -- bearbeiten = invoices.edit
   router.get   ("/:id/attachments",            (req, res) => att.list  (req, res, supabase));
-  router.post  ("/:id/attachments",            requirePermission("invoices.edit"), (req, res) => att.add   (req, res, supabase));
-  router.patch ("/:id/attachments/:attId",     requirePermission("invoices.edit"), (req, res) => att.patch (req, res, supabase));
-  router.delete("/:id/attachments/:attId",     requirePermission("invoices.edit"), (req, res) => att.remove(req, res, supabase));
+  router.post  ("/:id/attachments",            draftEdit, (req, res) => att.add   (req, res, supabase));
+  router.patch ("/:id/attachments/:attId",     draftEdit, (req, res) => att.patch (req, res, supabase));
+  router.delete("/:id/attachments/:attId",     draftEdit, (req, res) => att.remove(req, res, supabase));
 
   // GET /invoices/:id/email-preview — Empfaenger + Betreff/Text aus der
   // E-Mail-Textvorlage, Platzhalter bereits gegen diese Rechnung aufgeloest.
