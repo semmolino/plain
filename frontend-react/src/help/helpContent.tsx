@@ -492,9 +492,38 @@ export const HELP = {
     title: 'Sicherheitseinbehalt',
     body: (
       <>
-        Ein vereinbarter Prozentsatz der Schlussrechnung, der vorübergehend
-        einbehalten wird (Gewährleistungssicherheit). Er mindert den jetzt
-        fälligen Betrag und wird später gesondert freigegeben.
+        Ein vereinbarter Prozentsatz, den der Auftraggeber von jeder{' '}
+        <strong>Abschlagsrechnung</strong> einbehält — als Sicherheit, bis die Leistung
+        abgenommen ist. Er mindert den jetzt fälligen Betrag. Mit der{' '}
+        <strong>Schluss- oder Teilschlussrechnung</strong> wird er aufgelöst, also
+        wieder mit abgerechnet. Bemessen wird er wahlweise vom Brutto oder vom Netto.
+      </>
+    ),
+  },
+
+  // ── Verträge (Projekt-Reiter) ────────────────────────────────────────────
+  'contract.defaults': {
+    title: 'Vertrag als Vorbelegung',
+    body: (
+      <>
+        Der Vertrag hält fest, was für jede Rechnung aus diesem Projekt gilt: an wen sie geht,
+        Skonto, Steuersatz und Umsatzsteuer-Kategorie, dazu ein vereinbarter
+        Sicherheitseinbehalt. Beim Anlegen einer Rechnung werden die Werte vorbelegt und lassen
+        sich dort für diese eine Rechnung ändern. <strong>Bereits gestellte Rechnungen ändern
+        sich nicht</strong>, wenn der Vertrag geändert wird.
+      </>
+    ),
+  },
+  'contract.vat_category': {
+    title: 'Umsatzsteuer-Kategorie',
+    body: (
+      <>
+        Legt fest, wie Rechnungen aus diesem Vertrag die Umsatzsteuer behandeln. Die Angabe geht
+        auch in die E-Rechnung. Im Normalfall gilt der <strong>Regelsatz</strong>. Bei{' '}
+        <strong>Reverse Charge (§13b UStG)</strong> schuldet der Auftraggeber die Steuer: die
+        Rechnung weist dann keine aus und nennt den Grund. Code und Text des Befreiungsgrunds sind
+        optional, ohne Text steht der übliche Satz auf der Rechnung. Im Rechnungsassistenten lässt
+        sich die Kategorie je Rechnung ändern.
       </>
     ),
   },
@@ -601,8 +630,11 @@ export const HELP = {
         einem neuen auf oberster Ebene — beim Beauftragen geht es mit ins Projekt.
         <br /><br />
         <strong>Bearbeiten:</strong> jeder Schritt ist mit „Weiter" gespeichert. „Struktur
-        aktualisieren" überschreibt Honorar und Nebenkosten der Projektelemente, die aus dieser
-        Kalkulation entstanden sind; Elemente im Angebot zieht es nicht mit.
+        aktualisieren" (im Projekt) bzw. „Angebot aktualisieren" überschreibt Honorar und
+        Nebenkosten der Elemente, die aus dieser Kalkulation entstanden sind; ihre eigenen Zuschläge
+        bleiben, neue Besondere Leistungen bekommen ein Element dazu. Beim Beauftragen geht die
+        Verknüpfung mit ins Projekt. Elemente, die vor 09/2026 übernommen wurden, sind nicht
+        verknüpft.
       </>
     ),
   },
@@ -1546,6 +1578,9 @@ export const HELP = {
         „Intern" werden <strong>gesammelt</strong> und erst mit <strong>Speichern</strong> (oder
         Strg+S) übernommen. Geänderte Felder sind markiert; die Leiste unten zeigt, wie viele Elemente
         offen sind. <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
+        Summen rechnen die offenen Eingaben schon mit: Nebenkosten, Gesamt, die Werte der übergeordneten
+        Elemente und die Gesamtzeile stehen auf dem Stand nach dem Speichern. Solche Werte sind
+        <em> kursiv mit Punkt</em> („Summen vorläufig"); der Tooltip nennt den gespeicherten Wert.<br /><br />
         Sofort wirken dagegen Befehle, die die Struktur selbst ändern: Element anlegen, löschen,
         verschieben und Nebenkosten vererben — jeweils nach Rückfrage. Wer mit offenen Änderungen den
         Reiter oder das Projekt wechselt, die Seite über die Navigation verlässt oder im Browser
@@ -1597,6 +1632,46 @@ export const HELP = {
         Die <strong>Budgetwarnung</strong> rechnet bei solchen Elementen mit dem Plan als Budget und dem
         gebuchten Honorar als Verbrauch — ohne Plan wäre das Budget die Summe der Buchungen selbst und
         könnte nie warnen.
+      </>
+    ),
+  },
+  'projects.hourly_rates': {
+    title: 'Stundensätze im Projekt',
+    body: (
+      <>
+        Wer hier mit Rolle und Stundensatz steht, bucht in diesem Projekt zu genau diesem Satz: jede
+        Buchung übernimmt ihn, daraus entsteht das Honorar nach Aufwand. <strong>Ohne Zuordnung</strong>{' '}
+        gibt es keinen Satz — Stunden über die Stempeluhr oder „Eigene Zeit" zählen dann mit 0 €.
+        <br /><br />
+        Die <strong>Rolle als Vorlage</strong> füllt Kürzel, Bezeichnung und Satz aus Einstellungen →
+        Stammdaten vor; hier geändert gilt es nur für dieses Projekt. Bereits erfasste Buchungen behalten
+        ihren Satz.
+      </>
+    ),
+  },
+  'projects.budget.elements': {
+    title: 'Budget je Element',
+    body: (
+      <>
+        Das interne Budget eines Elements ist sein Honorar samt Zuschlägen (ohne Nebenkosten), der
+        Verbrauch sind die Kosten der gebuchten Stunden. Ein Element mit Unterelementen zählt deren
+        Werte zusammen.
+        <br /><br />
+        Ausnahme <strong>nach Aufwand mit Plan</strong>: dort ist das Honorar die Summe der Buchungen und
+        wüchse mit jeder mit. Budget ist deshalb der <strong>Plan</strong> aus dem Angebot, Verbrauch das
+        gebuchte Honorar; daneben stehen geplante und gebuchte Stunden. Die Warnregeln unten rechnen mit
+        denselben Werten.
+      </>
+    ),
+  },
+  'projects.budget.rules': {
+    title: 'Warnregeln',
+    body: (
+      <>
+        Eine Regel meldet sich, sobald der Verbrauch einen Anteil des Budgets erreicht — für das ganze
+        Projekt oder für ein Element. Sie meldet sich einmal und erst wieder, wenn der Verbrauch zwischendurch
+        unter die Schwelle gefallen ist — frühestens einen Tag nach der letzten Meldung. <strong>Stumm</strong> heißt: die Überwachung läuft
+        weiter, benachrichtigt wird niemand.
       </>
     ),
   },

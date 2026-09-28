@@ -111,6 +111,8 @@ export interface OfferStructureNode {
   ROLE_NAME:  string | null
   ROLE_ID:         number | null
   EFFORT_LINES?:   EffortLine[] | null
+  /** Kalkulation, aus der das Element stammt (Migration 0174, „Angebot aktualisieren“). */
+  FEE_CALC_MASTER_ID?: number | null
   TENANT_ID:       number | null
   SURCHARGE_1_LABEL: string | null
   SURCHARGE_1_PCT:   number | null

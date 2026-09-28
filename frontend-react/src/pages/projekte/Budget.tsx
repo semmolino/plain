@@ -1,8 +1,12 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, X, Plus, BellOff, Bell } from 'lucide-react'
+import { Pencil, Trash2, Plus, BellOff, Bell } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
+import { DialogFooter } from '@/components/ui/DialogFooter'
+import { FormSection } from '@/components/ui/FormSection'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { KpiValue } from '@/components/ui/KpiValue'
+import { Message } from '@/components/ui/Message'
 import { fetchActiveEmployees, type ActiveEmployee } from '@/api/projekte'
 import {
   fetchBudgetOverview,
@@ -11,15 +15,25 @@ import {
   deleteBudgetRule,
   setProjectMute,
   type BudgetWarningRule,
+  type BudgetWarningOverview,
+  type BudgetWarningStructureAgg,
 } from '@/api/budgetWarnings'
 import { useConfirm } from '@/hooks/useConfirm'
-import { fmtEur, money } from '@/utils/money'
+import { usePermission } from '@/store/permissionsStore'
+import { fmtEur, money, NO_VALUE } from '@/utils/money'
+import { fmtHours } from '@/utils/zeit'
+
+const FMT_PCT = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const fmtPct = (v: number | null) => (v == null ? NO_VALUE : `${FMT_PCT.format(v)} %`)
 
 const fmtDate = (s: string | null | undefined) => {
-  if (!s) return '—'
+  if (!s) return NO_VALUE
   const d = new Date(s); if (isNaN(d.getTime())) return s
   return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
 }
+
+/** Anteil verbraucht in %; ohne Budget nicht bewertbar. */
+const share = (verbrauch: number, budget: number) => (budget > 0 ? (verbrauch / budget) * 100 : null)
 
 interface Props {
   initialProjectId?: number
@@ -33,6 +47,28 @@ interface RuleDraft {
   notify_cc:      number[]
   muted:          boolean
 }
+
+const emptyDraft = (): RuleDraft => ({ threshold_pct: '75', structure_id: '', notify_pm: true, notify_booker: true, notify_cc: [], muted: false })
+
+/** Elemente in Baumreihenfolge mit Tiefe — wie in der Struktur. */
+function inTreeOrder(structures: BudgetWarningStructureAgg[]) {
+  const kids = new Map<number | null, BudgetWarningStructureAgg[]>()
+  const ids = new Set(structures.map(s => s.ID))
+  for (const s of structures) {
+    const f = s.FATHER_ID != null && ids.has(s.FATHER_ID) ? s.FATHER_ID : null
+    kids.set(f, [...(kids.get(f) ?? []), s])
+  }
+  const out: { node: BudgetWarningStructureAgg; depth: number }[] = []
+  const walk = (father: number | null, depth: number) => {
+    const list = [...(kids.get(father) ?? [])].sort((a, b) => (a.SORT_ORDER ?? a.ID) - (b.SORT_ORDER ?? b.ID) || a.ID - b.ID)
+    for (const n of list) { out.push({ node: n, depth }); walk(n.ID, depth + 1) }
+  }
+  walk(null, 0)
+  return out
+}
+
+const elementLabel = (s: BudgetWarningStructureAgg | undefined, id: number) =>
+  s ? [s.ABBR, s.NAME].filter(Boolean).join(' · ') || `Element ${id}` : `Element ${id}`
 
 // Zeigt, wen diese Regel benachrichtigen würde. Dieselbe Zusammenstellung wie
 // im Backend (services/budgetWarnings.js → notifyBudgetWarning): PL, Auslöser
@@ -66,391 +102,469 @@ function EmpfaengerVorschau({ draft, employees, projectManagerId }: {
     !draft.notify_booker &&
     draft.notify_cc.length === 0
 
-  const box: React.CSSProperties = {
-    background: 'var(--surface-2)', border: '1px solid var(--border)',
-    borderRadius: 'var(--radius-sm)', padding: '8px 10px', fontSize: 12,
-  }
-
   if (draft.muted) {
-    return <div style={{ ...box, color: 'var(--text-3)' }}>
-      Regel ist stumm geschaltet — es wird niemand benachrichtigt.
-    </div>
+    return <div className="bud-preview bud-preview--muted">Regel ist stumm geschaltet — es wird niemand benachrichtigt.</div>
   }
   if (erreichtNiemanden) {
     return (
-      <div style={{ ...box, borderColor: 'var(--warning)', background: 'var(--warning-bg)' }}>
+      <div className="bud-preview bud-preview--warn">
         <strong>Niemand ausgewählt.</strong> Diese Regel überwacht das Budget, benachrichtigt
         aber niemanden.
       </div>
     )
   }
-  return <div style={box}><strong>Empfänger:</strong> {teile.join(', ')}</div>
+  return <div className="bud-preview"><strong>Empfänger:</strong> {teile.join(', ')}</div>
 }
 
 export function Budget({ initialProjectId }: Props) {
-  const [confirm, confirmDialog] = useConfirm()
-  const [pid, setPid] = useState<number | null>(initialProjectId ?? null)
-  const [editingRule, setEditingRule] = useState<BudgetWarningRule | null>(null)
-  const [creating, setCreating] = useState(false)
-  const [draft, setDraft] = useState<RuleDraft>({
-    threshold_pct: '75',
-    structure_id:  '',
-    notify_pm:     true,
-    notify_booker: true,
-    notify_cc:     [],
-    muted:         false,
-  })
+  if (initialProjectId == null) return <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>
+  // Neuer Zustand je Projekt — ein offener Regel-Dialog gehört zu genau einem.
+  return <BudgetProjekt key={initialProjectId} pid={initialProjectId} />
+}
 
-  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
-  useEffect(() => { setPid(initialProjectId ?? null) }, [initialProjectId])
-
+function BudgetProjekt({ pid }: { pid: number }) {
   const qc = useQueryClient()
-  const { data: empData }      = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
-  const { data: ovData, isLoading } = useQuery({
-    queryKey: ['budget-overview', pid],
-    queryFn:  () => fetchBudgetOverview(pid!),
-    enabled:  pid !== null,
-  })
+  // Anlegen, Ändern, Löschen und Stummschalten prüft das Backend mit
+  // projects.budget.edit (routes/budgetWarnings.js). Die Knöpfe standen vorher
+  // für jeden da, der den Reiter sehen durfte.
+  const canEdit = usePermission('projects.budget.edit')
+  const [confirm, confirmDialog] = useConfirm()
+  const [dialog, setDialog] = useState<{ rule: BudgetWarningRule | null } | null>(null)
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
-  const employees = empData?.data ?? []
+  const { data: ovData, isLoading, isError } = useQuery({
+    queryKey: ['budget-overview', pid],
+    queryFn:  () => fetchBudgetOverview(pid),
+  })
   const overview = ovData?.data ?? null
 
-  function invalidate() { qc.invalidateQueries({ queryKey: ['budget-overview', pid] }) }
-
-  const createMut = useMutation({
-    mutationFn: (b: RuleDraft) => createBudgetRule(pid!, {
-      threshold_pct: Number(b.threshold_pct),
-      structure_id:  b.structure_id ? Number(b.structure_id) : null,
-      notify_pm:     b.notify_pm,
-      notify_booker: b.notify_booker,
-      notify_cc:     b.notify_cc,
-      muted:         b.muted,
-    }),
-    onSuccess: () => { invalidate(); setCreating(false); resetDraft() },
-  })
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, b }: { id: number; b: RuleDraft }) => updateBudgetRule(id, {
-      threshold_pct: Number(b.threshold_pct),
-      notify_pm:     b.notify_pm,
-      notify_booker: b.notify_booker,
-      notify_cc:     b.notify_cc,
-      muted:         b.muted,
-    }),
-    onSuccess: () => { invalidate(); setEditingRule(null) },
-  })
+  function invalidate() { void qc.invalidateQueries({ queryKey: ['budget-overview', pid] }) }
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteBudgetRule(id),
-    onSuccess:  () => invalidate(),
+    onSuccess:  () => { invalidate(); setMsg({ text: 'Warnregel gelöscht.', type: 'success' }) },
+    onError:    (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
   const muteMut = useMutation({
-    mutationFn: (m: boolean) => setProjectMute(pid!, m),
+    mutationFn: (m: boolean) => setProjectMute(pid, m),
     onSuccess:  () => invalidate(),
+    onError:    (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
-  function resetDraft() {
-    setDraft({ threshold_pct: '75', structure_id: '', notify_pm: true, notify_booker: true, notify_cc: [], muted: false })
-  }
+  if (isLoading) return <p className="ls-empty">Lädt …</p>
+  if (isError || !overview) return <Message type="error" text="Das Budget konnte nicht geladen werden." />
 
-  function openEdit(rule: BudgetWarningRule) {
-    setDraft({
-      threshold_pct: String(rule.THRESHOLD_PCT),
-      structure_id:  rule.STRUCTURE_ID != null ? String(rule.STRUCTURE_ID) : '',
-      notify_pm:     rule.NOTIFY_PM,
-      notify_booker: rule.NOTIFY_BOOKER,
-      notify_cc:     Array.isArray(rule.NOTIFY_CC) ? rule.NOTIFY_CC : [],
-      muted:         rule.MUTED,
+  const agg = overview.projectAggregate
+  const pct = share(agg.verbrauch, agg.budget)
+  const muted = overview.project.BUDGET_WARNINGS_MUTED
+  const planLeaves = overview.structures.filter(s => s.leaf && s.plan === 'all')
+  const planHours = planLeaves.reduce((a, s) => a + Number(s.planHours ?? 0), 0)
+  const bookedHours = planLeaves.reduce((a, s) => a + Number(s.bookedHours ?? 0), 0)
+
+  async function removeRule(r: BudgetWarningRule) {
+    const ok = await confirm({
+      title: 'Warnregel löschen',
+      message: `Die Warnregel bei ${Number(r.THRESHOLD_PCT).toFixed(0)} % wird gelöscht. Bei dieser Schwelle wird dann nicht mehr gewarnt.`,
+      confirmLabel: 'Löschen',
     })
-    setEditingRule(rule)
-  }
-
-  // Map structure_id → label (kurz)
-  const structureLabel = useMemo(() => {
-    const m = new Map<number, string>()
-    if (overview?.structures) for (const s of overview.structures) m.set(s.ID, `#${s.ID}`)
-    return m
-  }, [overview])
-
-  // Verbrauch & Budget pro Regel ermitteln (für die Anzeige in der Tabelle)
-  function calcForRule(rule: BudgetWarningRule): { budget: number; verbrauch: number; pctActual: number; limitEur: number } {
-    if (!overview) return { budget: 0, verbrauch: 0, pctActual: 0, limitEur: 0 }
-    let budget = 0, verbrauch = 0
-    if (rule.STRUCTURE_ID) {
-      const s = overview.structures.find(x => x.ID === rule.STRUCTURE_ID)
-      if (s) { budget = s.budget; verbrauch = s.verbrauch }
-    } else {
-      budget = overview.projectAggregate.budget
-      verbrauch = overview.projectAggregate.verbrauch
-    }
-    const pctActual = budget > 0 ? (verbrauch / budget) * 100 : 0
-    const limitEur = budget * rule.THRESHOLD_PCT / 100
-    return { budget, verbrauch, pctActual, limitEur }
+    if (ok) deleteMut.mutate(r.ID)
   }
 
   return (
-    <div className="ls-wrap">
-      {!pid && <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>}
-      {pid && isLoading && <p className="ls-empty">Lade …</p>}
-
-      {pid && !isLoading && overview && (
-        <>
-          {/* KPI Kacheln */}
-          <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'var(--dim)', border: '1px solid var(--border)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: 'var(--text-2)', fontWeight: 600, marginBottom: 4 }}>HONORAR + ZUSCHLÄGE</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>{money(overview.projectAggregate.budget)}</div>
-              <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>ohne Nebenkosten</div>
-            </div>
-            <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: 'var(--warning-strong)', fontWeight: 600, marginBottom: 4 }}>VERBRAUCHT</div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--warning-strong)' }}>{money(overview.projectAggregate.verbrauch)}</div>
-              <div style={{ fontSize: 12, color: 'var(--warning-strong)', marginTop: 2 }}>
-                {overview.projectAggregate.budget > 0
-                  ? `${(overview.projectAggregate.verbrauch / overview.projectAggregate.budget * 100).toFixed(1).replace('.', ',')} %`
-                  : '—'}
-              </div>
-            </div>
-            <div style={{ flex: 1, minWidth: 200, padding: '14px 16px', background: overview.project.BUDGET_WARNINGS_MUTED ? 'rgba(156, 163, 175, 0.10)' : 'rgba(34, 197, 94, 0.08)', border: overview.project.BUDGET_WARNINGS_MUTED ? '1px solid rgba(156, 163, 175, 0.30)' : '1px solid rgba(34, 197, 94, 0.25)', borderRadius: 8 }}>
-              <div style={{ fontSize: 12, color: overview.project.BUDGET_WARNINGS_MUTED ? 'var(--text-2)' : 'var(--success-strong)', fontWeight: 600, marginBottom: 4 }}>STATUS</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: overview.project.BUDGET_WARNINGS_MUTED ? 'var(--text-2)' : 'var(--success-strong)', marginBottom: 6 }}>
-                {overview.project.BUDGET_WARNINGS_MUTED ? 'Stumm geschaltet' : 'Aktiv'}
-              </div>
-              <button
-                className="btn-secondary"
-                style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                onClick={() => muteMut.mutate(!overview.project.BUDGET_WARNINGS_MUTED)}
-                disabled={muteMut.isPending}
-              >
-                {overview.project.BUDGET_WARNINGS_MUTED
-                  ? <><Bell size={13} strokeWidth={2} /> Stummschaltung aufheben</>
-                  : <><BellOff size={13} strokeWidth={2} /> Projekt stumm schalten</>}
-              </button>
-            </div>
-          </div>
-
-          {overview.structures.some(s => s.plan && s.plan !== 'none') && (
-            <p className="form-field-hint" style={{ margin: '-6px 0 14px' }}>
-              Elemente nach Aufwand mit Plan aus dem Angebot zählen mit dem Plan als Budget und dem gebuchten
-              Honorar als Verbrauch. <HelpHint id="projects.structure.plan" size={13} />
-            </p>
-          )}
-
-          {/* Regeln-Tabelle */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 style={{ margin: 0, fontSize: 14 }}>Schwellwert-Regeln</h3>
-            <button className="btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              onClick={() => { resetDraft(); setCreating(true) }}>
-              <Plus size={14} strokeWidth={2} /> Neue Regel
-            </button>
-          </div>
-
-          {overview.rules.length === 0 && (
-            <p className="ls-empty">Noch keine Regeln definiert.</p>
-          )}
-
-          {overview.rules.length > 0 && (
-            <div className="table-scroll">
-              <table className="ls-table">
-                <thead>
-                  <tr>
-                    <th scope="col" className="ls-th">Scope</th>
-                    <th scope="col" className="ls-th ls-col-num">Schwelle %</th>
-                    <th scope="col" className="ls-th ls-col-num">Schwelle €</th>
-                    <th scope="col" className="ls-th ls-col-num">Verbraucht</th>
-                    <th scope="col" className="ls-th ls-col-num">Verbraucht %</th>
-                    <th scope="col" className="ls-th">Empfänger</th>
-                    <th scope="col" className="ls-th">Status</th>
-                    <th scope="col" className="ls-th" style={{ width: 100 }}>Aktion</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {overview.rules.map(r => {
-                    const calc = calcForRule(r)
-                    const reached = calc.verbrauch >= calc.limitEur && calc.limitEur > 0
-                    return (
-                      <tr key={r.ID} className="ls-row">
-                        <td className="ls-td">
-                          {r.STRUCTURE_ID
-                            ? <span>Struktur {structureLabel.get(r.STRUCTURE_ID) ?? r.STRUCTURE_ID}</span>
-                            : <strong>Projekt-Ebene</strong>}
-                          {(() => {
-                            const plan = r.STRUCTURE_ID ? overview.structures.find(x => x.ID === r.STRUCTURE_ID)?.plan : undefined
-                            return plan === 'all' ? <span className="sx-plan-note">nach Plan</span>
-                              : plan === 'some' ? <span className="sx-plan-note">teils nach Plan</span> : null
-                          })()}
-                        </td>
-                        <td className="ls-td ls-col-num">{Number(r.THRESHOLD_PCT).toFixed(0)} %</td>
-                        <td className="ls-td ls-col-num">{money(calc.limitEur)}</td>
-                        <td className="ls-td ls-col-num">{money(calc.verbrauch)}</td>
-                        <td className="ls-td ls-col-num" style={{ color: reached ? 'var(--danger-strong)' : undefined, fontWeight: reached ? 600 : undefined }}>
-                          {calc.pctActual.toFixed(1).replace('.', ',')} %
-                        </td>
-                        <td className="ls-td" style={{ fontSize: 12 }}>
-                          {[
-                            r.NOTIFY_PM     && 'Projektleiter',
-                            r.NOTIFY_BOOKER && 'Verursacher',
-                            (r.NOTIFY_CC?.length ?? 0) > 0 && `${r.NOTIFY_CC!.length} Person(en)`,
-                          ].filter(Boolean).join(' · ') || 'niemand'}
-                        </td>
-                        <td className="ls-td">
-                          {r.MUTED
-                            ? <span style={{ color: 'var(--text-3)', fontSize: 12 }}>stumm</span>
-                            : reached
-                              ? <span style={{ color: 'var(--danger-strong)', fontSize: 12, fontWeight: 600 }}>überschritten</span>
-                              : <span style={{ color: 'var(--success)', fontSize: 12 }}>aktiv</span>}
-                        </td>
-                        <td className="ls-td">
-                          <button className="row-action-btn" title="Bearbeiten" onClick={() => openEdit(r)}>
-                            <Pencil size={14} strokeWidth={2} />
-                          </button>
-                          <button className="row-action-btn" title="Löschen" onClick={async () => {
-                            const ok = await confirm({
-                              title: 'Regel löschen',
-                              message: `Die Warnregel bei ${Number(r.THRESHOLD_PCT).toFixed(0)} % wird gelöscht. Bei dieser Schwelle wird dann nicht mehr gewarnt.`,
-                              confirmLabel: 'Löschen',
-                            })
-                            if (ok) deleteMut.mutate(r.ID)
-                          }}>
-                            <X size={12} strokeWidth={2.5} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Fired-History */}
-          {overview.fired.length > 0 && (
-            <div style={{ marginTop: 24 }}>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: 14 }}>Letzte Auslösungen</h3>
-              <div className="table-scroll">
-                <table className="ls-table">
-                  <thead>
-                    <tr>
-                      <th scope="col" className="ls-th">Zeit</th>
-                      <th scope="col" className="ls-th">Regel</th>
-                      <th scope="col" className="ls-th ls-col-num">Budget</th>
-                      <th scope="col" className="ls-th ls-col-num">Verbraucht</th>
-                      <th scope="col" className="ls-th">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {overview.fired.map(f => {
-                      const rule = overview.rules.find(r => r.ID === f.RULE_ID)
-                      const label = rule
-                        ? rule.STRUCTURE_ID
-                          ? `Struktur ${structureLabel.get(rule.STRUCTURE_ID) ?? rule.STRUCTURE_ID} @ ${Number(rule.THRESHOLD_PCT).toFixed(0)} %`
-                          : `Projekt @ ${Number(rule.THRESHOLD_PCT).toFixed(0)} %`
-                        : `#${f.RULE_ID}`
-                      return (
-                        <tr key={f.ID} className="ls-row">
-                          <td className="ls-td">{fmtDate(f.FIRED_AT)}</td>
-                          <td className="ls-td">{label}</td>
-                          <td className="ls-td ls-col-num">{money(f.BUDGET_EUR)}</td>
-                          <td className="ls-td ls-col-num">{money(f.ACTUAL_EUR)}</td>
-                          <td className="ls-td">{f.RESET_AT ? <span style={{ color: 'var(--text-3)', fontSize: 12 }}>zurückgesetzt {fmtDate(f.RESET_AT)}</span> : <span style={{ color: 'var(--danger-strong)', fontSize: 12, fontWeight: 600 }}>offen</span>}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Create / Edit Modal */}
-      <Modal open={creating || editingRule != null} onClose={() => { setCreating(false); setEditingRule(null) }}
-        title={creating ? 'Neue Schwellwert-Regel' : 'Regel bearbeiten'}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, minWidth: 360 }}>
-          {creating && (
-            <div className="form-group">
-              <label>Scope</label>
-              <select value={draft.structure_id} onChange={e => setDraft(d => ({ ...d, structure_id: e.target.value }))}>
-                <option value="">Projekt-Ebene</option>
-                {overview?.structures.map(s => (
-                  <option key={s.ID} value={s.ID}>Struktur #{s.ID} (Budget {fmtEur(s.budget)})</option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div className="form-group">
-            <label>Schwelle (%)</label>
-            <input type="number" min={0.1} max={500} step={0.1}
-              value={draft.threshold_pct}
-              onChange={e => setDraft(d => ({ ...d, threshold_pct: e.target.value }))} />
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
-              Wer wird benachrichtigt?
-              <HelpHint id="notifications.budget.recipients" />
-            </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-              <input type="checkbox" checked={draft.notify_pm}
-                onChange={e => setDraft(d => ({ ...d, notify_pm: e.target.checked }))} />
-              <span>Projektleiter</span>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 4 }}>
-              <input type="checkbox" checked={draft.notify_booker}
-                onChange={e => setDraft(d => ({ ...d, notify_booker: e.target.checked }))} />
-              <span>Verursachende Mitarbeiter (wer die Buchung ausgelöst hat)</span>
-            </label>
-          </div>
-          <div className="form-group">
-            {/* Hieß „CC-Empfänger (optional)". Das las sich, als ginge es nur
-                zusätzlich zu PL/Verursacher — dabei ist es die einzige Stelle,
-                an der sich eine feste Person eintragen lässt. Wer PL und
-                Verursacher abwählt, benachrichtigt genau diese Personen. */}
-            <label>Weitere Personen</label>
-            <select multiple value={draft.notify_cc.map(String)}
-              onChange={e => {
-                const sel = Array.from(e.target.selectedOptions).map(o => Number(o.value))
-                setDraft(d => ({ ...d, notify_cc: sel }))
-              }}
-              style={{ minHeight: 100 }}>
-              {employees.map(emp => (
-                <option key={emp.ID} value={emp.ID}>{emp.ABBR}</option>
-              ))}
-            </select>
-            <p className="admin-section-hint">
-              Strg-/Cmd-Klick für Mehrfachauswahl. Für „nur diese eine Person" die beiden
-              Haken oben abwählen und hier die Person auswählen.
-            </p>
-          </div>
-
-          <EmpfaengerVorschau
-            draft={draft}
-            employees={employees}
-            projectManagerId={overview?.project.PROJECT_MANAGER_ID ?? null}
-          />
-
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-            <input type="checkbox" checked={draft.muted}
-              onChange={e => setDraft(d => ({ ...d, muted: e.target.checked }))} />
-            <span>Regel stumm schalten (Überwachung läuft weiter, keine Benachrichtigung)</span>
-          </label>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
-            <button className="btn-secondary" onClick={() => { setCreating(false); setEditingRule(null) }}>
-              Abbrechen
-            </button>
-            <button className="btn-primary"
-              disabled={createMut.isPending || updateMut.isPending}
-              onClick={() => {
-                if (editingRule) updateMut.mutate({ id: editingRule.ID, b: draft })
-                else             createMut.mutate(draft)
-              }}>
-              Speichern
-            </button>
+    <div className="ws-form">
+      <div className="bud-kpis">
+        <div className="bud-kpi">
+          <div className="bud-kpi-label">Budget</div>
+          <div className="bud-kpi-value">{money(agg.budget)}</div>
+          <div className="bud-kpi-sub">Honorar und Zuschläge, ohne Nebenkosten{planLeaves.length > 0 ? ' · teils nach Plan' : ''}</div>
+        </div>
+        <div className="bud-kpi">
+          <div className="bud-kpi-label">Verbraucht</div>
+          <div className="bud-kpi-value">{money(agg.verbrauch)}</div>
+          <div className="bud-kpi-sub">
+            {pct != null && pct >= 100
+              ? <KpiValue level="critical" reason={`Verbrauch ${fmtPct(pct)} des Budgets`}>{fmtPct(pct)} des Budgets</KpiValue>
+              : pct != null ? `${fmtPct(pct)} des Budgets` : 'Kein Budget hinterlegt'}
           </div>
         </div>
-      </Modal>
+        {planLeaves.length > 0 && (
+          <div className="bud-kpi">
+            <div className="bud-kpi-label">Stunden nach Plan</div>
+            <div className="bud-kpi-value">{fmtHours(bookedHours)} <span className="bud-kpi-unit">von {fmtHours(planHours)} h</span></div>
+            <div className="bud-kpi-sub">{planLeaves.length === 1 ? '1 Element' : `${planLeaves.length} Elemente`} nach Aufwand mit Plan</div>
+          </div>
+        )}
+        <div className="bud-kpi">
+          <div className="bud-kpi-label">Warnungen</div>
+          <div className="bud-kpi-value bud-kpi-state">
+            {muted ? <BellOff size={16} strokeWidth={2} aria-hidden="true" /> : <Bell size={16} strokeWidth={2} aria-hidden="true" />}
+            {muted ? 'stumm geschaltet' : 'aktiv'}
+          </div>
+          {canEdit && (
+            <button type="button" className="btn-small bud-kpi-btn" onClick={() => muteMut.mutate(!muted)} disabled={muteMut.isPending}>
+              {muted ? 'Wieder benachrichtigen' : 'Projekt stumm schalten'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <Message type={msg?.type ?? 'info'} text={msg?.text ?? null} />
+
+      <BudgetJeElement overview={overview} />
+
+      <FormSection
+        title="Warnregeln"
+        help="projects.budget.rules"
+        layout="block"
+        actions={canEdit && overview.rules.length > 0 ? (
+          <button type="button" className="btn-small prl-btn" onClick={() => { setMsg(null); setDialog({ rule: null }) }}>
+            <Plus size={13} strokeWidth={2} aria-hidden="true" /> Neue Regel
+          </button>
+        ) : undefined}
+      >
+        {overview.rules.length === 0 ? (
+          <div className="empty-block">
+            <p className="empty-note">Für dieses Projekt gibt es noch keine Warnregel.</p>
+            <p className="empty-block-why">
+              Eine Regel meldet sich, sobald der Verbrauch einen Anteil des Budgets erreicht — zum Beispiel bei
+              75 %, solange noch Zeit zum Gegensteuern ist.
+            </p>
+            {canEdit && (
+              <button type="button" className="btn-small prl-btn" onClick={() => { setMsg(null); setDialog({ rule: null }) }}>
+                <Plus size={13} strokeWidth={2} aria-hidden="true" /> Erste Regel anlegen
+              </button>
+            )}
+          </div>
+        ) : (
+          <RegelTabelle overview={overview} canEdit={canEdit} onEdit={r => { setMsg(null); setDialog({ rule: r }) }} onDelete={r => void removeRule(r)} />
+        )}
+      </FormSection>
+
+      {overview.fired.length > 0 && <Meldungen overview={overview} />}
+
+      {dialog && (
+        <RegelDialog
+          pid={pid}
+          overview={overview}
+          rule={dialog.rule}
+          onClose={() => setDialog(null)}
+          onSaved={text => { setDialog(null); invalidate(); setMsg({ text, type: 'success' }) }}
+        />
+      )}
       {confirmDialog}
     </div>
+  )
+}
+
+// ── Budget je Element ──────────────────────────────────────────────────────────
+
+function BudgetJeElement({ overview }: { overview: BudgetWarningOverview }) {
+  const rows = useMemo(() => inTreeOrder(overview.structures), [overview.structures])
+  const hasPlan = overview.structures.some(s => s.plan && s.plan !== 'none')
+
+  return (
+    <FormSection title="Budget je Element" help="projects.budget.elements" layout="block"
+      hint={hasPlan ? 'Elemente nach Aufwand mit Plan rechnen mit dem Plan als Budget und dem gebuchten Honorar als Verbrauch.' : undefined}>
+      {rows.length === 0 ? (
+        <div className="empty-block">
+          <p className="empty-note">Dieses Projekt hat noch keine Struktur.</p>
+          <p className="empty-block-why">Budget und Verbrauch entstehen je Element der Struktur — aus Honorar und Zuschlägen und den gebuchten Stunden.</p>
+        </div>
+      ) : (
+        <div className="table-scroll">
+          <table className="ls-table bud-table">
+            <thead>
+              <tr>
+                <th scope="col" className="ls-th">Element</th>
+                <th scope="col" className="ls-th ls-col-num">Budget</th>
+                <th scope="col" className="ls-th ls-col-num">Verbraucht</th>
+                <th scope="col" className="ls-th bud-col-share">Anteil</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ node: s, depth }) => {
+                const p = share(s.verbrauch, s.budget)
+                const over = p != null && p >= 100
+                const isPlan = s.leaf && s.plan === 'all'
+                return (
+                  <tr key={s.ID} className={`ls-row${s.leaf ? '' : ' bud-row-parent'}`}>
+                    <td className="ls-td">
+                      <div className="bud-el" style={{ paddingLeft: depth * 16 }}>
+                        <span className="bud-el-abbr">{s.ABBR || `#${s.ID}`}</span>
+                        {s.NAME && <span className="bud-el-name">{s.NAME}</span>}
+                      </div>
+                      {isPlan && (
+                        <div className="prl-sub" style={{ paddingLeft: depth * 16 }}>
+                          nach Plan · {fmtHours(s.bookedHours ?? 0)} von {s.planHours != null ? `${fmtHours(s.planHours)} h` : NO_VALUE} gebucht
+                        </div>
+                      )}
+                      {!s.leaf && s.plan === 'some' && <div className="prl-sub" style={{ paddingLeft: depth * 16 }}>teils nach Plan</div>}
+                    </td>
+                    <td className="ls-td ls-col-num">{money(s.budget)}</td>
+                    <td className="ls-td ls-col-num">{money(s.verbrauch)}</td>
+                    <td className="ls-td bud-col-share">
+                      <div className="bud-share">
+                        <span className="bud-bar" aria-hidden="true">
+                          <span className={`bud-bar-fill${over ? ' bud-bar-fill--over' : ''}`} style={{ width: `${Math.min(100, p ?? 0)}%` }} />
+                        </span>
+                        {over
+                          ? <KpiValue level="critical" reason={`Verbrauch ${fmtPct(p)} des Budgets`}>{fmtPct(p)}</KpiValue>
+                          : <span className="bud-share-pct">{fmtPct(p)}</span>}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </FormSection>
+  )
+}
+
+// ── Warnregeln ─────────────────────────────────────────────────────────────────
+
+function RegelTabelle({ overview, canEdit, onEdit, onDelete }: {
+  overview: BudgetWarningOverview
+  canEdit:  boolean
+  onEdit:   (r: BudgetWarningRule) => void
+  onDelete: (r: BudgetWarningRule) => void
+}) {
+  const byId = new Map(overview.structures.map(s => [s.ID, s]))
+  return (
+    <div className="table-scroll">
+      <table className="ls-table bud-table">
+        <thead>
+          <tr>
+            <th scope="col" className="ls-th">Gilt für</th>
+            <th scope="col" className="ls-th ls-col-num">Schwelle</th>
+            <th scope="col" className="ls-th ls-col-num">Stand</th>
+            <th scope="col" className="ls-th">Empfänger</th>
+            <th scope="col" className="ls-th">Status</th>
+            {canEdit && <th scope="col" className="ls-th prl-col-actions"><span className="sr-only">Aktionen</span></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {overview.rules.map(r => {
+            const s = r.STRUCTURE_ID ? byId.get(r.STRUCTURE_ID) : undefined
+            const budget = r.STRUCTURE_ID ? s?.budget ?? 0 : overview.projectAggregate.budget
+            const verbrauch = r.STRUCTURE_ID ? s?.verbrauch ?? 0 : overview.projectAggregate.verbrauch
+            const limitEur = budget * Number(r.THRESHOLD_PCT) / 100
+            const reached = limitEur > 0 && verbrauch >= limitEur
+            const label = r.STRUCTURE_ID ? elementLabel(s, r.STRUCTURE_ID) : 'ganzes Projekt'
+            const pctTxt = `${Number(r.THRESHOLD_PCT).toFixed(0)} %`
+            return (
+              <tr key={r.ID} className="ls-row">
+                <td className="ls-td">
+                  <div className={r.STRUCTURE_ID ? 'prl-name' : 'prl-name bud-scope-project'}>{label}</div>
+                  {s?.plan === 'all' && <div className="prl-sub">nach Plan</div>}
+                  {s?.plan === 'some' && <div className="prl-sub">teils nach Plan</div>}
+                </td>
+                <td className="ls-td ls-col-num">
+                  <div>{pctTxt}</div>
+                  <div className="prl-sub">{fmtEur(limitEur)}</div>
+                </td>
+                <td className="ls-td ls-col-num">
+                  <div>{fmtPct(share(verbrauch, budget))}</div>
+                  <div className="prl-sub">{fmtEur(verbrauch)}</div>
+                </td>
+                <td className="ls-td bud-recipients">
+                  {[
+                    r.NOTIFY_PM     && 'Projektleiter',
+                    r.NOTIFY_BOOKER && 'Verursacher',
+                    (r.NOTIFY_CC?.length ?? 0) > 0 && `${r.NOTIFY_CC!.length} Person${r.NOTIFY_CC!.length === 1 ? '' : 'en'}`,
+                  ].filter(Boolean).join(' · ') || 'niemand'}
+                </td>
+                <td className="ls-td">
+                  {r.MUTED
+                    ? <span className="bud-state-muted">stumm</span>
+                    : reached
+                      ? <KpiValue level="critical" reason={`Verbrauch hat ${pctTxt} erreicht`}>erreicht</KpiValue>
+                      : <span className="bud-state">aktiv</span>}
+                </td>
+                {canEdit && (
+                  <td className="ls-td prl-col-actions">
+                    <div className="doc-actions">
+                      <button type="button" className="row-action-btn" title="Bearbeiten" aria-label={`Regel ${pctTxt} für ${label} bearbeiten`} onClick={() => onEdit(r)}>
+                        <Pencil size={14} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                      <button type="button" className="row-action-btn row-action-btn--danger" title="Löschen" aria-label={`Regel ${pctTxt} für ${label} löschen`} onClick={() => onDelete(r)}>
+                        <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function Meldungen({ overview }: { overview: BudgetWarningOverview }) {
+  const byId = new Map(overview.structures.map(s => [s.ID, s]))
+  return (
+    <FormSection title="Letzte Meldungen" layout="block">
+      <div className="table-scroll">
+        <table className="ls-table bud-table">
+          <thead>
+            <tr>
+              <th scope="col" className="ls-th">Zeit</th>
+              <th scope="col" className="ls-th">Regel</th>
+              <th scope="col" className="ls-th ls-col-num">Budget</th>
+              <th scope="col" className="ls-th ls-col-num">Verbraucht</th>
+              <th scope="col" className="ls-th">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {overview.fired.map(f => {
+              const rule = overview.rules.find(r => r.ID === f.RULE_ID)
+              const label = rule
+                ? `${rule.STRUCTURE_ID ? elementLabel(byId.get(rule.STRUCTURE_ID), rule.STRUCTURE_ID) : 'ganzes Projekt'} · ${Number(rule.THRESHOLD_PCT).toFixed(0)} %`
+                : `Regel ${f.RULE_ID}`
+              return (
+                <tr key={f.ID} className="ls-row">
+                  <td className="ls-td">{fmtDate(f.FIRED_AT)}</td>
+                  <td className="ls-td">{label}</td>
+                  <td className="ls-td ls-col-num">{money(f.BUDGET_EUR)}</td>
+                  <td className="ls-td ls-col-num">{money(f.ACTUAL_EUR)}</td>
+                  <td className="ls-td">
+                    {f.RESET_AT
+                      ? <span className="bud-state-muted">zurückgesetzt {fmtDate(f.RESET_AT)}</span>
+                      : <KpiValue level="critical" reason="Verbrauch liegt noch über der Schwelle">offen</KpiValue>}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </FormSection>
+  )
+}
+
+function RegelDialog({ pid, overview, rule, onClose, onSaved }: {
+  pid:      number
+  overview: BudgetWarningOverview
+  rule:     BudgetWarningRule | null
+  onClose:  () => void
+  onSaved:  (text: string) => void
+}) {
+  const isNew = rule == null
+  const [draft, setDraft] = useState<RuleDraft>(() => rule ? {
+    threshold_pct: String(rule.THRESHOLD_PCT),
+    structure_id:  rule.STRUCTURE_ID != null ? String(rule.STRUCTURE_ID) : '',
+    notify_pm:     rule.NOTIFY_PM,
+    notify_booker: rule.NOTIFY_BOOKER,
+    notify_cc:     Array.isArray(rule.NOTIFY_CC) ? rule.NOTIFY_CC : [],
+    muted:         rule.MUTED,
+  } : emptyDraft())
+  const [msg, setMsg] = useState<string | null>(null)
+  const { data: empData } = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
+  const employees = empData?.data ?? []
+  const elements = useMemo(() => inTreeOrder(overview.structures), [overview.structures])
+
+  const mut = useMutation({
+    mutationFn: () => {
+      const common = {
+        threshold_pct: Number(draft.threshold_pct),
+        notify_pm:     draft.notify_pm,
+        notify_booker: draft.notify_booker,
+        notify_cc:     draft.notify_cc,
+        muted:         draft.muted,
+      }
+      return isNew
+        ? createBudgetRule(pid, { ...common, structure_id: draft.structure_id ? Number(draft.structure_id) : null })
+        : updateBudgetRule(rule.ID, common)
+    },
+    onSuccess: () => onSaved(isNew ? 'Warnregel angelegt.' : 'Warnregel gespeichert.'),
+    onError:   (e: Error) => setMsg(e.message),
+  })
+
+  function submit() {
+    const n = Number(draft.threshold_pct)
+    if (!Number.isFinite(n) || n <= 0 || n > 500) { setMsg('Die Schwelle muss über 0 und höchstens 500 % sein.'); return }
+    setMsg(null); mut.mutate()
+  }
+
+  const toggleCc = (id: number, on: boolean) =>
+    setDraft(d => ({ ...d, notify_cc: on ? [...d.notify_cc, id] : d.notify_cc.filter(x => x !== id) }))
+
+  const scopeLabel = rule?.STRUCTURE_ID
+    ? elementLabel(overview.structures.find(s => s.ID === rule.STRUCTURE_ID), rule.STRUCTURE_ID)
+    : 'ganzes Projekt'
+
+  return (
+    <Modal open onClose={onClose} title={isNew ? 'Neue Warnregel' : 'Warnregel bearbeiten'}>
+      <div className="master-form bud-dialog">
+        {isNew ? (
+          <div className="form-group">
+            <label htmlFor="bud-scope">Gilt für</label>
+            <select id="bud-scope" value={draft.structure_id} onChange={e => setDraft(d => ({ ...d, structure_id: e.target.value }))}>
+              <option value="">Ganzes Projekt (Budget {fmtEur(overview.projectAggregate.budget)})</option>
+              {elements.map(({ node: s, depth }) => (
+                <option key={s.ID} value={s.ID}>
+                  {`${'  '.repeat(depth)}${elementLabel(s, s.ID)} (Budget ${fmtEur(s.budget)})`}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <p className="form-field-hint bud-dialog-scope">Gilt für: <strong>{scopeLabel}</strong></p>
+        )}
+        <div className="form-group">
+          <label htmlFor="bud-threshold">Schwelle (% des Budgets)</label>
+          <input id="bud-threshold" type="number" inputMode="decimal" min={0.1} max={500} step={0.1} data-autofocus
+            value={draft.threshold_pct} onChange={e => setDraft(d => ({ ...d, threshold_pct: e.target.value }))} />
+        </div>
+
+        <fieldset className="ws-radio-group">
+          <legend className="ws-legend-help">Wer wird benachrichtigt? <HelpHint id="notifications.budget.recipients" size={13} /></legend>
+          <label className="ws-check">
+            <input type="checkbox" checked={draft.notify_pm} onChange={e => setDraft(d => ({ ...d, notify_pm: e.target.checked }))} />
+            <span>Projektleiter</span>
+          </label>
+          <label className="ws-check">
+            <input type="checkbox" checked={draft.notify_booker} onChange={e => setDraft(d => ({ ...d, notify_booker: e.target.checked }))} />
+            <span>Wer die auslösende Buchung erfasst hat</span>
+          </label>
+        </fieldset>
+
+        {/* Hieß „CC-Empfänger (optional)" und war eine Mehrfachauswahl mit
+            Strg-Klick. Es ist die einzige Stelle, an der sich eine feste Person
+            eintragen lässt — wer PL und Verursacher abwählt, benachrichtigt
+            genau diese Personen. */}
+        <fieldset className="ws-radio-group">
+          <legend>Weitere Personen</legend>
+          <div className="bud-people">
+            {employees.map(emp => (
+              <label key={emp.ID} className="ws-check">
+                <input type="checkbox" checked={draft.notify_cc.includes(emp.ID)} onChange={e => toggleCc(emp.ID, e.target.checked)} />
+                <span>{`${emp.ABBR}${emp.FIRST_NAME || emp.LAST_NAME ? ` · ${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trimEnd() : ''}`}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <EmpfaengerVorschau draft={draft} employees={employees} projectManagerId={overview.project.PROJECT_MANAGER_ID ?? null} />
+
+        <label className="ws-check">
+          <input type="checkbox" checked={draft.muted} onChange={e => setDraft(d => ({ ...d, muted: e.target.checked }))} />
+          <span>Regel stumm schalten (Überwachung läuft weiter, keine Benachrichtigung)</span>
+        </label>
+
+        <Message text={msg} type="error" />
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={mut.isPending} onClick={submit}>
+            {mut.isPending ? 'Speichert …' : isNew ? 'Anlegen' : 'Speichern'}
+          </button>
+        </DialogFooter>
+      </div>
+    </Modal>
   )
 }

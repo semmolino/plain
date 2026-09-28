@@ -1815,113 +1815,35 @@ async function getHonorarPdf(req, res, supabase) {
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-/**
- * Verteilt einen Betrag proportional auf Empfaenger und legt den Rundungsrest
- * auf den letzten Empfaenger. Ohne diesen Ausgleich fehlten Cents: 100,00 EUR
- * auf 3 gleich grosse Leistungsphasen ergaben 3 x 33,33 = 99,99 EUR, waehrend
- * die Zuschlagszeile im PDF 100,00 EUR auswies (Audit B6).
- *
- * Gleiches Vorgehen wie distributeAcrossRemaining in services/partialPayments.js.
- *
- * @param {number} amount   zu verteilender Betrag (bereits auf 2 Stellen)
- * @param {Array<{key: any, weight: number}>} parts  Empfaenger mit Gewicht
- * @returns {Map<any, number>} je Empfaenger ein auf 2 Stellen gerundeter Anteil
- */
-function distributeWithRemainder(amount, parts) {
-  const out = new Map();
-  const eligible = parts.filter(p => p.weight > 0);
-  if (!eligible.length) return out;
-
-  const totalWeight = eligible.reduce((s, p) => s + p.weight, 0);
-  if (totalWeight <= 0) return out;
-
-  const target = r2(amount);
-  let running = 0;
-  eligible.forEach((p, idx) => {
-    if (idx === eligible.length - 1) {
-      out.set(p.key, r2(target - running));
-    } else {
-      const share = r2((target * p.weight) / totalWeight);
-      out.set(p.key, share);
-      running = r2(running + share);
-    }
-  });
-  return out;
-}
-
-/**
- * Splits each surcharge's stored AMOUNT proportionally between the LPH phases it
- * targets (via LPH_FILTER) and the BL items it targets (via BL_FILTER).
- * Returns two plain objects: lphAlloc {phaseId → share} and blAlloc {blId → share}.
- *
- * B6: Die Anteile werden je Zuschlag gerundet und mit Restausgleich verteilt.
- * Vorher blieben sie ungerundet und wurden erst je Strukturzeile gerundet --
- * die Summe der Zeilen wich dann um Cents vom ausgewiesenen Zuschlag ab.
- */
-function computeSurchargeAllocations(phases, surchargeRows, blItems) {
-  const allPhaseIds = (phases || []).map(p => p.ID);
-  const lphAlloc = {};
-  const blAlloc  = {};
-
-  for (const s of (surchargeRows || [])) {
-    const amount = Number(s.AMOUNT) || 0;
-    if (amount === 0) continue;
-
-    let selectedLphIds;
-    if (s.LPH_FILTER) {
-      try { selectedLphIds = JSON.parse(s.LPH_FILTER); } catch { selectedLphIds = allPhaseIds; }
-    } else {
-      selectedLphIds = allPhaseIds;
-    }
-    const selectedPhases = (phases || []).filter(p => selectedLphIds.includes(p.ID));
-    const lphBase = selectedPhases.reduce((sum, p) => sum + (Number(p.PHASE_REVENUE) || 0), 0);
-
-    let selectedBlItems = [], blBase = 0;
-    if (s.BL_FILTER && (blItems || []).length > 0) {
-      try {
-        const selectedBlIds = JSON.parse(s.BL_FILTER);
-        selectedBlItems = (blItems || []).filter(b => b.ID && selectedBlIds.includes(b.ID));
-        blBase = selectedBlItems.reduce((sum, b) => sum + (Number(b.AMOUNT) || 0), 0);
-      } catch { /* ignore */ }
-    }
-
-    const totalBase = lphBase + blBase;
-    if (totalBase === 0) continue;
-
-    // Erst die beiden Haelften bilden, und zwar so, dass sie zusammen genau
-    // den Zuschlag ergeben -- die zweite ist der Rest der ersten.
-    const lphAmt = lphBase > 0 ? r2(r2(amount) * (lphBase / totalBase)) : 0;
-    const blAmt  = blBase  > 0 ? r2(r2(amount) - lphAmt)                : 0;
-
-    if (lphBase > 0) {
-      const shares = distributeWithRemainder(lphAmt, selectedPhases.map(p => ({
-        key: p.ID, weight: Number(p.PHASE_REVENUE) || 0,
-      })));
-      for (const [phaseId, share] of shares) {
-        lphAlloc[phaseId] = r2((lphAlloc[phaseId] || 0) + share);
-      }
-    }
-
-    if (blBase > 0) {
-      const shares = distributeWithRemainder(blAmt, selectedBlItems.map(b => ({
-        key: b.ID, weight: Number(b.AMOUNT) || 0,
-      })));
-      for (const [blId, share] of shares) {
-        blAlloc[blId] = r2((blAlloc[blId] || 0) + share);
-      }
-    }
-  }
-
-  return { lphAlloc, blAlloc };
-}
+// Zuschlagsverteilung liegt seit Runde 6 in services/feeAllocation.js — der
+// Abgleich mit dem Angebot braucht dieselbe Rechnung. Hier nur re-exportiert
+// (Tests und Aufrufer greifen weiterhin ueber den Controller zu).
+const { computeSurchargeAllocations, distributeWithRemainder } = require("../services/feeAllocation");
 
 async function syncFeeCalcToStructure(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "id is required" });
   try {
     const { data: master } = await supabase.from("FEE_CALCULATION_MASTER")
-      .select("ID, PROJECT_ID").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
+      .select("ID, PROJECT_ID, OFFER_ID").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
     if (!master) return res.status(404).json({ error: "Honorarberechnung nicht gefunden" });
+
+    // Noch im Angebot (Runde 6): „Angebot aktualisieren" — dieselbe Rechnung
+    // auf den Angebotselementen (services/angebote.js).
+    if (!master.PROJECT_ID && master.OFFER_ID) {
+      const { syncFeeCalcToOfferStructure } = require("../services/angebote");
+      const out = await syncFeeCalcToOfferStructure(supabase, { calcMasterId: id, tenantId: req.tenantId });
+      return res.json({
+        synced: out.synced, projectId: null, offerId: out.offerId,
+        message: out.synced > 0
+          ? `${out.synced} Angebotselement${out.synced !== 1 ? "e wurden" : " wurde"} aktualisiert.`
+          : "Keine Elemente aktualisiert.",
+      });
+    }
+
+    const { leafValues } = require("../services/feeAllocation");
+    const { computeSurchargesNode } = require("../services/projekte");
+    const ROW_COLS = "ID, EXTRAS_PERCENT, FATHER_ID, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL";
 
     const { data: phases } = await supabase.from("FEE_CALCULATION_PHASE")
       .select("ID, PHASE_REVENUE, FEE_PERCENT").eq("FEE_MASTER_ID", id);
@@ -1932,14 +1854,14 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       .order("SORT_ORDER", { ascending: true });
 
     const { data: structRows } = await supabase.from("PROJECT_STRUCTURE")
-      .select("ID, EXTRAS_PERCENT, FATHER_ID, FEE_CALC_PHASE_ID")
+      .select(`${ROW_COLS}, FEE_CALC_PHASE_ID`)
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
 
     // Soft-fail BL queries if migration 0043 not yet run
     let blStructRows = [], blItems = [];
     try {
       const [blStructRes, blItemsRes] = await Promise.all([
-        supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FATHER_ID, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
+        supabase.from("PROJECT_STRUCTURE").select(`${ROW_COLS}, FEE_CALC_BL_ID`).eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
         supabase.from("FEE_CALCULATION_BL").select("ID, ABBR, NAME, AMOUNT").eq("FEE_CALC_MASTER_ID", id).order("SORT_ORDER", { ascending: true }),
       ]);
       blStructRows = blStructRes.data || [];
@@ -1965,11 +1887,10 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       if (!phase) continue;
       const baseRevenue = Number(phase.PHASE_REVENUE ?? 0) || 0;
       const surchargeShare = lphAlloc[phase.ID] || 0;
-      const revenue = Math.round((baseRevenue + surchargeShare) * 100) / 100;
-      const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
-      const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
+      // Eigene Zuschlaege und NK des Elements obendrauf, Honorar-Feld mit
+      // (leafValues) — vorher blieben beide auf dem alten Stand
       const { error } = await supabase.from("PROJECT_STRUCTURE")
-        .update({ REVENUE: revenue, EXTRAS: extras })
+        .update(leafValues(baseRevenue + surchargeShare, row, computeSurchargesNode))
         .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
       if (!error) synced++;
     }
@@ -1979,11 +1900,8 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       const bl = blMap.get(row.FEE_CALC_BL_ID);
       if (!bl) continue;
       const blSurchargeShare = blAlloc[bl.ID] || 0;
-      const revenue = Math.round(((Number(bl.AMOUNT) || 0) + blSurchargeShare) * 100) / 100;
-      const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
-      const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
       const { error } = await supabase.from("PROJECT_STRUCTURE")
-        .update({ REVENUE: revenue, EXTRAS: extras })
+        .update(leafValues((Number(bl.AMOUNT) || 0) + blSurchargeShare, row, computeSurchargesNode))
         .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
       if (!error) synced++;
     }

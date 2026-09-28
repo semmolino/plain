@@ -65,6 +65,27 @@ test.describe('Struktur am Desktop', () => {
     expect(await right('.sx-root-row .sx-surcharge-static')).toBe(await right('tr[data-struct-id="108"] .sx-surcharge-btn'))
   })
 
+  // Runde 6: Summen warten nicht mehr auf „Speichern"
+  test('Summen rechnen offene Eingaben mit und sind als vorläufig markiert; Verwerfen nimmt sie zurück', async ({ page }) => {
+    await open(page)
+    const lp2 = page.locator('tr[data-struct-id="103"]')
+    const fee = lp2.getByRole('textbox', { name: 'Honorar' })
+    await fee.click()
+    await fee.fill('300000')
+    await fee.press('Tab')
+    const total = lp2.locator('td.num.sx-strong').last()
+    await expect(total).toHaveText('315.000,00 € (noch nicht gespeichert)')
+    await expect(total.locator('.sx-pending')).toHaveAttribute('title', /Noch nicht gespeichert – gespeichert: 294\.920,34/)
+    // Vater und Gesamtzeile ziehen mit, ein Nachbar nicht
+    await expect(page.locator('tr[data-struct-id="101"] td.num.sx-strong').last().locator('.sx-pending')).toBeVisible()
+    await expect(page.locator('tr.sx-root-row td.num.sx-strong').last().locator('.sx-pending')).toBeVisible()
+    await expect(page.locator('tr[data-struct-id="104"] .sx-pending')).toHaveCount(0)
+    await expect(page.locator('.action-bar')).toContainText('1 Element geändert · Summen vorläufig')
+    await page.locator('.action-bar').getByRole('button', { name: 'Verwerfen' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /Verwerfen/ }).click()
+    await expect(page.locator('.sx-pending')).toHaveCount(0)
+  })
+
   test('Kürzel und Bezeichnung in einer Spalte, Zuklappen blendet Unterelemente aus', async ({ page }) => {
     await open(page)
     await expect(page.getByRole('columnheader', { name: /^Element/ })).toBeVisible()

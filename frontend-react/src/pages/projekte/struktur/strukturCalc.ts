@@ -159,6 +159,82 @@ export function treeRootTotals<T extends CalcNode>(nodes: T[], idOf: (n: T) => n
   return { rootRevenue, rootSurcharges, rootStructureRevenueSum, rootRevenueFinal, rootExtras, rootGesamt }
 }
 
+// ── Offene Eingaben in den Summen (Runde 6) ────────────────────────────────
+
+/** Was eine offene Eingabe an einem Element fuer die Summen aendert. */
+export interface PendingCalc {
+  /** Blatt: Honorar vor Zuschlaegen, wie es nach dem Speichern waere. */
+  basis?:     number
+  nkPct?:     number
+  surcharge?: SurchargeEdit
+}
+
+/**
+ * Die Tabelle, wie sie nach „Speichern" stuende — gerechnet wie der Server
+ * (Projekt: patchStructure + recalcParent, Angebot: updateOfferStructureNode
+ * + recalcOfferParent). Blatt: Honorar = Basis + Zuschlaege, NK = Honorar ×
+ * NK %. Vater: Basis = Summe der Kinder-Honorare, eigene Zuschlaege darauf,
+ * NK = Summe der Kinder-NK + eigene Zuschlaege × NK %.
+ *
+ * Neu gerechnet werden nur Elemente mit Eingaben und ihre Vorfahren; alles
+ * andere behaelt die gespeicherten Werte, damit keine Rundungsdifferenz aus
+ * dem Nachrechnen auftaucht. Vorher zeigten Nebenkosten, Gesamt und die
+ * Vatersummen bis „Speichern" den alten Stand, waehrend das Eingabefeld
+ * daneben schon den neuen trug — bei „Aufwand nach Rollen" stand in der
+ * Zelle 2.960 €, im Gesamt noch 2.280 €.
+ */
+export function withPending<T extends CalcNode>(
+  nodes: T[], idOf: (n: T) => number, leafBasis: (n: T) => number, pendingOf: (n: T) => PendingCalc | null,
+): { nodes: T[]; pending: Set<string> } {
+  const byId = new Map(nodes.map(n => [String(idOf(n)), n]))
+  const fatherOf = (n: T) => n.FATHER_ID != null && byId.has(String(n.FATHER_ID)) ? String(n.FATHER_ID) : null
+  const childrenOf = new Map<string, T[]>()
+  for (const n of nodes) {
+    const f = fatherOf(n)
+    if (f) childrenOf.set(f, [...(childrenOf.get(f) ?? []), n])
+  }
+  const own = new Map<string, PendingCalc>()
+  const pending = new Set<string>()
+  for (const n of nodes) {
+    const p = pendingOf(n)
+    if (!p) continue
+    own.set(String(idOf(n)), p)
+    for (let id: string | null = String(idOf(n)); id && !pending.has(id); id = fatherOf(byId.get(id)!)) pending.add(id)
+  }
+  if (pending.size === 0) return { nodes, pending }
+
+  const done = new Map<string, T>()
+  function calc(n: T): T {
+    const id = String(idOf(n))
+    if (!pending.has(id)) return n
+    const hit = done.get(id)
+    if (hit) return hit
+    const p     = own.get(id) ?? {}
+    const s     = p.surcharge ?? surchargeDefault(n)
+    const nkPct = p.nkPct ?? num(n.EXTRAS_PERCENT)
+    const kids  = (childrenOf.get(id) ?? []).map(calc)
+    let res: T
+    if (kids.length === 0) {
+      const basis   = p.basis ?? leafBasis(n)
+      const sur     = computeSurcharges(basis, s).total
+      const revenue = r2(basis + sur)
+      res = { ...n, REVENUE_BASIS: basis, SURCHARGES_TOTAL: sur, REVENUE: revenue, EXTRAS_PERCENT: nkPct, EXTRAS: r2(revenue * nkPct / 100) }
+    } else {
+      const basis   = r2(kids.reduce((a, k) => a + num(k.REVENUE), 0))
+      const sur     = computeSurcharges(basis, s).total
+      const revenue = r2(basis + sur)
+      const extras  = r2(kids.reduce((a, k) => a + num(k.EXTRAS), 0) + r2(sur * nkPct / 100))
+      res = { ...n, REVENUE_BASIS: basis, SURCHARGES_TOTAL: sur, REVENUE: revenue, EXTRAS_PERCENT: nkPct, EXTRAS: extras }
+    }
+    done.set(id, res)
+    return res
+  }
+  return { nodes: nodes.map(calc), pending }
+}
+
+/** Weicht ein angezeigter Wert vom gespeicherten ab? (Cent-genau) */
+export const differs = (a: number | null | undefined, b: number | null | undefined) => Math.abs(num(a) - num(b)) >= 0.005
+
 // ── Projektstruktur ──────────────────────────────────────────────────────────
 
 /**
@@ -173,6 +249,25 @@ export function projectLeafBasis(n: StructureNode): number {
 
 export function aggregateStructure(structure: StructureNode[]): Map<string, Agg> {
   return aggregateTree(structure, n => n.STRUCTURE_ID, projectLeafBasis)
+}
+
+/** Offene Eingaben eines Projekt-Elements, soweit sie in Summen eingehen. */
+export function projectPending(node: StructureNode, e: RowEdit | undefined): PendingCalc | null {
+  if (!e) return null
+  const ch = rowChanges(node, e)
+  const surcharge = ch.SURCHARGE_1_CUMUL !== undefined ? e.surcharge : undefined
+  if (ch.REVENUE === undefined && ch.EXTRAS_PERCENT === undefined && ch.BILLING_TYPE_ID === undefined && !surcharge) return null
+  const bt = Number(e.billingTypeId ?? node.BILLING_TYPE_ID)
+  return {
+    // Nach Aufwand zaehlen die Buchungen, nicht ein eingetippter Betrag (wie im Server)
+    basis: bt === 2 ? num(node.TEC_SP_TOT_SUM) : (ch.REVENUE ?? num(node.REVENUE_BASIS ?? node.REVENUE)),
+    nkPct: ch.EXTRAS_PERCENT, surcharge,
+  }
+}
+
+/** Projektstruktur mit den offenen Eingaben (siehe withPending). */
+export function pendingStructure(structure: StructureNode[], edits: Record<number, RowEdit>) {
+  return withPending(structure, n => n.STRUCTURE_ID, projectLeafBasis, n => projectPending(n, edits[n.STRUCTURE_ID]))
 }
 
 /** Summen der Projektzeile („Projekt gesamt"). */

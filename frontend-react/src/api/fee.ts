@@ -199,7 +199,7 @@ export function openHonorarPdf(id: number) {
 }
 
 export const syncFeeCalcToStructure = (id: number) =>
-  apiClient.post<{ synced: number; projectId: number | null; message: string }>(
+  apiClient.post<{ synced: number; projectId: number | null; offerId?: number | null; message: string }>(
     `/stammdaten/fee-calculation-masters/${id}/sync-to-structure`, {}
   )
 

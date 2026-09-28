@@ -187,6 +187,8 @@ function buildOfferStructure() {
       QUANTITY: s.hours ?? null, HOURLY_RATE: s.rate ?? null,
       ROLE_ID: s.role ? { PL: 2, AR: 3, TZ: 4 }[s.role] : null, ROLE_ABBR: s.role ?? null,
       ROLE_NAME: s.role ? { PL: 'Projektleitung', AR: 'Architekt/in', TZ: 'Technische/r Zeichner/in' }[s.role] : null,
+      // LP1–LP5 stammen aus der Kalkulation § 34 im Angebot (Runde 6: „Angebot aktualisieren")
+      FEE_CALC_MASTER_ID: !children.length && s.id >= 202 && s.id <= 206 ? 74 : null,
       ...sur.fields, SURCHARGES_TOTAL: sur.total,
     })
     return revenue
@@ -402,7 +404,9 @@ const OPEN_SE = [
 
 const CONTRACTS = [
   { ID: 11, ABBR: 'V-2024-001', NAME: 'Generalplanervertrag Kita Sonnenblume – Objektplanung Gebäude LP1–9', PROJECT_ID: 1,
-    CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14, SE_ENABLED: true, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', SE_LEGAL_REFERENCE: '§ 17 VOB/B' },
+    CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14, SE_ENABLED: true, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', SE_LEGAL_REFERENCE: '§ 17 VOB/B',
+    INVOICE_ADDRESS_ID: 1, INVOICE_ADDRESS_NAME: 'Stadt Musterstadt – Hochbauamt', INVOICE_CONTACT_ID: 2, VAT_ID: 1,
+    VAT_CATEGORY: 'S', VAT_EXEMPTION_REASON_CODE: null, VAT_EXEMPTION_REASON_TEXT: null },
 ]
 
 // ── Registrierung ────────────────────────────────────────────────────────────
@@ -770,6 +774,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   await get('projekte/roles/active', { data: ROLES })
   await get('angebote', { data: DEMO_OFFERS.map(o => o.ID === 1 ? { ...o, TOTAL_AMOUNT: OFFER_TOTAL } : o) })
   await mockKalkulationen(page)
+  await mockVertragPreiseBudget(page)
 }
 
 // ── Kalkulationen (HOAI-Assistent, Runde 5) ─────────────────────────────────
@@ -877,7 +882,9 @@ async function mockKalkulationen(page: Page) {
   await route('fee-calculation-masters/\\d+/surcharges/save', r => r.fulfill(json({ data: r.request().postDataJSON()?.rows ?? [] })))
   await route('fee-calculation-masters/\\d+/add-to-offer-structure', r => r.fulfill(json({ success: true, fatherId: 299, message: 'Kalkulation ins Angebot übernommen' })))
   await route('fee-calculation-masters/\\d+/add-to-project-structure', r => r.fulfill(json({ message: 'ok' })))
-  await route('fee-calculation-masters/\\d+/sync-to-structure', r => r.fulfill(json({ synced: 9, projectId: 1, message: '9 Projektelemente wurden aktualisiert.' })))
+  await route('fee-calculation-masters/\\d+/sync-to-structure', r => r.fulfill(json(id(r) === 74
+    ? { synced: 5, projectId: null, offerId: 1, message: '5 Angebotselemente wurden aktualisiert.' }
+    : { synced: 9, projectId: 1, message: '9 Projektelemente wurden aktualisiert.' })))
 }
 
 // ── Leistungsstände / Monatsrunde ───────────────────────────────────────────
@@ -963,4 +970,103 @@ function myWeek() {
     BILLED: false, CLOSED: false,
   }]
   return { from: '2026-09-21', to: '2026-09-27', bookings, drafts }
+}
+
+// ── Verträge, Preislisten, Interne Budgets (Runde 6) ─────────────────────────
+
+/** Verbrauch je Blatt in % des Budgets — LP5.3 liegt über dem Budget, BL2 genau darauf, NA1 über dem Plan. */
+const USE_PCT: Record<number, number> = {
+  102: 98, 103: 96, 104: 91, 105: 88, 106: 64, 107: 57, 108: 41, 109: 108, 110: 12, 112: 72, 113: 55,
+  114: 30, 115: 22, 116: 0, 118: 84, 119: 100, 120: 35, 121: 18,
+}
+/** Gebuchte Stunden der Blätter nach Plan. */
+const BOOKED_H: Record<number, number> = { 123: 194, 124: 82.75 }
+
+export function budgetOverview() {
+  const kids = new Map<number | null, typeof STRUCTURE>()
+  for (const n of STRUCTURE) kids.set(n.FATHER_ID as number | null, [...(kids.get(n.FATHER_ID as number | null) ?? []), n])
+  const agg = new Map<number, { budget: number; verbrauch: number; plan: 'none' | 'some' | 'all' }>()
+  const visit = (n: Record<string, unknown>): { budget: number; verbrauch: number; plan: 'none' | 'some' | 'all' } => {
+    const id = n.STRUCTURE_ID as number
+    const ch = kids.get(id) ?? []
+    let r: { budget: number; verbrauch: number; plan: 'none' | 'some' | 'all' }
+    if (!ch.length) {
+      r = n.PLAN_REVENUE != null
+        ? { budget: n.PLAN_REVENUE as number, verbrauch: n.TEC_SP_TOT_SUM as number, plan: 'all' }
+        : { budget: n.REVENUE as number, verbrauch: r2((n.REVENUE as number) * (USE_PCT[id] ?? 50) / 100), plan: 'none' }
+    } else {
+      const parts = ch.map(visit)
+      const plans = new Set(parts.map(p => p.plan))
+      r = {
+        budget: r2(parts.reduce((a, p) => a + p.budget, 0) + (n.SURCHARGES_TOTAL as number)),
+        verbrauch: r2(parts.reduce((a, p) => a + p.verbrauch, 0)),
+        plan: plans.size === 1 ? [...plans][0] : 'some',
+      }
+    }
+    agg.set(id, r)
+    return r
+  }
+  const roots = STRUCTURE.filter(n => n.FATHER_ID == null).map(visit)
+  const structures = STRUCTURE.map(n => {
+    const id = n.STRUCTURE_ID as number
+    const leaf = !(kids.get(id) ?? []).length
+    return {
+      ID: id, FATHER_ID: n.FATHER_ID, ABBR: n.ABBR, NAME: n.NAME, SORT_ORDER: n.SORT_ORDER, leaf,
+      ...agg.get(id)!,
+      ...(leaf && n.PLAN_REVENUE != null ? { planHours: n.PLAN_HOURS, bookedHours: BOOKED_H[id] ?? 0 } : {}),
+    }
+  })
+  return {
+    project: { ID: 1, ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', PROJECT_MANAGER_ID: 1, BUDGET_WARNINGS_MUTED: false },
+    projectAggregate: { budget: r2(roots.reduce((a, p) => a + p.budget, 0)), verbrauch: r2(roots.reduce((a, p) => a + p.verbrauch, 0)) },
+    structures,
+    rules: [
+      { ID: 1, TENANT_ID: 1, PROJECT_ID: 1, STRUCTURE_ID: null, THRESHOLD_PCT: 75, NOTIFY_PM: true, NOTIFY_BOOKER: false, NOTIFY_CC: [], MUTED: false, CREATED_AT: '2026-03-02T09:00:00Z', CREATED_BY: 1 },
+      { ID: 2, TENANT_ID: 1, PROJECT_ID: 1, STRUCTURE_ID: null, THRESHOLD_PCT: 90, NOTIFY_PM: true, NOTIFY_BOOKER: false, NOTIFY_CC: [2], MUTED: false, CREATED_AT: '2026-03-02T09:00:00Z', CREATED_BY: 1 },
+      { ID: 3, TENANT_ID: 1, PROJECT_ID: null, STRUCTURE_ID: 109, THRESHOLD_PCT: 100, NOTIFY_PM: true, NOTIFY_BOOKER: true, NOTIFY_CC: [], MUTED: false, CREATED_AT: '2026-05-11T09:00:00Z', CREATED_BY: 1 },
+      { ID: 4, TENANT_ID: 1, PROJECT_ID: null, STRUCTURE_ID: 123, THRESHOLD_PCT: 90, NOTIFY_PM: true, NOTIFY_BOOKER: true, NOTIFY_CC: [], MUTED: false, CREATED_AT: '2026-06-01T09:00:00Z', CREATED_BY: 1 },
+    ],
+    fired: [
+      { ID: 21, RULE_ID: 4, FIRED_AT: '2026-09-18T14:32:00Z', BUDGET_EUR: 17_100, ACTUAL_EUR: 15_480, TRIGGER_TEC_ID: null, RESET_AT: null },
+      { ID: 20, RULE_ID: 3, FIRED_AT: '2026-09-03T10:05:00Z', BUDGET_EUR: agg.get(109)!.budget, ACTUAL_EUR: r2(agg.get(109)!.budget * 1.01), TRIGGER_TEC_ID: null, RESET_AT: null },
+      { ID: 19, RULE_ID: 1, FIRED_AT: '2026-07-14T08:12:00Z', BUDGET_EUR: 402_000, ACTUAL_EUR: 301_900, TRIGGER_TEC_ID: null, RESET_AT: '2026-07-21T16:40:00Z' },
+    ],
+  }
+}
+
+async function mockVertragPreiseBudget(page: Page) {
+  const get = (re: string, body: unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), r => r.fulfill(json(body)))
+  await get('stammdaten/vat', { data: [
+    { ID: 1, VAT: 'USt 19', VAT_PERCENT: 19 },
+    { ID: 2, VAT: 'USt 7', VAT_PERCENT: 7 },
+    { ID: 3, VAT: 'USt 0', VAT_PERCENT: 0 },
+  ] })
+  await get('stammdaten/contacts/by-address', { data: [
+    { ID: 1, FIRST_NAME: 'Petra', LAST_NAME: 'Albrecht' },
+    { ID: 2, FIRST_NAME: 'Rainer', LAST_NAME: 'Vogt' },
+  ] })
+  // Rollen kommen aus ROLES (mockPilot) — dieselben wie in der Angebotsstruktur
+  const e2p = (id: number, emp: number, role: [number, string, string] | null, rate: number | null) => ({
+    ID: id, EMPLOYEE_ID: emp, ROLE_ID: role?.[0] ?? null, ROLE_ABBR: role?.[1] ?? '', ROLE_NAME: role?.[2] ?? '', HOURLY_RATE: rate,
+    EMPLOYEE_SHORT_NAME: EMPLOYEES[emp - 1].ABBR, EMPLOYEE_FIRST_NAME: EMPLOYEES[emp - 1].FIRST_NAME, EMPLOYEE_LAST_NAME: EMPLOYEES[emp - 1].LAST_NAME,
+  })
+  await get('employee2project/project/\\d+', { data: [
+    e2p(31, 1, [2, 'PL', 'Projektleitung'], 115),
+    e2p(32, 2, [2, 'PL', 'Projektleitung'], 110),
+    e2p(33, 3, [3, 'AR', 'Architekt/in'], 82.5),
+    e2p(34, 4, [3, 'AR', 'Architekt/in'], 78.5),
+    e2p(35, 6, [4, 'TZ', 'Technische/r Zeichner/in'], 68),
+    e2p(36, 9, null, null),
+  ] })
+  await get('buchungen/booking-prices', { data: [
+    { BOOKING_TYPE_ID: 1, KIND: 'UNIT', ABBR: 'PLOT-A0', NAME: 'Plot A0 farbig', UNIT_LABEL: 'Stk', SCOPE: 'global',
+      DEFAULT_SP_RATE: 18, DEFAULT_CP_RATE: 6.5, PROJECT_SP_RATE: 15, PROJECT_CP_RATE: null, EFFECTIVE_SP_RATE: 15, EFFECTIVE_CP_RATE: 6.5 },
+    { BOOKING_TYPE_ID: 2, KIND: 'UNIT', ABBR: 'KM', NAME: 'Fahrtkosten', UNIT_LABEL: 'km', SCOPE: 'global',
+      DEFAULT_SP_RATE: 0.42, DEFAULT_CP_RATE: 0.3, PROJECT_SP_RATE: null, PROJECT_CP_RATE: null, EFFECTIVE_SP_RATE: 0.42, EFFECTIVE_CP_RATE: 0.3 },
+    { BOOKING_TYPE_ID: 3, KIND: 'LUMP_COST', ABBR: 'GUT', NAME: 'Bodengutachten (Fremdleistung)', UNIT_LABEL: null, SCOPE: 'global',
+      DEFAULT_SP_RATE: null, DEFAULT_CP_RATE: 2400, PROJECT_SP_RATE: null, PROJECT_CP_RATE: 2180, EFFECTIVE_SP_RATE: null, EFFECTIVE_CP_RATE: 2180 },
+    { BOOKING_TYPE_ID: 9, KIND: 'LUMP_REVENUE', ABBR: 'MOD', NAME: 'Architekturmodell 1:200', UNIT_LABEL: null, SCOPE: 'project',
+      DEFAULT_SP_RATE: 3200, DEFAULT_CP_RATE: null, PROJECT_SP_RATE: null, PROJECT_CP_RATE: null, EFFECTIVE_SP_RATE: 3200, EFFECTIVE_CP_RATE: null },
+  ] })
+  await get('budget-warnings/projects/\\d+', { data: budgetOverview() })
 }

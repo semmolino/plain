@@ -8,7 +8,7 @@
 const { makeFakeSupabase } = require("./helpers/fakeSupabase");
 const angebote = require("../services/angebote");
 const projekte = require("../services/projekte");
-const { loadProjectTree, aggregateSubtree } = require("../services/budgetWarnings");
+const { loadProjectTree, aggregateSubtree, getProjectOverview } = require("../services/budgetWarnings");
 
 const T = 7;
 
@@ -76,6 +76,28 @@ describe("Budgetwarnung mit Plan", () => {
     expect(aggregateSubtree("32", nodes, childrenOf)).toEqual({ budget: 5000, verbrauch: 1000, plan: "none" });
     // Vater mischt beide — die Beschriftung sagt das
     expect(aggregateSubtree("30", nodes, childrenOf)).toMatchObject({ budget: 7320, verbrauch: 2900, plan: "some" });
+  });
+
+  test("Uebersicht im Reiter: Element mit Namen, Plan-Blatt mit Stunden (Runde 6)", async () => {
+    const sb = projectDb([
+      { ID: 1, STRUCTURE_ID: 31, HOURLY_RATE_TOTAL: 1140, QUANTITY_INT: 12, BOOKING_KIND: "TIME", STATUS: "CONFIRMED" },
+      { ID: 2, STRUCTURE_ID: 31, HOURLY_RATE_TOTAL: 760, QUANTITY_INT: 8, STATUS: "CONFIRMED" },
+      // Pauschale zaehlt zum Honorar, aber nicht zu den Stunden
+      { ID: 3, STRUCTURE_ID: 31, HOURLY_RATE_TOTAL: 100, QUANTITY_INT: 1, BOOKING_KIND: "LUMP_REVENUE", STATUS: "CONFIRMED" },
+      { ID: 4, STRUCTURE_ID: 31, HOURLY_RATE_TOTAL: 999, QUANTITY_INT: 9, STATUS: "DRAFT" },
+    ]);
+    sb._tables.PROJECT = [{ ID: 2, TENANT_ID: T, ABBR: "P-2", NAME: "Kita", PROJECT_MANAGER_ID: 3 }];
+    sb._tables.PROJECT_STRUCTURE[1].ABBR = "BL1";
+    sb._tables.PROJECT_STRUCTURE[1].NAME = "Bestandsaufnahme";
+    const ov = await getProjectOverview(sb, { tenantId: T, projectId: 2 });
+    const byId = Object.fromEntries(ov.structures.map(s => [s.ID, s]));
+    expect(byId[31]).toMatchObject({ ABBR: "BL1", NAME: "Bestandsaufnahme", leaf: true, plan: "all",
+      budget: 2320, verbrauch: 2000, planHours: 24, bookedHours: 20 });
+    // Pauschal-Blatt und Vater ohne Stundenangaben
+    expect(byId[32]).toMatchObject({ leaf: true, plan: "none" });
+    expect(byId[32].planHours).toBeUndefined();
+    expect(byId[30]).toMatchObject({ leaf: false, plan: "some" });
+    expect(byId[30].bookedHours).toBeUndefined();
   });
 
   test("ohne Plan rechnet ein Aufwand-Blatt wie bisher", async () => {

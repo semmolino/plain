@@ -18,6 +18,9 @@ const DEFAULT_SETTINGS = {
 
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
 
+// Buchungsarten ohne Stundencharakter — dieselbe Menge wie in services/buchungen.js
+const SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE']);
+
 function fmtEur(n) {
   return new Intl.NumberFormat('de-DE', {
     style: 'currency', currency: 'EUR',
@@ -55,15 +58,18 @@ async function getSettings(supabase, tenantId) {
 // koennte nie warnen. Gebucht = Σ HOURLY_RATE_TOTAL der bestaetigten
 // Buchungen, dieselbe Quelle wie REVENUE (services/buchungen.js).
 async function loadProjectTree(supabase, projectId) {
+  // ABBR/NAME/SORT_ORDER nur fuer die Uebersicht im Reiter „Interne Budgets"
+  // (Runde 6) — vorher stand dort „Struktur #412" statt des Elements.
+  const COLS = 'ID, FATHER_ID, ABBR, NAME, SORT_ORDER, REVENUE, COSTS, SURCHARGES_TOTAL, BILLING_TYPE_ID';
   let { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL, BILLING_TYPE_ID, PLAN_REVENUE')
+    .select(`${COLS}, PLAN_HOURS, PLAN_REVENUE`)
     .eq('PROJECT_ID', projectId);
   // Schema-Cache ohne die neue Spalte (Deploy vor dem Reload): wie bisher rechnen
-  if (error && /PLAN_REVENUE/.test(String(error.message || ''))) {
+  if (error && /PLAN_/.test(String(error.message || ''))) {
     ({ data, error } = await supabase
       .from('PROJECT_STRUCTURE')
-      .select('ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL, BILLING_TYPE_ID')
+      .select(COLS)
       .eq('PROJECT_ID', projectId));
   }
   if (error) throw new Error(error.message);
@@ -84,14 +90,18 @@ async function loadProjectTree(supabase, projectId) {
   if (planIds.length) {
     const { data: bk, error: bkErr } = await supabase
       .from('BOOKING')
-      .select('STRUCTURE_ID, HOURLY_RATE_TOTAL')
+      .select('STRUCTURE_ID, HOURLY_RATE_TOTAL, QUANTITY_INT, BOOKING_KIND')
       .in('STRUCTURE_ID', planIds)
       .neq('STATUS', 'DRAFT');
     if (bkErr) throw new Error(bkErr.message);
-    for (const id of planIds) nodes.get(String(id)).BOOKED_REVENUE = 0;
+    for (const id of planIds) Object.assign(nodes.get(String(id)), { BOOKED_REVENUE: 0, BOOKED_HOURS: 0 });
     for (const r of bk || []) {
       const n = nodes.get(String(r.STRUCTURE_ID));
-      if (n) n.BOOKED_REVENUE += Number(r.HOURLY_RATE_TOTAL ?? 0) || 0;
+      if (!n) continue;
+      n.BOOKED_REVENUE += Number(r.HOURLY_RATE_TOTAL ?? 0) || 0;
+      // Stunden nur aus Zeitbuchungen — Pauschalen und Stueckleistungen
+      // tragen QUANTITY_INT = 0 bzw. eine Stueckzahl (services/buchungen.js)
+      if (!SPECIAL_KINDS.has(r.BOOKING_KIND)) n.BOOKED_HOURS += Number(r.QUANTITY_INT ?? 0) || 0;
     }
   }
   return { nodes, childrenOf };
@@ -443,12 +453,23 @@ async function getProjectOverview(supabase, { tenantId, projectId }) {
   const cache = new Map();
   const structures = Array.from(nodes.values()).map(n => {
     const agg = aggregateSubtree(String(n.ID), nodes, childrenOf, cache);
+    const leaf = !(childrenOf.get(String(n.ID)) || []).length;
     return {
-      ID:        n.ID,
-      FATHER_ID: n.FATHER_ID,
-      budget:    agg.budget,
-      verbrauch: agg.verbrauch,
-      plan:      agg.plan,
+      ID:         n.ID,
+      FATHER_ID:  n.FATHER_ID,
+      ABBR:       n.ABBR ?? null,
+      NAME:       n.NAME ?? null,
+      SORT_ORDER: n.SORT_ORDER ?? null,
+      leaf,
+      budget:     agg.budget,
+      verbrauch:  agg.verbrauch,
+      plan:       agg.plan,
+      // Blatt nach Plan: Stunden neben dem Honorar, damit der Reiter zeigen
+      // kann, wie weit die geplanten Stunden verbraucht sind
+      ...(leaf && hasPlan(n) ? {
+        planHours:     n.PLAN_HOURS != null ? round2(n.PLAN_HOURS) : null,
+        bookedHours:   round2(n.BOOKED_HOURS ?? 0),
+      } : {}),
     };
   });
 

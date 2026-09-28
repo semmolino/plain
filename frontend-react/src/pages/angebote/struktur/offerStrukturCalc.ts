@@ -1,7 +1,7 @@
 import type { EffortLine, OfferStructureNode, UpdateStructureNodePayload, UpdateOfferSurchargesPayload } from '@/api/angebote'
 import {
-  aggregateTree, treeRootTotals, sameSurcharge, surchargeBody, surchargeDefault,
-  type Agg, type SurchargeEdit,
+  aggregateTree, treeRootTotals, sameSurcharge, surchargeBody, surchargeDefault, withPending,
+  type Agg, type SurchargeEdit, type PendingCalc,
 } from '@/pages/projekte/struktur/strukturCalc'
 
 /**
@@ -146,4 +146,19 @@ export function offerRowChanges(node: OfferStructureNode, e: OfferRowEdit | unde
   }
   if (e.surcharge && !sameSurcharge(e.surcharge, surchargeDefault(node))) Object.assign(b, surchargeBody(e.surcharge))
   return b
+}
+
+/** Offene Eingaben eines Angebotselements, soweit sie in Summen eingehen. */
+export function offerPending(node: OfferStructureNode, e: OfferRowEdit | undefined): PendingCalc | null {
+  if (!e) return null
+  const ch = offerRowChanges(node, e)
+  const surcharge = ch.SURCHARGE_1_CUMUL !== undefined ? e.surcharge : undefined
+  if (ch.revenue === undefined && ch.effort_lines === undefined && ch.extras_percent === undefined
+      && ch.billing_type_id === undefined && !surcharge) return null
+  return { basis: offerLeafFee(node, e), nkPct: ch.extras_percent != null ? Number(ch.extras_percent) : undefined, surcharge }
+}
+
+/** Angebotsstruktur mit den offenen Eingaben (siehe withPending in strukturCalc.ts). */
+export function pendingOfferStructure(structure: OfferStructureNode[], edits: Record<number, OfferRowEdit>) {
+  return withPending(structure, n => n.ID, offerLeafBasis, n => offerPending(n, edits[n.ID]))
 }

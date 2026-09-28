@@ -4566,6 +4566,42 @@ th.doc-actions, td.doc-actions {
 .empty-block .empty-note { margin-bottom: var(--space-2); }
 .empty-block-why { font-size: 13px; color: var(--text-3); max-width: 520px; margin: 0 auto var(--space-4); line-height: 1.55; }
 
+/* ── Seitenformular im Arbeitsbereich (.ws-form) und FormSection ───────────
+   Runde 6, Reiter „Verträge": vorher baute jede Seite ihre Gruppen selbst
+   (einmal ein Kasten mit --dim, einmal einer mit Rahmen und 8px Radius), die
+   Überschrift war ein fetter Absatz, und das Formular blieb bei 600px stehen.
+   Ab 900px zwei Spalten; .form-section-wide läuft über beide. */
+.ws-form { max-width: 960px; display: flex; flex-direction: column; gap: var(--space-4); }
+.ws-form-intro { margin: 0; display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; font-size: 13px; color: var(--text-2); }
+.ws-form-readonly { margin: 0; font-size: 13px; color: var(--text-3); }
+.ws-form-fields { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.form-section {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5) var(--space-1);
+}
+.form-section-head { display: flex; align-items: center; gap: var(--space-1); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.form-section-actions { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); }
+.form-section-block { padding-bottom: var(--space-3); min-width: 0; }
+.form-section-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+/* Feldbeschriftungen eine Stufe unter der Abschnittsüberschrift — sonst stand
+   „Vertragsnummer" größer da als „Vertrag". */
+.form-section .form-group label, .form-section .ws-radio-group legend { font-size: 13px; margin-bottom: 6px; color: var(--text-2); }
+.form-section-hint { margin: calc(-1 * var(--space-2)) 0 var(--space-3); font-size: 12px; color: var(--text-3); }
+.form-section-body { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: var(--space-5); }
+.form-section-wide { grid-column: 1 / -1; }
+.form-section .form-group { margin-bottom: var(--space-4); min-width: 0; }
+.form-section .form-field-hint.form-section-wide { margin: calc(-1 * var(--space-2)) 0 var(--space-4); }
+.form-group label.ws-label-help { display: flex; align-items: center; gap: var(--space-1); }
+.ws-check { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; font-size: 14px; cursor: pointer; }
+.ws-check input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
+.form-section .ws-check { margin-bottom: var(--space-2); }
+.ws-radio-group { border: 0; padding: 0; margin: 0 0 var(--space-4); min-width: 0; }
+.ws-radio-group legend { padding: 0; margin-bottom: var(--space-1); font-weight: 600; }
+.ws-radio-group .ws-check { display: inline-flex; margin: 0 var(--space-5) 0 0; }
+fieldset:disabled .ws-check { cursor: default; }
+@media (min-width: 900px) { .form-section-body { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .form-section { padding: var(--space-3) var(--space-3) var(--space-1); } }
+
 /* ── Umschalter aus Segmenten (aria-pressed) ───────────────────────────────
    „Wie wird beauftragt?", Berechnungsmodus eines Zuschlags. Vorher faerbte
    der Modus-Knopf sich mit festem Weiss auf Akzent. */
@@ -4801,6 +4837,14 @@ th.doc-actions, td.doc-actions {
    Hinweis. */
 .sx-table .sx-changed { background: var(--warning-bg); border-color: var(--warning); }
 .sx-row-changed > td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+/* Summen mit offenen Eingaben (Runde 6): der Wert ist schon neu, kursiv mit
+   Punkt wie in der Aktionsleiste; „noch nicht gespeichert" steht im Tooltip
+   und fuer Screenreader (PendingValue) — Farbe ist nicht der einzige Traeger. */
+.sx-pending { font-style: italic; white-space: nowrap; }
+.sx-pending::after {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 4px;
+  border-radius: 50%; background: var(--warning); vertical-align: middle;
+}
 
 .sx-row-internal .sx-input-name, .sx-row-internal .sx-name-text { color: var(--text-3); }
 .sx-internal-pill { flex-shrink: 0; }
@@ -5310,6 +5354,75 @@ th.doc-actions, td.doc-actions {
 }
 
 /* ═══ Leistungsstände ═════════════════════════════════════════════════════ */
+
+/* ── Preislisten (Projekt-Reiter, .prl-*) ────────────────────────────────────
+   Runde 6: Mitarbeiter und Buchungsarten als zwei Abschnitte, Rolle und
+   Herkunft des Preises als zweite Zeile statt eigener Spalten — bei 390px
+   passten vier Eingabefelder nebeneinander nie. */
+.prl-btn { display: inline-flex; align-items: center; gap: 6px; }
+.prl-table .ls-td, .bud-table .ls-td { padding-top: var(--space-2); padding-bottom: var(--space-2); }
+/* Zellen als Bezugsrahmen: .sr-only (Ampel-Klartext, „Aktionen") ist absolut
+   positioniert und entkam sonst dem Scroll-Container — am Handy wurde die
+   Seite dadurch 836px breit und das ganze Layout verkleinert. */
+.prl-table .ls-td, .bud-table .ls-td, .prl-table .prl-col-actions, .bud-table .prl-col-actions { position: relative; }
+.prl-name { font-weight: 600; color: var(--text); }
+.prl-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.prl-rate { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.prl-rate--own { font-weight: 700; }
+.prl-unit { color: var(--text-3); margin-left: 2px; }
+.prl-col-actions { width: 1%; white-space: nowrap; }
+.prl-table .ls-col-num { width: 150px; }
+.ls-col-num .prl-sub { white-space: nowrap; }
+.prl-dialog, .bud-dialog { max-width: none; min-width: min(420px, 100%); }
+.prl-dialog-intro { margin: 0 0 var(--space-3); }
+@media (max-width: 640px) {
+  .prl-table .ls-col-num { width: auto; }
+  .prl-col-actions .row-action-btn { min-width: 44px; min-height: 44px; }
+}
+
+/* ── Interne Budgets (Projekt-Reiter, .bud-*) ────────────────────────────────
+   Runde 6: die Kacheln trugen feste rgba-Toene (Orange, Gruen, Grau), die in
+   keinem Theme mitgingen; eine Regel hiess „Struktur #412". */
+.bud-kpis { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.bud-kpi {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.bud-kpi-label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.bud-kpi-value { font-size: 20px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.bud-kpi-unit { font-size: 13px; font-weight: 600; color: var(--text-3); }
+.bud-kpi-sub { font-size: 12px; color: var(--text-3); }
+.bud-kpi-state { display: flex; align-items: center; gap: var(--space-2); font-size: 16px; }
+.bud-kpi-btn { align-self: flex-start; margin-top: var(--space-2); }
+.bud-row-parent .bud-el-abbr { font-weight: 700; }
+.bud-el { display: flex; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.bud-el-abbr { font-weight: 600; color: var(--text); white-space: nowrap; }
+.bud-el-name { color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bud-col-share { width: 180px; }
+.bud-share { display: flex; align-items: center; gap: var(--space-2); justify-content: flex-end; }
+.bud-bar { flex: 1; max-width: 90px; height: 6px; border-radius: var(--radius-pill); background: var(--dim-2); overflow: hidden; }
+.bud-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.bud-bar-fill--over { background: var(--kpi-critical); }
+.bud-share-pct { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+.bud-scope-project { font-weight: 700; }
+.bud-recipients { font-size: 12px; color: var(--text-2); }
+.bud-state { font-size: 12px; color: var(--text-2); }
+.bud-state-muted { font-size: 12px; color: var(--text-3); }
+.bud-dialog-scope { margin: 0 0 var(--space-3); }
+.bud-people { max-height: 200px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0 var(--space-3); }
+.bud-people .ws-check { display: flex; margin: 0; min-height: 40px; }
+.ws-legend-help { display: flex; align-items: center; gap: var(--space-1); }
+.bud-preview {
+  margin-bottom: var(--space-3); padding: 8px 10px; font-size: 12px;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.bud-preview--muted { color: var(--text-3); }
+.bud-preview--warn { background: var(--warning-bg); border-color: var(--warning); }
+@media (max-width: 640px) {
+  .bud-col-share { width: auto; }
+  .bud-bar { display: none; }
+  .bud-people .ws-check { min-height: 44px; }
+}
 
 /* ── Leistungsstände: Eingabetabelle (Reiter und Monatsrunde) ────────────── */
 .lr-wrap { display: flex; flex-direction: column; gap: var(--space-3); }

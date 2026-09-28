@@ -10,7 +10,7 @@ plan&simple is a **multi-tenant business management tool** for architects and pl
 
 | Layer | Technology |
 |---|---|
-| Backend | Node.js 20 + Express, `@supabase/supabase-js` (service-role client) |
+| Backend | Node.js 22 + Express, `@supabase/supabase-js` (service-role client) |
 | Database | **Scalingo PostgreSQL** über lokales PostgREST (`127.0.0.1:3001`), angesprochen mit dem supabase-js-Client — kein rohes SQL im App-Code. RLS ist aktiv und erzwungen (`is_system_request()` / `current_tenant_id()`). Das alte Supabase-Projekt hängt nur noch als Altbestand in den Variablen und enthält einen **veralteten Datenstand** — nicht dorthin schreiben. |
 | Auth | Custom JWT (`jsonwebtoken` + `bcryptjs`), 8h expiry, secret from `JWT_SECRET` env var |
 | Frontend | React 18, TypeScript, Vite, Tanstack Query v5, Zustand, React Router v6 |
@@ -331,9 +331,15 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Im Angebot ohne gewähltes Element legt `addFeeCalcToOffer` ein eigenes auf
   oberster Ebene an: `ATTACH_TO_OFFER_STRUCTURE_ID` ist der Anker, an dem das
   Beauftragen erkennt, dass die Phasen schon in der Struktur stehen — direkt an
-  der Wurzel legte es sie ein zweites Mal an. „Struktur aktualisieren" gibt es
-  nur für Projektelemente mit `FEE_CALC_MASTER_ID`; Angebotselemente tragen
-  keine Verknüpfung und ziehen Änderungen nicht mit.
+  der Wurzel legte es sie ein zweites Mal an. Elemente aus einer Kalkulation
+  tragen `FEE_CALC_MASTER_ID` + `FEE_CALC_PHASE_ID`/`FEE_CALC_BL_ID` — im
+  Projekt seit 0041/0043, im Angebot seit `0174`; beim Beauftragen geht die
+  Verknüpfung mit. Daran hängen „Struktur aktualisieren" bzw. „Angebot
+  aktualisieren" (`POST …/sync-to-structure`, Ziel je nachdem, ob die
+  Kalkulation schon am Projekt hängt). Beide rechnen über
+  `services/feeAllocation.js` (`computeSurchargeAllocations`, `leafValues`):
+  Phase + Zuschlagsanteil, darauf die **eigenen** Zuschläge und NK des
+  Elements, `REVENUE_BASIS` zieht mit.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
@@ -653,6 +659,7 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Dialoge: `Modal`/`ConfirmModal` benutzen (bringen Escape, Fokus-Falle, Fokus-Rückgabe, `role="dialog"` mit). Kein eigenes Overlay bauen.
 - Dialog-Fußzeile: **immer `<DialogFooter>`** aus `components/ui/`, nie ein eigenes `flex-end`-`<div>` und nie `.modal-actions` direkt. Reihenfolge ist verbindlich: **Abbrechen links, Hauptaktion rechts** (13 Dialoge hatten es umgekehrt — dieselbe Position, gegenteilige Wirkung). Abbrechen trägt `.btn-secondary`, jeder Knopf ein `type="button"`. Ein Löschen-Knopf gehört in die `secondary`-Zone, nicht gleichrangig neben „Speichern". Geprüft von `tests/dialogs.spec.ts`.
 - Modulseiten (Übersicht, Adressen, Projekte, Rechnungen, Angebote, …) zeigen **keinen sichtbaren Seitentitel** — welches Modul offen ist, sagt die Seitennavigation. Die `<h1>` bleibt für Screenreader: `<PageHeader title="…" srTitle />` bzw. `<h1 className="sr-only">`. Eine Hauptaktion ohne Kopf steht rechts neben den Reitern (`.module-tabs-row`). Sichtbar bleiben Titel, die ein **Objekt** benennen (Projektkopf, Adresse, Nachtrag, Assistent).
+- Seitenformulare im Arbeitsbereich (Vertrag, Preislisten, Budget): `.ws-form` mit `<FormSection>` aus `components/ui/` — Überschrift als `<h3>`, ab 900px zwei Spalten, `layout="block"` für Tabellen. Eingaben liegen als Änderungen über dem geladenen Stand, gespeichert wird über die ActionBar mit `useRegisterDirty`; keine eigenen Kästen mit `--dim`/Rahmen mehr.
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
 - Stile für Bausteine (PageHeader, ActionBar, Disclosure …) und die Arbeitsbereiche stehen in `globals.css` im Abschnitt „Arbeitsbereiche und gemeinsame Bausteine“, **gegliedert nach Baustein, nicht nach Runde**. Ein Nachtrag gehört an die bestehende Regel, nicht als zweite Regel ans Dateiende: genau so standen `max-width` des Titel-Knopfs und die Breite des Umschalters zweimal da, und die zweite Regel gewann still.

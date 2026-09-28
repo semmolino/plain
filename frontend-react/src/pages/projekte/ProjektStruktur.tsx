@@ -18,6 +18,7 @@ import { StrukturMobile } from '@/pages/projekte/struktur/StrukturMobile'
 import { PlanDialog } from '@/pages/projekte/struktur/PlanDialog'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
 import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
+import { PendingValue }   from '@/pages/projekte/struktur/PendingValue'
 import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
 import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
 import { HonorarWizard, HONORAR_WIZARD_GUARD } from '@/pages/projekte/HonorarWizard'
@@ -32,7 +33,7 @@ import {
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import {
   surchargeDefault, sameSurcharge, surchargeBody, computeSurcharges, rowChanges,
-  aggregateStructure, rootTotals, planStatus, type SurchargeEdit, type RowEdit, type PatchBody,
+  aggregateStructure, rootTotals, planStatus, pendingStructure, type SurchargeEdit, type RowEdit, type PatchBody,
 } from '@/pages/projekte/struktur/strukturCalc'
 import { fmtHours } from '@/utils/zeit'
 import { fmtEur, money } from '@/utils/money'
@@ -153,7 +154,13 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
   const parentMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
 
-  const aggMap = aggregateStructure(structure)
+  // Mit den offenen Eingaben gerechnet (Runde 6): Nebenkosten, Gesamt und die
+  // Vatersummen stehen schon vor „Speichern" auf dem neuen Stand und tragen
+  // die Marke „noch nicht gespeichert" (PendingValue).
+  const view     = pendingStructure(structure, edits)
+  const savedAgg = aggregateStructure(structure)
+  const aggMap   = view.pending.size ? aggregateStructure(view.nodes) : savedAgg
+  const viewById = new Map(view.nodes.map(n => [n.STRUCTURE_ID, n]))
 
   const showInklCol = cols.show('inkl')
   const hasParents  = parentIds.size > 0
@@ -555,9 +562,15 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
 
   // ── Root row totals ───────────────────────────────────────────────────────
   const currentProject = projects.find(p => p.ID === selectedPid)
-  const projectLevelSurcharges = Number((projectRow as Record<string, unknown> | null)?.SURCHARGES_TOTAL || 0)
+  const savedProjectSurcharges = Number((projectRow as Record<string, unknown> | null)?.SURCHARGES_TOTAL || 0)
+  const savedRoot = rootTotals(structure, savedAgg, savedProjectSurcharges)
+  // Projektzuschlaege rechnen auf die Summe der Wurzel-Honorare — mit
+  // offenen Eingaben also neu, wie recalcProjectRootSurcharges im Server.
+  const projectLevelSurcharges = view.pending.size || rootChanged
+    ? computeSurcharges(rootTotals(view.nodes, aggMap, 0).rootStructureRevenueSum, rootEdit ?? surchargeDefault(projectRow)).total
+    : savedProjectSurcharges
   const { rootRevenue, rootSurcharges, rootStructureRevenueSum, rootRevenueFinal, rootExtras, rootGesamt } =
-    rootTotals(structure, aggMap, projectLevelSurcharges)
+    rootTotals(view.nodes, aggMap, projectLevelSurcharges)
 
   // ── Select helpers ────────────────────────────────────────────────────────
 
@@ -705,12 +718,12 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             <span className="sx-root-name">Projekt gesamt</span>
                           </td>
                           {cols.show('bt') && <td className="sx-muted">—</td>}
-                          <td className="num sx-muted">{money(rootRevenue)}</td>
-                          {cols.show('sur') && <td className="num"><span className="sx-surcharge-static"><SurchargeAmount value={rootSurcharges} /></span></td>}
-                          {showInklCol && <td className="num">{money(rootRevenueFinal)}</td>}
+                          <td className="num sx-muted"><PendingValue now={rootRevenue} saved={savedRoot.rootRevenue}>{money(rootRevenue)}</PendingValue></td>
+                          {cols.show('sur') && <td className="num"><span className="sx-surcharge-static"><PendingValue now={rootSurcharges} saved={savedRoot.rootSurcharges}><SurchargeAmount value={rootSurcharges} /></PendingValue></span></td>}
+                          {showInklCol && <td className="num"><PendingValue now={rootRevenueFinal} saved={savedRoot.rootRevenueFinal}>{money(rootRevenueFinal)}</PendingValue></td>}
                           {cols.show('nkpct') && <td className="sx-muted">—</td>}
-                          {cols.show('nk') && <td className="num sx-muted">{money(rootExtras)}</td>}
-                          {cols.show('total') && <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}>{money(rootGesamt)}</td>}
+                          {cols.show('nk') && <td className="num sx-muted"><PendingValue now={rootExtras} saved={savedRoot.rootExtras}>{money(rootExtras)}</PendingValue></td>}
+                          {cols.show('total') && <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}><PendingValue now={rootGesamt} saved={savedRoot.rootGesamt}>{money(rootGesamt)}</PendingValue></td>}
                           <td className="sx-col-menu">
                             {canEditProject && (
                               <RowMenu label="Aktionen zum Projekt" triggerClassName="row-action-btn">
@@ -751,10 +764,14 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                         const isDragOver = dragOverId === node.STRUCTURE_ID
 
                         const sEdit = edit?.surcharge ?? surchargeDefault(node)
+                        // Stand mit offenen Eingaben (Runde 6) und der gespeicherte zum Vergleich
+                        const vnode    = viewById.get(node.STRUCTURE_ID) ?? node
+                        const agg      = aggMap.get(String(node.STRUCTURE_ID))
+                        const savedA   = savedAgg.get(String(node.STRUCTURE_ID))
                         // Surcharge base = REVENUE_BASIS only (for leaf) or sum of children's REVENUE (for parent)
                         const surchargeBase = isParent
-                          ? (node.REVENUE_BASIS ?? 0)
-                          : (isTec ? (node.TEC_SP_TOT_SUM ?? 0) : (node.REVENUE_BASIS ?? node.REVENUE ?? 0))
+                          ? (vnode.REVENUE_BASIS ?? 0)
+                          : (isTec ? (node.TEC_SP_TOT_SUM ?? 0) : (vnode.REVENUE_BASIS ?? vnode.REVENUE ?? 0))
                         const computed = computeSurcharges(surchargeBase, sEdit)
                         const surchargeChanged = changes.SURCHARGE_1_CUMUL !== undefined
                         const hasSurcharges = (node.SURCHARGES_TOTAL ?? 0) !== 0
@@ -850,9 +867,9 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                 <span className="sx-muted">
                                   {/* Ein Vater zeigt IMMER die Summe seines Teilbaums — auch wenn er
                                       selbst auf Nachweis steht. */}
-                                  {money(isParent
-                                    ? (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0)
-                                    : isTec ? (node.TEC_SP_TOT_SUM ?? 0) : Number(budgetVal))}
+                                  {isParent
+                                    ? <PendingValue now={agg?.revenueBasis} saved={savedA?.revenueBasis}>{money(agg?.revenueBasis ?? 0)}</PendingValue>
+                                    : money(isTec ? (node.TEC_SP_TOT_SUM ?? 0) : Number(budgetVal))}
                                 </span>
                               ) : (
                                 <AmountInput className={`tbl-input sx-input sx-input-num${ch('REVENUE')}`}
@@ -864,22 +881,25 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             {cols.show('sur') && (
                             <td className="num">
                               {(() => {
-                                const sv = surchargeChanged ? computed.total
-                                  : isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
+                                const sv = isParent ? (agg?.surcharges ?? 0) : (vnode.SURCHARGES_TOTAL ?? 0)
+                                const svSaved = isParent ? (savedA?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
+                                // Selbst geaenderte Zuschlaege traegt schon sx-changed am Knopf
+                                const amount = surchargeChanged ? <SurchargeAmount value={sv} />
+                                  : <PendingValue now={sv} saved={svSaved}><SurchargeAmount value={sv} /></PendingValue>
                                 return canEdit ? (
                                   <button type="button" className={`sx-surcharge-btn${surchargeChanged ? ' sx-changed' : ''}`}
                                     aria-label={`Zuschläge von ${nameShort} bearbeiten`}
                                     onClick={() => setSurchargePanel(p => p === node.STRUCTURE_ID ? null : node.STRUCTURE_ID)}>
-                                    <SurchargeAmount value={sv} />
+                                    {amount}
                                   </button>
-                                ) : <span className="sx-surcharge-static"><SurchargeAmount value={sv} /></span>
+                                ) : <span className="sx-surcharge-static">{amount}</span>
                               })()}
                             </td>
                             )}
                             {showInklCol && (
                               <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>
                                 {/* Honorar + Zuschläge = REVENUE (final, all surcharges included) */}
-                                {money(node.REVENUE ?? 0)}
+                                <PendingValue now={vnode.REVENUE} saved={node.REVENUE}>{money(vnode.REVENUE ?? 0)}</PendingValue>
                               </td>
                             )}
                             {cols.show('nkpct') && (
@@ -892,15 +912,22 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                               ) : `${nkVal} %`}
                             </td>
                             )}
-                            {cols.show('nk') && <td className="num">{money(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>}
+                            {cols.show('nk') && (
+                              <td className="num">
+                                <PendingValue now={isParent ? agg?.extras : vnode.EXTRAS} saved={isParent ? savedA?.extras : node.EXTRAS}>
+                                  {money(isParent ? agg?.extras : vnode.EXTRAS)}
+                                </PendingValue>
+                              </td>
+                            )}
                             {cols.show('total') && (() => {
-                              const rev = Number(node.REVENUE ?? 0)
-                              const ext = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.extras ?? 0) : Number(node.EXTRAS ?? 0)
+                              const rev = Number(vnode.REVENUE ?? 0)
+                              const ext = isParent ? (agg?.extras ?? 0) : Number(vnode.EXTRAS ?? 0)
+                              const savedTotal = Number(node.REVENUE ?? 0) + (isParent ? (savedA?.extras ?? 0) : Number(node.EXTRAS ?? 0))
                               // In der luftigen Dichte entfaellt „inkl. Zuschl." — die Aufteilung
                               // steht dann im Tooltip der Gesamtsumme.
                               return (
                                 <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rev)} + Nebenkosten ${fmtEur(ext)}`}>
-                                  {fmtEur(rev + ext)}
+                                  <PendingValue now={rev + ext} saved={savedTotal}>{fmtEur(rev + ext)}</PendingValue>
                                 </td>
                               )
                             })()}
@@ -950,7 +977,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                   dirty={dirty}
                   quiet={!dirty}
                   status={saving ? 'Speichert …' : dirty
-                    ? `${dirtyCount} ${dirtyCount === 1 ? 'Element' : 'Elemente'} geändert`
+                    ? `${dirtyCount} ${dirtyCount === 1 ? 'Element' : 'Elemente'} geändert${view.pending.size || rootChanged ? ' · Summen vorläufig' : ''}`
                     : 'Alle Änderungen gespeichert'}
                   secondary={dirty ? (
                     <button type="button" className="btn-secondary" onClick={() => void confirmDiscard()} disabled={saving}>Verwerfen</button>

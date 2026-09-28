@@ -52,6 +52,8 @@ describe("Kalkulation ins Angebot uebernehmen", () => {
     expect(wurzel).toMatchObject({ FATHER_ID: null, NAME: "Gebäude", SORT_ORDER: 10, REVENUE: 10000 });
     const phasen = sb._tables.OFFER_STRUCTURE.filter(r => r.FATHER_ID === wurzel.ID);
     expect(phasen.map(r => r.ABBR)).toEqual(["LPH 1", "LPH 2"]);
+    // Runde 6: jedes Element weiss, aus welcher Phase es stammt
+    expect(phasen.map(r => [r.FEE_CALC_MASTER_ID, r.FEE_CALC_PHASE_ID])).toEqual([[50, 501], [50, 502]]);
     expect(sb._tables.FEE_CALCULATION_MASTER[0].ATTACH_TO_OFFER_STRUCTURE_ID).toBe(wurzel.ID);
     expect(res.body.fatherId).toBe(wurzel.ID);
   });
