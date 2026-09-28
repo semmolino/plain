@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Request } from '@playwright/test'
-import { mockPilot } from './fixtures/pilotData'
+import { mockPilot, budgetOverview } from './fixtures/pilotData'
 
 /**
  * Verträge, Preislisten, Interne Budgets im Arbeitsbereich-Muster (UI-Pilot
@@ -138,6 +138,24 @@ test.describe('Interne Budgets', () => {
     const rules = page.getByRole('region', { name: 'Warnregeln' })
     await expect(rules.getByRole('row').filter({ hasText: 'LP5.3 · Werk- und Montageplanung prüfen' })).toContainText('erreicht')
     await expect(page.getByText(/Struktur #\d+/)).toHaveCount(0)
+  })
+
+  test('Ampel: beobachten ab der niedrigsten Warnregel, ohne Regel erst ab 100 %', async ({ page }) => {
+    await mockPilot(page)
+    await page.goto('/projekte?projectId=1&tab=budget')
+    const elements = page.getByRole('region', { name: 'Budget je Element' })
+    // NA2 79,6 %, niedrigste Regel 75 %
+    const na2 = elements.getByRole('row').filter({ hasText: 'Zusätzliche Baubesprechungen' })
+    await expect(na2).toContainText('beobachten')
+    // LP9 bei 0 % bleibt ohne Stufe
+    await expect(elements.getByRole('row').filter({ hasText: 'Objektbetreuung' })).not.toContainText(/beobachten|Handlungsbedarf/)
+
+    await page.route(/\/api\/v1\/budget-warnings\/projects\/\d+(\?|$)/, r => r.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify({ data: { ...budgetOverview(), rules: [], fired: [] } }),
+    }))
+    await page.reload()
+    await expect(na2).not.toContainText('beobachten')
+    await expect(elements.getByRole('row').filter({ hasText: 'Planungsänderungen auf Wunsch des Bauherrn' })).toContainText('Handlungsbedarf')
   })
 
   test('Regel anlegen: Personen als Häkchen, Element aus der Liste', async ({ page }) => {

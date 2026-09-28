@@ -1661,6 +1661,9 @@ export const HELP = {
         wüchse mit jeder mit. Budget ist deshalb der <strong>Plan</strong> aus dem Angebot, Verbrauch das
         gebuchte Honorar; daneben stehen geplante und gebuchte Stunden. Die Warnregeln unten rechnen mit
         denselben Werten.
+        <br /><br />
+        Der Anteil ist <strong>orange („beobachten")</strong> ab der niedrigsten Warnregel des Projekts und{' '}
+        <strong>rot („Handlungsbedarf")</strong> ab 100 %. Ohne Warnregel gibt es nur die Grenze bei 100 %.
       </>
     ),
   },

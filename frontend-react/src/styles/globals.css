@@ -5403,6 +5403,7 @@ fieldset:disabled .ws-check { cursor: default; }
 .bud-bar { flex: 1; max-width: 90px; height: 6px; border-radius: var(--radius-pill); background: var(--dim-2); overflow: hidden; }
 .bud-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
 .bud-bar-fill--over { background: var(--kpi-critical); }
+.bud-bar-fill--watch { background: var(--kpi-watch); }
 .bud-share-pct { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
 .bud-scope-project { font-weight: 700; }
 .bud-recipients { font-size: 12px; color: var(--text-2); }
