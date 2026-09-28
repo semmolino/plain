@@ -641,17 +641,19 @@ test('Kalkulation – Schließen fragt nach', async ({ page }, info) => {
 test('Projekt – Vertrag', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte?projectId=1&tab=vertraege')
-  await page.getByLabel('Vertragsnummer').waitFor()
+  // Vor Runde 6 hingen die Beschriftungen nicht am Feld
+  await page.getByText('Vertragsnummer').first().waitFor()
   await shoot(page, info.project.name, 'vertrag')
 })
 
 test('Projekt – Vertrag geändert', async ({ page }, info) => {
   await prepare(page, info.project.name)
   await open(page, '/projekte?projectId=1&tab=vertraege')
-  const skonto = page.getByLabel(/^Skonto \(%\)/)
-  await skonto.fill('3')
-  await page.getByLabel(/Umsatzsteuer-Kategorie/).selectOption('AE')
-  await page.getByLabel('Vertragsnummer').focus()
+  await page.getByText('Vertragsnummer').first().waitFor()
+  if (since(6)) await page.getByLabel(/^Skonto \(%\)/).fill('3')
+  else await page.locator('input[type="number"]').first().fill('3')
+  await page.locator('select').filter({ has: page.locator('option[value="AE"]') }).selectOption('AE')
+  await page.locator('input[type="text"]').first().focus()
   await shoot(page, info.project.name, 'vertrag-geaendert')
 })
 

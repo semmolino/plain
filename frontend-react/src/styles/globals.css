@@ -5376,6 +5376,7 @@ fieldset:disabled .ws-check { cursor: default; }
 .prl-dialog, .bud-dialog { max-width: none; min-width: min(420px, 100%); }
 .prl-dialog-intro { margin: 0 0 var(--space-3); }
 @media (max-width: 640px) {
+  .prl-table .ls-col-num { width: auto; }
   .prl-col-actions .row-action-btn { min-width: 44px; min-height: 44px; }
 }
 
