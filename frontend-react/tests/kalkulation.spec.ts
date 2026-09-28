@@ -100,6 +100,29 @@ test.describe('Kalkulation im Angebot', () => {
   })
 })
 
+test.describe('Kalkulation im Angebot ändern', () => {
+  test.skip(({ viewport }) => (viewport?.width ?? 0) < 1024, 'Desktop')
+
+  // Runde 6: die Elemente im Angebot sind mit der Kalkulation verknüpft
+  test('„Angebot aktualisieren" gleicht die verknüpften Elemente ab', async ({ page }) => {
+    const sync = record(page, 'POST', /sync-to-structure/)
+    await mockPilot(page)
+    await page.goto('/angebote?offerId=1&tab=kalkulationen')
+    await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Kalkulation bearbeiten' })
+    const bar = dialog.getByRole('region', { name: 'Seitenaktionen' })
+    for (const title of ['Leistungsphasen', 'Besondere Leistungen', 'Zuschläge', 'Übersicht']) {
+      await bar.getByRole('button', { name: /Weiter/ }).click()
+      await expect(dialog.getByRole('heading', { name: title })).toBeVisible()
+    }
+    await expect(dialog.getByRole('checkbox', { name: /Die 5 verknüpften Angebotselemente mit den neuen Werten überschreiben/ })).toBeChecked()
+    await bar.getByRole('button', { name: 'Angebot aktualisieren' }).click()
+    await expect(dialog).toBeHidden()
+    expect(sync).toHaveLength(1)
+    await expect(page.locator('.toast-message', { hasText: '5 Angebotselemente wurden aktualisiert.' })).toBeVisible()
+  })
+})
+
 test.describe('Kalkulationen im Projekt', () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) < 1024, 'Desktop')
 

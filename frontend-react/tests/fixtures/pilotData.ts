@@ -187,6 +187,8 @@ function buildOfferStructure() {
       QUANTITY: s.hours ?? null, HOURLY_RATE: s.rate ?? null,
       ROLE_ID: s.role ? { PL: 2, AR: 3, TZ: 4 }[s.role] : null, ROLE_ABBR: s.role ?? null,
       ROLE_NAME: s.role ? { PL: 'Projektleitung', AR: 'Architekt/in', TZ: 'Technische/r Zeichner/in' }[s.role] : null,
+      // LP1–LP5 stammen aus der Kalkulation § 34 im Angebot (Runde 6: „Angebot aktualisieren")
+      FEE_CALC_MASTER_ID: !children.length && s.id >= 202 && s.id <= 206 ? 74 : null,
       ...sur.fields, SURCHARGES_TOTAL: sur.total,
     })
     return revenue
@@ -877,7 +879,9 @@ async function mockKalkulationen(page: Page) {
   await route('fee-calculation-masters/\\d+/surcharges/save', r => r.fulfill(json({ data: r.request().postDataJSON()?.rows ?? [] })))
   await route('fee-calculation-masters/\\d+/add-to-offer-structure', r => r.fulfill(json({ success: true, fatherId: 299, message: 'Kalkulation ins Angebot übernommen' })))
   await route('fee-calculation-masters/\\d+/add-to-project-structure', r => r.fulfill(json({ message: 'ok' })))
-  await route('fee-calculation-masters/\\d+/sync-to-structure', r => r.fulfill(json({ synced: 9, projectId: 1, message: '9 Projektelemente wurden aktualisiert.' })))
+  await route('fee-calculation-masters/\\d+/sync-to-structure', r => r.fulfill(json(id(r) === 74
+    ? { synced: 5, projectId: null, offerId: 1, message: '5 Angebotselemente wurden aktualisiert.' }
+    : { synced: 9, projectId: 1, message: '9 Projektelemente wurden aktualisiert.' })))
 }
 
 // ── Leistungsstände / Monatsrunde ───────────────────────────────────────────

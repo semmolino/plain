@@ -731,8 +731,15 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   // Beim Bearbeiten: die Elemente, die aus dieser Kalkulation entstanden sind.
   // „Struktur aktualisieren" gibt es nur, wenn es welche gibt — vorher stand
   // die Frage immer da und endete sonst in „Keine verknüpften Projektelemente".
-  const linkedCount = calcMaster ? structureNodes.filter(n => n.FEE_CALC_MASTER_ID === calcMaster.ID).length : 0
-  const willSync = isEdit && !isOfferMode && linkedCount > 0 && syncStructure
+  // Seit Runde 6 auch im Angebot (Migration 0174). Ist das Angebot schon
+  // beauftragt, haengt die Kalkulation am Projekt — dann gleicht der Server
+  // das Projekt ab, und so heisst es auch hier.
+  const syncTarget: 'project' | 'offer' = calcMaster?.PROJECT_ID != null || !isOfferMode ? 'project' : 'offer'
+  const linkedCount = !calcMaster ? 0 : syncTarget === 'offer'
+    ? offerStructureNodes.filter(n => n.FEE_CALC_MASTER_ID === calcMaster.ID).length
+    : structureNodes.filter(n => n.FEE_CALC_MASTER_ID === calcMaster.ID).length
+  const willSync = isEdit && linkedCount > 0 && syncStructure
+  const elementNoun = syncTarget === 'offer' ? 'Angebotselement' : 'Projektelement'
 
   async function finishEdit() {
     if (!calcMaster) { onDone?.(); return }
@@ -745,6 +752,11 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
     await run(async () => {
       const res = await syncFeeCalcToStructure(calcMaster.ID)
       if (res.projectId) void qc.invalidateQueries({ queryKey: ['structure', res.projectId] })
+      if (res.offerId) {
+        for (const key of [['offer-structure', res.offerId], ['offer', res.offerId], ['offers'], ['fee-calc-masters-offer', res.offerId]]) {
+          void qc.invalidateQueries({ queryKey: key })
+        }
+      }
       void qc.invalidateQueries({ queryKey: ['fee-calc-masters'] })
       toast.success(res.message || 'Struktur aktualisiert')
       onDone?.()
@@ -878,7 +890,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   function primaryAction(): { label: string; run: () => void; icon: typeof Check; disabled?: boolean } {
     if (step === 1) return { label: loading ? 'Legt an …' : 'Weiter', run: () => void goNext1(), icon: ChevronRight, disabled: !feeMasterId }
     if (step < 6)   return { label: loading ? 'Speichert …' : 'Weiter', run: () => void nextFromStep(), icon: ChevronRight }
-    if (isEdit)     return { label: willSync ? 'Struktur aktualisieren' : 'Fertig', run: () => void finishEdit(), icon: Check }
+    if (isEdit)     return { label: willSync ? (syncTarget === 'offer' ? 'Angebot aktualisieren' : 'Struktur aktualisieren') : 'Fertig', run: () => void finishEdit(), icon: Check }
     if (isOfferMode) return { label: loading ? 'Übernimmt …' : 'Ins Angebot übernehmen', run: () => void finishOffer(), icon: Check }
     return { label: loading ? 'Übernimmt …' : 'In die Struktur übernehmen', run: () => void finish(), icon: Check, disabled: !fatherId }
   }
@@ -1602,25 +1614,25 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </tbody>
             </table>
           </div>
-          {/* Bearbeiten: Struktur mitziehen? */}
-          {isEdit && !isOfferMode && linkedCount > 0 && (
+          {/* Bearbeiten: Struktur bzw. Angebot mitziehen? */}
+          {isEdit && linkedCount > 0 && (
             <label className="hw-check">
               <input type="checkbox" checked={syncStructure} onChange={e => setSyncStructure(e.target.checked)} />
               <span>
-                {linkedCount === 1 ? 'Das verknüpfte Projektelement' : `Die ${linkedCount} verknüpften Projektelemente`} mit den neuen Werten überschreiben
+                {linkedCount === 1 ? `Das verknüpfte ${elementNoun}` : `Die ${linkedCount} verknüpften ${elementNoun}e`} mit den neuen Werten überschreiben
                 <span className="form-field-hint">
-                  Honorar und Nebenkosten der Elemente aus dieser Kalkulation werden neu gesetzt, Zuschläge anteilig verteilt.
-                  Ohne Haken bleibt die Struktur, wie sie ist.
+                  Honorar und Nebenkosten der Elemente aus dieser Kalkulation werden neu gesetzt, Zuschläge anteilig verteilt;
+                  eigene Zuschläge der Elemente bleiben. Neue Besondere Leistungen bekommen ein Element dazu.
+                  Ohne Haken bleibt {syncTarget === 'offer' ? 'das Angebot, wie es' : 'die Struktur, wie sie'} ist.
                 </span>
               </span>
             </label>
           )}
-          {isEdit && !isOfferMode && linkedCount === 0 && (
-            <p className="form-field-hint">Diese Kalkulation ist mit keinem Projektelement verknüpft — „Fertig" behält nur die Kalkulation.</p>
-          )}
-          {isEdit && isOfferMode && (
+          {isEdit && linkedCount === 0 && (
             <p className="form-field-hint">
-              Die Elemente im Angebot übernehmen geänderte Werte nicht von selbst — dort bei Bedarf anpassen.
+              {syncTarget === 'offer'
+                ? 'Diese Kalkulation hat im Angebot keine verknüpften Elemente – ältere Übernahmen tragen die Verknüpfung nicht. Dort bei Bedarf von Hand anpassen; „Fertig" behält nur die Kalkulation.'
+                : 'Diese Kalkulation ist mit keinem Projektelement verknüpft — „Fertig" behält nur die Kalkulation.'}
             </p>
           )}
 

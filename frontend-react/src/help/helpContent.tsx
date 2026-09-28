@@ -601,8 +601,11 @@ export const HELP = {
         einem neuen auf oberster Ebene — beim Beauftragen geht es mit ins Projekt.
         <br /><br />
         <strong>Bearbeiten:</strong> jeder Schritt ist mit „Weiter" gespeichert. „Struktur
-        aktualisieren" überschreibt Honorar und Nebenkosten der Projektelemente, die aus dieser
-        Kalkulation entstanden sind; Elemente im Angebot zieht es nicht mit.
+        aktualisieren" (im Projekt) bzw. „Angebot aktualisieren" überschreibt Honorar und
+        Nebenkosten der Elemente, die aus dieser Kalkulation entstanden sind; ihre eigenen Zuschläge
+        bleiben, neue Besondere Leistungen bekommen ein Element dazu. Beim Beauftragen geht die
+        Verknüpfung mit ins Projekt. Elemente, die vor 09/2026 übernommen wurden, sind nicht
+        verknüpft.
       </>
     ),
   },

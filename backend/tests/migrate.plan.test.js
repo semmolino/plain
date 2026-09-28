@@ -154,6 +154,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0171 merkt die SE-Auswahl im Schlussrechnungs-Entwurf.
     // 0172 beschreibt die Rechnungsrechte (Entwurf mit Anlege-Recht).
     // 0173 fuehrt Aufwandszeilen im Angebot und den Plan am Projekt-Element ein.
+    // 0174 verknuepft Angebotselemente mit ihrer Kalkulation.
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -196,6 +197,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0171_invoice_se_release_auswahl.sql",
       "0172_rechnung_entwurf_rechte_texte.sql",
       "0173_aufwandszeilen_und_plan.sql",
+      "0174_angebot_kalkulation_verknuepfung.sql",
     ]);
   });
 

@@ -2029,6 +2029,7 @@ module.exports = {
   progressSnapshot,
   recalcParent,
   propagateUpwards,
+  computeSurchargesNode,
   getTecSum,
   checkParentForChild,
   createStructureNode,

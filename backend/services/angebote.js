@@ -1081,9 +1081,11 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
         REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
         SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + i * 10,
         TENANT_ID: tenantId,
+        // Verknuepfung (Migration 0174): „Angebot aktualisieren" gleicht daran ab
+        FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_PHASE_ID: r.ID,
       };
     });
-    await supabase.from('OFFER_STRUCTURE').insert(insertRows);
+    await insertOfferRowsLinked(supabase, insertRows);
   }
 
   // Insert BL rows
@@ -1099,13 +1101,107 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
         REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
         SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + (lphCount + i) * 10,
         TENANT_ID: tenantId,
+        FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_BL_ID: b.ID,
       };
     });
-    await supabase.from('OFFER_STRUCTURE').insert(blRows);
+    await insertOfferRowsLinked(supabase, blRows);
   }
 
-  // Recalculate parent
-  if (fatherId) await recalcOfferParent(supabase, { parentId: fatherId });
+  // Vater und die Kette darueber samt Angebotszuschlaegen — vorher nur der
+  // direkte Vater, die Angebotssumme stand bis zur naechsten Aenderung alt da.
+  if (fatherId) {
+    await recalcOfferParent(supabase, { parentId: fatherId });
+    await propagateUpwardsOffer(supabase, { structureId: fatherId });
+  }
+}
+
+/**
+ * Elemente samt Verknuepfung zur Kalkulation einfuegen. Kennt das Schema die
+ * Spalten noch nicht (PostgREST-Cache direkt nach dem Deploy, siehe CLAUDE.md
+ * „PostgREST kennt eine neue Spalte nicht von selbst"), ohne sie — lieber ein
+ * Element ohne Verknuepfung als gar keins.
+ */
+async function insertOfferRowsLinked(supabase, rows) {
+  const { error } = await supabase.from('OFFER_STRUCTURE').insert(rows);
+  if (!error) return;
+  if (!/FEE_CALC/.test(String(error.message || ''))) throw error;
+  console.warn('[attachFeeCalcToOfferStructure] ohne Verknuepfung eingefuegt:', error.message);
+  const plain = rows.map(({ FEE_CALC_MASTER_ID, FEE_CALC_PHASE_ID, FEE_CALC_BL_ID, ...rest }) => rest);
+  const { error: e2 } = await supabase.from('OFFER_STRUCTURE').insert(plain);
+  if (e2) throw e2;
+}
+
+/**
+ * „Angebot aktualisieren" (Runde 6): die Elemente einer Kalkulation im Angebot
+ * auf den Stand der Kalkulation bringen — dasselbe wie „Struktur
+ * aktualisieren" im Projekt. Je Element Honorar der Leistungsphase bzw.
+ * Besonderen Leistung samt Zuschlagsanteil (feeAllocation), darauf die
+ * eigenen Zuschlaege und NK des Elements. Neue Besondere Leistungen bekommen
+ * ein Element neben den vorhandenen. Danach Vaeter und Angebotszuschlaege.
+ *
+ * Verknuepft sind nur Elemente, die seit Migration 0174 uebernommen wurden;
+ * aeltere zaehlt `synced` nicht mit, und der Assistent sagt das vorher.
+ */
+async function syncFeeCalcToOfferStructure(supabase, { calcMasterId, tenantId }) {
+  const { computeSurchargeAllocations, leafValues } = require('./feeAllocation');
+  const { data: calc, error: cErr } = await supabase.from('FEE_CALCULATION_MASTER')
+    .select('ID, OFFER_ID').eq('ID', calcMasterId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (cErr) throw cErr;
+  if (!calc) throw { status: 404, message: 'Kalkulation nicht gefunden' };
+
+  const [{ data: rows, error: rErr }, { data: phases }, { data: blItems }, { data: surRows }] = await Promise.all([
+    supabase.from('OFFER_STRUCTURE').select('*').eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId),
+    supabase.from('FEE_CALCULATION_PHASE').select('ID, PHASE_REVENUE').eq('FEE_MASTER_ID', calcMasterId),
+    supabase.from('FEE_CALCULATION_BL').select('ID, ABBR, NAME, AMOUNT, SORT_ORDER').eq('FEE_CALC_MASTER_ID', calcMasterId).order('SORT_ORDER', { ascending: true }),
+    supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
+      .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER', { ascending: true }),
+  ]);
+  if (rErr) throw rErr;
+  const linked = rows || [];
+  if (!linked.length) return { synced: 0, offerId: calc.OFFER_ID };
+
+  const { lphAlloc, blAlloc } = computeSurchargeAllocations(phases || [], surRows || [], blItems || []);
+  const phaseById = new Map((phases || []).map(p => [p.ID, p]));
+  const blById    = new Map((blItems || []).map(b => [b.ID, b]));
+  let synced = 0;
+  for (const row of linked) {
+    let basis = null;
+    if (row.FEE_CALC_PHASE_ID != null && phaseById.has(row.FEE_CALC_PHASE_ID)) {
+      basis = (Number(phaseById.get(row.FEE_CALC_PHASE_ID).PHASE_REVENUE) || 0) + (lphAlloc[row.FEE_CALC_PHASE_ID] || 0);
+    } else if (row.FEE_CALC_BL_ID != null && blById.has(row.FEE_CALC_BL_ID)) {
+      basis = (Number(blById.get(row.FEE_CALC_BL_ID).AMOUNT) || 0) + (blAlloc[row.FEE_CALC_BL_ID] || 0);
+    }
+    if (basis == null) continue;
+    const { error } = await supabase.from('OFFER_STRUCTURE')
+      .update(leafValues(basis, row, computeSurchargesOffer)).eq('ID', row.ID).eq('TENANT_ID', tenantId);
+    if (error) throw error;
+    synced++;
+  }
+
+  // Neue Besondere Leistungen: Element neben den vorhandenen, wie im Projekt
+  const withBl  = new Set(linked.map(r => r.FEE_CALC_BL_ID).filter(v => v != null));
+  const missing = (blItems || []).filter(b => !withBl.has(b.ID));
+  const anchor  = linked[0];
+  if (missing.length) {
+    const sortBase = Math.max(0, ...linked.map(r => Number(r.SORT_ORDER ?? 0))) + 10;
+    await supabase.from('OFFER_STRUCTURE').insert(missing.map((b, i) => ({
+      ABBR: b.NAME || b.ABBR || 'BL', NAME: b.NAME || null,
+      OFFER_ID: anchor.OFFER_ID, FATHER_ID: anchor.FATHER_ID ?? null,
+      BILLING_TYPE_ID: 1, EXTRAS_PERCENT: Number(anchor.EXTRAS_PERCENT ?? 0) || 0,
+      ...leafValues((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0), { EXTRAS_PERCENT: anchor.EXTRAS_PERCENT }, computeSurchargesOffer),
+      SORT_ORDER: sortBase + i * 10, TENANT_ID: tenantId,
+      FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_BL_ID: b.ID,
+    })));
+    synced += missing.length;
+  }
+
+  const fathers = new Set(linked.map(r => r.FATHER_ID).filter(f => f != null));
+  for (const f of fathers) {
+    await recalcOfferParent(supabase, { parentId: f });
+    await propagateUpwardsOffer(supabase, { structureId: f });
+  }
+  if (!fathers.size && calc.OFFER_ID) await recalcOfferRootSurcharges(supabase, { offerId: calc.OFFER_ID });
+  return { synced, offerId: calc.OFFER_ID };
 }
 
 /**
@@ -1338,6 +1434,11 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       SURCHARGE_3_EUR:   n.SURCHARGE_3_EUR   ?? 0,
       SURCHARGE_3_CUMUL: n.SURCHARGE_3_CUMUL ?? true,
       SURCHARGES_TOTAL:  n.SURCHARGES_TOTAL  ?? 0,
+      // Verknuepfung zur Kalkulation (0174) geht mit — sonst hat
+      // „Struktur aktualisieren" im Projekt nichts, woran es abgleichen kann
+      FEE_CALC_MASTER_ID: n.FEE_CALC_MASTER_ID ?? null,
+      FEE_CALC_PHASE_ID:  n.FEE_CALC_PHASE_ID  ?? null,
+      FEE_CALC_BL_ID:     n.FEE_CALC_BL_ID     ?? null,
     }; });
 
     let createdNodes;
@@ -1346,11 +1447,12 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       if (r.error) {
         const msg = String(r.error.message || '');
         // Fallback: schema may be missing surcharge columns
-        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS') || msg.includes('PLAN_')) {
+        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS') || msg.includes('PLAN_') || msg.includes('FEE_CALC')) {
           const stripped = insertRows.map(row => {
             const c = { ...row };
             delete c.REVENUE_BASIS;
             delete c.PLAN_HOURS; delete c.PLAN_REVENUE;
+            delete c.FEE_CALC_MASTER_ID; delete c.FEE_CALC_PHASE_ID; delete c.FEE_CALC_BL_ID;
             delete c.SURCHARGE_1_LABEL; delete c.SURCHARGE_1_PCT; delete c.SURCHARGE_1_EUR; delete c.SURCHARGE_1_CUMUL;
             delete c.SURCHARGE_2_LABEL; delete c.SURCHARGE_2_PCT; delete c.SURCHARGE_2_EUR; delete c.SURCHARGE_2_CUMUL;
             delete c.SURCHARGE_3_LABEL; delete c.SURCHARGE_3_PCT; delete c.SURCHARGE_3_EUR; delete c.SURCHARGE_3_CUMUL;
@@ -1651,6 +1753,7 @@ module.exports = {
   recalcOfferRootSurcharges,
   attachFeeCalcToOfferStructure,
   addFeeCalcToOffer,
+  syncFeeCalcToOfferStructure,
   buildOfferPdfViewModel,
   convertOfferToProject,
   copyOffer,

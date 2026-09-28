@@ -331,9 +331,15 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Im Angebot ohne gewähltes Element legt `addFeeCalcToOffer` ein eigenes auf
   oberster Ebene an: `ATTACH_TO_OFFER_STRUCTURE_ID` ist der Anker, an dem das
   Beauftragen erkennt, dass die Phasen schon in der Struktur stehen — direkt an
-  der Wurzel legte es sie ein zweites Mal an. „Struktur aktualisieren" gibt es
-  nur für Projektelemente mit `FEE_CALC_MASTER_ID`; Angebotselemente tragen
-  keine Verknüpfung und ziehen Änderungen nicht mit.
+  der Wurzel legte es sie ein zweites Mal an. Elemente aus einer Kalkulation
+  tragen `FEE_CALC_MASTER_ID` + `FEE_CALC_PHASE_ID`/`FEE_CALC_BL_ID` — im
+  Projekt seit 0041/0043, im Angebot seit `0174`; beim Beauftragen geht die
+  Verknüpfung mit. Daran hängen „Struktur aktualisieren" bzw. „Angebot
+  aktualisieren" (`POST …/sync-to-structure`, Ziel je nachdem, ob die
+  Kalkulation schon am Projekt hängt). Beide rechnen über
+  `services/feeAllocation.js` (`computeSurchargeAllocations`, `leafValues`):
+  Phase + Zuschlagsanteil, darauf die **eigenen** Zuschläge und NK des
+  Elements, `REVENUE_BASIS` zieht mit.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
