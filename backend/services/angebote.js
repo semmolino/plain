@@ -73,10 +73,23 @@ async function getOfferStatuses(supabase) {
 
 // ── offers ────────────────────────────────────────────────────────────────────
 
+/**
+ * Netto-Angebotssumme wie im Angebots-PDF: Wurzel-Honorar (REVENUE traegt die
+ * Zuschlaege seines Teilbaums) + Angebotszuschlaege + Wurzel-Nebenkosten.
+ * Liste und PDF rechnen damit dasselbe. Vorher summierte die Liste nur die
+ * Blaetter — Zuschlaege auf Vaetern und am Angebot fehlten dort.
+ */
+function offerNetTotal(structRows, offerSurchargesTotal) {
+  const roots = (structRows || []).filter(r => r.FATHER_ID == null);
+  const revenue = roots.reduce((s, r) => s + (Number(r.REVENUE) || 0), 0);
+  const extras  = roots.reduce((s, r) => s + (Number(r.EXTRAS)  || 0), 0);
+  return fmt2(revenue + (Number(offerSurchargesTotal) || 0) + extras);
+}
+
 async function listOffers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from('OFFER')
-    .select('ID, ABBR, NAME, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID')
+    .select('ID, ABBR, NAME, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID, SURCHARGES_TOTAL')
     .eq('TENANT_ID', tenantId)
     .order('ID', { ascending: false });
   if (error) throw error;
@@ -105,7 +118,7 @@ async function listOffers(supabase, { tenantId }) {
   const contactMap = new Map((contactRes.data  || []).map(r => [r.ID, r]));
   const projectMap = new Map((projectRes.data  || []).map(r => [r.ID, r]));
 
-  // Leaf-based totals per offer
+  // Summe je Angebot — dieselbe Rechnung wie im PDF (offerNetTotal)
   const totalMap = new Map();
   if (structRes.data?.length) {
     const byOffer = new Map();
@@ -113,18 +126,13 @@ async function listOffers(supabase, { tenantId }) {
       if (!byOffer.has(s.OFFER_ID)) byOffer.set(s.OFFER_ID, []);
       byOffer.get(s.OFFER_ID).push(s);
     }
-    for (const [oId, sRows] of byOffer) {
-      const withChildren = new Set(sRows.map(r => r.FATHER_ID).filter(Boolean));
-      const leaves = sRows.filter(r => !withChildren.has(r.ID));
-      const rev  = leaves.reduce((s, r) => s + (Number(r.REVENUE) || 0), 0);
-      const ext  = leaves.reduce((s, r) => s + (Number(r.EXTRAS)  || 0), 0);
-      totalMap.set(oId, fmt2(rev + ext));
-    }
+    const offerSur = new Map(rows.map(r => [r.ID, r.SURCHARGES_TOTAL]));
+    for (const [oId, sRows] of byOffer) totalMap.set(oId, offerNetTotal(sRows, offerSur.get(oId)));
   }
 
   // NB: HOAI fee-calculations attached to an offer are materialised as
   // OFFER_STRUCTURE rows (siehe attachFeeCalcToOfferStructure), d. h. ihre
-  // Leistungsphasen sind bereits in der Leaf-Summe oben enthalten. Sie hier
+  // Leistungsphasen sind bereits in der Summe oben enthalten. Sie hier
   // zusätzlich direkt aus FEE_CALCULATION_PHASE/BL/SURCHARGES aufzusummieren
   // zählte die Honorare doppelt. Die Angebotssumme entspricht jetzt – wie im
   // Angebots-PDF – ausschließlich der OFFER_STRUCTURE.
@@ -705,7 +713,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   // Offer-level (root) surcharges — Option A
   const offerLevelSurcharges = Number(offer.SURCHARGES_TOTAL || 0);
   const totalRevenue = structureRevenueSum + offerLevelSurcharges;
-  const totalNet     = fmt2(totalRevenue + totalExtras);
+  const totalNet     = offerNetTotal(structRows, offerLevelSurcharges);
 
   const hasExtras = (structRows || []).some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
   const hasSurcharges = (structRows || []).some(r => Number(r.SURCHARGES_TOTAL || 0) > 0) || offerLevelSurcharges > 0;
@@ -1517,6 +1525,7 @@ module.exports = {
   addOfferStructureNode,
   updateOfferStructureNode,
   deleteOfferStructureNode,
+  offerNetTotal,
   moveOfferStructureNode,
   recalcOfferRootSurcharges,
   attachFeeCalcToOfferStructure,

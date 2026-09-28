@@ -5900,3 +5900,8 @@ div.dash-attn-link:hover { background: transparent; }
 }
 .module-tabs-action .btn-primary { width: auto; margin-top: 0; height: 38px; padding: 0 16px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
 @media (max-width: 640px) { .module-tabs-action .btn-primary { min-height: 44px; } }
+/* Angebots-Arbeitsbereich (Kopf wie beim Projekt, .pw-*) */
+.aw-action { display: inline-flex; align-items: center; gap: 6px; }
+.page-header-actions .aw-action { height: 38px; margin-top: 0; width: auto; padding: 0 14px; font-size: 13px; }
+.aw-kpi-note { margin-left: 6px; font-size: 12px; font-weight: 600; color: var(--kpi-watch); }
+@media (max-width: 640px) { .page-header-actions .aw-action { min-height: 44px; } }

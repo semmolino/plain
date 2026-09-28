@@ -306,11 +306,18 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   einem PUT). Beide Tabellen puffern Eingaben bis „Speichern" (ActionBar,
   `useRegisterDirty`); Anlegen, Loeschen, Verschieben wirken sofort. Beide
   sind immer luftig (keine Dichte-Umschaltung); welche Spalten sichtbar sind,
-  waehlt jeder ueber „Spalten" (`struktur/strukturSpalten.tsx`, je Mitarbeiter
+  waehlt jeder ueber „Spalten" (`struktur/strukturSpalten.ts`, je Mitarbeiter
   gemerkt). Ein
   Angebotselement mit Unterelementen loescht das Backend nicht
   (`dependencyCheck.checkOfferStructure`, 409) — die Oberflaeche sagt das
   vorher, statt es „samt Unterelementen" zu versprechen.
+- **Angebote als Arbeitsbereich** (wie die Projekte): `/angebote` ist die
+  Liste, `/angebote?offerId=…&tab=struktur|kalkulationen|daten` das Angebot
+  mit Kopf (`AngebotHeader.tsx`: Name als Umschalter, Strg+K) und Reitern.
+  Der Zustand steht in der URL (`angebote/angebotUrlState.ts`); Links von
+  anderen Seiten bauen `angebotHref(id, tab)`, alte `state: { offerId }`-
+  Einstiege werden umgeschrieben. „Als beauftragt markieren" laeuft in Liste
+  und Kopf ueber denselben `BeauftragtDialog`.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.

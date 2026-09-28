@@ -355,10 +355,17 @@ test('Schlussrechnung – Schritte', async ({ page }, info) => {
 // Vorher-Stand ist derselbe wie in main (Runde 1 und 2 liessen sie unberuehrt);
 // aufgenommen als PILOT_PHASE=vorher3 aus einem Arbeitsbaum vor Runde 3.
 
+// Seit Runde 4 ist das Angebot ein Arbeitsbereich mit URL; davor ein Modul-Reiter.
+const OFFER_WORKSPACE = PHASE.startsWith('nachher')
+
 async function openOfferStructure(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('angebote-selected-oid', '1'))
-  await open(page, '/angebote')
-  await page.getByRole('tab', { name: 'Angebotsstruktur' }).click()
+  if (OFFER_WORKSPACE) {
+    await open(page, '/angebote?offerId=1&tab=struktur')
+  } else {
+    await page.addInitScript(() => localStorage.setItem('angebote-selected-oid', '1'))
+    await open(page, '/angebote')
+    await page.getByRole('tab', { name: 'Angebotsstruktur' }).click()
+  }
   await page.waitForLoadState('networkidle')
   await page.locator('.structure-table, .sxm-list').first().waitFor()
 }
@@ -432,4 +439,35 @@ test('Angebotsstruktur – Handy Blatt', async ({ page }, info) => {
   await page.getByRole('button', { name: /^BL1 .*bearbeiten/ }).click()
   await page.getByRole('dialog').waitFor()
   await shoot(page, info.project.name, 'angebot-blatt')
+})
+
+// ── Runde 4: Angebote als Arbeitsbereich ─────────────────────────────────────
+test('Angebote – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/angebote')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'angebote-liste')
+})
+
+test('Angebot – Angebotsdaten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (OFFER_WORKSPACE) {
+    await open(page, '/angebote?offerId=1&tab=daten')
+  } else {
+    await open(page, '/angebote')
+    await page.locator('table').first().waitFor()
+    await page.getByTitle('Angebotsdaten bearbeiten').first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await page.waitForLoadState('networkidle')
+  await shoot(page, info.project.name, 'angebot-daten')
+})
+
+test('Angebot – wechseln', async ({ page }, info) => {
+  test.skip(!OFFER_WORKSPACE, 'Umschalter über den Namen gibt es erst mit Runde 4')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  await page.locator('.pw-title-btn').click()
+  await page.waitForTimeout(300)
+  await shoot(page, info.project.name, 'angebot-wechseln')
 })

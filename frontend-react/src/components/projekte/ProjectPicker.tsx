@@ -23,7 +23,14 @@ interface Props {
   startEmpty?: boolean
   /** Liste immer offen und im Fluss statt als Aufklapper (Handy-Blatt). */
   inline?: boolean
+  /** Was ausgewaehlt wird — Angebote benutzen dieselbe Suchbox (Arbeitsbereich). */
+  kind?: 'project' | 'offer'
 }
+
+const WORDS = {
+  project: { list: 'Projekte', all: 'Alle Projekte', none: 'Keine Projekte gefunden', toList: 'Zur Projektliste', placeholder: 'Projekt suchen …' },
+  offer:   { list: 'Angebote', all: 'Alle Angebote', none: 'Keine Angebote gefunden', toList: 'Zur Angebotsliste', placeholder: 'Angebot suchen …' },
+} as const
 
 const displayName = (p: ProjectOption) => p.ABBR + (p.NAME ? ` – ${p.NAME}` : '')
 
@@ -32,7 +39,9 @@ const displayName = (p: ProjectOption) => p.ABBR + (p.NAME ? ` – ${p.NAME}` : 
  * Beim Fokus: „Zuletzt verwendet" oben, darunter alle Projekte (scrollbar);
  * Tippen filtert. Optional ein Sprung „Zur Projektliste".
  */
-export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, placeholder = 'Projekt suchen …', autoFocus, openOnFocus = true, startEmpty = false, inline = false }: Props) {
+export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, placeholder, autoFocus, openOnFocus = true, startEmpty = false, inline = false, kind = 'project' }: Props) {
+  const w = WORDS[kind]
+  placeholder ??= w.placeholder
   const [input, setInput] = useState('')
   const [openState, setOpen] = useState(false)
   const open = inline || openState
@@ -53,8 +62,8 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
 
   // Recents nur zum Stöbern (ohne aktive Suche)
   const { data: recentsData } = useQuery({
-    queryKey: ['recents', 'project', null, 'recent'],
-    queryFn:  () => fetchRecents('project', 6, { sortBy: 'recent' }),
+    queryKey: ['recents', kind, null, 'recent'],
+    queryFn:  () => fetchRecents(kind, 6, { sortBy: 'recent' }),
     staleTime: 30_000,
   })
 
@@ -157,20 +166,20 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
         }}
       />
       {open && (
-        <div className={`project-ac-dropdown${inline ? ' project-ac-dropdown--inline' : ''}`} role="listbox" id={listId} ref={listRef} aria-label="Projekte">
+        <div className={`project-ac-dropdown${inline ? ' project-ac-dropdown--inline' : ''}`} role="listbox" id={listId} ref={listRef} aria-label={w.list}>
           {recentProjects.length > 0 && (
             <>
               <div className="project-ac-section" role="presentation">Zuletzt verwendet</div>
               {recentProjects.map(p => option(`r${p.ID}`, p))}
-              <div className="project-ac-section" role="presentation">Alle Projekte</div>
+              <div className="project-ac-section" role="presentation">{w.all}</div>
             </>
           )}
-          {filtered.length === 0 && <div className="project-ac-empty">Keine Projekte gefunden</div>}
+          {filtered.length === 0 && <div className="project-ac-empty">{w.none}</div>}
           {filtered.slice(0, 50).map(p => option(String(p.ID), p))}
           {onGoToList && (
             <button type="button" className="project-ac-tolist" tabIndex={-1}
               onMouseDown={ev => { ev.preventDefault(); setOpen(false); onGoToList() }}>
-              Zur Projektliste <ArrowRight size={13} strokeWidth={2} aria-hidden="true" />
+              {w.toList} <ArrowRight size={13} strokeWidth={2} aria-hidden="true" />
             </button>
           )}
         </div>

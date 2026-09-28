@@ -96,7 +96,7 @@ const OFFERS = [
   ['A-2025-018', 'Innenausbau Praxisräume Dr. Hoffmann',                       'Entwurf',     25,  21_450.75],
 ]
 
-const offers = OFFERS.map(([short, long, status, prob, total], i) => ({
+export const offers = OFFERS.map(([short, long, status, prob, total], i) => ({
   ID: i + 1,
   ABBR: short as string, NAME: long as string,
   PROBABILITY: prob as number,

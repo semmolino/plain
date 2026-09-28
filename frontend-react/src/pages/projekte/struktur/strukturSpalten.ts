@@ -1,5 +1,4 @@
 import { useStickyState } from '@/hooks/useStickyState'
-import { fmtEur } from '@/utils/money'
 import type { ChooserColumn } from '@/components/ui/ColumnChooser'
 
 /**
@@ -31,13 +30,4 @@ export function useStrukturSpalten(storageKey: string) {
   // Kontrollkaestchen, Griff, Element, Honorar, Aktionen + die sichtbaren optionalen
   const colCount = 5 + STRUKTUR_SPALTEN.filter(c => !hidden.has(c.key)).length
   return { hidden, toggle, show, colCount }
-}
-
-/**
- * Zuschlagsbetrag in der Tabelle: positiv gruen, negativ rot (Nachlass), 0 als
- * „—". Bis Runde 1 war das so; mit dem Umbau in Runde 2 fiel die Farbe weg.
- */
-export function SurchargeAmount({ value }: { value: number }) {
-  if (!value) return <span className="sx-muted">—</span>
-  return <span className={value > 0 ? 'sx-sur-pos' : 'sx-sur-neg'}>{fmtEur(value)}</span>
 }

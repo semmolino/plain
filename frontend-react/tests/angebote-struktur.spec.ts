@@ -11,13 +11,10 @@ import { mockPilot } from './fixtures/pilotData'
  */
 
 async function open(page: Page, density?: 'compact' | 'comfortable') {
-  await page.addInitScript(v => {
-    localStorage.setItem('angebote-selected-oid', '1')
-    if (v) localStorage.setItem('plain:filt:v2:1:ui.density', JSON.stringify(v))
-  }, density ?? null)
+  if (density) await page.addInitScript(v => localStorage.setItem('plain:filt:v2:1:ui.density', JSON.stringify(v)), density)
   await mockPilot(page)
-  await page.goto('/angebote')
-  await page.getByRole('tab', { name: 'Angebotsstruktur' }).click()
+  // Seit dem Arbeitsbereich steht das Angebot in der URL (angebotUrlState.ts)
+  await page.goto('/angebote?offerId=1&tab=struktur')
 }
 
 function recordPuts(page: Page) {
@@ -121,7 +118,7 @@ test.describe('Angebotsstruktur am Desktop', () => {
   test('Angebotszuschläge über das ⋯ der Gesamtzeile, gespeichert mit Strg+S', async ({ page }) => {
     const puts = recordPuts(page)
     await open(page)
-    await page.getByRole('button', { name: 'Aktionen zum Angebot' }).click()
+    await page.getByRole('button', { name: 'Aktionen zum Angebot', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Angebotszuschläge bearbeiten' }).click()
     const pct = page.getByRole('textbox', { name: 'Zuschlag 1 Prozent' })
     await expect(pct).toHaveValue('-3')
@@ -180,18 +177,19 @@ test.describe('Angebotsstruktur am Desktop', () => {
   test('Angebots- und Reiterwechsel fragen bei offenen Änderungen nach', async ({ page }) => {
     await open(page)
     await page.getByRole('textbox', { name: 'Bezeichnung' }).nth(1).fill('Geändert')
-    await page.getByRole('tab', { name: 'Angebotsliste' }).click()
+    await page.getByRole('tab', { name: 'Kalkulationen' }).click()
     const dialog = page.getByRole('dialog', { name: 'Ungespeicherte Änderungen' })
     await expect(dialog).toBeVisible()
     await expect(dialog).toContainText('Angebotsstruktur')
     await dialog.getByRole('button', { name: 'Abbrechen' }).click()
     await expect(page.getByRole('textbox', { name: 'Bezeichnung' }).nth(1)).toHaveValue('Geändert')
 
-    await page.getByRole('combobox', { name: 'Angebot' }).click()
-    await page.getByRole('option', { name: /A-2025-016/ }).click()
+    // Angebot wechseln geht jetzt ueber den Namen im Kopf
+    await page.locator('.pw-title-btn').click()
+    await page.getByRole('option', { name: /A-2025-016/ }).first().click()
     await expect(dialog).toBeVisible()
     await dialog.getByRole('button', { name: 'Abbrechen' }).click()
-    await expect(page.getByRole('combobox', { name: 'Angebot' })).toHaveValue(/A-2025-014/)
+    await expect(page).toHaveURL(/offerId=1&tab=struktur/)
 
     await page.getByRole('navigation').getByRole('link', { name: 'Adressen' }).first().click()
     await dialog.getByRole('button', { name: 'Verwerfen' }).click()

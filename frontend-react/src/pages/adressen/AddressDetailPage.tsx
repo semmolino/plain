@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
+import { angebotHref } from '@/pages/angebote/angebotUrlState'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -336,7 +337,7 @@ export function AddressDetailPage() {
           <LinkList items={detail!.projects} icon={<FolderOpen size={14} />} label="Projekte"
             render={p => p.ABBR || p.NAME || `#${p.ID}`} onClick={p => navigate('/projekte', { state: { projectId: p.ID } })} />
           <LinkList items={detail!.offers} icon={<FileSignature size={14} />} label="Angebote"
-            render={o => o.ABBR || `#${o.ID}`} onClick={o => navigate('/angebote', { state: { offerId: o.ID } })} />
+            render={o => o.ABBR || `#${o.ID}`} onClick={o => navigate(angebotHref(o.ID))} />
           <LinkList items={detail!.invoices} icon={<Receipt size={14} />} label="Rechnungen"
             render={i => i.INVOICE_NUMBER || `#${i.ID}`} onClick={() => navigate('/rechnungen')} />
           <LinkList items={detail!.partials} icon={<Banknote size={14} />} label="Abschläge"

@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test'
-import { mockDemo, type DemoOptions } from './demoData'
+import { mockDemo, offers as DEMO_OFFERS, type DemoOptions } from './demoData'
 
 /**
  * Zusatzdaten fuer die Pilot-Ansichten (UI-Pilot 2026-09): Projekt-
@@ -199,6 +199,11 @@ export const OFFER_DETAIL = {
   OFFER_DATE: '2025-07-01', VALID_UNTIL: '2025-09-01', PROJECT_ID: null,
   ...offerSur.fields, SURCHARGES_TOTAL: offerSur.total,
 }
+// Angebotssumme wie im Backend (services/angebote.js, offerNetTotal): Wurzel-
+// Honorar + Angebotszuschlaege + Wurzel-NK — damit Liste, Kopf und Struktur
+// in den Bildern dieselbe Zahl zeigen.
+const OFFER_TOTAL = r2(OFFER_ROOT_SUM + offerSur.total
+  + OFFER_STRUCTURE.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.EXTRAS as number), 0))
 export const ROLES = [
   { ID: 2, ABBR: 'PL', NAME: 'Projektleitung', HOURLY_RATE: 95 },
   { ID: 3, ABBR: 'AR', NAME: 'Architekt/in', HOURLY_RATE: 78.5 },
@@ -751,6 +756,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   })
   await byMethod('angebote/\\d+/structure/\\d+/move', { PUT: r => r.fulfill(json({ ok: true })) })
   await get('projekte/roles/active', { data: ROLES })
+  await get('angebote', { data: DEMO_OFFERS.map(o => o.ID === 1 ? { ...o, TOTAL_AMOUNT: OFFER_TOTAL } : o) })
 }
 
 // ── Leistungsstände / Monatsrunde ───────────────────────────────────────────

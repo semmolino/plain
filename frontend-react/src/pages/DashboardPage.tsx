@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, Children, type ReactNode } from 'react'
+import { angebotHref } from '@/pages/angebote/angebotUrlState'
 import { DashboardLoading } from '@/components/ui/Skeleton'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import {
@@ -1428,7 +1429,7 @@ function TopOpenOffersCard() {
               </thead>
               <tbody>
                 {open.map(o => (
-                  <tr key={o.ID} className="clickable-row" onClick={() => navigate('/angebote')} title="Zu den Angeboten">
+                  <tr key={o.ID} className="clickable-row" onClick={() => navigate(angebotHref(o.ID))} title="Angebot öffnen">
                     <td>{o.ABBR || o.NAME || '—'}</td>
                     <td className="col-hide-mobile" style={{ color: 'var(--text-3)' }}>{o.ADDRESS_NAME || '—'}</td>
                     <td className="num">{money(o.TOTAL_AMOUNT)}</td>

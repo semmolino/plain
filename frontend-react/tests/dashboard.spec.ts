@@ -78,7 +78,7 @@ test.describe('Übersicht', () => {
     const cases: [RegExp, RegExp, (p: Page) => Promise<void>][] = [
       [/P-2024-001/,   /\/projekte\?projectId=1&tab=struktur/, async p => { await expect(p.getByRole('heading', { level: 1 })).toContainText('Neubau Kindertagesstätte') }],
       [/RE-2026-0052/, /\/rechnungen$/,                         async p => { await expect(p.getByPlaceholder(/Suchen/).first()).toHaveValue('RE-2026-0052') }],
-      [/A-2025-016/,   /\/angebote$/,                           async () => {}],
+      [/A-2025-016/,   /\/angebote\?offerId=3&tab=struktur/,     async p => { await expect(p.getByRole('heading', { level: 1 })).toContainText('Machbarkeitsstudie') }],
       [/Wohnbau Süd/,  /\/adressen/,                            async () => {}],
       [/1\. Mahnung/,  /\/rechnungen/,                          async p => { await expect(p.getByRole('tab', { name: 'Mahnungen' })).toHaveAttribute('aria-selected', 'true') }],
     ]
