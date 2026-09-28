@@ -1546,6 +1546,9 @@ export const HELP = {
         „Intern" werden <strong>gesammelt</strong> und erst mit <strong>Speichern</strong> (oder
         Strg+S) übernommen. Geänderte Felder sind markiert; die Leiste unten zeigt, wie viele Elemente
         offen sind. <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
+        Summen rechnen die offenen Eingaben schon mit: Nebenkosten, Gesamt, die Werte der übergeordneten
+        Elemente und die Gesamtzeile stehen auf dem Stand nach dem Speichern. Solche Werte sind
+        <em> kursiv mit Punkt</em> („Summen vorläufig"); der Tooltip nennt den gespeicherten Wert.<br /><br />
         Sofort wirken dagegen Befehle, die die Struktur selbst ändern: Element anlegen, löschen,
         verschieben und Nebenkosten vererben — jeweils nach Rückfrage. Wer mit offenen Änderungen den
         Reiter oder das Projekt wechselt, die Seite über die Navigation verlässt oder im Browser

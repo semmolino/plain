@@ -20,6 +20,7 @@ import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
 import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
 import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
 import { OfferStrukturMobile } from '@/pages/angebote/struktur/OfferStrukturMobile'
+import { PendingValue }   from '@/pages/projekte/struktur/PendingValue'
 import { EffortPanelRow } from '@/pages/angebote/struktur/EffortPanelRow'
 import {
   fetchOffer, fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
@@ -32,7 +33,7 @@ import {
   surchargeDefault, sameSurcharge, surchargeBody, computeSurcharges, type SurchargeEdit,
 } from '@/pages/projekte/struktur/strukturCalc'
 import {
-  aggregateOffer, offerRootTotals, offerRowChanges, offerLeafFee, hoursRate, isHourlyBt,
+  aggregateOffer, offerRootTotals, offerRowChanges, offerLeafFee, hoursRate, isHourlyBt, pendingOfferStructure,
   effectiveLines, nodeLines, withFirstLine, rolesLabel, linesHours, linesFee, serializeLines,
   type OfferRowEdit, type OfferPutBody, type EffortLineEdit,
 } from '@/pages/angebote/struktur/offerStrukturCalc'
@@ -191,7 +192,11 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
   const parentMap = new Map(structure.map(n => [String(n.ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
   const nodeById  = useMemo(() => new Map(structure.map(n => [n.ID, n])), [structure])
-  const aggMap    = useMemo(() => aggregateOffer(structure), [structure])
+  // Mit den offenen Eingaben gerechnet (Runde 6) — wie in der Projektstruktur
+  const view      = useMemo(() => pendingOfferStructure(structure, edits), [structure, edits])
+  const savedAgg  = useMemo(() => aggregateOffer(structure), [structure])
+  const aggMap    = useMemo(() => view.pending.size ? aggregateOffer(view.nodes) : savedAgg, [view, savedAgg])
+  const viewById  = useMemo(() => new Map(view.nodes.map(n => [n.ID, n])), [view])
 
   const showInklCol  = cols.show('inkl')
   const hasParents   = parentIds.size > 0
@@ -563,9 +568,15 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
 
   // ── Summen ───────────────────────────────────────────────────────────────
 
-  const offerLevelSurcharges = Number(offerDetail?.SURCHARGES_TOTAL ?? 0)
+  const savedOfferSurcharges = Number(offerDetail?.SURCHARGES_TOTAL ?? 0)
+  const savedRoot = offerRootTotals(structure, savedAgg, savedOfferSurcharges)
+  // Angebotszuschlaege rechnen auf die Summe der Wurzel-Honorare — mit
+  // offenen Eingaben also neu.
+  const offerLevelSurcharges = view.pending.size || rootChanged
+    ? computeSurcharges(offerRootTotals(view.nodes, aggMap, 0).rootStructureRevenueSum, rootEdit ?? surchargeDefault(offerDetail)).total
+    : savedOfferSurcharges
   const { rootRevenue, rootSurcharges, rootStructureRevenueSum, rootRevenueFinal, rootExtras, rootGesamt } =
-    offerRootTotals(structure, aggMap, offerLevelSurcharges)
+    offerRootTotals(view.nodes, aggMap, offerLevelSurcharges)
 
   const allIds = structure.map(n => n.ID)
   const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id))
@@ -698,12 +709,12 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                       <span className="sx-root-name">Angebot gesamt</span>
                     </td>
                     {cols.show('bt') && <td className="sx-muted">—</td>}
-                    <td className="num sx-muted">{money(rootRevenue)}</td>
-                    {cols.show('sur') && <td className="num"><span className="sx-surcharge-static"><SurchargeAmount value={rootSurcharges} /></span></td>}
-                    {showInklCol && <td className="num">{money(rootRevenueFinal)}</td>}
+                    <td className="num sx-muted"><PendingValue now={rootRevenue} saved={savedRoot.rootRevenue}>{money(rootRevenue)}</PendingValue></td>
+                    {cols.show('sur') && <td className="num"><span className="sx-surcharge-static"><PendingValue now={rootSurcharges} saved={savedRoot.rootSurcharges}><SurchargeAmount value={rootSurcharges} /></PendingValue></span></td>}
+                    {showInklCol && <td className="num"><PendingValue now={rootRevenueFinal} saved={savedRoot.rootRevenueFinal}>{money(rootRevenueFinal)}</PendingValue></td>}
                     {cols.show('nkpct') && <td className="sx-muted">—</td>}
-                    {cols.show('nk') && <td className="num sx-muted">{money(rootExtras)}</td>}
-                    {cols.show('total') && <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}>{money(rootGesamt)}</td>}
+                    {cols.show('nk') && <td className="num sx-muted"><PendingValue now={rootExtras} saved={savedRoot.rootExtras}>{money(rootExtras)}</PendingValue></td>}
+                    {cols.show('total') && <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}><PendingValue now={rootGesamt} saved={savedRoot.rootGesamt}>{money(rootGesamt)}</PendingValue></td>}
                     <td className="sx-col-menu">
                       {canEdit && (
                         <RowMenu label="Aktionen zum Angebot" triggerClassName="row-action-btn">
@@ -745,7 +756,10 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
 
                     const sEdit = edit?.surcharge ?? surchargeDefault(node)
                     // Zuschlaege eines Vaters rechnen auf die Summe der Kinder, eines Blatts auf sein Honorar
-                    const surchargeBase = isParent ? Number(node.REVENUE_BASIS ?? 0) : offerLeafFee(node, edit)
+                    // Stand mit offenen Eingaben (Runde 6) und der gespeicherte zum Vergleich
+                    const vnode  = viewById.get(node.ID) ?? node
+                    const savedA = savedAgg.get(String(node.ID))
+                    const surchargeBase = isParent ? Number(vnode.REVENUE_BASIS ?? 0) : offerLeafFee(node, edit)
                     const computed = computeSurcharges(surchargeBase, sEdit)
                     const surchargeChanged = changes.SURCHARGE_1_CUMUL !== undefined
                     const hasSurcharges = Number(node.SURCHARGES_TOTAL ?? 0) !== 0
@@ -840,7 +854,9 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                             </span>
                           ) : isParent || hourly || !canEdit ? (
                             <span className="sx-muted" title={hourly ? linesTitle : isParent ? 'Summe der Unterelemente' : undefined}>
-                              {money(isParent ? (agg?.revenueBasis ?? 0) : offerLeafFee(node, edit))}
+                              {isParent
+                                ? <PendingValue now={agg?.revenueBasis} saved={savedA?.revenueBasis}>{money(agg?.revenueBasis ?? 0)}</PendingValue>
+                                : money(offerLeafFee(node, edit))}
                             </span>
                           ) : (
                             <AmountInput className={`tbl-input sx-input sx-input-num${ch('revenue')}`}
@@ -851,19 +867,25 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                         {cols.show('sur') && (
                         <td className="num">
                           {(() => {
-                            const sv = surchargeChanged ? computed.total : isParent ? (agg?.surcharges ?? 0) : Number(node.SURCHARGES_TOTAL ?? 0)
+                            const sv = isParent ? (agg?.surcharges ?? 0) : Number(vnode.SURCHARGES_TOTAL ?? 0)
+                            const svSaved = isParent ? (savedA?.surcharges ?? 0) : Number(node.SURCHARGES_TOTAL ?? 0)
+                            // Selbst geaenderte Zuschlaege traegt schon sx-changed am Knopf
+                            const amount = surchargeChanged ? <SurchargeAmount value={sv} />
+                              : <PendingValue now={sv} saved={svSaved}><SurchargeAmount value={sv} /></PendingValue>
                             return canEdit ? (
                               <button type="button" className={`sx-surcharge-btn${surchargeChanged ? ' sx-changed' : ''}`}
                                 aria-label={`Zuschläge von ${nameShort} bearbeiten`}
                                 onClick={() => setSurchargePanel(p => p === node.ID ? null : node.ID)}>
-                                <SurchargeAmount value={sv} />
+                                {amount}
                               </button>
-                            ) : <span className="sx-surcharge-static"><SurchargeAmount value={sv} /></span>
+                            ) : <span className="sx-surcharge-static">{amount}</span>
                           })()}
                         </td>
                         )}
                         {showInklCol && (
-                          <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>{money(Number(node.REVENUE ?? 0))}</td>
+                          <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>
+                            <PendingValue now={vnode.REVENUE} saved={node.REVENUE}>{money(Number(vnode.REVENUE ?? 0))}</PendingValue>
+                          </td>
                         )}
                         {cols.show('nkpct') && (
                         <td>
@@ -874,13 +896,20 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                           ) : `${nkVal} %`}
                         </td>
                         )}
-                        {cols.show('nk') && <td className="num">{money(isParent ? agg?.extras : node.EXTRAS)}</td>}
+                        {cols.show('nk') && (
+                          <td className="num">
+                            <PendingValue now={isParent ? agg?.extras : vnode.EXTRAS} saved={isParent ? savedA?.extras : node.EXTRAS}>
+                              {money(isParent ? agg?.extras : vnode.EXTRAS)}
+                            </PendingValue>
+                          </td>
+                        )}
                         {cols.show('total') && (() => {
-                          const rev = Number(node.REVENUE ?? 0)
-                          const ext = isParent ? (agg?.extras ?? 0) : Number(node.EXTRAS ?? 0)
+                          const rev = Number(vnode.REVENUE ?? 0)
+                          const ext = isParent ? (agg?.extras ?? 0) : Number(vnode.EXTRAS ?? 0)
+                          const savedTotal = Number(node.REVENUE ?? 0) + (isParent ? (savedA?.extras ?? 0) : Number(node.EXTRAS ?? 0))
                           return (
                             <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rev)} + Nebenkosten ${fmtEur(ext)}`}>
-                              {fmtEur(rev + ext)}
+                              <PendingValue now={rev + ext} saved={savedTotal}>{fmtEur(rev + ext)}</PendingValue>
                             </td>
                           )
                         })()}
@@ -935,7 +964,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
               dirty={dirty}
               quiet={!dirty}
               status={saving ? 'Speichert …' : dirty
-                ? `${dirtyCount} ${dirtyCount === 1 ? 'Element' : 'Elemente'} geändert`
+                ? `${dirtyCount} ${dirtyCount === 1 ? 'Element' : 'Elemente'} geändert${view.pending.size || rootChanged ? ' · Summen vorläufig' : ''}`
                 : 'Alle Änderungen gespeichert'}
               secondary={dirty ? (
                 <button type="button" className="btn-secondary" onClick={() => void confirmDiscard()} disabled={saving}>Verwerfen</button>

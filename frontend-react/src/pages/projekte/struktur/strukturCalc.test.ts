@@ -123,3 +123,60 @@ describe('aggregateStructure / rootTotals', () => {
     expect(t.rootGesamt).toBeCloseTo(4800.27, 2)
   })
 })
+
+// ── Runde 6: offene Eingaben in den Summen ──────────────────────────────────
+import { pendingStructure, differs } from './strukturCalc'
+
+describe('Summen mit offenen Eingaben (pendingStructure)', () => {
+  // Vater 1 (NK 5 %, Umbau 20 %) mit Pauschal-Blatt 2 und Nachweis-Blatt 3, daneben Blatt 4
+  const tree = () => [
+    n({ STRUCTURE_ID: 1, REVENUE_BASIS: 1500, REVENUE: 1800, EXTRAS: 90, EXTRAS_PERCENT: 5, SURCHARGES_TOTAL: 300,
+        SURCHARGE_1_LABEL: 'Umbau', SURCHARGE_1_PCT: 20 } as Partial<StructureNode> & { STRUCTURE_ID: number }),
+    n({ STRUCTURE_ID: 2, FATHER_ID: 1, REVENUE_BASIS: 1000, REVENUE: 1000, EXTRAS: 50, EXTRAS_PERCENT: 5 }),
+    n({ STRUCTURE_ID: 3, FATHER_ID: 1, BILLING_TYPE_ID: 2, TEC_SP_TOT_SUM: 500, REVENUE_BASIS: 500, REVENUE: 500, EXTRAS: 25, EXTRAS_PERCENT: 5 }),
+    n({ STRUCTURE_ID: 4, REVENUE_BASIS: 200, REVENUE: 200, EXTRAS: 0, EXTRAS_PERCENT: 0 }),
+  ]
+
+  it('ohne Eingaben bleibt alles, wie es ist (dieselben Objekte)', () => {
+    const s = tree()
+    const v = pendingStructure(s, {})
+    expect(v.pending.size).toBe(0)
+    expect(v.nodes).toBe(s)
+  })
+
+  it('neues Honorar: Blatt, Vater samt Zuschlag und NK, Gesamtzeile — Nachbarn unberührt', () => {
+    const s = tree()
+    const v = pendingStructure(s, { 2: { budget: '1200' } })
+    const by = new Map(v.nodes.map(x => [x.STRUCTURE_ID, x]))
+    expect(by.get(2)).toMatchObject({ REVENUE_BASIS: 1200, REVENUE: 1200, EXTRAS: 60 })
+    // Vater: 1200 + 500 = 1700, Umbau 20 % = 340, NK = 60 + 25 + 340 × 5 % = 102
+    expect(by.get(1)).toMatchObject({ REVENUE_BASIS: 1700, SURCHARGES_TOTAL: 340, REVENUE: 2040, EXTRAS: 102 })
+    expect(by.get(3)).toBe(s[2])
+    expect(by.get(4)).toBe(s[3])
+    expect([...v.pending].sort()).toEqual(['1', '2'])
+    const agg = aggregateStructure(v.nodes)
+    expect(agg.get('1')).toEqual({ extras: 102, surcharges: 340, revenueBasis: 1700 })
+    expect(rootTotals(v.nodes, agg, 0)).toMatchObject({ rootRevenueFinal: 2240, rootExtras: 102, rootGesamt: 2342 })
+  })
+
+  it('NK % und Zuschlag am Vater wirken nur auf ihn; Name allein ist keine Summenänderung', () => {
+    const s = tree()
+    expect(pendingStructure(s, { 2: { nameLong: 'Neu' } }).pending.size).toBe(0)
+    const sur = { ...surchargeDefault(s[0]), s1Pct: '10' }
+    const v = pendingStructure(s, { 1: { nk: '10', surcharge: sur } })
+    const p = v.nodes.find(x => x.STRUCTURE_ID === 1)!
+    // 1500 × 10 % = 150; NK = 50 + 25 + 150 × 10 % = 90
+    expect(p).toMatchObject({ REVENUE_BASIS: 1500, SURCHARGES_TOTAL: 150, REVENUE: 1650, EXTRAS: 90 })
+  })
+
+  it('Wechsel auf Nachweis: Basis sind die Buchungen, nicht der eingetippte Betrag', () => {
+    const s = tree()
+    const v = pendingStructure(s, { 2: { billingTypeId: '2', budget: '9999' } })
+    expect(v.nodes.find(x => x.STRUCTURE_ID === 2)).toMatchObject({ REVENUE: 0, EXTRAS: 0 })
+  })
+
+  it('differs: Cent-genau', () => {
+    expect(differs(10, 10.004)).toBe(false)
+    expect(differs(10, 10.01)).toBe(true)
+  })
+})

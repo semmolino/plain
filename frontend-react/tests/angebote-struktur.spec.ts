@@ -117,6 +117,11 @@ test.describe('Angebotsstruktur am Desktop', () => {
     await expect(row.getByRole('button', { name: 'Aufwand BL1 nach Rollen bearbeiten' })).toHaveText('34 h · 2.960,00 €')
     await expect(row.locator('.ox-role')).toHaveText('PL · TZ')
     await expect(page.getByRole('textbox', { name: 'Stunden BL1' })).toHaveCount(0)
+    // Runde 6: Gesamt und Vater rechnen die offene Zeile schon mit, gekennzeichnet
+    await expect(row.locator('td.num.sx-strong').last()).toHaveText('2.960,00 € (noch nicht gespeichert)')
+    await expect(row.locator('td.num.sx-strong').last().locator('.sx-pending')).toBeVisible()
+    await expect(page.locator('tr[data-struct-id="210"] .sx-pending').first()).toBeVisible()
+    await expect(page.locator('.action-bar')).toContainText('Summen vorläufig')
     expect(puts).toHaveLength(0)
     await page.locator('.action-bar').getByRole('button', { name: /Speichern/ }).click()
     await expect(page.locator('.toast-message', { hasText: '1 Element gespeichert' })).toBeVisible()

@@ -4801,6 +4801,14 @@ th.doc-actions, td.doc-actions {
    Hinweis. */
 .sx-table .sx-changed { background: var(--warning-bg); border-color: var(--warning); }
 .sx-row-changed > td:first-child { box-shadow: inset 3px 0 0 var(--warning); }
+/* Summen mit offenen Eingaben (Runde 6): der Wert ist schon neu, kursiv mit
+   Punkt wie in der Aktionsleiste; „noch nicht gespeichert" steht im Tooltip
+   und fuer Screenreader (PendingValue) — Farbe ist nicht der einzige Traeger. */
+.sx-pending { font-style: italic; white-space: nowrap; }
+.sx-pending::after {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 4px;
+  border-radius: 50%; background: var(--warning); vertical-align: middle;
+}
 
 .sx-row-internal .sx-input-name, .sx-row-internal .sx-name-text { color: var(--text-3); }
 .sx-internal-pill { flex-shrink: 0; }

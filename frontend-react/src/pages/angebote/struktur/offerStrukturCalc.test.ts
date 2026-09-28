@@ -251,3 +251,34 @@ describe('offerRowChanges', () => {
     } })).toEqual({})
   })
 })
+
+// ── Runde 6: offene Eingaben in den Summen ──────────────────────────────────
+import { pendingOfferStructure } from './offerStrukturCalc'
+
+describe('Angebot: Summen mit offenen Eingaben', () => {
+  it('zweite Aufwandszeile: Blatt, Vater und Gesamt wie nach dem Speichern', () => {
+    const s = [
+      n({ ID: 10, BILLING_TYPE_ID: 2, REVENUE_BASIS: 2280, REVENUE: 2280, EXTRAS: 0 }),
+      n({ ID: 11, FATHER_ID: 10, BILLING_TYPE_ID: 2, QUANTITY: 24, HOURLY_RATE: 95, ROLE_ID: 2, ROLE_ABBR: 'PL',
+          REVENUE_BASIS: 2280, REVENUE: 2280, EXTRAS: 0 }),
+    ]
+    const lines: EffortLineEdit[] = [
+      { roleId: '2', roleAbbr: 'PL', roleName: '', hours: '24', rate: '95' },
+      { roleId: '4', roleAbbr: 'TZ', roleName: '', hours: '10', rate: '68' },
+    ]
+    const v = pendingOfferStructure(s, { 11: { lines } })
+    expect(v.nodes.find(x => x.ID === 11)).toMatchObject({ REVENUE_BASIS: 2960, REVENUE: 2960 })
+    expect(v.nodes.find(x => x.ID === 10)).toMatchObject({ REVENUE_BASIS: 2960, REVENUE: 2960 })
+    expect(offerRootTotals(v.nodes, aggregateOffer(v.nodes), 0).rootGesamt).toBe(2960)
+  })
+
+  it('Pauschal mit NK: Honorar und NK neu, unveränderte Elemente bleiben dieselben Objekte', () => {
+    const s = [
+      n({ ID: 1, REVENUE_BASIS: 1000, REVENUE: 1000, EXTRAS: 50, EXTRAS_PERCENT: 5 }),
+      n({ ID: 2, REVENUE_BASIS: 500, REVENUE: 500, EXTRAS: 0 }),
+    ]
+    const v = pendingOfferStructure(s, { 1: { budget: '1100' } })
+    expect(v.nodes[0]).toMatchObject({ REVENUE: 1100, EXTRAS: 55 })
+    expect(v.nodes[1]).toBe(s[1])
+  })
+})
