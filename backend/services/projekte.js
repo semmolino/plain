@@ -1483,13 +1483,25 @@ async function getContractByProject(supabase, { projectId, tenantId }) {
       .from(table)
       .select(columns)
       .eq("PROJECT_ID", projectId)
+      .eq("TENANT_ID", tenantId)
+      .order("ID", { ascending: true })
       .limit(1)
       .maybeSingle();
 
-  const fullCols = "ID, ABBR, NAME, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, VAT_ID, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE";
   const basicCols = "ID, ABBR, NAME, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, VAT_ID";
+  const seCols    = `${basicCols}, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE`;
+  // Die USt-Kategorie fehlte hier (Runde 6). Der Reiter „Verträge" zeigte
+  // deshalb immer „Standard" und schickte das beim naechsten Speichern mit —
+  // ein Vertrag nach §13b wurde still zum Regelsatz, und jede neue Rechnung
+  // daraus (invoices.js / partialPayments.js lesen die Kategorie vom Vertrag)
+  // wies Umsatzsteuer aus.
+  const fullCols  = `${seCols}, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT`;
 
   let { data, error } = await query("CONTRACT", fullCols);
+  if (error && String(error.message || "").includes("VAT_")) {
+    // Migration 0059 not yet run — retry without the VAT category
+    ({ data, error } = await query("CONTRACT", seCols));
+  }
   if (error && String(error.message || "").includes("SE_")) {
     // Migration 0047 not yet run — retry with basic columns
     ({ data, error } = await query("CONTRACT", basicCols));
