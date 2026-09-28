@@ -1034,6 +1034,13 @@ export function budgetOverview() {
   }
 }
 
+export const ADDRESS_HITS = [
+  { ID: 1, ADDRESS_NAME_1: 'Stadt Musterstadt – Hochbauamt' },
+  { ID: 2, ADDRESS_NAME_1: 'Stadtwerke Ravensburg GmbH' },
+  { ID: 3, ADDRESS_NAME_1: 'Staatliches Hochbauamt Ulm' },
+  { ID: 4, ADDRESS_NAME_1: 'Kita-Verbund Sonnenblume e. V.' },
+]
+
 async function mockVertragPreiseBudget(page: Page) {
   const get = (re: string, body: unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), r => r.fulfill(json(body)))
   await get('stammdaten/vat', { data: [
@@ -1046,6 +1053,11 @@ async function mockVertragPreiseBudget(page: Page) {
     { ID: 2, FIRST_NAME: 'Rainer', LAST_NAME: 'Vogt' },
   ] })
   // Rollen kommen aus ROLES (mockPilot) — dieselben wie in der Angebotsstruktur
+  // Adresssuche (Autocomplete): filtert wie der Server auf den Namen
+  await page.route(/\/api\/v1\/stammdaten\/addresses\/search(\?|$)/, r => {
+    const q = (new URL(r.request().url()).searchParams.get('q') ?? '').toLowerCase()
+    return r.fulfill(json({ data: ADDRESS_HITS.filter(a => a.ADDRESS_NAME_1.toLowerCase().includes(q)) }))
+  })
   const e2p = (id: number, emp: number, role: [number, string, string] | null, rate: number | null) => ({
     ID: id, EMPLOYEE_ID: emp, ROLE_ID: role?.[0] ?? null, ROLE_ABBR: role?.[1] ?? '', ROLE_NAME: role?.[2] ?? '', HOURLY_RATE: rate,
     EMPLOYEE_SHORT_NAME: EMPLOYEES[emp - 1].ABBR, EMPLOYEE_FIRST_NAME: EMPLOYEES[emp - 1].FIRST_NAME, EMPLOYEE_LAST_NAME: EMPLOYEES[emp - 1].LAST_NAME,

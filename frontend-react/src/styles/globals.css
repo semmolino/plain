@@ -2015,7 +2015,12 @@ th.doc-actions, td.doc-actions {
   border-bottom: 1px solid var(--border-4);
 }
 .autocomplete-item:last-child { border-bottom: none; }
-.autocomplete-item:hover { background: var(--accent-bg); }
+.autocomplete-item:hover, .autocomplete-item--active { background: var(--accent-bg); }
+/* Runde 7: Tastatur (aktiver Treffer), „Keine Treffer", 44px am Handy */
+.autocomplete-empty { padding: 9px 12px; font-size: 13px; color: var(--text-3); }
+@media (max-width: 640px), (pointer: coarse) {
+  .autocomplete-item { min-height: 44px; display: flex; align-items: center; }
+}
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 .modal-backdrop {
