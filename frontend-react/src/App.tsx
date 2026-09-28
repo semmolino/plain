@@ -1,11 +1,12 @@
 import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 
 import { AuthProvider }   from '@/context/AuthContext'
 import { ProtectedRoute } from '@/components/ui/ProtectedRoute'
 import { ErrorBoundary }  from '@/components/ui/ErrorBoundary'
+import { RouteError }     from '@/components/ui/RouteError'
 import { AppLayout }      from '@/components/layout/AppLayout'
 
 // Auth pages — tiny, always needed, eager
@@ -43,53 +44,72 @@ function PageLoader() {
   return <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)' }}>Laden …</div>
 }
 
+/**
+ * Die Anwendung als ein Wurzel-Eintrag des Data-Routers (UI-Pilot Runde 2).
+ *
+ * Vorher `<BrowserRouter>`. Der Data-Router ist Voraussetzung fuer
+ * `useBlocker` — erst damit fragt der Guard fuer ungespeicherte Aenderungen
+ * auch bei einem Klick in die Seitennavigation und beim Zurueck des
+ * Browsers nach (components/ui/DirtyGuard.tsx). Die Routen selbst sind
+ * unveraendert: sie stehen als `<Routes>` unter einer Splat-Route, damit
+ * dieser Schritt nichts anderes aendert. `errorElement` faengt, was an den
+ * ErrorBoundaries der Seiten vorbeigeht.
+ */
+function AppRoutes() {
+  return (
+    <ErrorBoundary>
+    <AuthProvider>
+      <Routes>
+        {/* Public */}
+        <Route path="/login"          element={<LoginPage />} />
+        <Route path="/login/:slug"    element={<LoginPage />} />
+        <Route path="/signup"         element={<SignupPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        {/* Landeseite des Bestaetigungslinks aus der Registrierungsmail */}
+        <Route path="/registrierung-bestaetigen" element={<ConfirmSignupPage />} />
+
+        {/* Protected — all wrapped in AppLayout */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/"            element={<ProtectedRoute anyOf={['dashboard.view']}><Suspense fallback={<PageLoader />}><DashboardPage /></Suspense></ProtectedRoute>} />
+          <Route path="/adressen"    element={<ProtectedRoute anyOf={['addresses.view']}><Suspense fallback={<PageLoader />}><AdressenPage /></Suspense></ProtectedRoute>} />
+          <Route path="/adressen/:id" element={<ProtectedRoute anyOf={['addresses.view']}><Suspense fallback={<PageLoader />}><AddressDetailPage /></Suspense></ProtectedRoute>} />
+          <Route path="/projekte"    element={<ProtectedRoute anyOf={['projects.view']}><Suspense fallback={<PageLoader />}><ProjektePage /></Suspense></ProtectedRoute>} />
+          <Route path="/daten"       element={<ProtectedRoute anyOf={['reports.view']}><Suspense fallback={<PageLoader />}><DatenPage /></Suspense></ProtectedRoute>} />
+          <Route path="/rechnungen"  element={<ProtectedRoute anyOf={['invoices.view','dunning.view','security_retention.view']}><Suspense fallback={<PageLoader />}><RechnungenPage /></Suspense></ProtectedRoute>} />
+          <Route path="/admin"       element={<ProtectedRoute anyOf={['settings.basedata.view','settings.basedata.edit','settings.defaults.edit','settings.notifications.edit','settings.monthly_close.edit','settings.company.view','settings.company.edit','settings.numbers.edit','settings.text_templates.edit','settings.dunning_config.edit','settings.work_time.edit','settings.cost_rate.edit','roles.view']}><Suspense fallback={<PageLoader />}><AdminPage /></Suspense></ProtectedRoute>} />
+          <Route path="/mitarbeiter" element={<ProtectedRoute anyOf={['employees.view','absence.view','absence.request']}><Suspense fallback={<PageLoader />}><MitarbeiterPage /></Suspense></ProtectedRoute>} />
+          <Route path="/angebote"   element={<ProtectedRoute anyOf={['offers.view']}><Suspense fallback={<PageLoader />}><AngebotePage /></Suspense></ProtectedRoute>} />
+          <Route path="/nachtraege"     element={<ProtectedRoute anyOf={['nachtraege.view']}><Suspense fallback={<PageLoader />}><NachtraegePage /></Suspense></ProtectedRoute>} />
+          <Route path="/nachtraege/:id" element={<ProtectedRoute anyOf={['nachtraege.view']}><Suspense fallback={<PageLoader />}><NachtragDetailPage /></Suspense></ProtectedRoute>} />
+
+          <Route path="/service"    element={<ProtectedRoute anyOf={['service.suggestions.view','service.feedback.use','service.support.use']}><Suspense fallback={<PageLoader />}><ServicePage /></Suspense></ProtectedRoute>} />
+          <Route path="/profil"     element={<Suspense fallback={<PageLoader />}><ProfilePage /></Suspense>} />
+          <Route path="/403"        element={<Suspense fallback={<PageLoader />}><ForbiddenPage /></Suspense>} />
+        </Route>
+
+        {/* Catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
+    </ErrorBoundary>
+  )
+}
+
+const router = createBrowserRouter([
+  { path: '*', element: <AppRoutes />, errorElement: <RouteError /> },
+])
+
 export default function App() {
   return (
     <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ErrorBoundary>
-        <AuthProvider>
-          <Routes>
-            {/* Public */}
-            <Route path="/login"          element={<LoginPage />} />
-            <Route path="/login/:slug"    element={<LoginPage />} />
-            <Route path="/signup"         element={<SignupPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            {/* Landeseite des Bestaetigungslinks aus der Registrierungsmail */}
-            <Route path="/registrierung-bestaetigen" element={<ConfirmSignupPage />} />
-
-            {/* Protected — all wrapped in AppLayout */}
-            <Route
-              element={
-                <ProtectedRoute>
-                  <AppLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route path="/"            element={<ProtectedRoute anyOf={['dashboard.view']}><Suspense fallback={<PageLoader />}><DashboardPage /></Suspense></ProtectedRoute>} />
-              <Route path="/adressen"    element={<ProtectedRoute anyOf={['addresses.view']}><Suspense fallback={<PageLoader />}><AdressenPage /></Suspense></ProtectedRoute>} />
-              <Route path="/adressen/:id" element={<ProtectedRoute anyOf={['addresses.view']}><Suspense fallback={<PageLoader />}><AddressDetailPage /></Suspense></ProtectedRoute>} />
-              <Route path="/projekte"    element={<ProtectedRoute anyOf={['projects.view']}><Suspense fallback={<PageLoader />}><ProjektePage /></Suspense></ProtectedRoute>} />
-              <Route path="/daten"       element={<ProtectedRoute anyOf={['reports.view']}><Suspense fallback={<PageLoader />}><DatenPage /></Suspense></ProtectedRoute>} />
-              <Route path="/rechnungen"  element={<ProtectedRoute anyOf={['invoices.view','dunning.view','security_retention.view']}><Suspense fallback={<PageLoader />}><RechnungenPage /></Suspense></ProtectedRoute>} />
-              <Route path="/admin"       element={<ProtectedRoute anyOf={['settings.basedata.view','settings.basedata.edit','settings.defaults.edit','settings.notifications.edit','settings.monthly_close.edit','settings.company.view','settings.company.edit','settings.numbers.edit','settings.text_templates.edit','settings.dunning_config.edit','settings.work_time.edit','settings.cost_rate.edit','roles.view']}><Suspense fallback={<PageLoader />}><AdminPage /></Suspense></ProtectedRoute>} />
-              <Route path="/mitarbeiter" element={<ProtectedRoute anyOf={['employees.view','absence.view','absence.request']}><Suspense fallback={<PageLoader />}><MitarbeiterPage /></Suspense></ProtectedRoute>} />
-              <Route path="/angebote"   element={<ProtectedRoute anyOf={['offers.view']}><Suspense fallback={<PageLoader />}><AngebotePage /></Suspense></ProtectedRoute>} />
-              <Route path="/nachtraege"     element={<ProtectedRoute anyOf={['nachtraege.view']}><Suspense fallback={<PageLoader />}><NachtraegePage /></Suspense></ProtectedRoute>} />
-              <Route path="/nachtraege/:id" element={<ProtectedRoute anyOf={['nachtraege.view']}><Suspense fallback={<PageLoader />}><NachtragDetailPage /></Suspense></ProtectedRoute>} />
-
-              <Route path="/service"    element={<ProtectedRoute anyOf={['service.suggestions.view','service.feedback.use','service.support.use']}><Suspense fallback={<PageLoader />}><ServicePage /></Suspense></ProtectedRoute>} />
-              <Route path="/profil"     element={<Suspense fallback={<PageLoader />}><ProfilePage /></Suspense>} />
-              <Route path="/403"        element={<Suspense fallback={<PageLoader />}><ForbiddenPage /></Suspense>} />
-            </Route>
-
-            {/* Catch-all */}
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </AuthProvider>
-        </ErrorBoundary>
-      </BrowserRouter>
+      <RouterProvider router={router} />
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
     </ErrorBoundary>

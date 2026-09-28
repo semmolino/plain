@@ -1,6 +1,7 @@
 "use strict";
 
 const { contractDefaults } = require("./contractDefaults");
+const runde = require("./leistungsstandRunde");
 const { suchwert } = require("./pgrestFilter");
 
 // ---------------------------------------------------------------------------
@@ -743,7 +744,15 @@ async function recalcProjectRootSurcharges(supabase, { projectId }) {
   }).eq("ID", projectId);
 }
 
-async function progressSnapshot(supabase, { projectId, tenantId }) {
+/**
+ * Stand aller Elemente eines Projekts festschreiben (PROJECT_PROGRESS).
+ *
+ * `asOfDate` (JJJJ-MM-TT) ist der Stichtag, zu dem der Stand gilt (Migration
+ * 0170). Ohne ihn gilt „heute" (Spaltenstandard). Mit einem frueheren
+ * Stichtag bekommen Elemente, die schon einen spaeteren Stand haben, keine
+ * Zeile — siehe laterStands in services/leistungsstandRunde.js.
+ */
+async function progressSnapshot(supabase, { projectId, tenantId, asOfDate = null }) {
   projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const { data: structures, error: sErr } = await supabase
     .from("PROJECT_STRUCTURE")
@@ -826,12 +835,24 @@ async function progressSnapshot(supabase, { projectId, tenantId }) {
     if (uErr) throw uErr;
   }
 
-  for (const part of chunk(progressRows, 200)) {
+  let rowsToWrite = progressRows;
+  let skipped = [];
+  if (asOfDate) {
+    const later = await runde.laterStands(supabase, {
+      tenantId, structureIds: progressRows.map(r => r.STRUCTURE_ID), asOf: asOfDate,
+    });
+    skipped = [...later.keys()];
+    rowsToWrite = progressRows
+      .filter(r => !later.has(String(r.STRUCTURE_ID)))
+      .map(r => ({ ...r, AS_OF_DATE: asOfDate }));
+  }
+
+  for (const part of chunk(rowsToWrite, 200)) {
     const { error: pErr } = await supabase.from("PROJECT_PROGRESS").insert(part);
     if (pErr) throw { status: 500, message: "PROJECT_PROGRESS konnte nicht geschrieben werden: " + pErr.message };
   }
 
-  return { updated: updates.length, inserted: progressRows.length };
+  return { updated: updates.length, inserted: rowsToWrite.length, skipped_later: skipped };
 }
 
 async function getTecSum(supabase, { structureId, tenantId }) {
@@ -1531,7 +1552,7 @@ async function getLeistungsstand(supabase, { projectId, tenantId }) {
   projectId = await assertProjectInTenant(supabase, projectId, tenantId);
   const { data: nodes, error: nErr } = await supabase
     .from("PROJECT_STRUCTURE")
-    .select("ID, ABBR, NAME, FATHER_ID, SORT_ORDER, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION, TENANT_ID")
+    .select("ID, ABBR, NAME, FATHER_ID, SORT_ORDER, BILLING_TYPE_ID, REVENUE, EXTRAS, EXTRAS_PERCENT, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, REVENUE_COMPLETION, EXTRAS_COMPLETION, ADVANCE_INVOICED, INVOICED, TENANT_ID")
     .eq("PROJECT_ID", projectId)
     .order("SORT_ORDER")
     .order("ID");
@@ -1543,10 +1564,13 @@ async function getLeistungsstand(supabase, { projectId, tenantId }) {
   const fatherIds = new Set(rows.filter(r => r.FATHER_ID !== null && r.FATHER_ID !== undefined).map(r => String(r.FATHER_ID)));
   const structureIds = rows.map(r => String(r.ID));
 
+  // Juengster Stand je Element — nach Stichtag, bei Gleichstand nach Erfassung.
   const { data: progress, error: pErr } = await supabase
     .from("PROJECT_PROGRESS")
-    .select("STRUCTURE_ID, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, created_at")
+    .select("STRUCTURE_ID, REVENUE_COMPLETION_PERCENT, EXTRAS_COMPLETION_PERCENT, AS_OF_DATE, created_at")
+    .eq("TENANT_ID", tenantId)
     .in("STRUCTURE_ID", structureIds)
+    .order("AS_OF_DATE", { ascending: false })
     .order("created_at", { ascending: false });
   if (pErr) throw pErr;
 
@@ -1563,12 +1587,36 @@ async function getLeistungsstand(supabase, { projectId, tenantId }) {
     PREV_REVENUE_COMPLETION_PERCENT: latestProgress.get(String(r.ID))?.REVENUE_COMPLETION_PERCENT ?? null,
     PREV_EXTRAS_COMPLETION_PERCENT: latestProgress.get(String(r.ID))?.EXTRAS_COMPLETION_PERCENT ?? null,
     PREV_AT: latestProgress.get(String(r.ID))?.created_at ?? null,
+    // Stichtag des letzten Standes. Liegt er nach dem gewaehlten Stichtag,
+    // laesst sich das Element dafuer nicht mehr pflegen (laterStands).
+    PREV_AS_OF: latestProgress.get(String(r.ID))?.AS_OF_DATE ?? null,
   }));
 }
 
-async function saveLeistungsstand(supabase, { projectId, updates, tenantId }) {
+/**
+ * Leistungsstaende speichern — zu einem Stichtag (Migration 0170).
+ *
+ * `asOfDate`: Stichtag, zu dem der Stand gilt (leer = heute, nie Zukunft).
+ * `confirmUnchanged`: ohne Aenderung den Stand zum Stichtag bestaetigen —
+ *   schreibt die aktuellen Werte mit diesem Stichtag. Genau diesen
+ *   Monatsend-Stand braucht der Bericht „Teilfertige Leistungen".
+ * Beides vermerkt am Projekt, fuer welchen Stichtag es gepflegt ist
+ * (PROGRESS_REVIEWED_*), das liest die Monatsrunde.
+ *
+ * Ein Element mit einem Stand NACH dem Stichtag ist fuer diesen Stichtag
+ * gesperrt: Aendern → 409 mit Namen, Bestaetigen → uebersprungen.
+ */
+async function saveLeistungsstand(supabase, { projectId, updates, tenantId, asOfDate = null, confirmUnchanged = false, employeeId = null }) {
   projectId = await assertProjectInTenant(supabase, projectId, tenantId);
-  if (!Array.isArray(updates) || !updates.length) return { saved: 0, updated: 0, inserted: 0 };
+  const hasUpdates = Array.isArray(updates) && updates.length > 0;
+  if (!hasUpdates && !confirmUnchanged) return { saved: 0, updated: 0, inserted: 0 };
+  const asOf = runde.normalizeAsOf(asOfDate);
+
+  if (!hasUpdates) {
+    const snap = await progressSnapshot(supabase, { projectId: String(projectId), tenantId, asOfDate: asOf });
+    await runde.markReviewed(supabase, { tenantId, projectId, asOf, employeeId });
+    return { saved: 0, as_of: asOf, confirmed: true, ...snap };
+  }
 
   const ids = updates.map(u => String(u.structure_id));
   const { data: nodes, error: nErr } = await supabase
@@ -1579,6 +1627,18 @@ async function saveLeistungsstand(supabase, { projectId, updates, tenantId }) {
   if (nErr) throw nErr;
 
   const nodeMap = new Map((nodes || []).map(n => [String(n.ID), n]));
+
+  const later = await runde.laterStands(supabase, { tenantId, structureIds: [...nodeMap.keys()], asOf });
+  if (later.size) {
+    const { data: named } = await supabase
+      .from("PROJECT_STRUCTURE").select("ID, ABBR").eq("TENANT_ID", tenantId).in("ID", [...later.keys()]);
+    const list = (named || []).map(n => `${n.ABBR} (${runde.deDate(later.get(String(n.ID)))})`).join(", ");
+    throw {
+      status: 409,
+      code: "AS_OF_BEFORE_LATEST",
+      message: `Zum ${runde.deDate(asOf)} lässt sich nicht mehr ändern, es gibt schon einen späteren Stand: ${list}.`,
+    };
+  }
 
   const bt2Ids = (nodes || []).filter(n => Number(n.BILLING_TYPE_ID) === 2).map(n => String(n.ID));
   const tecSums = {};
@@ -1643,8 +1703,9 @@ async function saveLeistungsstand(supabase, { projectId, updates, tenantId }) {
     await propagateUpwards(supabase, { structureId: parentId });
   }
 
-  const snapshotResult = await progressSnapshot(supabase, { projectId: String(projectId), tenantId });
-  return { saved: updates.length, ...snapshotResult };
+  const snapshotResult = await progressSnapshot(supabase, { projectId: String(projectId), tenantId, asOfDate: asOf });
+  await runde.markReviewed(supabase, { tenantId, projectId, asOf, employeeId });
+  return { saved: updates.length, as_of: asOf, ...snapshotResult };
 }
 
 async function deleteStructure(supabase, { structureId, cascade, tenantId }) {

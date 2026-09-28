@@ -1,10 +1,50 @@
 "use strict";
 
 const svc = require("../services/buchungen");
+const eigen = require("../services/eigeneZeit");
+
+const has = (req, key) => !!req._permissionsUnrestricted || !!req.hasPermission?.(key);
+/** Nur „Eigene Zeit buchen", nicht das volle Recht fuer diese Aktion. */
+const ownOnly = (req, fullKey) => !has(req, fullKey) && has(req, "projects.bookings.own");
+
+/** Eigene, geladene Buchung — oder 403/404. */
+async function loadOwnBooking(supabase, req, id) {
+  const { data } = await supabase
+    .from("BOOKING").select("ID, EMPLOYEE_ID, PROJECT_ID, BOOKING_DATE")
+    .eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+  if (!data) throw { status: 404, message: "Buchung nicht gefunden" };
+  if (Number(data.EMPLOYEE_ID) !== Number(req.employeeId)) {
+    throw { status: 403, message: "Nur eigene Buchungen lassen sich ändern." };
+  }
+  return data;
+}
+
+/** GET /buchungen/mine?from&to — eigene Buchungen, Mitarbeiter aus der Sitzung. */
+async function listMine(req, res, supabase) {
+  try {
+    const data = await eigen.listMine(supabase, {
+      tenantId: req.tenantId, employeeId: req.employeeId, from: req.query.from, to: req.query.to,
+    });
+    res.json({ data });
+  } catch (err) {
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
+  }
+}
 
 async function createBuchung(req, res, supabase) {
   try {
-    await svc.createBuchung(supabase, { body: req.body, tenantId: req.tenantId });
+    let body = req.body || {};
+    // Mit „Eigene Zeit buchen": immer fuer sich selbst, Saetze vom Server,
+    // Stunden zur Abrechnung = geleistete Stunden, nur laufende Projekte.
+    if (ownOnly(req, "projects.bookings.create")) {
+      await eigen.assertBookable(supabase, { tenantId: req.tenantId, projectId: body.PROJECT_ID });
+      if (body.STRUCTURE_ID) {
+        await eigen.assertLeafOfProject(supabase, { tenantId: req.tenantId, projectId: body.PROJECT_ID, structureId: body.STRUCTURE_ID });
+      }
+      body = { ...body, EMPLOYEE_ID: req.employeeId, HOURLY_RATE: 0, QUANTITY_EXT: body.QUANTITY_INT };
+      delete body.COST_RATE;
+    }
+    await svc.createBuchung(supabase, { body, tenantId: req.tenantId });
     res.json({ success: true });
   } catch (err) {
     const status = err.status || 500;
@@ -42,8 +82,22 @@ async function patchBuchung(req, res, supabase) {
   const id = req.params.id;
   if (!id) return res.status(400).json({ error: "ID fehlt" });
   try {
-    const data = await svc.patchBuchung(supabase, { id, body: req.body, tenantId: req.tenantId });
-    res.json({ data });
+    let body = req.body || {};
+    if (ownOnly(req, "projects.bookings.edit")) {
+      const own = await loadOwnBooking(supabase, req, id);
+      // Nur Zeit, Menge, Text und die Leistung im selben Projekt — kein
+      // Mitarbeiter-, Projekt- oder Satzwechsel (Umbuchen ist ein eigenes Recht).
+      const allowed = ["BOOKING_DATE", "TIME_START", "TIME_FINISH", "QUANTITY_INT", "POSTING_DESCRIPTION", "STRUCTURE_ID"];
+      body = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
+      if (body.QUANTITY_INT !== undefined) body.QUANTITY_EXT = body.QUANTITY_INT;
+      if (body.STRUCTURE_ID !== undefined) {
+        await eigen.assertLeafOfProject(supabase, { tenantId: req.tenantId, projectId: own.PROJECT_ID, structureId: body.STRUCTURE_ID });
+      }
+    }
+    const data = await svc.patchBuchung(supabase, { id, body, tenantId: req.tenantId });
+    // patchBuchung liefert die ganze Zeile (select *) — Saetze nur mit Recht,
+    // wie beim Lesen der Liste.
+    res.json({ data: stripBookingMoney(req, [data])[0] });
   } catch (err) {
     const status = err.status || 500;
     res.status(status).json({ error: err.message || err });
@@ -54,6 +108,10 @@ async function deleteBuchung(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "ID fehlt" });
   try {
+    if (ownOnly(req, "projects.bookings.delete")) {
+      const own = await loadOwnBooking(supabase, req, id);
+      if (own.BOOKING_DATE) await svc.checkMonthNotClosed(supabase, req.tenantId, own.EMPLOYEE_ID, String(own.BOOKING_DATE));
+    }
     const depCheck = require("../services/dependencyCheck");
     const check = await depCheck.checkTec(supabase, { tenantId: req.tenantId, id });
     if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
@@ -71,23 +129,7 @@ async function listBuchungenByProject(req, res, supabase) {
     const data = await svc.listBuchungenByProject(supabase, { projectId, tenantId: req.tenantId });
 
     // Phase 6: Felder-Filter — Erloese / Kosten nur mit jeweiliger Permission
-    const showRevenue = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.revenue.view");
-    const showCosts   = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.costs.view");
-    const filtered = (data || []).map(r => {
-      const out = { ...r };
-      if (!showRevenue) {
-        delete out.QUANTITY_EXT;
-        delete out.HOURLY_RATE;
-        delete out.HOURLY_RATE_TOTAL;
-      }
-      if (!showCosts) {
-        delete out.COST_RATE;
-        delete out.COST_TOTAL;
-      }
-      return out;
-    });
-
-    res.json({ data: filtered });
+    res.json({ data: stripBookingMoney(req, data) });
   } catch (err) {
     res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
@@ -109,11 +151,36 @@ async function createTimerDraft(req, res, supabase) {
   }
 }
 
+/** Erloes- und Kostenfelder nur mit dem jeweiligen Recht (wie die Projektliste). */
+function stripBookingMoney(req, rows) {
+  const showRevenue = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.revenue.view");
+  const showCosts   = !!req._permissionsUnrestricted || req.permissions?.has?.("projects.bookings.costs.view");
+  return (rows || []).map(r => {
+    const out = { ...r };
+    if (!showRevenue) { delete out.QUANTITY_EXT; delete out.HOURLY_RATE; delete out.HOURLY_RATE_TOTAL; }
+    if (!showCosts)   { delete out.COST_RATE; delete out.COST_TOTAL; }
+    return out;
+  });
+}
+
+/** Timer-Entwuerfe sehen und bestaetigen: eigene immer, fremde nur mit
+ *  employees.bookings.view_all. Vorher kam die Mitarbeiter-ID ungeprueft aus
+ *  der Anfrage — jeder mit Buchungsrecht las (samt Kostensatz) und bestaetigte
+ *  die Tagesentwuerfe eines Kollegen. */
+function mayActForEmployee(req, employeeId) {
+  if (Number(employeeId) === Number(req.employeeId)) return true;
+  return !!req.hasPermission?.("employees.bookings.view_all");
+}
+
 async function listDraftsByEmployee(req, res, supabase) {
   const { employee_id, date } = req.query;
+  const employeeId = employee_id != null && employee_id !== "" ? Number(employee_id) : req.employeeId;
+  if (!mayActForEmployee(req, employeeId)) {
+    return res.status(403).json({ error: "Nur eigene Entwürfe sichtbar." });
+  }
   try {
-    const data = await svc.listDraftsByEmployee(supabase, { employeeId: employee_id, date, tenantId: req.tenantId });
-    res.json({ data });
+    const data = await svc.listDraftsByEmployee(supabase, { employeeId, date, tenantId: req.tenantId });
+    res.json({ data: stripBookingMoney(req, data) });
   } catch (err) {
     res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
@@ -126,6 +193,8 @@ async function confirmDrafts(req, res, supabase) {
       ids,
       breakConfirmations: break_confirmations || {},
       tenantId: req.tenantId,
+      // Fremde Entwuerfe nur mit Team-Sicht; sonst werden sie still uebergangen.
+      employeeId: req.hasPermission?.("employees.bookings.view_all") ? null : req.employeeId,
     });
     res.json({ success: true, ...result });
   } catch (err) {
@@ -248,7 +317,25 @@ async function getWorkstartStatus(req, res, supabase) {
   }
 }
 
+async function listOwnProjects(req, res, supabase) {
+  try {
+    res.json({ data: await eigen.listOwnProjects(supabase, { tenantId: req.tenantId }) });
+  } catch (err) {
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
+  }
+}
+
+async function listOwnLeaves(req, res, supabase) {
+  try {
+    res.json({ data: await eigen.listOwnLeaves(supabase, { tenantId: req.tenantId, projectId: req.params.id }) });
+  } catch (err) {
+    res.status(err?.status || 500).json({ error: err?.message || String(err) });
+  }
+}
+
 module.exports = {
+  listOwnProjects,
+  listOwnLeaves,
   createBuchung,
   createSpecialBuchung,
   updateSpecialBuchung,
@@ -263,4 +350,5 @@ module.exports = {
   deleteDraft,
   patchDraftDescription,
   getWorkstartStatus,
+  listMine,
 };

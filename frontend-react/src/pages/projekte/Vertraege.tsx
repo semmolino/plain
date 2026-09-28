@@ -1,9 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { DialogFooter } from '@/components/ui/DialogFooter'
-import { useNavigate } from 'react-router-dom'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchProjectsShort, fetchContractByProject, patchContract } from '@/api/projekte'
+import { fetchContractByProject, patchContract } from '@/api/projekte'
 import { searchAddressesApi, fetchContactsByAddress, fetchVatList } from '@/api/stammdaten'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { Message } from '@/components/ui/Message'
@@ -16,7 +15,6 @@ type ContactOpt = { ID: number; FIRST_NAME: string; LAST_NAME: string }
 
 export function Vertraege({ initialProjectId }: Props) {
   const qc       = useQueryClient()
-  const navigate = useNavigate()
 
   const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
   // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
@@ -41,8 +39,6 @@ export function Vertraege({ initialProjectId }: Props) {
   const [vatExemptText,setVatExemptText]= useState('')
   const [dirty,        setDirty]        = useState(false)
   const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-
-  const { data: projectsData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: vatListData }  = useQuery({ queryKey: ['vat-list'],       queryFn: fetchVatList })
 
   const { data: contractData, isLoading, isError } = useQuery({
@@ -153,25 +149,10 @@ export function Vertraege({ initialProjectId }: Props) {
     setDirty(false)
     setMsg(null)
   }
-
-  const projects = projectsData?.data ?? []
   const contract = contractData?.data ?? null
-  const currentProject = projects.find(p => p.ID === pid)
 
   return (
     <div className="list-section" style={{ maxWidth: 600 }}>
-      {/* Jump bar */}
-      {pid && (
-        <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject?.ABBR ?? ''}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject?.NAME ?? currentProject?.ABBR, backProject: { id: pid, name: currentProject?.ABBR } } })}>
-            Rechnungen →
-          </button>
-          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
-            Projekt-Report →
-          </button>
-        </div>
-      )}
 
       {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
 

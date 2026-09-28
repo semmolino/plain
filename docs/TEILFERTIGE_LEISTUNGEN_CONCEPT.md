@@ -181,6 +181,26 @@ nicht verschweigen. Deshalb:
   `settings.monthly_close.edit`) ruft den bestehenden Lauf
   `POST /stammdaten/monatsabschluss/run` und erzeugt die fehlenden Snapshots.
 
+**Stichtag statt Erfassungszeit (Migration 0170, UI-Pilot Runde 2).** Bis
+09/2026 galt ein Stand ab dem Moment, in dem er gespeichert wurde
+(`created_at`). Der September-Stand, am 3. Oktober eingetragen — der Regelfall
+bei der monatlichen Pflege —, war damit ein Oktober-Stand, und dieser Report
+nahm zum 30.09. den August. Jetzt trägt jede Zeile `PROJECT_PROGRESS.AS_OF_DATE`;
+die Stichtagsabfragen (`fn_project_list_report`, `fn_project_report_header`,
+`fn_project_report_structure`, `FN_REPORT_PROJECT_DETAIL`, `fn_wip_snapshot_dates`,
+Sortierung in `fn_dashboard_kpis`) filtern darauf. Das Snapshot-Datum je
+Projekt ist damit der **Stichtag** des Standes. Gepflegt wird zum Stichtag über
+die Monatsrunde (Projekte → Leistungsstände) oder den Projekt-Reiter;
+„Unverändert bestätigen" schreibt genau den Monatsend-Stand, den dieser Report
+braucht.
+
+Die Regel dahinter: je Element steigt `AS_OF_DATE` in Erfassungsreihenfolge
+nie ab. Fortschreibungen bei Rechnung/Zahlung übernehmen das Datum ihrer
+Vorlage, und ein Element mit einem späteren Stand ist für einen früheren
+Stichtag gesperrt (`services/leistungsstandRunde.js`, `laterStands`). Nur
+deshalb darf die Sortierung innerhalb der gefilterten Zeilen bei `created_at`
+bleiben.
+
 Weitere Zeilen-Marker: `R > L` → „Erhaltene Anzahlung"; `K_u > U` →
 „Drohender Verlust"; `L = 0 ∧ K > 0` → „Leistungsstand nicht gepflegt".
 

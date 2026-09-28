@@ -61,7 +61,7 @@ const capabilities = [
     // Die letzten drei standen nur in der DB (per Owner-Konsole gesetzt) und
     // fehlten hier. Ein frisch aufgesetztes System haette sie nicht bekommen.
     permissions: ["projects.bookings.view", "projects.bookings.create", "projects.bookings.edit", "projects.bookings.delete",
-      "projects.bookings.rebook", "projects.bookings.special.create",
+      "projects.bookings.own", "projects.bookings.rebook", "projects.bookings.special.create",
       "settings.booking_types.edit", "settings.booking_text_templates.edit"], since: SINCE },
 
   // ── Projekte ─────────────────────────────────────────────────────────────────

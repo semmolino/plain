@@ -202,7 +202,11 @@ export const initInvoice = (body: {
 }) => apiClient.post<{ id: number }>('/invoices/init', body)
 
 export const getInvoice = (id: number) =>
-  apiClient.get<{ data: { inv: Invoice } }>(`/invoices/${id}`)
+  apiClient.get<{ data: {
+    inv: Invoice
+    project?:  { ABBR: string | null; NAME: string | null } | null
+    contract?: { ABBR: string | null; NAME: string | null } | null
+  } }>(`/invoices/${id}`)
 
 export const patchInvoice = (id: number, body: Partial<{
   invoice_number: string; invoice_date: string; due_date: string
@@ -214,6 +218,8 @@ export const patchInvoice = (id: number, body: Partial<{
   se_percent: number | null; se_basis: 'BRUTTO' | 'NETTO' | null
   se_basis_amt: number | null; se_amount: number | null
   se_release_total: number | null
+  /** Schlussrechnung im Entwurf: gewaehlte SE-Aufloesungen (Migration 0171) */
+  se_release_advance_ids: number[] | null
   // E-Rechnung Branch 1 — BT-Felder
   buyer_reference: string | null
   buyer_order_reference: string | null
@@ -403,7 +409,11 @@ export const initPartialPayment = (body: {
 }) => apiClient.post<{ id: number }>('/partial-payments/init', body)
 
 export const getPartialPayment = (id: number) =>
-  apiClient.get<{ data: { pp: PartialPayment } }>(`/partial-payments/${id}`)
+  apiClient.get<{ data: {
+    pp: PartialPayment
+    project?:  { ABBR: string | null; NAME: string | null } | null
+    contract?: { ABBR: string | null; NAME: string | null } | null
+  } }>(`/partial-payments/${id}`)
 
 export const patchPartialPayment = (id: number, body: Partial<{
   advance_invoice_number: string; advance_invoice_date: string; due_date: string

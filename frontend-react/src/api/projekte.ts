@@ -282,18 +282,77 @@ export interface LeistungsstandNode extends StructureNode {
   PREV_REVENUE_COMPLETION_PERCENT:  number | null
   PREV_EXTRAS_COMPLETION_PERCENT:   number | null
   PREV_AT:                          string | null
+  /** Stichtag des letzten Standes (Migration 0170). */
+  PREV_AS_OF?:                      string | null
+  /** Schon abgerechnet (Abschlag / Rechnung, netto) — fuer die Warnung „unter abgerechnet". */
+  ADVANCE_INVOICED?:                number | null
+  INVOICED?:                        number | null
+}
+
+export interface LeistungsstandMeta {
+  /** Stichtag, fuer den das Projekt zuletzt gepflegt oder bestaetigt wurde. */
+  reviewed_as_of: string | null
+  reviewed_at:    string | null
+  /** Heute und letztes Monatsende in der App-Zeitzone. */
+  today:          string
+  last_month_end: string
 }
 
 export const fetchLeistungsstand = (projectId: number) =>
-  apiClient.get<{ data: LeistungsstandNode[] }>(`/projekte/${projectId}/leistungsstand`)
+  apiClient.get<{ data: LeistungsstandNode[]; meta?: LeistungsstandMeta }>(`/projekte/${projectId}/leistungsstand`)
+
+export interface SaveLeistungsstandResult {
+  success: boolean
+  saved: number
+  inserted: number
+  as_of?: string
+  confirmed?: boolean
+  /** Elemente, die schon einen spaeteren Stand haben und deshalb nichts bekamen. */
+  skipped_later?: string[]
+}
 
 export const saveLeistungsstand = (projectId: number, updates: Array<{
   structure_id: number
   revenue_completion_percent: number
-}>) => apiClient.post<{ success: boolean; saved: number; inserted: number }>(
+}>, opts: { as_of_date?: string; confirm_unchanged?: boolean } = {}) => apiClient.post<SaveLeistungsstandResult>(
   `/projekte/${projectId}/leistungsstand`,
-  { updates }
+  { updates, ...opts }
 )
+
+/** Eine Zeile der Monatsrunde. */
+export interface RundeProjekt {
+  ID:                     number
+  ABBR:                   string
+  NAME:                   string
+  PROJECT_MANAGER_ID:     number | null
+  PROJECT_MANAGER:        string | null
+  STATUS:                 string | null
+  EDITABLE_COUNT:         number
+  BUDGET_TOTAL_NET:       number | null
+  LEISTUNGSSTAND_PERCENT: number | null
+  OPEN_NET_TOTAL:         number | null
+  REVIEWED_AS_OF:         string | null
+  REVIEWED_AT:            string | null
+  DONE:                   boolean
+}
+
+export interface RundeResponse {
+  as_of: string
+  /** heute in der App-Zeitzone — obere Grenze fuer den Stichtag */
+  today: string
+  scope: 'own' | 'all'
+  /** Zahl der laufenden Projekte, die ich leite — 0 heisst: „Alle" vorbelegen. */
+  mine_count: number
+  total: number
+  done: number
+  projects: RundeProjekt[]
+}
+
+export const fetchLeistungsstandRunde = (asOf: string | null, scope: 'own' | 'all') => {
+  const q = new URLSearchParams({ scope })
+  if (asOf) q.set('as_of', asOf)
+  return apiClient.get<{ data: RundeResponse }>(`/projekte/leistungsstand/runde?${q.toString()}`)
+}
 
 // ── Buchungen ─────────────────────────────────────────────────────────────────
 

@@ -4506,9 +4506,7 @@ export function AdminPage() {
   const [tab, setTab] = useState(validTabs.includes(initialTab) ? initialTab : 'stammdaten')
   return (
     <div className="master-page">
-      <div className="master-page-header">
-        <h1 className="master-page-title">Administration</h1>
-      </div>
+      <h1 className="sr-only">Administration</h1>
       <Tabs tabs={useLicenseFilterTabs(useFilterTabs(PAGE_TABS))} active={tab} onChange={setTab} />
       <div className="master-section">
         {tab === 'stammdaten'            && (

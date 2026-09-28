@@ -3102,9 +3102,7 @@ export function MitarbeiterPage() {
 
   return (
     <div className="master-page">
-      <div className="master-page-header">
-        <h1 className="master-page-title">Mitarbeiter</h1>
-      </div>
+      <h1 className="sr-only">Mitarbeiter</h1>
       <Tabs tabs={visibleTabs} active={tab} onChange={changeTab} />
 
       <div className="master-section">

@@ -1,22 +1,25 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { FilterChip } from '@/components/ui/FilterChip'
+import { FilterBar } from '@/components/ui/FilterBar'
+import { SortTh } from '@/components/ui/SortTh'
+import { RowMenu } from '@/components/ui/RowMenu'
+import { DialogFooter } from '@/components/ui/DialogFooter'
+import { DensityToggle } from '@/components/ui/DensityToggle'
+import { useDensity } from '@/hooks/useDensity'
 import { useStickyState, useStickySet } from '@/hooks/useStickyState'
-import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }     from '@/components/ui/Message'
 import { Modal }       from '@/components/ui/Modal'
-import { Pencil, Trash2, ArrowRightLeft } from 'lucide-react'
-import { usePermissionsStore } from '@/store/permissionsStore'
+import { Pencil, Trash2, ArrowRightLeft, Plus, ChevronDown, Lock } from 'lucide-react'
+import { usePermission } from '@/store/permissionsStore'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { FormField }   from '@/components/ui/FormField'
 import {
-  fetchProjectsShort, fetchProjectStructure, fetchBuchungen, createBuchung, updateBuchung, deleteBuchung,
-  fetchEmployee2ProjectPreset,
+  fetchProjectStructure, fetchBuchungen, createBuchung, updateBuchung, deleteBuchung,
   type Buchung, type UpdateBuchungPayload,
 } from '@/api/projekte'
 import { fetchActiveEmployees, type ActiveEmployee } from '@/api/projekte'
-import { fetchEmployeeCpRateForDate } from '@/api/mitarbeiter'
 import {
   fetchSelectableBookingTypes, createSpecialBuchung, updateSpecialBuchung, BOOKING_KIND_LABEL,
   type BookingKind, type SelectableBookingType,
@@ -25,16 +28,24 @@ import { TextSnippetBar } from '@/components/ui/TextSnippetBar'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useAuthStore } from '@/store/authStore'
 import { useCtrlS } from '@/hooks/useCtrlS'
-import { useTrackRecent } from '@/hooks/useTrackRecent'
-import { RecentList } from '@/components/recents/RecentList'
 import { UmbuchenModal } from './UmbuchenModal'
 import { parentStructureIds, structurePaths } from '@/utils/treeUtils'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { trackRecent } from '@/api/recents'
+import { useQuickBooking } from '@/store/quickBookingStore'
+import { localIsoDate } from '@/utils/zeit'
+import { money } from '@/utils/money'
+import { useToast } from '@/store/toastStore'
 
 const FMT_NUM = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 })
 const fmtN    = (v: number | null | undefined) => v == null ? '—' : FMT_NUM.format(v)
 const fmtDate = (v: string | null) => v ? v.slice(0, 10) : ''
+/** 2026-07-01 → 01.07.2026 — die ISO-Form stand vorher so in der Tabelle. */
+/** „LPH > LP5 > LP5.1: Ausführungsplanung" → „LP5.1: Ausführungsplanung" (Pfad steht im title). */
+const leafOf = (path: string) => path.includes(' > ') ? path.slice(path.lastIndexOf(' > ') + 3) : path
+const fmtDateDe = (v: string | null) => {
+  const d = fmtDate(v)
+  return d ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : ''
+}
 
 const SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE'])
 const isSpecialKind = (k?: string | null) => !!k && SPECIAL_KINDS.has(k)
@@ -63,7 +74,8 @@ function bookingTypeLabel(b: Buchung): string {
   }
 }
 
-function todayIso() { return new Date().toISOString().slice(0, 10) }
+// Lokales Datum — das UTC-Datum ist zwischen 0 und 2 Uhr noch gestern.
+function todayIso() { return localIsoDate() }
 
 interface BuchungForm {
   EMPLOYEE_ID:         string
@@ -107,27 +119,41 @@ type SortDir = 'asc' | 'desc'
 
 interface Props { initialProjectId?: number }
 
+/**
+ * Buchungen eines Projekts (UI-Pilot 2026-09).
+ *
+ * Vorher: Werkzeugleiste, darunter eine eigene Zeile mit bis zu fuenf
+ * Anlegen-Knoepfen (Stunden, Pause, Stueck, Pauschale K, Pauschale E), ein
+ * eigener Stunden-Dialog mit „Speichern" links neben „Abbrechen", ISO-Daten
+ * in der Tabelle und ungegatete Zeilenaktionen. Jetzt:
+ *  - eine Leiste nach dem Listen-Standard; rechts EINE Hauptaktion
+ *    „+ Stunden buchen" (derselbe Dialog wie „Zeit buchen" in der Kopfzeile)
+ *    und die seltenen Arten hinter „Weitere Buchungsarten";
+ *  - deutsche Daten, Betraege ueber money(), sortierbare Koepfe ueber SortTh;
+ *  - Bearbeiten/Loeschen nur mit dem jeweiligen Recht;
+ *  - auf dem Handy eine Summenzeile und vier Spalten statt neun.
+ */
 export function Buchungen({ initialProjectId }: Props = {}) {
   const qc = useQueryClient()
-  const navigate = useNavigate()
-  const formRef = useRef<HTMLFormElement>(null)
+  const toast = useToast()
+  const openQuickBooking = useQuickBooking(s => s.open)
+  const [density, setDensity] = useDensity()
 
   // Phase 6: Sichtbarkeit Erloese / Kosten
-  const showRevenue = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.revenue.view'))
-  const showCosts   = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.costs.view'))
-  const canSpecial  = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.special.create'))
+  const showRevenue = usePermission('projects.bookings.revenue.view')
+  const showCosts   = usePermission('projects.bookings.costs.view')
+  const canSpecial  = usePermission('projects.bookings.special.create')
+  const canCreate   = usePermission('projects.bookings.create')
+  const canEdit     = usePermission('projects.bookings.edit')
+  const canDelete   = usePermission('projects.bookings.delete')
   // Umbuchen steht unter einem eigenen Recht: es verschiebt Kosten und Erlös
   // zwischen Projekten (Migration 0139).
-  const canRebook   = usePermissionsStore(s => s.unrestricted || s.keys.has('projects.bookings.rebook'))
+  const canRebook   = usePermission('projects.bookings.rebook')
   const narrow      = useIsNarrow()
   const [specialKind, setSpecialKind] = useState<BookingKind | null>(null)
   const [editSpecial, setEditSpecial] = useState<Buchung | null>(null)
   const [pauseModal,  setPauseModal]  = useState<{ mode: 'create' | 'edit'; row?: Buchung } | null>(null)
-  const [pid,          setPid]          = useState<number | null>(initialProjectId ?? null)
-  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
-  useEffect(() => { setPid(initialProjectId ?? null) }, [initialProjectId])
-  const [showForm,     setShowForm]     = useState(false)
-  const [form,         setForm]         = useState<BuchungForm>(emptyForm)
+  const pid = initialProjectId ?? null
   const [msg,          setMsg]          = useState<{ text: string; type: 'success'|'error' } | null>(null)
   const [filterStruct,  setFilterStruct]  = useState<string>('')
   const [search,        setSearch]        = useState('')
@@ -142,15 +168,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   const [editRow,      setEditRow]      = useState<Buchung | null>(null)
   const [editForm,     setEditForm]     = useState<BuchungForm>(emptyForm)
   const [editMsg,      setEditMsg]      = useState<{ text: string; type: 'success'|'error' } | null>(null)
-  const [cpRateFound,  setCpRateFound]  = useState<boolean | null>(null)
-  const [extTouched,   setExtTouched]   = useState(false)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   // Mehrfachauswahl für das Umbuchen. Auf Handy-Breite entfällt sie (die
   // Spalte kostet dort 44px) — einzeln umbuchen geht über die Zeilenaktion.
   const [selected,    setSelected]    = useState<Set<number>>(new Set())
   const [rebookRows,  setRebookRows]  = useState<Buchung[] | null>(null)
 
-  const { data: projectsData }  = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort })
   const { data: empData }       = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
   const { data: buchData, isLoading } = useQuery({
     queryKey: ['buchungen', pid],
@@ -163,42 +186,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     enabled:  pid !== null,
   })
 
-  const empId = form.EMPLOYEE_ID ? Number(form.EMPLOYEE_ID) : null
-
-  const { data: presetData } = useQuery({
-    queryKey: ['e2p-preset', empId, pid],
-    queryFn:  () => fetchEmployee2ProjectPreset(empId!, pid!),
-    enabled:  empId !== null && pid !== null && showForm,
-  })
-
-  const projects  = projectsData?.data ?? []
   const employees = empData?.data      ?? []
-
-  // HOURLY_RATE (Stundensatz) aus Mitarbeiter/Projekt-Zuordnung vorbelegen.
-  // `showForm` muss in den Deps stehen: beim erneuten Öffnen liefert React Query
-  // dieselbe gecachte presetData-Referenz, sodass der Effect sonst nicht erneut
-  // läuft und das von emptyForm() geleerte Feld leer bliebe → "Pflichtfeld fehlt".
-  useEffect(() => {
-    if (!presetData || !showForm) return
-    setForm(f => ({ ...f, HOURLY_RATE: presetData.found && presetData.HOURLY_RATE != null ? String(presetData.HOURLY_RATE) : f.HOURLY_RATE }))
-  }, [presetData, showForm])
-
-  // COST_RATE (Kostensatz) aus dem Kostensatz-Verlauf laden. Ebenfalls an `showForm`
-  // gekoppelt, sonst feuert der Effect beim erneuten Öffnen (gleicher empId/Datum)
-  // nicht und der von emptyForm() geleerte Wert würde als 0 gespeichert.
-  useEffect(() => {
-    if (!showForm) return
-    if (!empId || !form.BOOKING_DATE) { setForm(f => ({ ...f, COST_RATE: '' })); setCpRateFound(null); return }
-    fetchEmployeeCpRateForDate(empId, form.BOOKING_DATE)
-      .then(res => { setForm(f => ({ ...f, COST_RATE: String(res.data.rate) })); setCpRateFound(res.data.found) })
-      .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [empId, form.BOOKING_DATE, showForm])
 
   useEffect(() => { setFilterStruct(''); setSearch(''); setDateFrom(''); setDateTo('') }, [pid])
 
-  const buchungen = buchData?.data   ?? []
-  const structure = structData?.data ?? []
+  const buchungen = useMemo(() => buchData?.data ?? [], [buchData])
+  const structure = useMemo(() => structData?.data ?? [], [structData])
 
   const parentIds = useMemo(() => parentStructureIds(structure), [structure])
   // Pfade („LP1 > LP5: Ausführungsplanung") kommen aus treeUtils — derselbe
@@ -217,17 +210,6 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     return m
   }, [structure])
 
-  function getDescendantIds(id: number): Set<number> {
-    const result = new Set<number>()
-    const queue = [id]
-    while (queue.length) {
-      const cur = queue.shift()!
-      result.add(cur)
-      for (const child of (childrenMap.get(cur) ?? [])) queue.push(child)
-    }
-    return result
-  }
-
   const allStructureSorted = useMemo(() =>
     [...structure].sort((a, b) =>
       (pathCache.get(a.STRUCTURE_ID) ?? '').localeCompare(pathCache.get(b.STRUCTURE_ID) ?? '', 'de', { numeric: true })),
@@ -241,7 +223,14 @@ export function Buchungen({ initialProjectId }: Props = {}) {
 
   const filterDescendants = useMemo(() => {
     if (!filterStruct) return null
-    return getDescendantIds(Number(filterStruct))
+    const result = new Set<number>()
+    const queue = [Number(filterStruct)]
+    while (queue.length) {
+      const cur = queue.shift()!
+      result.add(cur)
+      for (const child of (childrenMap.get(cur) ?? [])) queue.push(child)
+    }
+    return result
   }, [filterStruct, childrenMap])
 
   // Filter-Optionen aus den geladenen Daten ableiten (keine harten Listen).
@@ -277,7 +266,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       rows = rows.filter(b =>
-        fmtDate(b.BOOKING_DATE).includes(q) ||
+        fmtDate(b.BOOKING_DATE).includes(q) || fmtDateDe(b.BOOKING_DATE).includes(q) ||
         (b.EMPLOYEE?.ABBR ?? '').toLowerCase().includes(q) ||
         (b.POSTING_DESCRIPTION ?? '').toLowerCase().includes(q) ||
         (b.STRUCTURE_ID != null ? (pathCache.get(b.STRUCTURE_ID) ?? '').toLowerCase().includes(q) : false)
@@ -336,28 +325,11 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     else { setSortCol(col); setSortDir('asc') }
   }
 
-  function sortIndicator(col: SortCol) {
-    if (sortCol !== col) return <span style={{ opacity: 0.25, marginLeft: 4 }}>↕</span>
-    return <span style={{ marginLeft: 4 }}>{sortDir === 'asc' ? '↑' : '↓'}</span>
-  }
-
-  const createMut = useMutation({
-    mutationFn: createBuchung,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
-      setMsg({ text: 'Buchung gespeichert ✅', type: 'success' })
-      setForm(emptyForm())
-      setExtTouched(false)
-      setShowForm(false)
-    },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
   const patchMut = useMutation({
     mutationFn: ({ id, body }: { id: number; body: UpdateBuchungPayload }) => updateBuchung(id, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
-      setMsg({ text: 'Buchung aktualisiert ✅', type: 'success' })
+      toast.success('Buchung aktualisiert')
       setEditRow(null)
     },
     onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
@@ -365,38 +337,11 @@ export function Buchungen({ initialProjectId }: Props = {}) {
 
   const deleteMut = useMutation({
     mutationFn: deleteBuchung,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['buchungen', pid] }),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['buchungen', pid] }); toast.success('Buchung gelöscht') },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
-  useCtrlS(() => formRef.current?.requestSubmit(), showForm)
-
-  function submitForm(e: React.FormEvent) {
-    e.preventDefault()
-    setMsg(null)
-    if (!pid || !form.EMPLOYEE_ID || !form.STRUCTURE_ID || !form.BOOKING_DATE || !form.QUANTITY_INT || !form.QUANTITY_EXT || form.HOURLY_RATE === '' || !form.POSTING_DESCRIPTION) {
-      setMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
-    }
-    // Recents: zuletzt gebuchte Strukturelemente pro Projekt mitschreiben
-    if (form.STRUCTURE_ID) {
-      const sid = Number(form.STRUCTURE_ID)
-      const label = pathCache.get(sid) ?? `#${sid}`
-      void trackRecent('project_structure', sid, label, { project_id: pid }).catch(() => {})
-    }
-    createMut.mutate({
-      PROJECT_ID:          pid,
-      STRUCTURE_ID:        form.STRUCTURE_ID  ? Number(form.STRUCTURE_ID) : undefined,
-      EMPLOYEE_ID:         Number(form.EMPLOYEE_ID),
-      BOOKING_DATE:        form.BOOKING_DATE,
-      TIME_START:          form.TIME_START  || undefined,
-      TIME_FINISH:         form.TIME_FINISH || undefined,
-      QUANTITY_INT:        Number(form.QUANTITY_INT),
-      COST_RATE:             Number(form.COST_RATE),
-      QUANTITY_EXT:        Number(form.QUANTITY_EXT),
-      HOURLY_RATE:             Number(form.HOURLY_RATE),
-      POSTING_DESCRIPTION: form.POSTING_DESCRIPTION,
-    })
-  }
+  useCtrlS(() => { if (editRow) (document.getElementById('bk-edit-form') as HTMLFormElement | null)?.requestSubmit() }, editRow !== null)
 
   function submitEdit(e: React.FormEvent) {
     e.preventDefault()
@@ -422,21 +367,12 @@ export function Buchungen({ initialProjectId }: Props = {}) {
     })
   }
 
-  const setF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const value = e.target.value
-    if (k === 'QUANTITY_EXT') { setExtTouched(true) }
-    setForm(f => ({
-      ...f,
-      [k]: value,
-      ...(k === 'EMPLOYEE_ID' ? { HOURLY_RATE: '', COST_RATE: '' } : {}),
-      ...(k === 'QUANTITY_INT' && !extTouched ? { QUANTITY_EXT: value } : {}),
-    }))
-  }
-
   const setEF = (k: keyof BuchungForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setEditForm(f => ({ ...f, [k]: e.target.value }))
 
   function openEdit(b: Buchung) {
+    if (isBreakRow(b)) { setPauseModal({ mode: 'edit', row: b }); return }
+    if (isSpecialKind(b.BOOKING_KIND)) { setEditSpecial(b); return }
     setEditRow(b)
     setEditForm(buchungToForm(b))
     setEditMsg(null)
@@ -445,213 +381,172 @@ export function Buchungen({ initialProjectId }: Props = {}) {
   function confirmDelete(b: Buchung) {
     setConfirmState({
       title: 'Buchung löschen',
-      message: `Buchung vom ${fmtDate(b.BOOKING_DATE)} löschen?`,
+      message: `Buchung vom ${fmtDateDe(b.BOOKING_DATE)} löschen?`,
       onConfirm: () => { setMsg(null); deleteMut.mutate(b.ID) },
     })
   }
 
-  const anyFilter = !!(search || filterStruct || filterEmp.size || filterKind.size || filterStatus.size || hideZeroExt || dateFrom || dateTo)
+  const activeFilterCount = [filterStruct, ...(filterEmp.size ? [1] : []), ...(filterKind.size ? [1] : []), ...(filterStatus.size ? [1] : []), hideZeroExt, dateFrom || dateTo]
+    .filter(Boolean).length
+  const anyFilter = !!(search || activeFilterCount)
   function resetFilters() {
     setSearch(''); setFilterStruct(''); setFilterEmp(new Set()); setFilterKind(new Set())
     setFilterStatus(new Set()); setHideZeroExt(false); setDateFrom(''); setDateTo('')
   }
 
-  const currentProject = projects.find(p => p.ID === pid)
-  useTrackRecent('project', pid, currentProject ? ([currentProject.ABBR, currentProject.NAME].filter(Boolean).join(' · ') || null) : null)
+  const moreKinds = [
+    canCreate  && { key: 'pause', label: 'Pause', run: () => { setPauseModal({ mode: 'create' }); setMsg(null) } },
+    canSpecial && { key: 'unit',  label: 'Stückleistung', run: () => { setSpecialKind('UNIT'); setMsg(null) } },
+    canSpecial && { key: 'lc',    label: 'Pauschale (Kosten)', run: () => { setSpecialKind('LUMP_COST'); setMsg(null) } },
+    canSpecial && { key: 'lr',    label: 'Pauschale (Erlös)', run: () => { setSpecialKind('LUMP_REVENUE'); setMsg(null) } },
+  ].filter(Boolean) as { key: string; label: string; run: () => void }[]
+
+  const colCount = narrow ? 4 : 6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0) + (showSelectCol ? 1 : 0)
+
+  function rowActions(b: Buchung) {
+    if (isBilled(b)) {
+      return <span className="bk-billed" title="Abgerechnet – Korrektur nur über Storno/Gutschrift"><Lock size={12} strokeWidth={2} aria-hidden="true" /> abgerechnet</span>
+    }
+    const acts = [
+      canEdit && { key: 'edit', label: 'Bearbeiten', icon: Pencil, run: () => openEdit(b) },
+      canRebook && !isBreakRow(b) && { key: 'rebook', label: 'Umbuchen', icon: ArrowRightLeft, run: () => { setMsg(null); setRebookRows([b]) } },
+      canDelete && { key: 'del', label: 'Löschen', icon: Trash2, danger: true, run: () => confirmDelete(b) },
+    ].filter(Boolean) as { key: string; label: string; icon: typeof Pencil; run: () => void; danger?: boolean }[]
+    if (!acts.length) return null
+    if (narrow) {
+      return (
+        <RowMenu label={`Aktionen zur Buchung vom ${fmtDateDe(b.BOOKING_DATE)}`} triggerClassName="row-action-btn">
+          {acts.map(a => (
+            <button key={a.key} type="button" role="menuitem" className={`row-menu-item${a.danger ? ' danger' : ''}`} onClick={a.run}>{a.label}</button>
+          ))}
+        </RowMenu>
+      )
+    }
+    return acts.map(a => {
+      const Icon = a.icon
+      return (
+        <button key={a.key} type="button" className={`row-action-btn${a.danger ? ' row-action-btn--danger' : ''}`} onClick={a.run}
+          title={a.key === 'rebook' ? 'Umbuchen — auf anderes Projektelement/Projekt verschieben' : a.label} aria-label={a.label}>
+          <Icon size={14} strokeWidth={2} />
+        </button>
+      )
+    })
+  }
+
+  function kindBadge(b: Buchung) {
+    if (isSpecialKind(b.BOOKING_KIND)) return <span className="bk-badge bk-badge--special">{KIND_BADGE[b.BOOKING_KIND!]}</span>
+    if (isBreakRow(b)) return <span className="bk-badge bk-badge--break">Pause</span>
+    return null
+  }
 
   return (
-    <div>
-      {pid === null && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
-
-      {pid !== null && currentProject && (
-        <div className="proj-jump-bar">
-          <span className="proj-jump-label">{currentProject.ABBR}</span>
-          <button className="btn-small" onClick={() => navigate('/rechnungen', { state: { projectSearch: currentProject.NAME ?? currentProject.ABBR, backProject: { id: pid, name: currentProject.ABBR } } })}>
-            Rechnungen →
-          </button>
-          <button className="btn-small" onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: pid } })}>
-            Projekt-Report →
-          </button>
-        </div>
-      )}
+    <div className="bk-root" data-density={density}>
+      {pid === null && <p className="empty-note">Kein Projekt gewählt.</p>}
 
       {pid !== null && (
         <>
           {isLoading && <ListLoading columns={6} />}
           {!isLoading && (
             <>
-              <div className="list-toolbar">
+              <div className="list-toolbar bk-toolbar">
                 <input
                   className="list-search"
                   type="search"
                   placeholder="Suchen …"
+                  aria-label="Buchungen durchsuchen"
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                 />
 
-                <select value={filterStruct} onChange={e => setFilterStruct(e.target.value)}
-                  title="Nach Projektelement filtern" style={{ maxWidth: 260 }}>
-                  <option value="">Alle Projektelemente</option>
-                  {allStructureSorted.map(n => (
-                    <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
-                      {pathCache.get(n.STRUCTURE_ID) ?? n.ABBR}
-                    </option>
-                  ))}
-                </select>
-
-                <FilterChip label="Mitarbeiter" options={empOptions}    active={filterEmp}    onChange={setFilterEmp} />
-                <FilterChip label="Buchungstyp" options={kindOptions}   active={filterKind}   onChange={setFilterKind} />
-                <FilterChip label="Status"      options={statusOptions} active={filterStatus} onChange={setFilterStatus} />
-
-                <label className="filter-daterange" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-2)' }}>
-                  Zeitraum
-                  <input type="date" className="inline-date-input" value={dateFrom} max={dateTo || undefined}
-                    onChange={e => setDateFrom(e.target.value)} title="Von" />
-                  <span>–</span>
-                  <input type="date" className="inline-date-input" value={dateTo} min={dateFrom || undefined}
-                    onChange={e => setDateTo(e.target.value)} title="Bis" />
-                </label>
-
-                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--text-2)' }}>
-                  <input type="checkbox" checked={hideZeroExt} onChange={e => setHideZeroExt(e.target.checked)} />
-                  0 zur Abrechnung ausblenden
-                </label>
-
-                {anyFilter && (
-                  <button type="button" className="btn-small" style={{ width: 'auto' }} onClick={resetFilters}>
-                    Zurücksetzen
-                  </button>
-                )}
+                <div className="bk-toolbar-right">
+                  <DensityToggle value={density} onChange={setDensity} />
+                  {moreKinds.length > 0 && (
+                    <RowMenu label="Weitere Buchungsarten" triggerClassName="btn-secondary bk-more-kinds"
+                      triggerContent={narrow ? undefined : <>Weitere Buchungsarten <ChevronDown size={14} strokeWidth={2} aria-hidden="true" /></>}>
+                      {moreKinds.map(k => (
+                        <button key={k.key} type="button" role="menuitem" className="row-menu-item" onClick={k.run}>+ {k.label}</button>
+                      ))}
+                    </RowMenu>
+                  )}
+                  {canCreate && (
+                    <button type="button" className="btn-primary bk-primary"
+                      onClick={() => openQuickBooking({ projectId: pid, allowOtherEmployee: true })}>
+                      <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> {narrow ? 'Stunden' : 'Stunden buchen'}
+                    </button>
+                  )}
+                </div>
+                <div className="bk-filters">
+                  <FilterBar activeCount={activeFilterCount} onReset={resetFilters}>
+                    <select value={filterStruct} onChange={e => setFilterStruct(e.target.value)}
+                      aria-label="Nach Projektelement filtern" className="bk-struct-filter">
+                      <option value="">Alle Projektelemente</option>
+                      {allStructureSorted.map(n => (
+                        <option key={n.STRUCTURE_ID} value={n.STRUCTURE_ID}>
+                          {pathCache.get(n.STRUCTURE_ID) ?? n.ABBR}
+                        </option>
+                      ))}
+                    </select>
+                    <FilterChip label="Mitarbeiter" options={empOptions}    active={filterEmp}    onChange={setFilterEmp} />
+                    <FilterChip label="Buchungstyp" options={kindOptions}   active={filterKind}   onChange={setFilterKind} />
+                    <FilterChip label="Status"      options={statusOptions} active={filterStatus} onChange={setFilterStatus} />
+                    <label className="filter-daterange bk-daterange">
+                      Zeitraum
+                      <input type="date" className="inline-date-input" value={dateFrom} max={dateTo || undefined}
+                        onChange={e => setDateFrom(e.target.value)} aria-label="Von" />
+                      <span>–</span>
+                      <input type="date" className="inline-date-input" value={dateTo} min={dateFrom || undefined}
+                        onChange={e => setDateTo(e.target.value)} aria-label="Bis" />
+                    </label>
+                    <label className="bk-check">
+                      <input type="checkbox" checked={hideZeroExt} onChange={e => setHideZeroExt(e.target.checked)} />
+                      0 zur Abrechnung ausblenden
+                    </label>
+                  </FilterBar>
+                </div>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
-                <button
-                  className="btn-primary"
-                  style={{ width: 'auto', marginTop: 0 }}
-                  onClick={() => { setExtTouched(false); setForm(emptyForm()); setShowForm(true); setMsg(null) }}
-                >
-                  + Stundenbuchung
-                </button>
-                <button
-                  className="btn-small"
-                  style={{ width: 'auto' }}
-                  onClick={() => { setPauseModal({ mode: 'create' }); setMsg(null) }}
-                >
-                  + Pause
-                </button>
-                <HelpHint id="bookings.pause" />
-                {canSpecial && (
-                  <>
-                    <button className="btn-small" style={{ width: 'auto' }} onClick={() => { setSpecialKind('UNIT'); setMsg(null) }}>
-                      + Stückleistung
-                    </button>
-                    <button className="btn-small" style={{ width: 'auto' }} onClick={() => { setSpecialKind('LUMP_COST'); setMsg(null) }}>
-                      + Pauschale (Kosten)
-                    </button>
-                    <button className="btn-small" style={{ width: 'auto' }} onClick={() => { setSpecialKind('LUMP_REVENUE'); setMsg(null) }}>
-                      + Pauschale (Erlös)
-                    </button>
-                    <HelpHint id="bookings.special" />
-                  </>
-                )}
-              </div>
-
-              <Modal open={showForm} onClose={() => setShowForm(false)} title="Neue Stundenbuchung">
-                <form ref={formRef} onSubmit={submitForm} className="master-form">
-                  <div className="form-group">
-                    <label>Mitarbeiter*</label>
-                    <select value={form.EMPLOYEE_ID} onChange={setF('EMPLOYEE_ID')} required>
-                      <option value="">Bitte wählen …</option>
-                      {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Projektelement*</label>
-                    <select value={form.STRUCTURE_ID} onChange={setF('STRUCTURE_ID')} required>
-                      <option value="">Bitte wählen …</option>
-                      {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.ABBR}</option>)}
-                    </select>
-                    <RecentList
-                      type="project_structure"
-                      projectId={pid}
-                      title="Zuletzt gebucht in diesem Projekt"
-                      onSelect={(e) => setForm(f => ({ ...f, STRUCTURE_ID: String(e.ENTITY_ID) }))}
-                    />
-                  </div>
-                  <div className="form-row">
-                    <FormField label="Datum*"      id="bda" type="date"   value={form.BOOKING_DATE}  onChange={setF('BOOKING_DATE')} required />
-                    <FormField label="Von"         id="bts" type="time"   value={form.TIME_START}    onChange={setF('TIME_START')} />
-                    <FormField label="Bis"         id="btf" type="time"   value={form.TIME_FINISH}   onChange={setF('TIME_FINISH')} />
-                  </div>
-                  <div className="form-row">
-                    <FormField label="Stunden*" id="bqi" type="number" value={form.QUANTITY_INT}  onChange={setF('QUANTITY_INT')} step="0.25" required />
-                    {showRevenue && (
-                      <FormField label="Zur Abrechnung*" id="bqe" type="number" value={form.QUANTITY_EXT}  onChange={setF('QUANTITY_EXT')} step="0.25" required />
-                    )}
-                  </div>
-                  <div className="form-row">
-                    {showCosts && (
-                      <div className="form-group">
-                        <label htmlFor="bcr">Kostensatz</label>
-                        <input id="bcr" type="number" step="0.01" value={form.COST_RATE} readOnly
-                          style={{ background: 'var(--dim)', cursor: 'not-allowed' }}
-                          title="Wird automatisch aus dem Kostensatz-Verlauf ermittelt" />
-                        {cpRateFound === false && (
-                          <span style={{ fontSize: 11, color: 'var(--danger)', display: 'block', marginTop: 2 }}>
-                            ⚠ Kein Kostensatz für dieses Datum hinterlegt — Buchung wird mit 0 gespeichert.
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {showRevenue && (
-                      <FormField label="Stundensatz*"  id="bsr" type="number" value={form.HOURLY_RATE}       onChange={setF('HOURLY_RATE')} step="0.01" required
-                        readOnly={presetData?.found === true && presetData.HOURLY_RATE != null}
-                        title={presetData?.found === true && presetData.HOURLY_RATE != null ? 'Aus Mitarbeiter/Projekt-Zuordnung vorbelegt' : undefined}
-                        style={{ background: presetData?.found === true && presetData.HOURLY_RATE != null ? 'rgba(17,24,39,0.04)' : undefined }} />
-                    )}
-                  </div>
-                  <div className="form-group">
-                    <label>Beschreibung*</label>
-                    <textarea rows={2} value={form.POSTING_DESCRIPTION} onChange={setF('POSTING_DESCRIPTION')} required
-                      style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
-                    <TextSnippetBar currentText={form.POSTING_DESCRIPTION} onChange={t => setForm(f => ({ ...f, POSTING_DESCRIPTION: t }))} kind="WORK" />
-                  </div>
-                  <Message text={msg?.text ?? null} type={msg?.type} />
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                    <button className="btn-primary" type="submit" disabled={createMut.isPending}>
-                      {createMut.isPending ? 'Speichert …' : 'Buchung speichern'}
-                    </button>
-                    <button type="button" className="btn-small" onClick={() => setShowForm(false)}>Abbrechen</button>
-                  </div>
-                </form>
-              </Modal>
-              {!showForm && <Message text={msg?.text ?? null} type={msg?.type} />}
+              <Message text={msg?.text ?? null} type={msg?.type} />
 
               {/* Sammelaktion: erscheint erst mit einer Auswahl. */}
               {showSelectCol && selectedRows.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0', fontSize: 13, flexWrap: 'wrap' }}>
-                  <span style={{ color: 'var(--text-3)' }}>{selectedRows.length} ausgewählt</span>
-                  <button
-                    type="button"
-                    className="btn-small"
-                    style={{ width: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                    onClick={() => { setMsg(null); setRebookRows(selectedRows) }}
-                  >
-                    <ArrowRightLeft size={13} strokeWidth={2} />
+                <div className="bk-bulk-bar">
+                  <span>{selectedRows.length} ausgewählt</span>
+                  <button type="button" className="btn-secondary" onClick={() => { setMsg(null); setRebookRows(selectedRows) }}>
+                    <ArrowRightLeft size={13} strokeWidth={2} aria-hidden="true" />
                     Umbuchen ({selectedRows.length})
                   </button>
-                  <button type="button" className="btn-small" style={{ width: 'auto', color: 'var(--text-3)' }} onClick={() => setSelected(new Set())}>
+                  <button type="button" className="btn-secondary" onClick={() => setSelected(new Set())}>
                     Auswahl aufheben
                   </button>
                 </div>
               )}
 
+              {narrow && buchungen.length > 0 && (
+                <p className="bk-summary" aria-live="polite">
+                  {visibleBuchungen.length !== buchungen.length ? `${visibleBuchungen.length} von ${buchungen.length}` : buchungen.length} Einträge
+                  {' · '}{fmtN(totalIntH)} h
+                  {showCosts   && <> · Kosten {money(totalCost)}</>}
+                  {showRevenue && <> · Erlös {money(totalRev)}</>}
+                </p>
+              )}
+
+              {buchungen.length === 0 ? (
+                <div className="bk-empty">
+                  <p className="empty-note">In diesem Projekt ist noch keine Zeit gebucht.</p>
+                  <p className="bk-empty-why">Gebuchte Stunden fließen in die Projektkosten, das Zeitkonto und – je nach Abrechnungsart – in die nächste Rechnung.</p>
+                  {canCreate && (
+                    <button type="button" className="btn-secondary" onClick={() => openQuickBooking({ projectId: pid, allowOtherEmployee: true })}>
+                      <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Erste Stunden buchen
+                    </button>
+                  )}
+                </div>
+              ) : (
               <div className="list-section">
-                <table className="master-table">
+                <table className="master-table bk-table">
                   <thead>
                     <tr>
                       {showSelectCol && (
-                        <th scope="col" style={{ width: 32, padding: '6px 4px' }}>
+                        <th scope="col" className="bk-col-check">
                           <input
                             type="checkbox"
                             checked={allSelected}
@@ -661,116 +556,98 @@ export function Buchungen({ initialProjectId }: Props = {}) {
                           />
                         </th>
                       )}
-                      <th scope="col" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('date')}>Datum{sortIndicator('date')}</th>
-                      <th scope="col" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('employee')}>Mitarbeiter{sortIndicator('employee')}</th>
-                      <th scope="col" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('path')}>Strukturpfad{sortIndicator('path')}</th>
-                      <th scope="col" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('description')}>Beschreibung{sortIndicator('description')}</th>
-                      <th scope="col" className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_int')}>Stunden{sortIndicator('h_int')}</th>
-                      {showRevenue && <th scope="col" className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('h_ext')}>Zur Abrechnung{sortIndicator('h_ext')}</th>}
-                      {showCosts && <th scope="col" className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('cost')}>Kosten €{sortIndicator('cost')}</th>}
-                      {showRevenue && <th scope="col" className="num" style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('revenue')}>Erlös €{sortIndicator('revenue')}</th>}
-                      <th scope="col"></th>
+                      <SortTh label="Datum" column="date" sortKey={sortCol} dir={sortDir} onSort={toggleSort} />
+                      {!narrow && <SortTh label="Mitarbeiter" column="employee" sortKey={sortCol} dir={sortDir} onSort={toggleSort} />}
+                      {!narrow && <SortTh label="Leistung" column="path" sortKey={sortCol} dir={sortDir} onSort={toggleSort} />}
+                      <SortTh label={narrow ? 'Leistung · Beschreibung' : 'Beschreibung'} column="description" sortKey={sortCol} dir={sortDir} onSort={toggleSort} />
+                      <SortTh label="Std." column="h_int" sortKey={sortCol} dir={sortDir} onSort={toggleSort} className="num" />
+                      {!narrow && showRevenue && <SortTh label="Zur Abr." column="h_ext" sortKey={sortCol} dir={sortDir} onSort={toggleSort} className="num" />}
+                      {!narrow && showCosts   && <SortTh label="Kosten €" column="cost" sortKey={sortCol} dir={sortDir} onSort={toggleSort} className="num" />}
+                      {!narrow && showRevenue && <SortTh label="Erlös €" column="revenue" sortKey={sortCol} dir={sortDir} onSort={toggleSort} className="num" />}
+                      <th scope="col" className="bk-col-actions"><span className="sr-only">Aktionen</span></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {visibleBuchungen.map(b => (
-                      <tr key={b.ID}>
+                    {visibleBuchungen.map(b => {
+                      const path  = b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'
+                      const hours = b.BOOKING_KIND === 'UNIT'
+                        ? `${fmtN(b.QUANTITY_EXT)}${b.UNIT_LABEL ? ' ' + b.UNIT_LABEL : ''}`
+                        : isSpecialKind(b.BOOKING_KIND) ? '—' : fmtN(b.QUANTITY_INT)
+                      return (
+                      <tr key={b.ID} className={isBilled(b) ? 'bk-row-billed' : undefined}>
                         {showSelectCol && (
-                          <td style={{ padding: '6px 4px' }}>
+                          <td className="bk-col-check">
                             {isRebookable(b) && (
                               <input
                                 type="checkbox"
                                 checked={selected.has(b.ID)}
                                 onChange={() => toggleRowSelected(b.ID)}
-                                aria-label={`Buchung vom ${fmtDate(b.BOOKING_DATE)} auswählen`}
+                                aria-label={`Buchung vom ${fmtDateDe(b.BOOKING_DATE)} auswählen`}
                               />
                             )}
                           </td>
                         )}
-                        <td>{fmtDate(b.BOOKING_DATE)}</td>
-                        <td>{b.EMPLOYEE?.ABBR}</td>
-                        <td style={{ fontSize: 13, color: 'var(--text-3)' }}>
-                          {b.STRUCTURE_ID != null ? pathCache.get(b.STRUCTURE_ID) ?? '—' : '—'}
+                        <td className="bk-date">
+                          {fmtDateDe(b.BOOKING_DATE)}
+                          {narrow && <span className="bk-sub">{b.EMPLOYEE?.ABBR}</span>}
                         </td>
-                        <td>
-                          {isSpecialKind(b.BOOKING_KIND) && (
-                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--accent2)', background: 'var(--info-bg)', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
-                              {KIND_BADGE[b.BOOKING_KIND!]}
-                            </span>
-                          )}
-                          {isBreakRow(b) && (
-                            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700, letterSpacing: 0.3, color: 'var(--warning-strong)', background: 'var(--warning-bg)', padding: '1px 6px', borderRadius: 4, marginRight: 6, verticalAlign: 'middle' }}>
-                              Pause
-                            </span>
-                          )}
-                          {b.POSTING_DESCRIPTION}
+                        {!narrow && <td>{b.EMPLOYEE?.ABBR}</td>}
+                        {!narrow && <td className="bk-path" title={path}>{leafOf(path)}</td>}
+                        <td className="bk-desc">
+                          {narrow && <span className="bk-sub bk-sub--path">{path}</span>}
+                          <span className="bk-desc-text">{kindBadge(b)}{b.POSTING_DESCRIPTION}</span>
                         </td>
-                        <td className="num">
-                          {b.BOOKING_KIND === 'UNIT'
-                            ? `${fmtN(b.QUANTITY_EXT)}${b.UNIT_LABEL ? ' ' + b.UNIT_LABEL : ''}`
-                            : isSpecialKind(b.BOOKING_KIND) ? '—' : fmtN(b.QUANTITY_INT)}
-                        </td>
-                        {showRevenue && <td className="num">{isSpecialKind(b.BOOKING_KIND) && b.BOOKING_KIND !== 'UNIT' ? '—' : fmtN(b.QUANTITY_EXT)}</td>}
-                        {showCosts && <td className="num">{fmtN(b.COST_TOTAL)}</td>}
-                        {showRevenue && <td className="num">{fmtN(b.HOURLY_RATE_TOTAL)}</td>}
-                        <td className="doc-actions">
-                          {b.ADVANCE_INVOICE_ID == null && b.INVOICE_ID == null ? (
-                            <>
-                              <button className="row-action-btn" onClick={() => isBreakRow(b) ? setPauseModal({ mode: 'edit', row: b }) : isSpecialKind(b.BOOKING_KIND) ? setEditSpecial(b) : openEdit(b)} title="Bearbeiten">
-                                <Pencil size={14} strokeWidth={2} />
-                              </button>
-                              {canRebook && !isBreakRow(b) && (
-                                <button className="row-action-btn" onClick={() => { setMsg(null); setRebookRows([b]) }} title="Umbuchen — auf anderes Projektelement/Projekt verschieben">
-                                  <ArrowRightLeft size={14} strokeWidth={2} />
-                                </button>
-                              )}
-                              <button className="row-action-btn row-action-btn--danger" onClick={() => confirmDelete(b)} title="Löschen">
-                                <Trash2 size={14} strokeWidth={2} />
-                              </button>
-                            </>
-                          ) : (
-                            <span style={{ fontSize: 11, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>abgerechnet</span>
-                          )}
-                        </td>
+                        <td className="num">{hours}</td>
+                        {!narrow && showRevenue && <td className="num">{isSpecialKind(b.BOOKING_KIND) && b.BOOKING_KIND !== 'UNIT' ? '—' : fmtN(b.QUANTITY_EXT)}</td>}
+                        {!narrow && showCosts   && <td className="num">{money(b.COST_TOTAL)}</td>}
+                        {!narrow && showRevenue && <td className="num">{money(b.HOURLY_RATE_TOTAL)}</td>}
+                        <td className="doc-actions bk-col-actions">{rowActions(b)}</td>
                       </tr>
-                    ))}
-                    {!visibleBuchungen.length && <tr><td colSpan={6 + (showRevenue ? 2 : 0) + (showCosts ? 1 : 0) + (showSelectCol ? 1 : 0)} className="empty-note">Keine Buchungen</td></tr>}
+                    )})}
+                    {!visibleBuchungen.length && (
+                      <tr><td colSpan={colCount} className="empty-note">
+                        Keine Buchung passt zu Suche und Filtern.{anyFilter && <> <button type="button" className="link-btn" onClick={resetFilters}>Filter zurücksetzen</button></>}
+                      </td></tr>
+                    )}
                   </tbody>
+                  {!narrow && (
                   <tfoot>
-                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
-                      <td colSpan={showSelectCol ? 4 : 3} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
+                    <tr className="bk-foot">
+                      <td colSpan={showSelectCol ? 4 : 3}>
                         {visibleBuchungen.length !== buchungen.length
-                          ? `${visibleBuchungen.length} / ${buchungen.length} Einträge`
+                          ? `${visibleBuchungen.length} von ${buchungen.length} Einträgen`
                           : `${buchungen.length} Einträge`}
                       </td>
                       <td></td>
                       <td className="num">{fmtN(totalIntH)}</td>
                       {showRevenue && <td className="num">{fmtN(totalExtH)}</td>}
-                      {showCosts && <td className="num">{fmtN(totalCost)}</td>}
-                      {showRevenue && <td className="num">{fmtN(totalRev)}</td>}
+                      {showCosts && <td className="num">{money(totalCost)}</td>}
+                      {showRevenue && <td className="num">{money(totalRev)}</td>}
                       <td></td>
                     </tr>
                   </tfoot>
+                  )}
                 </table>
               </div>
+              )}
             </>
           )}
         </>
       )}
 
-      {/* ── Edit modal ── */}
+      {/* ── Bearbeiten (Stunden) ── */}
       <Modal open={editRow !== null} onClose={() => setEditRow(null)} title="Buchung bearbeiten">
-        <form onSubmit={submitEdit} className="master-form">
+        <form id="bk-edit-form" onSubmit={submitEdit} className="master-form">
           <div className="form-group">
-            <label>Mitarbeiter*</label>
-            <select value={editForm.EMPLOYEE_ID} onChange={setEF('EMPLOYEE_ID')} required>
+            <label htmlFor="bk-e-emp">Mitarbeiter*</label>
+            <select id="bk-e-emp" value={editForm.EMPLOYEE_ID} onChange={setEF('EMPLOYEE_ID')} required>
               <option value="">Bitte wählen …</option>
               {employees.map(e => <option key={e.ID} value={e.ID}>{e.ABBR}: {e.FIRST_NAME} {e.LAST_NAME}</option>)}
             </select>
           </div>
           <div className="form-group">
-            <label>Projektelement*</label>
-            <select value={editForm.STRUCTURE_ID} onChange={setEF('STRUCTURE_ID')} required>
+            <label htmlFor="bk-e-leaf">Leistung*</label>
+            <select id="bk-e-leaf" value={editForm.STRUCTURE_ID} onChange={setEF('STRUCTURE_ID')} required>
               <option value="">Bitte wählen …</option>
               {leafStructure.map(s => <option key={s.STRUCTURE_ID} value={s.STRUCTURE_ID}>{pathCache.get(s.STRUCTURE_ID) ?? s.ABBR}</option>)}
             </select>
@@ -795,19 +672,17 @@ export function Buchungen({ initialProjectId }: Props = {}) {
             )}
           </div>
           <div className="form-group">
-            <label>Beschreibung*</label>
-            <textarea rows={2} value={editForm.POSTING_DESCRIPTION} onChange={setEF('POSTING_DESCRIPTION')} required
-              style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+            <label htmlFor="bk-e-desc">Beschreibung*</label>
+            <textarea id="bk-e-desc" className="bk-textarea" rows={2} value={editForm.POSTING_DESCRIPTION} onChange={setEF('POSTING_DESCRIPTION')} required />
           </div>
           <Message text={editMsg?.text ?? null} type={editMsg?.type} />
-          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-            <button className="btn-primary" type="submit" disabled={patchMut.isPending}>
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => setEditRow(null)}>Abbrechen</button>
+            <button type="button" className="btn-primary" disabled={patchMut.isPending}
+              onClick={() => (document.getElementById('bk-edit-form') as HTMLFormElement | null)?.requestSubmit()}>
               {patchMut.isPending ? 'Speichert …' : 'Speichern'}
             </button>
-            <button type="button" className="btn-small" onClick={() => setEditRow(null)}>
-              Abbrechen
-            </button>
-          </div>
+          </DialogFooter>
         </form>
       </Modal>
 
@@ -821,7 +696,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
           onClose={() => setSpecialKind(null)}
           onSaved={() => {
             setSpecialKind(null)
-            setMsg({ text: 'Buchung gespeichert ✅', type: 'success' })
+            toast.success('Buchung gespeichert')
             void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
           }}
         />
@@ -838,7 +713,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
           onClose={() => setEditSpecial(null)}
           onSaved={() => {
             setEditSpecial(null)
-            setMsg({ text: 'Buchung aktualisiert ✅', type: 'success' })
+            toast.success('Buchung aktualisiert')
             void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
           }}
         />
@@ -852,7 +727,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
           onClose={() => setPauseModal(null)}
           onSaved={(text) => {
             setPauseModal(null)
-            setMsg({ text, type: 'success' })
+            toast.success(text)
             void qc.invalidateQueries({ queryKey: ['buchungen', pid] })
           }}
         />
@@ -987,7 +862,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
     <Modal open onClose={onClose} title={`${BOOKING_KIND_LABEL[kind]}${isEdit ? ' bearbeiten' : ''}`}>
       <form ref={formRef} onSubmit={submit} className="master-form">
         <div className="form-group">
-          <label>Aus Katalog (optional)</label>
+          <label>Aus Katalog (optional) <HelpHint id="bookings.special" /></label>
           <select value={bookingTypeId} onChange={e => applyType(e.target.value)}>
             <option value="">— Freitext (ohne Katalog) —</option>
             {types.map(t => (
@@ -1019,8 +894,7 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
 
         <div className="form-group">
           <label>Bezeichnung*</label>
-          <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} required
-            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+          <textarea className="bk-textarea" rows={2} value={description} onChange={e => setDescription(e.target.value)} required />
           <TextSnippetBar currentText={description} onChange={setDescription} kind={kind} bookingTypeId={bookingTypeId ? Number(bookingTypeId) : undefined} />
         </div>
 
@@ -1053,12 +927,12 @@ function SpecialBookingModal({ projectId, kind, leafStructure, pathCache, showCo
         </div>
 
         <Message text={msg?.text ?? null} type={msg?.type} />
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <button className="btn-primary" type="submit" disabled={saveMut.isPending}>
-            {saveMut.isPending ? 'Speichert …' : 'Buchung speichern'}
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={saveMut.isPending} onClick={() => formRef.current?.requestSubmit()}>
+            {saveMut.isPending ? 'Speichert …' : 'Buchen'}
           </button>
-          <button type="button" className="btn-small" onClick={onClose}>Abbrechen</button>
-        </div>
+        </DialogFooter>
       </form>
     </Modal>
   )
@@ -1122,7 +996,7 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
         ENTRY_KIND:          'BREAK',
       })
     },
-    onSuccess: () => onSaved(isEdit ? 'Pause aktualisiert ✅' : 'Pause gebucht ✅'),
+    onSuccess: () => onSaved(isEdit ? 'Pause aktualisiert' : 'Pause gebucht'),
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -1157,19 +1031,18 @@ function PauseBookingModal({ projectId, employees, existing, onClose, onSaved }:
         </div>
         <div className="form-group">
           <label>Beschreibung</label>
-          <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Pause"
-            style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 12, fontSize: 15, outline: 'none' }} />
+          <textarea className="bk-textarea" rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder="Pause" />
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-2)', margin: '4px 0 8px' }}>
-          Kostenneutral · zählt zur Pausenpflicht (§ 4 ArbZG), <strong>nicht</strong> als Arbeitszeit im Zeitkonto.
+          Kostenneutral · zählt zur Pausenpflicht (§ 4 ArbZG), <strong>nicht</strong> als Arbeitszeit im Zeitkonto. <HelpHint id="bookings.pause" />
         </div>
         <Message text={msg?.text ?? null} type={msg?.type} />
-        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-          <button className="btn-primary" type="submit" disabled={saveMut.isPending}>
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={saveMut.isPending} onClick={() => formRef.current?.requestSubmit()}>
             {saveMut.isPending ? 'Speichert …' : (isEdit ? 'Speichern' : 'Pause buchen')}
           </button>
-          <button type="button" className="btn-small" onClick={onClose}>Abbrechen</button>
-        </div>
+        </DialogFooter>
       </form>
     </Modal>
   )

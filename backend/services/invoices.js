@@ -774,6 +774,13 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   if (body.se_basis_amt     !== undefined) payload.SE_BASIS_AMT     = body.se_basis_amt     != null && body.se_basis_amt !== "" ? toNum(body.se_basis_amt)     : null;
   if (body.se_amount        !== undefined) payload.SE_AMOUNT        = body.se_amount        != null && body.se_amount !== "" ? toNum(body.se_amount)        : null;
   if (body.se_release_total !== undefined) payload.SE_RELEASE_TOTAL = body.se_release_total != null && body.se_release_total !== "" ? toNum(body.se_release_total) : null;
+  // Schlussrechnungs-Entwurf: gewaehlte SE-Aufloesungen (Migration 0171). Nur
+  // das Gedaechtnis des Assistenten — beim Buchen zaehlt der Buchungsaufruf.
+  if (body.se_release_advance_ids !== undefined) {
+    payload.SE_RELEASE_ADVANCE_IDS = Array.isArray(body.se_release_advance_ids)
+      ? [...new Set(body.se_release_advance_ids.map(n => parseInt(String(n), 10)).filter(n => Number.isFinite(n) && n > 0))]
+      : null;
+  }
 
   if (body.vat_id !== undefined) {
     const vatId = body.vat_id;
@@ -828,7 +835,7 @@ async function patchInvoice(supabase, { id, body, currentInv }) {
   if (upErr && String(upErr.message || "").includes("SE_")) {
     // Migration 0047 not yet run — retry without SE fields
     const stripped = { ...payload };
-    delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_BASIS_AMT; delete stripped.SE_AMOUNT; delete stripped.SE_RELEASE_TOTAL;
+    delete stripped.SE_PERCENT; delete stripped.SE_BASIS; delete stripped.SE_BASIS_AMT; delete stripped.SE_AMOUNT; delete stripped.SE_RELEASE_TOTAL; delete stripped.SE_RELEASE_ADVANCE_IDS;
     const r = await supabase.from("INVOICE").update(stripped).eq("ID", id);
     upErr = r.error;
   }

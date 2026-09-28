@@ -97,7 +97,9 @@ describe("Leistungsstand-Reminder — eine insgesamt", () => {
     expect(notifs[0].TITLE).toBe("Leistungsstände pflegen (3 Projekte)");
     expect(notifs[0].METADATA.scope).toBe("pm_summary");
     expect(notifs[0].METADATA.project_ids).toEqual(["1", "2", "3"]);
-    expect(notifs[0].LINK).toBe("/projekte?tab=leistungsstand&filter=mine");
+    // Sammelnachricht fuehrt in die Monatsrunde (eigene Projekte vorbelegt) —
+    // der alte Link zeigte auf einen Reiter, den es auf Listenebene nicht gab.
+    expect(notifs[0].LINK).toBe("/projekte?tab=leistungsstaende");
   });
 
   test("je Person eine Nachricht, nicht eine fuer alle", async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { MoreHorizontal } from 'lucide-react'
 
@@ -8,6 +8,8 @@ interface Props {
   label?: string
   /** Zusaetzliche Klassen am Ausloeser (z. B. row-action-btn statt btn-small). */
   triggerClassName?: string
+  /** Sichtbarer Inhalt des Ausloesers statt des ⋯-Symbols (z. B. „Neue Rechnung ▾"). */
+  triggerContent?: ReactNode
 }
 
 /**
@@ -25,7 +27,7 @@ interface Props {
  * danach auf den Ausloeser zurueck, und der Zustand steht ueber
  * aria-expanded/aria-haspopup auch fuer Screenreader bereit.
  */
-export function RowMenu({ children, label = 'Weitere Aktionen', triggerClassName = 'btn-small' }: Props) {
+export function RowMenu({ children, label = 'Weitere Aktionen', triggerClassName = 'btn-small', triggerContent }: Props) {
   const [open, setOpen] = useState(false)
   const [pos, setPos]   = useState<{ top: number; right: number } | null>(null)
   const triggerRef  = useRef<HTMLButtonElement>(null)
@@ -68,6 +70,25 @@ export function RowMenu({ children, label = 'Weitere Aktionen', triggerClassName
     }
   }, [open])
 
+  // Im Fenster halten: das Menue haengt rechtsbuendig unter dem Ausloeser.
+  // Steht der Ausloeser links (Seitenkopf am Handy) oder unten (Aktions-
+  // leiste ueber der Bottom-Nav), lief es aus dem Bild. Korrigiert wird
+  // direkt am Element und vor dem ersten Paint.
+  useLayoutEffect(() => {
+    if (!open || !pos) return
+    const el = dropdownRef.current
+    const trigger = triggerRef.current
+    if (!el || !trigger) return
+    const M  = 8
+    const t  = trigger.getBoundingClientRect()
+    const d  = el.getBoundingClientRect()
+    if (d.left < M) {
+      el.style.right = 'auto'
+      el.style.left  = `${Math.max(M, Math.min(t.left, window.innerWidth - d.width - M))}px`
+    }
+    if (d.bottom > window.innerHeight - M) el.style.top = `${Math.max(M, t.top - 4 - d.height)}px`
+  }, [open, pos])
+
   return (
     <>
       <button
@@ -75,12 +96,12 @@ export function RowMenu({ children, label = 'Weitere Aktionen', triggerClassName
         type="button"
         className={triggerClassName}
         onClick={() => setOpen(o => !o)}
-        aria-label={label}
+        aria-label={triggerContent ? undefined : label}
         aria-expanded={open}
         aria-haspopup="menu"
-        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: triggerContent ? 6 : undefined }}
       >
-        <MoreHorizontal size={15} strokeWidth={1.75} />
+        {triggerContent ?? <MoreHorizontal size={15} strokeWidth={1.75} />}
       </button>
 
       {open && pos && createPortal(

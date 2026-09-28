@@ -119,8 +119,10 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
         )}
         <FilterChip label="Status"    options={statusOptions}   active={statusFilter} onChange={setStatus} />
         <FilterChip label="Kategorie" options={CATEGORY_ENTRIES.map(([value, label]) => ({ value, label }))} active={catFilter} onChange={setCat} />
+        {/* Stand bis Runde 3 im Seitentitel „Nachträge", der entfallen ist */}
+        {!projectId && <HelpHint id="nachtrag.overview" />}
         <Can permission="nachtraege.create">
-          <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setCreateOpen(true)}>+ Nachtrag</button>
+          <button type="button" className="btn-primary" style={{ marginLeft: 'auto', width: 'auto' }} onClick={() => setCreateOpen(true)}>+ Nachtrag</button>
         </Can>
       </div>
 

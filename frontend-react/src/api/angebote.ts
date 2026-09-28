@@ -207,7 +207,9 @@ export const fetchOfferStructure = (offerId: number) =>
 export const addOfferStructureNode = (offerId: number, body: AddStructureNodePayload) =>
   apiClient.post<{ data: OfferStructureNode }>(`/angebote/${offerId}/structure`, body)
 
-export const updateOfferStructureNode = (offerId: number, nodeId: number, body: UpdateStructureNodePayload) =>
+// Derselbe Endpunkt nimmt Felder und Zuschlaege in einem Aufruf — die
+// Angebotsstruktur speichert ein geaendertes Element deshalb mit genau einem PUT.
+export const updateOfferStructureNode = (offerId: number, nodeId: number, body: UpdateStructureNodePayload & Partial<UpdateOfferSurchargesPayload>) =>
   apiClient.put<{ data: OfferStructureNode }>(`/angebote/${offerId}/structure/${nodeId}`, body)
 
 export const deleteOfferStructureNode = (offerId: number, nodeId: number) =>

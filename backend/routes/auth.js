@@ -101,7 +101,8 @@ async function seedTenantRbacAndAssignAdmin(supabase, tenantId, employeeId) {
       { name: "Buchhaltung",      long: "Rechnungen/Mahnungen voll, Projekte/Angebote nur lesen",       color: "#16a34a", isDefault: false,
         permIds: uniq([...byModule(["invoices","dunning","reports","addresses","dashboard"]), ...byKey(["projects.view","offers.view","employees.view"])]) },
       { name: "Mitarbeiter",      long: "Basis-Zugriff: Übersicht + eigene Stunden",                    color: "#6b7280", isDefault: true,
-        permIds: byKey(["dashboard.view","addresses.view","addresses.contacts.view"]) },
+        // "projects.bookings.own": eigene Stunden buchen, ohne Projekte zu sehen (Migration 0169).
+        permIds: byKey(["dashboard.view","addresses.view","addresses.contacts.view","projects.bookings.own"]) },
     ];
 
     let adminRoleId = null;

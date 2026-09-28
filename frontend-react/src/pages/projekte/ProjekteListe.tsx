@@ -53,7 +53,12 @@ type InternalFilter = null | boolean
 type ContactOption = { ID: number; FIRST_NAME: string; LAST_NAME: string }
 type ContractConfirm = { contractId: number; addressId: number | null; contactId: number | null }
 
-export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectProject?: (id: number) => void; onProjectCreated?: (id: number) => void }) {
+export function ProjekteListe({ onSelectProject, onProjectCreated, initialSearch }: {
+  onSelectProject?: (id: number) => void
+  onProjectCreated?: (id: number) => void
+  /** Vorbelegte Suche, z. B. aus „Projekt zu dieser Mahnung" (Mahnungen). */
+  initialSearch?: string
+}) {
   const qc       = useQueryClient()
   const navigate = useNavigate()
   const toast    = useToast()
@@ -62,7 +67,7 @@ export function ProjekteListe({ onSelectProject, onProjectCreated }: { onSelectP
   const [showCreate, setShowCreate] = useState(false)
 
   // list state
-  const [search,        setSearch]        = useState('')
+  const [search,        setSearch]        = useState(initialSearch ?? '')
   const [sortKey,       setSortKey]       = useStickyState<SortKey>('projekte.sortKey', 'ABBR')
   const [sortDir,       setSortDir]       = useStickyState<'asc'|'desc'>('projekte.sortDir', 'asc')
   const [page,          setPage]          = useState(1)

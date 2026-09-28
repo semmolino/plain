@@ -245,7 +245,7 @@ async function listDraftsByEmployee(supabase, { employeeId, date, tenantId }) {
   return data || [];
 }
 
-async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId }) {
+async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId, employeeId = null }) {
   if (!Array.isArray(ids) || !ids.length) throw { status: 400, message: "ids fehlen" };
 
   // Nur Entwuerfe des eigenen Mandanten. Frueher wurde allein nach der
@@ -262,7 +262,11 @@ async function confirmDrafts(supabase, { ids, breakConfirmations = {}, tenantId 
     .eq("TENANT_ID", tenantId);
   if (fetchErr) throw fetchErr;
 
-  const drafts = (rows || []).filter(r => r.STATUS === "DRAFT");
+  // employeeId gesetzt = nur eigene Entwuerfe. Vorher bestaetigte die
+  // Tagesuebersicht, was sie geladen hatte — und geladen wurde nach der
+  // Mitarbeiter-ID aus der Anfrage, also auch die eines Kollegen.
+  const drafts = (rows || []).filter(r => r.STATUS === "DRAFT"
+    && (employeeId == null || Number(r.EMPLOYEE_ID) === Number(employeeId)));
   if (!drafts.length) return { confirmed: 0, arbzgEvents: [] };
 
   const draftIds = drafts.map(r => r.ID);
@@ -659,13 +663,29 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 
   const { data: existing, error: exErr } = await supabase
     .from("BOOKING")
-    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, BOOKING_DATE, QUANTITY_INT, QUANTITY_EXT, COST_RATE, HOURLY_RATE, BOOKING_KIND, ENTRY_KIND")
+    .select("ID, STRUCTURE_ID, PROJECT_ID, EMPLOYEE_ID, TENANT_ID, BOOKING_DATE, QUANTITY_INT, QUANTITY_EXT, COST_RATE, HOURLY_RATE, BOOKING_KIND, ENTRY_KIND, INVOICE_ID, ADVANCE_INVOICE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .single();
 
   if (exErr || !existing) {
     throw { status: 404, message: "Buchung nicht gefunden: " + (exErr?.message || "") };
+  }
+
+  // Abgerechnet heisst unveraenderlich — wie beim Loeschen (dependencyCheck)
+  // und Umbuchen. Vorher liess sich eine Buchung, die in einer gestellten
+  // Rechnung steckt, hier umschreiben: Stunden, Saetze, Datum, Projekt.
+  // Korrektur laeuft ueber Storno/Gutschrift.
+  if (istAbgerechnet(existing)) {
+    throw {
+      status: 409,
+      message: "Diese Buchung ist bereits abgerechnet und kann nicht mehr geändert werden. Korrekturen laufen über Storno oder Gutschrift.",
+    };
+  }
+  // Monatsabschluss: der bisherige Monat darf nicht mehr bewegt werden, und
+  // in einen abgeschlossenen Monat darf nichts hineinwandern.
+  if (existing.BOOKING_DATE) {
+    await checkMonthNotClosed(supabase, tenantId, existing.EMPLOYEE_ID, String(existing.BOOKING_DATE));
   }
 
   // Pauschalen/Stückleistungen und Pausen bekommen ihre Sätze NICHT aus Rolle/
@@ -734,6 +754,11 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
 
   const effectiveEmployeeId = newEmployeeId !== undefined ? newEmployeeId : existing.EMPLOYEE_ID;
   const effectiveProjectId  = newProjectId  !== undefined ? newProjectId  : existing.PROJECT_ID;
+
+  const effectiveDate = updateTec.BOOKING_DATE !== undefined ? updateTec.BOOKING_DATE : existing.BOOKING_DATE;
+  if (effectiveDate && (String(effectiveDate) !== String(existing.BOOKING_DATE) || Number(effectiveEmployeeId) !== Number(existing.EMPLOYEE_ID))) {
+    await checkMonthNotClosed(supabase, tenantId, effectiveEmployeeId, String(effectiveDate));
+  }
 
   if (!isSpecial) {
     let preset = null;
@@ -1473,6 +1498,7 @@ async function rebookBuchungen(supabase, {
 }
 
 module.exports = {
+  checkMonthNotClosed,
   recomputeStructure,
   createBuchung,
   createSpecialBuchung,

@@ -95,10 +95,13 @@ function makeFakeSupabase(initial = {}, opts = {}) {
       switch (f.op) {
         case "eq":  return v === f.val;
         case "neq": return v !== f.val;
-        case "in":  return f.val.includes(v);
+        // PostgREST bekommt die Liste als Text ("in.(11,12)") — ob der Aufrufer
+        // Zahlen oder Zeichenketten schickt, ist dort egal. Hier auch.
+        case "in":  return v != null && f.val.some(x => String(x) === String(v));
         case "gte": return v >= f.val;
         case "lte": return v <= f.val;
         case "lt":  return v <  f.val;
+        case "gt":  return v >  f.val;
         case "is":  return f.val === null ? (v === null || v === undefined) : v === f.val;
         // .not(col, "is", null) — die einzige not-Form, die im Code vorkommt.
         case "notIs": return f.val === null ? (v !== null && v !== undefined) : v !== f.val;
@@ -122,8 +125,12 @@ function makeFakeSupabase(initial = {}, opts = {}) {
         const cols = (onConflict || "").split(",").map(s => s.trim()).filter(Boolean);
         const out = [];
         for (const r of (Array.isArray(payload) ? payload : [payload])) {
-          const idx = cols.length ? tables[table].findIndex(x => cols.every(c => x[c] === r[c])) : -1;
-          if (idx >= 0) { tables[table][idx] = { ID: tables[table][idx].ID, ...r }; out.push(tables[table][idx]); }
+          // Ohne onConflict nimmt PostgREST den Primaerschluessel — vorher legte
+          // das Fake hier eine zweite Zeile mit derselben ID an.
+          const keys = cols.length ? cols : (r.ID != null ? ["ID"] : []);
+          const idx = keys.length ? tables[table].findIndex(x => keys.every(c => String(x[c]) === String(r[c]))) : -1;
+          if (idx >= 0 && !cols.length) { tables[table][idx] = { ...tables[table][idx], ...r }; out.push(tables[table][idx]); }
+          else if (idx >= 0) { tables[table][idx] = { ID: tables[table][idx].ID, ...r }; out.push(tables[table][idx]); }
           else { const nr = { ID: ++autoId, ...r }; tables[table].push(nr); out.push(nr); }
         }
         return { data: out, error: null };
@@ -143,7 +150,13 @@ function makeFakeSupabase(initial = {}, opts = {}) {
         return { data: [...matched].map(r => ({ ...r })), error: null };
       }
       let out = applyFilters(rows).map(r => ({ ...r }));
-      if (order) out.sort((a, b) => ((a[order.col] > b[order.col] ? 1 : a[order.col] < b[order.col] ? -1 : 0) * (order.asc ? 1 : -1)));
+      if (order) out.sort((a, b) => {
+        for (const o of order) {
+          const c = a[o.col] > b[o.col] ? 1 : a[o.col] < b[o.col] ? -1 : 0;
+          if (c) return o.asc ? c : -c;
+        }
+        return 0;
+      });
       if (limitN != null) out = out.slice(0, limitN);
       // { count: "exact" } liefert die Trefferzahl; mit head:true ohne Daten.
       if (countMode) return { data: headOnly ? null : out, count: out.length, error: null };
@@ -165,6 +178,7 @@ function makeFakeSupabase(initial = {}, opts = {}) {
       gte(col, val) { filters.push({ op: "gte", col, val }); return builder; },
       lte(col, val) { filters.push({ op: "lte", col, val }); return builder; },
       lt(col, val)  { filters.push({ op: "lt",  col, val }); return builder; },
+      gt(col, val)  { filters.push({ op: "gt",  col, val }); return builder; },
       is(col, val)  { filters.push({ op: "is",  col, val }); return builder; },
       // PostgREST-Semantik nachgebildet: "*" und "%" sind Platzhalter, ein
       // vorangestellter Backslash macht das naechste Zeichen literal. Genau
@@ -172,7 +186,9 @@ function makeFakeSupabase(initial = {}, opts = {}) {
       ilike(col, muster) { filters.push({ op: "ilike", col, val: ilikeRegex(muster) }); return builder; },
       not(col, op, val) { filters.push({ op: op === "is" ? "notIs" : "neq", col, val }); return builder; },
       or() { return builder; },
-      order(col, opts) { order = { col, asc: !opts || opts.ascending !== false }; return builder; },
+      // Mehrere .order() sortieren wie PostgREST nacheinander: der erste Aufruf
+      // ist der Hauptschluessel. (Vorher gewann still der letzte.)
+      order(col, opts) { (order ||= []).push({ col, asc: !opts || opts.ascending !== false }); return builder; },
       limit(n) { limitN = n; return builder; },
       // PostgREST liefert bei MEHREREN Treffern einen Fehler, nicht die erste
       // Zeile. Genau daran haing der Login-Fehler bei doppelten E-Mail-

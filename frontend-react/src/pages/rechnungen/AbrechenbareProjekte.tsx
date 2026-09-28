@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronRight, FileText, Receipt, FileCheck2, RefreshCcw } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { useInvoiceKinds } from '@/components/rechnungen/invoiceKinds'
 import { fetchBillingSummary } from '@/api/reports'
 import { fmtEur, money } from '@/utils/money'
 
@@ -58,6 +59,10 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
   // den obersten Bereich der Rechnungsseite dauerhaft mit der Meldung, dass
   // es nichts zu tun gibt.
   const collapsed = userCollapsed ?? (!isLoading && projects.length === 0)
+
+  // Nur Arten, die der Nutzer anlegen darf (UI-Pilot 2026-09) — vorher
+  // standen alle drei da, und die Rechnungsseite wies danach ab.
+  const allowed = new Set<string>(useInvoiceKinds().map(k => k.id))
 
   function handlePick(wizardType: WizardType) {
     if (!picker) return
@@ -192,21 +197,21 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
             </span>
             <HelpHint id="invoice.abschlag_vs_schluss" />
           </p>
-          <button className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
+          {allowed.has('abschlag') && <button type="button" className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => handlePick('abschlag')}>
             <FileText size={16} strokeWidth={1.75} />
             <span><strong>Abschlagsrechnung</strong><br/><span style={{ fontSize: 11, color: 'var(--text-3)' }}>Teilbetrag eines laufenden Vertrags</span></span>
-          </button>
-          <button className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
+          </button>}
+          {allowed.has('rechnung') && <button type="button" className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => handlePick('rechnung')}>
             <Receipt size={16} strokeWidth={1.75} />
             <span><strong>Rechnung</strong><br/><span style={{ fontSize: 11, color: 'var(--text-3)' }}>Einzelrechnung / Nebenleistungen</span></span>
-          </button>
-          <button className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
+          </button>}
+          {allowed.has('schluss') && <button type="button" className="btn-secondary" style={{ justifyContent: 'flex-start', display: 'flex', alignItems: 'center', gap: 8 }}
             onClick={() => handlePick('schluss')}>
             <FileCheck2 size={16} strokeWidth={1.75} />
             <span><strong>Teilschluss- / Schlussrechnung</strong><br/><span style={{ fontSize: 11, color: 'var(--text-3)' }}>Vertrag abrechnen, vorherige Abschläge verrechnen</span></span>
-          </button>
+          </button>}
         </div>
       </Modal>
     </div>
