@@ -12,12 +12,12 @@ import { DialogFooter }  from '@/components/ui/DialogFooter'
 import { ActionBar }     from '@/components/ui/ActionBar'
 import { RowMenu }       from '@/components/ui/RowMenu'
 import { AmountInput }   from '@/components/ui/AmountInput'
-import { DensityToggle } from '@/components/ui/DensityToggle'
-import { useDensity } from '@/hooks/useDensity'
+import { ColumnChooser } from '@/components/ui/ColumnChooser'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
 import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
+import { STRUKTUR_SPALTEN, useStrukturSpalten, SurchargeAmount } from '@/pages/projekte/struktur/strukturSpalten'
 import { OfferStrukturMobile } from '@/pages/angebote/struktur/OfferStrukturMobile'
 import {
   fetchOffer, fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
@@ -107,7 +107,8 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const featureCalc = useFeature('hoai.calculator')
   const canEdit     = permEdit && !readOnlyLicense
   const canCalc     = permCalc && featureCalc && !readOnlyLicense
-  const [density, setDensity] = useDensity()
+  // Immer luftig (Rueckmeldung Runde 3); welche Spalten, waehlt jeder selbst.
+  const cols = useStrukturSpalten('angebotsstruktur.spalten')
   const narrow = useIsNarrow()
 
   const [edits, setEdits]               = useState<Record<number, OfferRowEdit>>({})
@@ -210,7 +211,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   const nodeById  = useMemo(() => new Map(structure.map(n => [n.ID, n])), [structure])
   const aggMap    = useMemo(() => aggregateOffer(structure), [structure])
 
-  const showInklCol  = density === 'compact'
+  const showInklCol  = cols.show('inkl')
   const hasParents   = parentIds.size > 0
   const allCollapsed = hasParents && [...parentIds].every(id => collapsed.has(Number(id)))
   function toggleCollapsed(id: number) {
@@ -586,7 +587,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
 
   const addParent  = addForm?.FATHER_ID ? nodeById.get(Number(addForm.FATHER_ID)) : undefined
   const addTakes   = addForm ? leafValue(addForm.FATHER_ID ? Number(addForm.FATHER_ID) : null) : null
-  const COLS = showInklCol ? 11 : 10
+  const COLS = cols.colCount
 
   // Zeilenmenue und Rechtsklick teilen sich dieselben Befehle.
   function rowCommands(node: OfferStructureNode) {
@@ -607,7 +608,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="sx-root" data-density={density}>
+    <div className="sx-root" data-density="comfortable">
       <div className="list-toolbar ox-offer-bar">
         <label className="ox-offer-label" htmlFor="ox-offer-input">Angebot</label>
         <div ref={offerAcRef} className="project-ac-wrap ox-offer-ac">
@@ -688,7 +689,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                 value={elementSearch} onChange={e => setElementSearch(e.target.value)} />
             )}
             <div className="sx-toolbar-right">
-              {!narrow && flatTree.length > 0 && <DensityToggle value={density} onChange={setDensity} />}
+              {!narrow && flatTree.length > 0 && <ColumnChooser columns={STRUKTUR_SPALTEN} hidden={cols.hidden} onToggle={cols.toggle} />}
               {canEdit && (
                 <button className="btn-secondary" type="button" onClick={() => openAdd(null)}>
                   <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Neues Element
@@ -727,15 +728,15 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                         )}
                       </span>
                     </th>
-                    <th scope="col">Abrechnung</th>
+                    {cols.show('bt') && <th scope="col">Abrechnung</th>}
                     <th scope="col" className="num">
                       <span className="sx-th-element ox-th-fee">Honorar € <HelpHint id="offers.structure.hours" size={13} /></span>
                     </th>
-                    <th scope="col" className="num">Zuschläge €</th>
+                    {cols.show('sur') && <th scope="col" className="num">Zuschläge €</th>}
                     {showInklCol && <th scope="col" className="num" title="Honorar einschließlich Zuschlägen">inkl. Zuschl. €</th>}
-                    <th scope="col">NK %</th>
-                    <th scope="col" className="num">Nebenkosten €</th>
-                    <th scope="col" className="num">Gesamt €</th>
+                    {cols.show('nkpct') && <th scope="col">NK %</th>}
+                    {cols.show('nk') && <th scope="col" className="num">Nebenkosten €</th>}
+                    {cols.show('total') && <th scope="col" className="num">Gesamt €</th>}
                     <th scope="col" className="sx-col-menu">
                       <span className="sr-only">Aktionen</span>
                       <HelpHint id="structure.contextmenu" align="right" size={13} />
@@ -751,13 +752,13 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                       <span className="sx-root-abbr">{currentOffer?.ABBR ?? ''}</span>
                       <span className="sx-root-name">Angebot gesamt</span>
                     </td>
-                    <td className="sx-muted">—</td>
+                    {cols.show('bt') && <td className="sx-muted">—</td>}
                     <td className="num sx-muted">{money(rootRevenue)}</td>
-                    <td className="num">{rootSurcharges !== 0 ? money(rootSurcharges) : <span className="sx-muted">—</span>}</td>
+                    {cols.show('sur') && <td className="num"><span className="sx-surcharge-static"><SurchargeAmount value={rootSurcharges} /></span></td>}
                     {showInklCol && <td className="num">{money(rootRevenueFinal)}</td>}
-                    <td className="sx-muted">—</td>
-                    <td className="num sx-muted">{money(rootExtras)}</td>
-                    <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}>{money(rootGesamt)}</td>
+                    {cols.show('nkpct') && <td className="sx-muted">—</td>}
+                    {cols.show('nk') && <td className="num sx-muted">{money(rootExtras)}</td>}
+                    {cols.show('total') && <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}>{money(rootGesamt)}</td>}
                     <td className="sx-col-menu">
                       {canEdit && (
                         <RowMenu label="Aktionen zum Angebot" triggerClassName="row-action-btn">
@@ -858,6 +859,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                             )}
                           </div>
                         </td>
+                        {cols.show('bt') && (
                         <td>
                           {canEdit ? (
                             <select className={`tbl-select sx-input sx-input-bt${ch('billing_type_id')}`} aria-label="Abrechnungsart" value={btId}
@@ -866,6 +868,7 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                             </select>
                           ) : btypes.find(b => String(b.ID) === btId)?.ABBR ?? '—'}
                         </td>
+                        )}
                         <td className="num">
                           {hourly && canEdit ? (
                             // Aufwand: Stunden × Satz statt eines Betrags. Das Produkt steht
@@ -889,22 +892,24 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                               onChange={v => editRow(node.ID, { budget: v })} />
                           )}
                         </td>
+                        {cols.show('sur') && (
                         <td className="num">
                           {(() => {
                             const sv = surchargeChanged ? computed.total : isParent ? (agg?.surcharges ?? 0) : Number(node.SURCHARGES_TOTAL ?? 0)
-                            const label = sv !== 0 ? money(sv) : '—'
                             return canEdit ? (
                               <button type="button" className={`sx-surcharge-btn${surchargeChanged ? ' sx-changed' : ''}`}
                                 aria-label={`Zuschläge von ${nameShort} bearbeiten`}
                                 onClick={() => setSurchargePanel(p => p === node.ID ? null : node.ID)}>
-                                {label}
+                                <SurchargeAmount value={sv} />
                               </button>
-                            ) : <span className={sv === 0 ? 'sx-muted' : undefined}>{label}</span>
+                            ) : <span className="sx-surcharge-static"><SurchargeAmount value={sv} /></span>
                           })()}
                         </td>
+                        )}
                         {showInklCol && (
                           <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>{money(Number(node.REVENUE ?? 0))}</td>
                         )}
+                        {cols.show('nkpct') && (
                         <td>
                           {canEdit ? (
                             <input className={`tbl-input sx-input sx-input-pct${ch('extras_percent')}`} type="text" inputMode="decimal"
@@ -912,8 +917,9 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
                               onChange={e => editRow(node.ID, { nk: e.target.value.replace(',', '.') })} />
                           ) : `${nkVal} %`}
                         </td>
-                        <td className="num">{money(isParent ? agg?.extras : node.EXTRAS)}</td>
-                        {(() => {
+                        )}
+                        {cols.show('nk') && <td className="num">{money(isParent ? agg?.extras : node.EXTRAS)}</td>}
+                        {cols.show('total') && (() => {
                           const rev = Number(node.REVENUE ?? 0)
                           const ext = isParent ? (agg?.extras ?? 0) : Number(node.EXTRAS ?? 0)
                           return (

@@ -108,7 +108,7 @@ function ProjektePageInner() {
     const openProject = (id: number) => go({ view: 'workspace', projectId: id, tab: view.pendingTab ?? 'struktur' })
     return (
       <div className="master-page pw-list">
-        <PageHeader title="Projekte" />
+        <PageHeader title="Projekte" srTitle />
         {listTabs.length > 1 && (
           <Tabs tabs={listTabs} active={view.listTab} onChange={id => guarded(() => go({ view: 'list', listTab: id as ListTab, pendingTab: null }))} />
         )}

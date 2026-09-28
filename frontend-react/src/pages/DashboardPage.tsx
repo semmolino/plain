@@ -1902,6 +1902,7 @@ export function DashboardPage() {
     <div className="dash-page">
       <PageHeader
         title="Übersicht"
+        srTitle
         meta={<span>{todayLabel}{companyName ? ` · ${companyName}` : ''}</span>}
         actions={<>
           {dashboardRole && canSwitchView && (

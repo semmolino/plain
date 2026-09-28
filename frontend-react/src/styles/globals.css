@@ -5871,3 +5871,32 @@ div.dash-attn-link:hover { background: transparent; }
 /* Struktur-Blaetter am Handy: die Fusszeile klebt sonst um das Innenpolster
    des Dialogs (20 px) ueber dem Rand, und darunter scrollt Inhalt durch. */
 .modal-card.sxm-sheet .modal-actions { bottom: calc(-1 * var(--space-5)); }
+
+/* ── Rückmeldung Runde 3 ─────────────────────────────────────────────────── */
+/* Zuschläge wieder farbig (positiv gruen, Nachlass rot) und in jeder Zeile
+   buendig: der Knopf hat 1 px Rahmen + 6 px Innenabstand, der reine Wert in
+   der Gesamtzeile bekommt denselben Kasten. */
+.sx-sur-pos { color: var(--success); }
+.sx-sur-neg { color: var(--kpi-critical); }
+.sx-surcharge-static {
+  display: inline-block; min-width: 64px; padding: 0 6px; border: 1px solid transparent;
+  font-weight: 600; font-variant-numeric: tabular-nums; text-align: right;
+}
+.col-chooser-btn { display: inline-flex; align-items: center; gap: 5px; }
+.sx-toolbar-right .col-chooser-btn { height: 38px; }
+/* Titel-Knopf im Projektkopf: −8 px Rand + max-width 100 % schnitten immer
+   8 px ab — kurze Namen wurden so zu „BLAN…". */
+.pw-title-btn { max-width: calc(100% + 8px); }
+.pw-switch-pop { width: min(640px, calc(100vw - 32px)); }
+.ox-offer-ac { max-width: 640px; }
+/* Modulseite ohne sichtbaren Titel: Hauptaktion rechts neben den Reitern */
+.module-tabs-row { display: flex; align-items: flex-end; gap: var(--space-3); margin-bottom: var(--space-3); }
+.module-tabs-row > .tabs-wrap { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.module-tabs-action { flex: 0 0 auto; margin-left: auto; padding-bottom: var(--space-1); }
+@media (max-width: 640px) {
+  .module-tabs-row { flex-wrap: wrap; align-items: stretch; }
+  .module-tabs-row > .tabs-wrap { flex-basis: 100%; }
+  .module-tabs-action { margin-left: 0; }
+}
+.module-tabs-action .btn-primary { width: auto; margin-top: 0; height: 38px; padding: 0 16px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 640px) { .module-tabs-action .btn-primary { min-height: 44px; } }

@@ -83,7 +83,7 @@ function AngeboteSeite() {
 
   return (
     <div className="master-page">
-      <h1 className="master-title">Angebote</h1>
+      <h1 className="sr-only">Angebote</h1>
       <Tabs tabs={useLicenseFilterTabs(useFilterTabs(TABS))} active={tab} onChange={id => { if (id !== tab) guarded(() => setTab(id as Tab)) }} />
 
       {selectedOfferId && tab !== 'liste' && (

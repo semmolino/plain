@@ -101,6 +101,19 @@ test.describe('Projekt-Arbeitsbereich', () => {
     await expect(page.getByRole('combobox', { name: 'Weitere Bereiche des Projekts' })).toBeAttached()
   })
 
+  // Rueckmeldung Runde 3: −8 px Rand + max-width 100 % schnitten jeden Namen
+  // um 8 px — kurze Namen wurden zu „BLAN…", obwohl Platz war.
+  test('Projektname wird nicht abgeschnitten, solange Platz ist', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Desktop-Breite')
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await mockPilot(page)
+    await page.goto('/projekte?projectId=1&tab=struktur')
+    const text = page.locator('.pw-title-text')
+    await expect(text).toBeVisible()
+    const { scroll, client } = await text.evaluate(el => ({ scroll: el.scrollWidth, client: el.clientWidth }))
+    expect(scroll).toBeLessThanOrEqual(client + 1)
+  })
+
   test('Projektname ist der Umschalter: Suchen, Pfeiltasten, Enter', async ({ page }) => {
     await mockPilot(page)
     await page.goto('/projekte?projectId=1&tab=leistungsstand')

@@ -304,7 +304,10 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   fest, was beim Angebot anders ist (Blatt-Basis ohne Buchungen, Aufwand =
   Stunden × Satz, Speicher-Nutzlast kleingeschrieben plus `SURCHARGE_*` in
   einem PUT). Beide Tabellen puffern Eingaben bis „Speichern" (ActionBar,
-  `useRegisterDirty`); Anlegen, Loeschen, Verschieben wirken sofort. Ein
+  `useRegisterDirty`); Anlegen, Loeschen, Verschieben wirken sofort. Beide
+  sind immer luftig (keine Dichte-Umschaltung); welche Spalten sichtbar sind,
+  waehlt jeder ueber „Spalten" (`struktur/strukturSpalten.tsx`, je Mitarbeiter
+  gemerkt). Ein
   Angebotselement mit Unterelementen loescht das Backend nicht
   (`dependencyCheck.checkOfferStructure`, 409) — die Oberflaeche sagt das
   vorher, statt es „samt Unterelementen" zu versprechen.
@@ -626,6 +629,7 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Buttons sind standardmäßig flach; Erhebung nur bewusst über `.btn-elevated`.
 - Dialoge: `Modal`/`ConfirmModal` benutzen (bringen Escape, Fokus-Falle, Fokus-Rückgabe, `role="dialog"` mit). Kein eigenes Overlay bauen.
 - Dialog-Fußzeile: **immer `<DialogFooter>`** aus `components/ui/`, nie ein eigenes `flex-end`-`<div>` und nie `.modal-actions` direkt. Reihenfolge ist verbindlich: **Abbrechen links, Hauptaktion rechts** (13 Dialoge hatten es umgekehrt — dieselbe Position, gegenteilige Wirkung). Abbrechen trägt `.btn-secondary`, jeder Knopf ein `type="button"`. Ein Löschen-Knopf gehört in die `secondary`-Zone, nicht gleichrangig neben „Speichern". Geprüft von `tests/dialogs.spec.ts`.
+- Modulseiten (Übersicht, Adressen, Projekte, Rechnungen, Angebote, …) zeigen **keinen sichtbaren Seitentitel** — welches Modul offen ist, sagt die Seitennavigation. Die `<h1>` bleibt für Screenreader: `<PageHeader title="…" srTitle />` bzw. `<h1 className="sr-only">`. Eine Hauptaktion ohne Kopf steht rechts neben den Reitern (`.module-tabs-row`). Sichtbar bleiben Titel, die ein **Objekt** benennen (Projektkopf, Adresse, Nachtrag, Assistent).
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
 

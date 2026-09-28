@@ -33,20 +33,37 @@ const abbr = (page: Page, v: string) => page.locator(`input[aria-label="Kürzel"
 test.describe('Angebotsstruktur am Desktop', () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) < 1024, 'Tabelle nur am Desktop')
 
-  for (const d of ['comfortable', 'compact'] as const) {
-    test(`Dichte ${d}: kein Querscrollen bei 1280 px, auch mit Stunden × Satz`, async ({ page }) => {
-      await page.setViewportSize({ width: 1280, height: 800 })
-      await open(page, d)
-      await page.locator('.sx-table').waitFor()
-      await expect(page.getByRole('textbox', { name: 'Stunden BL1' })).toBeVisible()
-      const { table, box } = await page.evaluate(() => {
-        const t = document.querySelector('.sx-table') as HTMLElement
-        return { table: t.scrollWidth, box: (t.closest('.list-section') as HTMLElement).clientWidth }
-      })
-      expect(table).toBeLessThanOrEqual(box + 1)
-      await expect(page.getByRole('columnheader', { name: /inkl\. Zuschl/ })).toHaveCount(d === 'compact' ? 1 : 0)
+  test('luftig, kein Querscrollen bei 1280 px, auch mit Stunden × Satz', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    await open(page, 'compact')
+    await page.locator('.sx-table').waitFor()
+    await expect(page.locator('.sx-root')).toHaveAttribute('data-density', 'comfortable')
+    await expect(page.getByRole('textbox', { name: 'Stunden BL1' })).toBeVisible()
+    const { table, box } = await page.evaluate(() => {
+      const t = document.querySelector('.sx-table') as HTMLElement
+      return { table: t.scrollWidth, box: (t.closest('.list-section') as HTMLElement).clientWidth }
     })
-  }
+    expect(table).toBeLessThanOrEqual(box + 1)
+    await expect(page.getByRole('columnheader', { name: /inkl\. Zuschl/ })).toHaveCount(0)
+  })
+
+  test('Spaltenauswahl, Zuschläge farbig und bündig', async ({ page }) => {
+    await open(page)
+    await page.locator('.sx-table').waitFor()
+    await page.getByRole('button', { name: 'Spalten' }).click()
+    await page.getByRole('checkbox', { name: 'inkl. Zuschläge €' }).check()
+    await expect(page.getByRole('columnheader', { name: /inkl\. Zuschl/ })).toHaveCount(1)
+    await page.getByRole('checkbox', { name: 'NK %' }).uncheck()
+    await expect(page.getByRole('columnheader', { name: 'NK %' })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    // LP5 +10 % gruen; Gesamtzeile (inkl. Angebotsnachlass) steht buendig darueber
+    await expect(page.locator('tr[data-struct-id="206"] .sx-sur-pos')).toBeVisible()
+    const right = (sel: string) => page.locator(sel).first().evaluate(el => {
+      const r = el.getBoundingClientRect(); const st = getComputedStyle(el)
+      return Math.round(r.right - parseFloat(st.paddingRight) - parseFloat(st.borderRightWidth))
+    })
+    expect(await right('.sx-root-row .sx-surcharge-static')).toBe(await right('tr[data-struct-id="206"] .sx-surcharge-btn'))
+  })
 
   test('Spalte „Element" mit Zuklappen, Gesamtzeile, keine Emoji-Symbole', async ({ page }) => {
     await open(page)
