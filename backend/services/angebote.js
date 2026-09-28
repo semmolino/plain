@@ -108,7 +108,9 @@ async function listOffers(supabase, { tenantId }) {
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, ABBR').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
-    contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
+    // CONTACTS — die Tabelle heisst im Plural. Mit „CONTACT" lief die Abfrage
+    // ins Leere, und die Angebotsliste zeigte nie einen Ansprechpartner.
+    contactIds.length ? supabase.from('CONTACTS').select('ID, FIRST_NAME, LAST_NAME').eq('TENANT_ID', tenantId).in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
     projectIds.length ? supabase.from('PROJECT').select('ID, ABBR').in('ID', projectIds) : Promise.resolve({ data: [] }),
   ]);
@@ -725,9 +727,10 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 
   // Load buyer contact
   const { data: contact } = await supabase
-    .from('CONTACT')
+    .from('CONTACTS')   // Plural — mit „CONTACT" fehlte der Ansprechpartner im PDF
     .select('FIRST_NAME, LAST_NAME, EMAIL, MOBILE')
     .eq('ID', offer.CONTACT_ID)
+    .eq('TENANT_ID', tenantId)
     .maybeSingle();
 
   // Load employee (Ansprechpartner)

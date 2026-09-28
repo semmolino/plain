@@ -61,20 +61,30 @@ async function checkAddress(supabase, { tenantId, id }) {
   const name = addr?.ADDRESS_NAME_1 || `#${id}`;
   const entityLabel = `Adresse „${name}"`;
 
-  const [contacts, projects, offers, invoices, partials] = await Promise.all([
+  // Rechnung und Abschlag fuehren die Adresse als Rechnungsempfaenger
+  // (INVOICE_ADDRESS_ID / ADVANCE_INVOICE_ADDRESS_ID). Bis Runde 8 des
+  // UI-Pilots stand hier ADDRESS_ID — die Spalte gibt es dort nicht,
+  // safeReferences schluckte den Fehler, und Rechnungen blockierten nie.
+  // Verträge und Nachträge fehlten ganz; NACHTRAG hat keinen Fremdschluessel,
+  // dort blieb nach dem Loeschen ein Verweis ins Leere.
+  const [contacts, projects, offers, contracts, invoices, partials, nachtraege] = await Promise.all([
     safeReferences(supabase, "CONTACTS",        "ID, FIRST_NAME, LAST_NAME", { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "PROJECT",         "ID, ABBR, NAME", { ADDRESS_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "OFFER",           "ID, ABBR",            { ADDRESS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { ADDRESS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "CONTRACT",        "ID, ABBR",            { INVOICE_ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { INVOICE_ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ ADVANCE_INVOICE_ADDRESS_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "NACHTRAG",        "ID, ABBR",            { ADDRESS_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [
     formatRefBlock("contacts", contacts, c => `${c.FIRST_NAME || ""} ${c.LAST_NAME || ""}`.trim() || `#${c.ID}`),
     formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`),
     formatRefBlock("offers",   offers,   o => o.ABBR || `#${o.ID}`),
+    formatRefBlock("contracts", contracts, c => c.ABBR || `#${c.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
     formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
+    formatRefBlock("nachtraege", nachtraege, n => n.ABBR || `#${n.ID}`),
   ].filter(Boolean);
 
   const labeled = refs.map(r => ({
@@ -83,8 +93,10 @@ async function checkAddress(supabase, { tenantId, id }) {
       r.kind === "contacts" ? (r.count === 1 ? "Kontakt"  : "Kontakten") :
       r.kind === "projects" ? (r.count === 1 ? "Projekt"  : "Projekten") :
       r.kind === "offers"   ? (r.count === 1 ? "Angebot"  : "Angeboten") :
+      r.kind === "contracts" ? (r.count === 1 ? "Vertrag" : "Verträgen") :
       r.kind === "invoices" ? (r.count === 1 ? "Rechnung" : "Rechnungen") :
-      r.kind === "partials" ? (r.count === 1 ? "Abschlag" : "Abschlägen") : r.kind,
+      r.kind === "partials" ? (r.count === 1 ? "Abschlag" : "Abschlägen") :
+      r.kind === "nachtraege" ? (r.count === 1 ? "Nachtrag" : "Nachträgen") : r.kind,
   }));
 
   const blocked = labeled.length > 0;
@@ -110,18 +122,24 @@ async function checkContact(supabase, { tenantId, id }) {
   const name = c ? `${c.FIRST_NAME || ""} ${c.LAST_NAME || ""}`.trim() : `#${id}`;
   const entityLabel = `Kontakt „${name || "ohne Namen"}"`;
 
-  const [projects, offers, invoices, partials] = await Promise.all([
+  // Spalten wie bei checkAddress: Rechnung/Abschlag/Vertrag fuehren den
+  // Rechnungskontakt, Nachtrag seinen Ansprechpartner.
+  const [projects, offers, contracts, invoices, partials, nachtraege] = await Promise.all([
     safeReferences(supabase, "PROJECT",         "ID, ABBR",            { CONTACT_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "OFFER",           "ID, ABBR",            { CONTACT_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { CONTACT_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ CONTACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "CONTRACT",        "ID, ABBR",            { INVOICE_CONTACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { INVOICE_CONTACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ ADVANCE_INVOICE_CONTACT_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "NACHTRAG",        "ID, ABBR",            { CONTACT_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [
     formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`),
     formatRefBlock("offers",   offers,   o => o.ABBR || `#${o.ID}`),
+    formatRefBlock("contracts", contracts, c => c.ABBR || `#${c.ID}`),
     formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
     formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
+    formatRefBlock("nachtraege", nachtraege, n => n.ABBR || `#${n.ID}`),
   ].filter(Boolean);
 
   const labeled = refs.map(r => ({
@@ -129,8 +147,10 @@ async function checkContact(supabase, { tenantId, id }) {
     label:
       r.kind === "projects" ? (r.count === 1 ? "Projekt"  : "Projekten") :
       r.kind === "offers"   ? (r.count === 1 ? "Angebot"  : "Angeboten") :
+      r.kind === "contracts" ? (r.count === 1 ? "Vertrag" : "Verträgen") :
       r.kind === "invoices" ? (r.count === 1 ? "Rechnung" : "Rechnungen") :
-      r.kind === "partials" ? (r.count === 1 ? "Abschlag" : "Abschlägen") : r.kind,
+      r.kind === "partials" ? (r.count === 1 ? "Abschlag" : "Abschlägen") :
+      r.kind === "nachtraege" ? (r.count === 1 ? "Nachtrag" : "Nachträgen") : r.kind,
   }));
 
   const blocked = labeled.length > 0;
@@ -395,7 +415,9 @@ async function checkProjectStatus(supabase, { tenantId, id }) {
 async function checkProjectTyp(supabase, { tenantId, id }) {
   const { data: t } = await supabase.from("PROJECT_TYPE").select("ABBR").eq("ID", id).maybeSingle();
   const entityLabel = `Projekttyp „${t?.ABBR || `#${id}`}"`;
-  const projects = await safeReferences(supabase, "PROJECT", "ID, ABBR", { TYP_ID: id, TENANT_ID: tenantId });
+  // PROJECT_TYPE_ID — vorher TYP_ID, eine Spalte, die es nie gab: der Typ
+  // liess sich loeschen, auch wenn Projekte ihn trugen.
+  const projects = await safeReferences(supabase, "PROJECT", "ID, ABBR", { PROJECT_TYPE_ID: id, TENANT_ID: tenantId });
   const refs = [];
   const blk = formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`);
   if (blk) refs.push({ ...blk, label: blk.count === 1 ? "Projekt" : "Projekten" });
@@ -411,18 +433,24 @@ async function checkProjectTyp(supabase, { tenantId, id }) {
 async function checkRole(supabase, { tenantId, id }) {
   const { data: r } = await supabase.from("ROLE").select("ABBR").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
   const entityLabel = `Projekt-Rolle „${r?.ABBR || `#${id}`}"`;
-  const [employees, e2p] = await Promise.all([
-    safeReferences(supabase, "EMPLOYEE",         "ID, ABBR", { ROLE_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "EMPLOYEE2PROJECT", "ID",             { ROLE_ID: id, TENANT_ID: tenantId }),
+  // Wer die Rolle traegt, steht an den Tabellen mit Fremdschluessel auf ROLE.
+  // Vorher stand hier EMPLOYEE.ROLE_ID — die Spalte gibt es nicht, die
+  // Pruefung traf nie, und Preislisten, Buchungen und Angebotselemente
+  // fehlten ganz (die Datenbank hielt das Loeschen dann mit einem 500er auf).
+  const [e2p, rates, bookings, offerNodes] = await Promise.all([
+    safeReferences(supabase, "EMPLOYEE2PROJECT",     "ID", { ROLE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "PROJECT_HOURLY_RATES", "ID", { ROLE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "BOOKING",              "ID", { ROLE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "OFFER_STRUCTURE",      "ID", { ROLE_ID: id, TENANT_ID: tenantId }),
   ]);
   const refs = [];
-  if (employees.length > 0) {
-    const blk = formatRefBlock("employees", employees, e => e.ABBR || `#${e.ID}`);
-    refs.push({ ...blk, label: blk.count === 1 ? "Mitarbeiter:in" : "Mitarbeiter:innen" });
-  }
-  if (e2p.length > 0) {
-    refs.push({ kind: "team_assignments", count: e2p.length, sample: [], label: e2p.length === 1 ? "Projekt-Team-Zuordnung" : "Projekt-Team-Zuordnungen" });
-  }
+  const count = (kind, rows, one, many) => {
+    if (rows.length > 0) refs.push({ kind, count: rows.length, sample: [], label: rows.length === 1 ? one : many });
+  };
+  count("team_assignments", e2p, "Projekt-Team-Zuordnung", "Projekt-Team-Zuordnungen");
+  count("hourly_rates", rates, "Preisliste", "Preislisten");
+  count("bookings", bookings, "Buchung", "Buchungen");
+  count("offer_nodes", offerNodes, "Angebotselement", "Angebotselementen");
   const blocked = refs.length > 0;
   return {
     blocked, entity: { label: entityLabel }, refs,

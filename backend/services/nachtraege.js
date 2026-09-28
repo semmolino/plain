@@ -705,7 +705,8 @@ async function buildNachtragPdfViewModel(supabase, { nachtragId, tenantId }) {
     nachtrag.PROJECT_ID ? supabase.from('PROJECT').select('ABBR, NAME').eq('ID', nachtrag.PROJECT_ID).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.COMPANY_ID ? supabase.from('COMPANY').select('COMPANY_NAME_1, COMPANY_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, IBAN, BIC, "TAX-ID", TAX_NUMBER').eq('ID', nachtrag.COMPANY_ID).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.ADDRESS_ID ? supabase.from('ADDRESS').select('ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY').eq('ID', nachtrag.ADDRESS_ID).maybeSingle() : Promise.resolve({ data: null }),
-    nachtrag.CONTACT_ID ? supabase.from('CONTACT').select('FIRST_NAME, LAST_NAME, EMAIL, MOBILE').eq('ID', nachtrag.CONTACT_ID).maybeSingle() : Promise.resolve({ data: null }),
+    // CONTACTS (Plural) — mit „CONTACT" fehlte der Ansprechpartner im Nachtrags-PDF
+    nachtrag.CONTACT_ID ? supabase.from('CONTACTS').select('FIRST_NAME, LAST_NAME, EMAIL, MOBILE').eq('ID', nachtrag.CONTACT_ID).eq('TENANT_ID', tenantId).maybeSingle() : Promise.resolve({ data: null }),
     nachtrag.EMPLOYEE_ID ? supabase.from('EMPLOYEE').select('ABBR, FIRST_NAME, LAST_NAME').eq('ID', nachtrag.EMPLOYEE_ID).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from('NACHTRAG_STRUCTURE').select('*').eq('NACHTRAG_ID', nachtragId).order('SORT_ORDER', { ascending: true }).order('ID', { ascending: true }),
   ]);
