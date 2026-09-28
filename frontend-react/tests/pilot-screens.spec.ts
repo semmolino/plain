@@ -17,13 +17,13 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 
 // vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
 // vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
-// nachher = aktueller Stand.
+// vorher6 = nach Runde 5, nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4 }
-const since = (round: number) => (RANK[PHASE] ?? 5) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5 }
+const since = (round: number) => (RANK[PHASE] ?? 6) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -634,4 +634,68 @@ test('Kalkulation – Schließen fragt nach', async ({ page }, info) => {
   await page.keyboard.press('Escape')
   await page.getByRole('dialog', { name: 'Ungespeicherte Änderungen' }).waitFor()
   await shoot(page, info.project.name, 'kalk-schliessen')
+})
+
+// ── Runde 6: Verträge, Preislisten, Interne Budgets ──────────────────────────
+
+test('Projekt – Vertrag', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  await page.getByLabel('Vertragsnummer').waitFor()
+  await shoot(page, info.project.name, 'vertrag')
+})
+
+test('Projekt – Vertrag geändert', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  const skonto = page.getByLabel(/^Skonto \(%\)/)
+  await skonto.fill('3')
+  await page.getByLabel(/Umsatzsteuer-Kategorie/).selectOption('AE')
+  await page.getByLabel('Vertragsnummer').focus()
+  await shoot(page, info.project.name, 'vertrag-geaendert')
+})
+
+test('Projekt – Preislisten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=mitarbeiter')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'preislisten')
+})
+
+test('Projekt – Preislisten bearbeiten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=mitarbeiter')
+  await page.locator('table').first().waitFor()
+  if (since(6)) await page.getByRole('button', { name: /SB: Sabine Braun-Hofmeister bearbeiten/ }).click()
+  else await page.locator('table').first().locator('tbody tr').nth(2).getByTitle('Bearbeiten').click()
+  await shoot(page, info.project.name, 'preislisten-bearbeiten')
+})
+
+test('Projekt – Interne Budgets', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=budget')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'budget')
+})
+
+test('Projekt – Budget Regel anlegen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=budget')
+  await page.getByRole('button', { name: /Neue Regel/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'budget-regel')
+})
+
+test('Kalkulation im Angebot – Übersicht', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Assistent am Desktop')
+  await prepare(page, info.project.name)
+  await open(page, '/angebote?offerId=1&tab=kalkulationen')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  for (let i = 0; i < 4; i++) {
+    await dialog.getByRole('button', { name: /Weiter/ }).last().click()
+    await page.waitForLoadState('networkidle')
+  }
+  await shoot(page, info.project.name, 'kalk-angebot-uebersicht')
 })

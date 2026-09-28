@@ -1,16 +1,19 @@
-import { useState, useEffect } from 'react'
-import { DialogFooter } from '@/components/ui/DialogFooter'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Message }     from '@/components/ui/Message'
-import { Modal }       from '@/components/ui/Modal'
-import { FormField }   from '@/components/ui/FormField'
+import { Pencil, Trash2, Plus, UserPlus } from 'lucide-react'
+import { DialogFooter } from '@/components/ui/DialogFooter'
+import { Message }      from '@/components/ui/Message'
+import { Modal }        from '@/components/ui/Modal'
+import { FormField }    from '@/components/ui/FormField'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { Pencil, Trash2, Plus } from 'lucide-react'
-import { Can } from '@/components/ui/Can'
+import { AmountInput }  from '@/components/ui/AmountInput'
+import { FormSection }  from '@/components/ui/FormSection'
+import { usePermission } from '@/store/permissionsStore'
+import { money, fmtEur, NO_VALUE } from '@/utils/money'
 import {
   fetchActiveEmployees, fetchActiveRoles,
   fetchE2PByProject, createE2P, updateE2P, deleteE2P,
-  type E2PEntry,
+  type E2PEntry, type ActiveRole,
 } from '@/api/projekte'
 import {
   fetchProjectBookingPrices, upsertProjectBookingPrice,
@@ -18,320 +21,304 @@ import {
   BOOKING_KIND_LABEL,
   type ProjectBookingPrice, type BookingKind, type BookingTypePayload,
 } from '@/api/bookingTypes'
-import { HelpHint } from '@/components/ui/HelpHint'
 
 interface Props {
   initialProjectId?: number
 }
-
-const FMT_EUR = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-const fmtRate = (v: number | null | undefined) => v == null ? '—' : FMT_EUR.format(v) + ' €/h'
 
 function empName(row: E2PEntry) {
   const full = `${row.EMPLOYEE_FIRST_NAME ?? ''} ${row.EMPLOYEE_LAST_NAME ?? ''}`.trim()
   return row.EMPLOYEE_SHORT_NAME ? `${row.EMPLOYEE_SHORT_NAME}: ${full}` : full
 }
 
-interface EditState {
-  role_id: string
-  role_abbr: string
-  role_name: string
-  hourly_rate: string
+function roleText(abbr: string | null | undefined, name: string | null | undefined) {
+  return [abbr, name].filter(Boolean).join(' · ')
 }
 
-function emptyEdit(row: E2PEntry): EditState {
-  return {
-    role_id:         row.ROLE_ID   != null ? String(row.ROLE_ID) : '',
-    role_abbr: row.ROLE_ABBR ?? '',
-    role_name:  row.ROLE_NAME  ?? '',
-    hourly_rate:         row.HOURLY_RATE   != null ? String(row.HOURLY_RATE)  : '',
-  }
-}
-
-function emptyAdd(): { employee_id: string; role_id: string; role_abbr: string; role_name: string; hourly_rate: string } {
-  return { employee_id: '', role_id: '', role_abbr: '', role_name: '', hourly_rate: '' }
+/** Stundensatz mit Einheit — ohne Satz „—" (kein Wert, nicht 0 €). */
+function Rate({ v, unit }: { v: number | null | undefined; unit?: string }) {
+  if (v == null) return <>{NO_VALUE}</>
+  return <>{money(v)}{unit && <span className="prl-unit">{unit}</span>}</>
 }
 
 export function Mitarbeiter({ initialProjectId }: Props) {
-  const qc       = useQueryClient()
-
-  const [pid,       setPid]       = useState<number | null>(initialProjectId ?? null)
-  // Projektauswahl kommt zentral aus dem Seitenkopf (ProjectPicker).
-  useEffect(() => { setPid(initialProjectId ?? null); setEditingId(null); setMsg(null); setAddForm(emptyAdd()) }, [initialProjectId])
-  const [editingId, setEditingId] = useState<number | null>(null)
-  const [editForm,  setEditForm]  = useState<EditState>({ role_id: '', role_abbr: '', role_name: '', hourly_rate: '' })
-  const [addForm,      setAddForm]      = useState(emptyAdd())
-  const [msg,          setMsg]          = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-  const { data: empData }      = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees })
-  const { data: roleData }     = useQuery({ queryKey: ['active-roles'],     queryFn: fetchActiveRoles })
-
-  const { data: e2pData, isLoading, isError } = useQuery({
-    queryKey: ['e2p', pid],
-    queryFn:  () => fetchE2PByProject(pid!),
-    enabled:  pid !== null,
-  })
-  const employees = empData?.data     ?? []
-  const roles     = roleData?.data    ?? []
-  const rows      = e2pData?.data     ?? []
-
-
-  // Employees not yet assigned to this project
-  const assignedIds = new Set(rows.map(r => r.EMPLOYEE_ID))
-  const unassigned  = employees.filter(e => !assignedIds.has(e.ID))
-
-
-  function startEdit(row: E2PEntry) {
-    setEditingId(row.ID)
-    setEditForm(emptyEdit(row))
-    setMsg(null)
-  }
-
-  function applyRoleToEdit(roleId: string) {
-    const role = roles.find(r => String(r.ID) === roleId)
-    setEditForm(f => ({
-      ...f,
-      role_id:         roleId,
-      role_abbr: role?.ABBR ?? f.role_abbr,
-      role_name:  role?.NAME  ?? f.role_name,
-      hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
-    }))
-  }
-
-  function applyRoleToAdd(roleId: string) {
-    const role = roles.find(r => String(r.ID) === roleId)
-    setAddForm(f => ({
-      ...f,
-      role_id:         roleId,
-      role_abbr: role?.ABBR ?? f.role_abbr,
-      role_name:  role?.NAME  ?? f.role_name,
-      hourly_rate:         role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
-    }))
-  }
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: Parameters<typeof updateE2P>[1] }) =>
-      updateE2P(id, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['e2p', pid] })
-      setMsg({ text: 'Gespeichert ✅', type: 'success' })
-      setEditingId(null)
-    },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
-  const createMut = useMutation({
-    mutationFn: ({ body }: { body: Parameters<typeof createE2P>[1] }) =>
-      createE2P(pid!, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['e2p', pid] })
-      setMsg({ text: 'Mitarbeiter hinzugefügt ✅', type: 'success' })
-      setAddForm(emptyAdd())
-    },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
-  const deleteMut = useMutation({
-    mutationFn: deleteE2P,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['e2p', pid] })
-      setMsg({ text: 'Entfernt.', type: 'success' })
-    },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
-  function submitEdit(rowId: number) {
-    updateMut.mutate({
-      id: rowId,
-      body: {
-        role_id:         editForm.role_id         ? Number(editForm.role_id) : null,
-        role_abbr: editForm.role_abbr,
-        role_name:  editForm.role_name,
-        hourly_rate:         editForm.hourly_rate !== '' ? parseFloat(editForm.hourly_rate) : null,
-      },
-    })
-  }
-
-  function submitAdd() {
-    if (!addForm.employee_id) { setMsg({ text: 'Bitte Mitarbeiter wählen', type: 'error' }); return }
-    createMut.mutate({
-      body: {
-        employee_id:     Number(addForm.employee_id),
-        role_id:         addForm.role_id         ? Number(addForm.role_id) : null,
-        role_abbr: addForm.role_abbr,
-        role_name:  addForm.role_name,
-        hourly_rate:         addForm.hourly_rate !== '' ? parseFloat(addForm.hourly_rate) : null,
-      },
-    })
-  }
-
-  function handleDelete(row: E2PEntry) {
-    setConfirmState({
-      title: 'Mitarbeiter entfernen',
-      message: `${empName(row)} aus dem Projekt entfernen?`,
-      onConfirm: () => deleteMut.mutate(row.ID),
-    })
-  }
-
-  const setEF = (k: keyof EditState) => (v: string) => setEditForm(f => ({ ...f, [k]: v }))
-  const setAF = (k: keyof ReturnType<typeof emptyAdd>) => (v: string) => setAddForm(f => ({ ...f, [k]: v }))
-
+  if (initialProjectId == null) return <p className="ls-empty">Bitte oben ein Projekt auswählen.</p>
+  // Neuer Zustand je Projekt — offene Dialoge gehören zu genau einem.
   return (
-    <div className="list-section">
-
-      {msg && <div style={{ marginBottom: 12 }}><Message type={msg.type} text={msg.text} /></div>}
-
-      {!pid && <p className="empty-note">Bitte oben ein Projekt auswählen.</p>}
-      {pid && isLoading && <p className="empty-note">Lade Mitarbeiterdaten…</p>}
-      {pid && isError   && <p className="empty-note" style={{ color: 'var(--danger)' }}>Fehler beim Laden.</p>}
-
-      {pid && !isLoading && !isError && (
-        <>
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '8px 0 0' }}>Mitarbeiter-Stundensätze</h3>
-        <div className="table-scroll" style={{ marginTop: 8 }}>
-          <table className="master-table">
-            <thead>
-              <tr>
-                <th scope="col">Mitarbeiter</th>
-                <th scope="col">Rolle (Vorlage)</th>
-                <th scope="col">Rollenkürzel</th>
-                <th scope="col">Rollenbezeichnung</th>
-                <th scope="col" className="num">Stundensatz</th>
-                <th scope="col"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(row => {
-                const isEditing = editingId === row.ID
-                return (
-                  <tr key={row.ID}>
-                    <td>{empName(row)}</td>
-
-                    {isEditing ? (
-                      <>
-                        <td>
-                          <select className="tbl-select" value={editForm.role_id} onChange={e => applyRoleToEdit(e.target.value)}>
-                            <option value="">—</option>
-                            {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME ? ' – ' + r.NAME : ''}</option>)}
-                          </select>
-                        </td>
-                        <td><input className="tbl-input" style={{ width: 90 }} value={editForm.role_abbr} onChange={e => setEF('role_abbr')(e.target.value)} /></td>
-                        <td><input className="tbl-input" style={{ width: 150 }} value={editForm.role_name} onChange={e => setEF('role_name')(e.target.value)} /></td>
-                        <td><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" min="0" value={editForm.hourly_rate} onChange={e => setEF('hourly_rate')(e.target.value)} placeholder="0.00" /></td>
-                        <td className="doc-actions">
-                          <button className="btn-small btn-save" disabled={updateMut.isPending} onClick={() => submitEdit(row.ID)}>
-                            {updateMut.isPending ? '…' : 'Speichern'}
-                          </button>
-                          <button className="btn-small" onClick={() => setEditingId(null)}>Abbrechen</button>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td style={{ color: 'var(--text-3)', fontSize: 12 }}>
-                          {row.ROLE_ID ? roles.find(r => r.ID === row.ROLE_ID)?.ABBR ?? '—' : '—'}
-                        </td>
-                        <td>{row.ROLE_ABBR || '—'}</td>
-                        <td>{row.ROLE_NAME  || '—'}</td>
-                        <td className="num">{fmtRate(row.HOURLY_RATE)}</td>
-                        <td className="doc-actions">
-                          <Can permission="projects.hourly_rates.edit">
-                            <button className="row-action-btn" onClick={() => startEdit(row)} title="Bearbeiten">
-                              <Pencil size={14} strokeWidth={2} />
-                            </button>
-                            <button className="row-action-btn row-action-btn--danger" onClick={() => handleDelete(row)} title="Entfernen">
-                              <Trash2 size={14} strokeWidth={2} />
-                            </button>
-                          </Can>
-                        </td>
-                      </>
-                    )}
-                  </tr>
-                )
-              })}
-
-              {/* Add row */}
-              <tr style={{ borderTop: '2px solid var(--border)', background: 'rgba(16,185,129,0.03)' }}>
-                <td>
-                  <select className="tbl-select" value={addForm.employee_id} onChange={e => setAF('employee_id')(e.target.value)}>
-                    <option value="">— Mitarbeiter wählen —</option>
-                    {unassigned.map(e => {
-                      const label = `${e.ABBR ? e.ABBR + ': ' : ''}${e.FIRST_NAME ?? ''} ${e.LAST_NAME ?? ''}`.trim()
-                      return <option key={e.ID} value={e.ID}>{label}</option>
-                    })}
-                  </select>
-                </td>
-                <td>
-                  <select className="tbl-select" value={addForm.role_id} onChange={e => applyRoleToAdd(e.target.value)}>
-                    <option value="">—</option>
-                    {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME ? ' – ' + r.NAME : ''}</option>)}
-                  </select>
-                </td>
-                <td><input className="tbl-input" style={{ width: 90 }} value={addForm.role_abbr} onChange={e => setAF('role_abbr')(e.target.value)} placeholder="Kürzel" /></td>
-                <td><input className="tbl-input" style={{ width: 150 }} value={addForm.role_name} onChange={e => setAF('role_name')(e.target.value)} placeholder="Bezeichnung" /></td>
-                <td><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" min="0" value={addForm.hourly_rate} onChange={e => setAF('hourly_rate')(e.target.value)} placeholder="0.00" /></td>
-                <td></td>
-                <td className="doc-actions">
-                  <button
-                    className="btn-small btn-save"
-                    disabled={!addForm.employee_id || createMut.isPending}
-                    onClick={submitAdd}
-                  >
-                    {createMut.isPending ? '…' : '+ Hinzufügen'}
-                  </button>
-                </td>
-              </tr>
-
-              {rows.length === 0 && !createMut.isPending && (
-                <tr>
-                  <td colSpan={7} className="empty-note" style={{ paddingTop: 8 }}>
-                    Noch keine Mitarbeiter zugeordnet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-            <tfoot>
-              <tr style={{ borderTop: '2px solid var(--border)', fontWeight: 600 }}>
-                <td colSpan={7} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
-                  {rows.length} Mitarbeiter zugeordnet
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-
-        <BookingPriceBlock projectId={pid} />
-        </>
-      )}
-
-      <ConfirmModal
-        open={confirmState !== null}
-        title={confirmState?.title ?? ''}
-        message={confirmState?.message ?? ''}
-        confirmLabel="Entfernen"
-        confirmClass="danger"
-        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
-        onCancel={() => setConfirmState(null)}
-      />
+    <div className="ws-form" key={initialProjectId}>
+      <p className="ws-form-intro">
+        Welche Sätze in diesem Projekt gelten: je Mitarbeiter der Stundensatz, je Buchungsart der Preis.
+        Buchungen übernehmen sie beim Erfassen.
+      </p>
+      <StundensatzBlock projectId={initialProjectId} />
+      <BookingPriceBlock projectId={initialProjectId} />
     </div>
   )
 }
 
-// ── Buchungsarten-Preise je Projekt ────────────────────────────────────────────
+// ── Stundensätze je Mitarbeiter (EMPLOYEE2PROJECT) ─────────────────────────────
 
-function fmtRateOpt(v: number | null | undefined) {
-  return v == null ? '—' : FMT_EUR.format(v) + ' €'
+interface E2PDraft {
+  employee_id: string
+  role_id:     string
+  role_abbr:   string
+  role_name:   string
+  hourly_rate: string
+}
+
+const emptyDraft = (): E2PDraft => ({ employee_id: '', role_id: '', role_abbr: '', role_name: '', hourly_rate: '' })
+
+function StundensatzBlock({ projectId }: { projectId: number }) {
+  const qc = useQueryClient()
+  // Das Backend prüft Team und Satz getrennt (routes/employee2project.js):
+  // zuordnen/entfernen/ändern braucht projects.edit, einen Satz setzen
+  // zusätzlich projects.hourly_rates.edit. Vorher hing hier alles an Letzterem,
+  // und die Zeile „Hinzufügen" stand für jeden da — der Klick endete in einer 403.
+  const canTeam = usePermission('projects.edit')
+  const canRate = usePermission('projects.hourly_rates.edit')
+  const [dialog, setDialog] = useState<{ row: E2PEntry | null } | null>(null)
+  const [removing, setRemoving] = useState<E2PEntry | null>(null)
+  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+
+  const { data: e2pData, isLoading, isError } = useQuery({
+    queryKey: ['e2p', projectId],
+    queryFn:  () => fetchE2PByProject(projectId),
+  })
+  const { data: roleData } = useQuery({ queryKey: ['active-roles'], queryFn: fetchActiveRoles })
+  const rows  = e2pData?.data ?? []
+  const roles = roleData?.data ?? []
+
+  const deleteMut = useMutation({
+    mutationFn: deleteE2P,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['e2p', projectId] })
+      setMsg({ text: 'Zuordnung entfernt. Bereits erfasste Buchungen behalten ihren Satz.', type: 'success' })
+    },
+    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+  })
+
+  const addButton = canTeam && (
+    <button type="button" className="btn-small prl-btn" onClick={() => { setMsg(null); setDialog({ row: null }) }}>
+      <UserPlus size={13} strokeWidth={2} aria-hidden="true" /> Mitarbeiter zuordnen
+    </button>
+  )
+
+  return (
+    <FormSection title="Stundensätze je Mitarbeiter" help="projects.hourly_rates" layout="block" actions={rows.length > 0 ? addButton : undefined}>
+      <Message type={msg?.type ?? 'info'} text={msg?.text ?? null} />
+      {isLoading && <p className="ls-empty">Lädt …</p>}
+      {isError && <Message type="error" text="Die Zuordnungen konnten nicht geladen werden." />}
+
+      {!isLoading && !isError && rows.length === 0 && (
+        <div className="empty-block">
+          <p className="empty-note">Diesem Projekt ist noch niemand zugeordnet.</p>
+          <p className="empty-block-why">
+            Die Zuordnung legt Rolle und Stundensatz fest, zu dem jemand in diesem Projekt bucht. Ohne sie
+            gibt es keinen Satz — Stunden über die Stempeluhr zählen dann mit 0 €.
+          </p>
+          {addButton}
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="table-scroll">
+          <table className="ls-table prl-table">
+            <thead>
+              <tr>
+                <th scope="col" className="ls-th">Mitarbeiter · Rolle</th>
+                <th scope="col" className="ls-th ls-col-num">Stundensatz</th>
+                {canTeam && <th scope="col" className="ls-th prl-col-actions"><span className="sr-only">Aktionen</span></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => {
+                const name = empName(row)
+                const role = roleText(row.ROLE_ABBR, row.ROLE_NAME)
+                return (
+                  <tr key={row.ID} className="ls-row">
+                    <td className="ls-td">
+                      <div className="prl-name">{name}</div>
+                      <div className="prl-sub">{role || 'ohne Rolle'}</div>
+                    </td>
+                    <td className="ls-td ls-col-num prl-rate"><Rate v={row.HOURLY_RATE} unit="/h" /></td>
+                    {canTeam && (
+                      <td className="ls-td prl-col-actions">
+                        <div className="doc-actions">
+                          <button type="button" className="row-action-btn" title="Bearbeiten" aria-label={`${name} bearbeiten`}
+                            onClick={() => { setMsg(null); setDialog({ row }) }}>
+                            <Pencil size={14} strokeWidth={2} aria-hidden="true" />
+                          </button>
+                          <button type="button" className="row-action-btn row-action-btn--danger" title="Aus dem Projekt entfernen"
+                            aria-label={`${name} aus dem Projekt entfernen`} onClick={() => setRemoving(row)}>
+                            <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {dialog && (
+        <E2PDialog
+          projectId={projectId}
+          row={dialog.row}
+          assigned={new Set(rows.map(r => r.EMPLOYEE_ID))}
+          roles={roles}
+          canRate={canRate}
+          onClose={() => setDialog(null)}
+          onSaved={text => { setDialog(null); setMsg({ text, type: 'success' }) }}
+        />
+      )}
+
+      <ConfirmModal
+        open={removing !== null}
+        title="Aus dem Projekt entfernen"
+        message={removing ? `${empName(removing)} aus dem Projekt entfernen? Bereits erfasste Buchungen bleiben mit ihrem Satz erhalten, neue gibt es ohne Satz.` : ''}
+        confirmLabel="Entfernen"
+        confirmClass="danger"
+        onConfirm={() => { if (removing) deleteMut.mutate(removing.ID); setRemoving(null) }}
+        onCancel={() => setRemoving(null)}
+      />
+    </FormSection>
+  )
+}
+
+function E2PDialog({ projectId, row, assigned, roles, canRate, onClose, onSaved }: {
+  projectId: number
+  row:       E2PEntry | null
+  assigned:  Set<number>
+  roles:     ActiveRole[]
+  canRate:   boolean
+  onClose:   () => void
+  onSaved:   (text: string) => void
+}) {
+  const qc = useQueryClient()
+  const isNew = row == null
+  const [d, setD] = useState<E2PDraft>(() => row ? {
+    employee_id: String(row.EMPLOYEE_ID),
+    role_id:     row.ROLE_ID != null ? String(row.ROLE_ID) : '',
+    role_abbr:   row.ROLE_ABBR ?? '',
+    role_name:   row.ROLE_NAME ?? '',
+    hourly_rate: row.HOURLY_RATE != null ? String(row.HOURLY_RATE) : '',
+  } : emptyDraft())
+  const [msg, setMsg] = useState<string | null>(null)
+  const { data: empData } = useQuery({ queryKey: ['active-employees'], queryFn: fetchActiveEmployees, enabled: isNew })
+  const candidates = (empData?.data ?? []).filter(e => !assigned.has(e.ID))
+
+  function applyRole(roleId: string) {
+    const role = roles.find(r => String(r.ID) === roleId)
+    setD(f => ({
+      ...f,
+      role_id:     roleId,
+      role_abbr:   role?.ABBR ?? f.role_abbr,
+      role_name:   role?.NAME ?? f.role_name,
+      hourly_rate: canRate && role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.hourly_rate,
+    }))
+  }
+
+  const mut = useMutation({
+    mutationFn: () => {
+      const body = {
+        role_id:   d.role_id ? Number(d.role_id) : null,
+        role_abbr: d.role_abbr.trim(),
+        role_name: d.role_name.trim(),
+        // Ohne das Recht auf Sätze geht das Feld gar nicht erst mit — sonst
+        // lehnt das Backend die ganze Änderung ab (satzGuard).
+        ...(canRate ? { hourly_rate: d.hourly_rate !== '' ? Number(d.hourly_rate) : null } : {}),
+      }
+      if (isNew) return createE2P(projectId, { employee_id: Number(d.employee_id), ...body }).then(() => undefined)
+      return updateE2P(row.ID, body).then(() => undefined)
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['e2p', projectId] })
+      onSaved(isNew ? 'Mitarbeiter zugeordnet.' : 'Zuordnung gespeichert. Neue Buchungen übernehmen den Satz.')
+    },
+    onError: (e: Error) => setMsg(e.message),
+  })
+
+  function submit() {
+    if (isNew && !d.employee_id) { setMsg('Bitte einen Mitarbeiter wählen.'); return }
+    setMsg(null); mut.mutate()
+  }
+
+  return (
+    <Modal open onClose={onClose} title={isNew ? 'Mitarbeiter zuordnen' : `Zuordnung: ${empName(row)}`}>
+      <div className="master-form prl-dialog">
+        {isNew && (
+          <div className="form-group">
+            <label htmlFor="prl-emp">Mitarbeiter</label>
+            <select id="prl-emp" value={d.employee_id} data-autofocus onChange={e => setD(f => ({ ...f, employee_id: e.target.value }))}>
+              <option value="">— wählen —</option>
+              {candidates.map(e => (
+                <option key={e.ID} value={e.ID}>{`${e.ABBR ? e.ABBR + ': ' : ''}${e.FIRST_NAME ?? ''} ${e.LAST_NAME ?? ''}`.trim()}</option>
+              ))}
+            </select>
+            {empData && candidates.length === 0 && <p className="form-field-hint">Alle aktiven Mitarbeiter sind schon zugeordnet.</p>}
+          </div>
+        )}
+        <div className="form-group">
+          <label htmlFor="prl-role">Rolle als Vorlage</label>
+          <select id="prl-role" value={d.role_id} aria-describedby="prl-role-hint" onChange={e => applyRole(e.target.value)}>
+            <option value="">— keine —</option>
+            {roles.map(r => <option key={r.ID} value={r.ID}>{roleText(r.ABBR, r.NAME)}{r.HOURLY_RATE != null ? ` (${fmtEur(r.HOURLY_RATE)}/h)` : ''}</option>)}
+          </select>
+          <p id="prl-role-hint" className="form-field-hint">Füllt Kürzel, Bezeichnung und Satz aus Einstellungen → Stammdaten vor.</p>
+        </div>
+        <div className="form-row">
+          <FormField label="Rollenkürzel" id="prl-role-abbr" value={d.role_abbr} onChange={e => setD(f => ({ ...f, role_abbr: e.target.value }))} placeholder="z. B. PL" />
+          <FormField label="Rollenbezeichnung" id="prl-role-name" value={d.role_name} onChange={e => setD(f => ({ ...f, role_name: e.target.value }))} placeholder="z. B. Projektleitung" />
+        </div>
+        <div className="form-group">
+          <label htmlFor="prl-rate">Stundensatz (€/h)</label>
+          <AmountInput id="prl-rate" value={d.hourly_rate} placeholder="0,00" disabled={!canRate}
+            aria-describedby={canRate ? undefined : 'prl-rate-hint'}
+            onChange={v => setD(f => ({ ...f, hourly_rate: v }))} />
+          {!canRate && <p id="prl-rate-hint" className="form-field-hint">Den Satz ändern darf, wer das Recht „Stundensätze bearbeiten" hat.</p>}
+        </div>
+        <Message text={msg} type="error" />
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" onClick={submit} disabled={mut.isPending || (isNew && !d.employee_id)}>
+            {mut.isPending ? 'Speichert …' : isNew ? 'Zuordnen' : 'Speichern'}
+          </button>
+        </DialogFooter>
+      </div>
+    </Modal>
+  )
+}
+
+// ── Preise je Buchungsart ──────────────────────────────────────────────────────
+
+/** Wirksamer Preis: der Projektpreis, sonst der Standard — mit Herkunft. */
+function PriceCell({ project, standard }: { project: number | null; standard: number | null }) {
+  if (project != null) return (
+    <>
+      <div className="prl-rate prl-rate--own">{money(project)}</div>
+      <div className="prl-sub">Standard {standard != null ? fmtEur(standard) : NO_VALUE}</div>
+    </>
+  )
+  return (
+    <>
+      <div className="prl-rate"><Rate v={standard} /></div>
+      {standard != null && <div className="prl-sub">Standard</div>}
+    </>
+  )
 }
 
 function BookingPriceBlock({ projectId }: { projectId: number }) {
   const qc = useQueryClient()
-  const [editId, setEditId] = useState<number | null>(null)
-  const [editSp, setEditSp] = useState('')
-  const [editCp, setEditCp] = useState('')
+  const canEdit = usePermission('projects.hourly_rates.edit')
+  const [editing, setEditing] = useState<ProjectBookingPrice | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [delConfirm, setDelConfirm] = useState<{ id: number; label: string } | null>(null)
   const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['project-booking-prices', projectId],
     queryFn:  () => fetchProjectBookingPrices(projectId),
   })
@@ -344,110 +331,79 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
 
   const delTypeMut = useMutation({
     mutationFn: (id: number) => deleteProjectBookingType(id),
-    onSuccess: () => { invalidate(); setMsg({ text: 'Projektbezogene Buchungsart gelöscht', type: 'success' }) },
+    onSuccess: () => { invalidate(); setMsg({ text: 'Projektbezogene Buchungsart gelöscht. Erfasste Buchungen bleiben erhalten.', type: 'success' }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
-  const saveMut = useMutation({
-    mutationFn: (r: ProjectBookingPrice) => upsertProjectBookingPrice({
-      project_id:      projectId,
-      booking_type_id: r.BOOKING_TYPE_ID,
-      hourly_rate:         editSp !== '' ? Number(editSp) : null,
-      cost_rate:         editCp !== '' ? Number(editCp) : null,
-    }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['project-booking-prices', projectId] })
-      void qc.invalidateQueries({ queryKey: ['booking-types-selectable', projectId] })
-      setMsg({ text: 'Projektpreis gespeichert ✅', type: 'success' })
-      setEditId(null)
-    },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
-  function startEdit(r: ProjectBookingPrice) {
-    setEditId(r.BOOKING_TYPE_ID)
-    setEditSp(r.PROJECT_SP_RATE != null ? String(r.PROJECT_SP_RATE) : '')
-    setEditCp(r.PROJECT_CP_RATE != null ? String(r.PROJECT_CP_RATE) : '')
-    setMsg(null)
-  }
+  const createButton = canEdit && (
+    <button type="button" className="btn-small prl-btn" onClick={() => { setMsg(null); setCreateOpen(true) }}>
+      <Plus size={13} strokeWidth={2} aria-hidden="true" /> Buchungsart nur für dieses Projekt
+    </button>
+  )
 
   return (
-    <div style={{ marginTop: 22 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 4px', display: 'inline-flex', alignItems: 'center' }}>
-          Buchungsarten-Preise <HelpHint id="settings.booking_types" />
-        </h3>
-        <Can permission="projects.hourly_rates.edit">
-          <button className="btn-small" onClick={() => setCreateOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <Plus size={13} strokeWidth={2} /> Projektbezogene Buchungsart
-          </button>
-        </Can>
-      </div>
-      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 8px' }}>
-        Standardpreise aus den Stammdaten; hier optional projektbezogen überschreiben. Leer = Standardpreis gilt.
-        Projektbezogene Buchungsarten gelten nur in diesem Projekt.
-      </p>
-
-      {msg && <div style={{ marginBottom: 8 }}><Message type={msg.type} text={msg.text} /></div>}
-      {isLoading && <p className="empty-note">Lade Buchungsarten …</p>}
-      {!isLoading && rows.length === 0 && (
-        <p className="empty-note">Noch keine Buchungsarten definiert (Einstellungen → Stammdaten → Buchungsarten).</p>
+    <FormSection
+      title="Preise je Buchungsart"
+      help="settings.booking_types"
+      layout="block"
+      actions={rows.length > 0 ? createButton : undefined}
+      hint="Pauschalen und Stückleistungen. Ein Projektpreis ersetzt hier den Standard aus den Stammdaten; ohne ihn gilt der Standard."
+    >
+      <Message type={msg?.type ?? 'info'} text={msg?.text ?? null} />
+      {isLoading && <p className="ls-empty">Lädt …</p>}
+      {isError && <Message type="error" text="Die Buchungsarten konnten nicht geladen werden." />}
+      {!isLoading && !isError && rows.length === 0 && (
+        <div className="empty-block">
+          <p className="empty-note">Es gibt noch keine Buchungsarten.</p>
+          <p className="empty-block-why">
+            Buchungsarten sind Pauschalen und Stückleistungen mit festem Preis, z. B. Plots oder Fahrten. Angelegt
+            werden sie für alle Projekte unter Einstellungen → Stammdaten, oder hier nur für dieses Projekt.
+          </p>
+          {createButton}
+        </div>
       )}
 
       {rows.length > 0 && (
         <div className="table-scroll">
-          <table className="master-table">
+          <table className="ls-table prl-table">
             <thead>
               <tr>
-                <th scope="col">Art</th>
-                <th scope="col">Buchungsart</th>
-                <th scope="col">Einheit</th>
-                <th scope="col" className="num">Standard VK</th>
-                <th scope="col" className="num">Standard Kosten</th>
-                <th scope="col" className="num">Projekt VK</th>
-                <th scope="col" className="num">Projekt Kosten</th>
-                <th scope="col"></th>
+                <th scope="col" className="ls-th">Buchungsart</th>
+                <th scope="col" className="ls-th ls-col-num">Preis</th>
+                <th scope="col" className="ls-th ls-col-num">Kosten</th>
+                {canEdit && <th scope="col" className="ls-th prl-col-actions"><span className="sr-only">Aktionen</span></th>}
               </tr>
             </thead>
             <tbody>
               {rows.map(r => {
-                const isEditing = editId === r.BOOKING_TYPE_ID
+                const label = r.NAME ? `${r.ABBR} – ${r.NAME}` : r.ABBR
                 return (
-                  <tr key={r.BOOKING_TYPE_ID}>
-                    <td style={{ fontSize: 12, color: 'var(--text-3)' }}>{BOOKING_KIND_LABEL[r.KIND]}{r.SCOPE === 'project' ? ' · Projekt' : ''}</td>
-                    <td>{r.ABBR}{r.NAME ? <span style={{ color: 'var(--text-3)' }}> – {r.NAME}</span> : null}</td>
-                    <td>{r.KIND === 'UNIT' ? (r.UNIT_LABEL || '—') : '—'}</td>
-                    <td className="num">{fmtRateOpt(r.DEFAULT_SP_RATE)}</td>
-                    <td className="num">{fmtRateOpt(r.DEFAULT_CP_RATE)}</td>
-                    {isEditing ? (
-                      <>
-                        <td className="num"><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" value={editSp} onChange={e => setEditSp(e.target.value)} placeholder="Standard" /></td>
-                        <td className="num"><input className="tbl-input num" style={{ width: 80 }} type="number" step="0.01" value={editCp} onChange={e => setEditCp(e.target.value)} placeholder="Standard" /></td>
-                        <td className="doc-actions">
-                          <button className="btn-small btn-save" disabled={saveMut.isPending} onClick={() => saveMut.mutate(r)}>
-                            {saveMut.isPending ? '…' : 'Speichern'}
+                  <tr key={r.BOOKING_TYPE_ID} className="ls-row">
+                    <td className="ls-td">
+                      <div className="prl-name">{label}</div>
+                      <div className="prl-sub">
+                        {BOOKING_KIND_LABEL[r.KIND]}
+                        {r.KIND === 'UNIT' && r.UNIT_LABEL ? ` · je ${r.UNIT_LABEL}` : ''}
+                        {r.SCOPE === 'project' ? ' · nur dieses Projekt' : ''}
+                      </div>
+                    </td>
+                    <td className="ls-td ls-col-num"><PriceCell project={r.PROJECT_SP_RATE} standard={r.DEFAULT_SP_RATE} /></td>
+                    <td className="ls-td ls-col-num"><PriceCell project={r.PROJECT_CP_RATE} standard={r.DEFAULT_CP_RATE} /></td>
+                    {canEdit && (
+                      <td className="ls-td prl-col-actions">
+                        <div className="doc-actions">
+                          <button type="button" className="row-action-btn" title="Projektpreis setzen" aria-label={`Projektpreis für ${r.ABBR} setzen`}
+                            onClick={() => { setMsg(null); setEditing(r) }}>
+                            <Pencil size={14} strokeWidth={2} aria-hidden="true" />
                           </button>
-                          <button className="btn-small" onClick={() => setEditId(null)}>Abbrechen</button>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="num" style={{ fontWeight: r.PROJECT_SP_RATE != null ? 600 : 400 }}>{r.PROJECT_SP_RATE != null ? FMT_EUR.format(r.PROJECT_SP_RATE) + ' €' : '—'}</td>
-                        <td className="num" style={{ fontWeight: r.PROJECT_CP_RATE != null ? 600 : 400 }}>{r.PROJECT_CP_RATE != null ? FMT_EUR.format(r.PROJECT_CP_RATE) + ' €' : '—'}</td>
-                        <td className="doc-actions">
-                          <Can permission="projects.hourly_rates.edit">
-                            <button className="row-action-btn" onClick={() => startEdit(r)} title="Projektpreis setzen">
-                              <Pencil size={14} strokeWidth={2} />
+                          {r.SCOPE === 'project' && (
+                            <button type="button" className="row-action-btn row-action-btn--danger" title="Buchungsart löschen"
+                              aria-label={`Buchungsart ${r.ABBR} löschen`} onClick={() => setDelConfirm({ id: r.BOOKING_TYPE_ID, label: r.ABBR })}>
+                              <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
                             </button>
-                            {r.SCOPE === 'project' && (
-                              <button className="row-action-btn row-action-btn--danger"
-                                onClick={() => setDelConfirm({ id: r.BOOKING_TYPE_ID, label: r.ABBR })} title="Projektbezogene Buchungsart löschen">
-                                <Trash2 size={14} strokeWidth={2} />
-                              </button>
-                            )}
-                          </Can>
-                        </td>
-                      </>
+                          )}
+                        </div>
+                      </td>
                     )}
                   </tr>
                 )
@@ -457,24 +413,84 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
         </div>
       )}
 
+      {editing && (
+        <PriceDialog
+          projectId={projectId}
+          row={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); invalidate(); setMsg({ text: 'Projektpreis gespeichert. Neue Buchungen übernehmen ihn.', type: 'success' }) }}
+        />
+      )}
+
       {createOpen && (
         <ProjectBookingTypeModal
           projectId={projectId}
           onClose={() => setCreateOpen(false)}
-          onSaved={() => { setCreateOpen(false); invalidate(); setMsg({ text: 'Projektbezogene Buchungsart angelegt ✅', type: 'success' }) }}
+          onSaved={() => { setCreateOpen(false); invalidate(); setMsg({ text: 'Buchungsart für dieses Projekt angelegt.', type: 'success' }) }}
         />
       )}
 
       <ConfirmModal
         open={delConfirm !== null}
         title="Buchungsart löschen"
-        message={`Projektbezogene Buchungsart „${delConfirm?.label ?? ''}" löschen? Bereits erfasste Buchungen bleiben erhalten.`}
+        message={`Buchungsart „${delConfirm?.label ?? ''}" löschen? Sie gilt nur in diesem Projekt; bereits erfasste Buchungen bleiben erhalten.`}
         confirmLabel="Löschen"
         confirmClass="danger"
         onConfirm={() => { if (delConfirm) delTypeMut.mutate(delConfirm.id); setDelConfirm(null) }}
         onCancel={() => setDelConfirm(null)}
       />
-    </div>
+    </FormSection>
+  )
+}
+
+function PriceDialog({ projectId, row, onClose, onSaved }: {
+  projectId: number
+  row:       ProjectBookingPrice
+  onClose:   () => void
+  onSaved:   () => void
+}) {
+  const [sp, setSp] = useState(row.PROJECT_SP_RATE != null ? String(row.PROJECT_SP_RATE) : '')
+  const [cp, setCp] = useState(row.PROJECT_CP_RATE != null ? String(row.PROJECT_CP_RATE) : '')
+  const [msg, setMsg] = useState<string | null>(null)
+  const mut = useMutation({
+    mutationFn: () => upsertProjectBookingPrice({
+      project_id:      projectId,
+      booking_type_id: row.BOOKING_TYPE_ID,
+      hourly_rate:     sp !== '' ? Number(sp) : null,
+      cost_rate:       cp !== '' ? Number(cp) : null,
+    }),
+    onSuccess: onSaved,
+    onError: (e: Error) => setMsg(e.message),
+  })
+  const std = (v: number | null) => v != null ? fmtEur(v) : 'keiner'
+
+  return (
+    <Modal open onClose={onClose} title={`Projektpreis: ${row.ABBR}`}>
+      <div className="master-form prl-dialog">
+        <p className="form-field-hint prl-dialog-intro">Leer lassen, damit der Standard aus den Stammdaten gilt.</p>
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="prl-sp">Preis (€)</label>
+            <AmountInput id="prl-sp" value={sp} data-autofocus placeholder={row.DEFAULT_SP_RATE != null ? fmtEur(row.DEFAULT_SP_RATE) : ''}
+              aria-describedby="prl-sp-hint" onChange={setSp} />
+            <p id="prl-sp-hint" className="form-field-hint">Standard: {std(row.DEFAULT_SP_RATE)}</p>
+          </div>
+          <div className="form-group">
+            <label htmlFor="prl-cp">Kosten (€)</label>
+            <AmountInput id="prl-cp" value={cp} placeholder={row.DEFAULT_CP_RATE != null ? fmtEur(row.DEFAULT_CP_RATE) : ''}
+              aria-describedby="prl-cp-hint" onChange={setCp} />
+            <p id="prl-cp-hint" className="form-field-hint">Standard: {std(row.DEFAULT_CP_RATE)}</p>
+          </div>
+        </div>
+        <Message text={msg} type="error" />
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" onClick={() => { setMsg(null); mut.mutate() }} disabled={mut.isPending}>
+            {mut.isPending ? 'Speichert …' : 'Speichern'}
+          </button>
+        </DialogFooter>
+      </div>
+    </Modal>
   )
 }
 
@@ -482,12 +498,12 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
 
 function ProjectBookingTypeModal({ projectId, onClose, onSaved }: { projectId: number; onClose: () => void; onSaved: () => void }) {
   const [kind, setKind] = useState<BookingKind>('UNIT')
-  const [nameShort, setNameShort] = useState('')
-  const [nameLong,  setNameLong]  = useState('')
+  const [abbr, setAbbr] = useState('')
+  const [name, setName] = useState('')
   const [unitLabel, setUnitLabel] = useState('')
   const [sp, setSp] = useState('')
   const [cp, setCp] = useState('')
-  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
   const isUnit = kind === 'UNIT'
 
   const saveMut = useMutation({
@@ -495,8 +511,8 @@ function ProjectBookingTypeModal({ projectId, onClose, onSaved }: { projectId: n
       const payload: BookingTypePayload & { project_id: number } = {
         project_id:      projectId,
         kind,
-        abbr:      nameShort.trim(),
-        name:       nameLong.trim() || null,
+        abbr:            abbr.trim(),
+        name:            name.trim() || null,
         unit_label:      isUnit ? (unitLabel.trim() || null) : null,
         // Bei Pauschalen ist der Betrag der Standardwert: Kosten→CP, Erlös→SP.
         default_sp_rate: (isUnit || kind === 'LUMP_REVENUE') && sp !== '' ? Number(sp) : null,
@@ -505,53 +521,54 @@ function ProjectBookingTypeModal({ projectId, onClose, onSaved }: { projectId: n
       return createProjectBookingType(payload)
     },
     onSuccess: onSaved,
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+    onError: (e: Error) => setMsg(e.message),
   })
 
   function handleSave() {
-    if (!nameShort.trim()) { setMsg({ text: 'Kürzel erforderlich', type: 'error' }); return }
+    if (!abbr.trim()) { setMsg('Bitte ein Kürzel angeben.'); return }
     setMsg(null); saveMut.mutate()
   }
 
   return (
-    <Modal open onClose={onClose} title="Projektbezogene Buchungsart">
-      <div className="master-form">
+    <Modal open onClose={onClose} title="Buchungsart nur für dieses Projekt">
+      <div className="master-form prl-dialog">
         <div className="form-group">
-          <label>Art*</label>
-          <select value={kind} onChange={e => setKind(e.target.value as BookingKind)}>
+          <label htmlFor="pbt-kind">Art</label>
+          <select id="pbt-kind" value={kind} data-autofocus onChange={e => setKind(e.target.value as BookingKind)}>
             <option value="UNIT">{BOOKING_KIND_LABEL.UNIT}</option>
             <option value="LUMP_COST">{BOOKING_KIND_LABEL.LUMP_COST}</option>
             <option value="LUMP_REVENUE">{BOOKING_KIND_LABEL.LUMP_REVENUE}</option>
           </select>
         </div>
         <div className="form-row">
-          <FormField label="Kürzel*"     id="pbt-short" value={nameShort} onChange={e => setNameShort(e.target.value)} required />
-          <FormField label="Bezeichnung" id="pbt-long"  value={nameLong}  onChange={e => setNameLong(e.target.value)} />
+          <FormField label="Kürzel" id="pbt-short" value={abbr} onChange={e => setAbbr(e.target.value)} required />
+          <FormField label="Bezeichnung" id="pbt-long" value={name} onChange={e => setName(e.target.value)} />
         </div>
         {isUnit ? (
           <>
+            <FormField label="Einheit" id="pbt-unit" value={unitLabel} onChange={e => setUnitLabel(e.target.value)} placeholder="z. B. Stk, m²" />
             <div className="form-row">
-              <FormField label="Einheit" id="pbt-unit" value={unitLabel} onChange={e => setUnitLabel(e.target.value)} placeholder="z. B. Stk, m²" />
-            </div>
-            <div className="form-row">
-              <FormField label="Stückpreis (€)"  id="pbt-sp" type="number" step="0.01" value={sp} onChange={e => setSp(e.target.value)} />
-              <FormField label="Stückkosten (€)" id="pbt-cp" type="number" step="0.01" value={cp} onChange={e => setCp(e.target.value)} />
+              <div className="form-group">
+                <label htmlFor="pbt-sp">Stückpreis (€)</label>
+                <AmountInput id="pbt-sp" value={sp} placeholder="0,00" onChange={setSp} />
+              </div>
+              <div className="form-group">
+                <label htmlFor="pbt-cp">Stückkosten (€)</label>
+                <AmountInput id="pbt-cp" value={cp} placeholder="0,00" onChange={setCp} />
+              </div>
             </div>
           </>
         ) : (
-          <div className="form-row">
-            <FormField
-              label={kind === 'LUMP_COST' ? 'Standard-Betrag Kosten (€)' : 'Standard-Betrag Erlös (€)'}
-              id="pbt-amount" type="number" step="0.01"
-              value={kind === 'LUMP_COST' ? cp : sp}
-              onChange={e => (kind === 'LUMP_COST' ? setCp(e.target.value) : setSp(e.target.value))}
-            />
+          <div className="form-group">
+            <label htmlFor="pbt-amount">{kind === 'LUMP_COST' ? 'Betrag Kosten (€)' : 'Betrag Erlös (€)'}</label>
+            <AmountInput id="pbt-amount" value={kind === 'LUMP_COST' ? cp : sp} placeholder="0,00"
+              onChange={v => (kind === 'LUMP_COST' ? setCp(v) : setSp(v))} />
           </div>
         )}
-        <Message text={msg?.text ?? null} type={msg?.type} />
+        <Message text={msg} type="error" />
         <DialogFooter>
-          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
             {saveMut.isPending ? 'Speichert …' : 'Anlegen'}
           </button>
         </DialogFooter>
