@@ -340,6 +340,18 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   `services/feeAllocation.js` (`computeSurchargeAllocations`, `leafValues`):
   Phase + Zuschlagsanteil, darauf die **eigenen** Zuschläge und NK des
   Elements, `REVENUE_BASIS` zieht mit.
+  Die Rechnung des Assistenten (Kx, Phasenhonorar, Besondere Leistungen,
+  Zuschläge) steht **nur** in `pages/projekte/kalkCalc.ts`. Am Handy zeigen
+  Leistungsphasen, Besondere Leistungen und Zuschläge eine Liste, ein Tipp
+  öffnet die Zeile als Blatt (`KalkMobile.tsx`); „Übernehmen" schreibt in den
+  Stand des Assistenten, gespeichert wird wie am Desktop mit Weiter/Zurück.
+- **Projektdaten** (`/projekte?projectId=…&tab=daten`, `Projektdaten.tsx`):
+  Name, Nummer, Status, Leitung, Auftraggeber, „intern" im Arbeitsbereich-
+  Muster. Der Stift der Projektliste führt dorthin — einen Bearbeiten-Dialog
+  in der Liste gibt es nicht mehr. Die Folgefragen (Auftraggeber auch in den
+  Vertrag, „intern" an die Elemente) kommen **nach** dem Speichern und nur,
+  wenn sie etwas ändern. Das Kennzeichen „intern" am Projekt wirkt auf die
+  Produktivität; Rechnungen lassen nur **Elemente** aus, die selbst intern sind.
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
