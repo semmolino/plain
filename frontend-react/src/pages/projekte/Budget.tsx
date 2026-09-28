@@ -230,6 +230,13 @@ export function Budget({ initialProjectId }: Props) {
             </div>
           </div>
 
+          {overview.structures.some(s => s.plan && s.plan !== 'none') && (
+            <p className="form-field-hint" style={{ margin: '-6px 0 14px' }}>
+              Elemente nach Aufwand mit Plan aus dem Angebot zählen mit dem Plan als Budget und dem gebuchten
+              Honorar als Verbrauch. <HelpHint id="projects.structure.plan" size={13} />
+            </p>
+          )}
+
           {/* Regeln-Tabelle */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <h3 style={{ margin: 0, fontSize: 14 }}>Schwellwert-Regeln</h3>
@@ -268,6 +275,11 @@ export function Budget({ initialProjectId }: Props) {
                           {r.STRUCTURE_ID
                             ? <span>Struktur {structureLabel.get(r.STRUCTURE_ID) ?? r.STRUCTURE_ID}</span>
                             : <strong>Projekt-Ebene</strong>}
+                          {(() => {
+                            const plan = r.STRUCTURE_ID ? overview.structures.find(x => x.ID === r.STRUCTURE_ID)?.plan : undefined
+                            return plan === 'all' ? <span className="sx-plan-note">nach Plan</span>
+                              : plan === 'some' ? <span className="sx-plan-note">teils nach Plan</span> : null
+                          })()}
                         </td>
                         <td className="ls-td ls-col-num">{Number(r.THRESHOLD_PCT).toFixed(0)} %</td>
                         <td className="ls-td ls-col-num">{money(calc.limitEur)}</td>

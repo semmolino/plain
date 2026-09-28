@@ -6,23 +6,27 @@ import { DialogFooter } from '@/components/ui/DialogFooter'
 import { Message } from '@/components/ui/Message'
 import { AmountInput } from '@/components/ui/AmountInput'
 import { updateOfferStructureNode, moveOfferStructureNode, type OfferStructureNode } from '@/api/angebote'
+import type { ActiveRole } from '@/api/projekte'
 import { fmtEur } from '@/utils/money'
 import { computeSurcharges, surchargeDefault, type Agg, type SurchargeEdit } from '@/pages/projekte/struktur/strukturCalc'
 import { StructureTreeList, type TreeListItem } from '@/pages/projekte/struktur/StructureTreeList'
-import { hoursRate, isHourlyBt, offerLeafFee, offerRowChanges, type OfferRowEdit } from './offerStrukturCalc'
+import { effectiveLines, isHourlyBt, offerLeafFee, offerRowChanges, type OfferRowEdit } from './offerStrukturCalc'
+import { EffortLinesEditor } from './EffortLinesEditor'
 
 /**
  * Angebotsstruktur am Handy (UI-Pilot Runde 3) — dasselbe Muster wie die
  * Projektstruktur: Baumliste, ein Tipp oeffnet das Element als Blatt,
  * gespeichert wird je Element. Anders als im Projekt traegt ein
- * Aufwand-Element (BT 2) Stunden × Satz statt gebuchter Zeit.
+ * Aufwand-Element (BT 2) Aufwandszeilen (Rolle · Stunden · Satz) statt
+ * gebuchter Zeit.
  */
-export function OfferStrukturMobile({ offerId, flat, parentIds, aggMap, billingTypes, canEdit, root, onAdd, onDelete }: {
+export function OfferStrukturMobile({ offerId, flat, parentIds, aggMap, billingTypes, roles, canEdit, root, onAdd, onDelete }: {
   offerId:      number
   flat:         { node: OfferStructureNode; depth: number }[]
   parentIds:    Set<string>
   aggMap:       Map<string, Agg>
   billingTypes: { ID: number; ABBR: string }[]
+  roles:        ActiveRole[]
   canEdit:      boolean
   root:         { label: string; total: number } | null
   onAdd:        (fatherId: number | null) => void
@@ -46,7 +50,7 @@ export function OfferStrukturMobile({ offerId, flat, parentIds, aggMap, billingT
       <StructureTreeList items={items} listLabel="Elemente der Angebotsstruktur" canEdit={canEdit} onOpen={setOpenId} root={root} />
       {open && (
         <OfferElementSheet key={open.ID} offerId={offerId} node={open}
-          isParent={parentIds.has(String(open.ID))} flat={flat} billingTypes={billingTypes} canEdit={canEdit}
+          isParent={parentIds.has(String(open.ID))} flat={flat} billingTypes={billingTypes} roles={roles} canEdit={canEdit}
           onClose={() => setOpenId(null)}
           onAdd={() => { setOpenId(null); onAdd(open.ID) }}
           onDelete={() => { setOpenId(null); onDelete(open) }} />
@@ -57,10 +61,11 @@ export function OfferStrukturMobile({ offerId, flat, parentIds, aggMap, billingT
 
 const TOP = '__top__'
 
-function OfferElementSheet({ offerId, node, isParent, flat, billingTypes, canEdit, onClose, onAdd, onDelete }: {
+function OfferElementSheet({ offerId, node, isParent, flat, billingTypes, roles, canEdit, onClose, onAdd, onDelete }: {
   offerId: number; node: OfferStructureNode; isParent: boolean
   flat: { node: OfferStructureNode; depth: number }[]
   billingTypes: { ID: number; ABBR: string }[]
+  roles: ActiveRole[]
   canEdit: boolean
   onClose: () => void; onAdd: () => void; onDelete: () => void
 }) {
@@ -72,7 +77,6 @@ function OfferElementSheet({ offerId, node, isParent, flat, billingTypes, canEdi
   const sur: SurchargeEdit = e.surcharge ?? surchargeDefault(node)
   const btId = e.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
   const hourly = isHourlyBt(btId)
-  const { hours, rate } = hoursRate(node, e)
   const base = isParent ? Number(node.REVENUE_BASIS ?? 0) : offerLeafFee(node, e)
   const computed = computeSurcharges(base, sur)
   const changes = offerRowChanges(node, e)
@@ -131,23 +135,19 @@ function OfferElementSheet({ offerId, node, isParent, flat, billingTypes, canEdi
           <label htmlFor="oxm-name">Bezeichnung</label>
           <input id="oxm-name" value={e.nameLong ?? node.NAME ?? ''} readOnly={ro} onChange={x => set({ nameLong: x.target.value })} />
         </div>
-        {!isParent && hourly && !ro && (
-          <div className="qb-times">
-            <div className="form-group">
-              <label htmlFor="oxm-hours">Stunden{node.ROLE_ABBR ? ` (${node.ROLE_ABBR})` : ''}</label>
-              <input id="oxm-hours" type="text" inputMode="decimal" value={hours} onChange={x => set({ hours: x.target.value.replace(',', '.') })} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="oxm-rate">Satz €/h</label>
-              <AmountInput id="oxm-rate" value={rate} onChange={v => set({ rate: v })} aria-label="Stundensatz" />
-            </div>
-          </div>
+        {!isParent && hourly && (
+          <fieldset className="sxm-sur sxm-effort">
+            <legend>Aufwand nach Rollen</legend>
+            <p className="form-field-hint sxm-effort-hint">Je Zeile die Rolle, darunter Stunden und Satz €/h.</p>
+            <EffortLinesEditor lines={effectiveLines(node, e)} roles={roles} readOnly={ro}
+              onChange={ls => set({ lines: ls })} idPrefix="oxm-eff" />
+          </fieldset>
         )}
         <div className="qb-times">
           <div className="form-group">
             <label htmlFor="oxm-fee">Honorar €</label>
             {isParent || hourly || ro ? (
-              <p className="sxm-readonly" id="oxm-fee">{fmtEur(base)}<span className="form-field-hint">{isParent ? 'Summe der Unterelemente' : hourly ? 'Stunden × Satz' : ''}</span></p>
+              <p className="sxm-readonly" id="oxm-fee">{fmtEur(base)}<span className="form-field-hint">{isParent ? 'Summe der Unterelemente' : hourly ? 'Summe der Aufwandszeilen' : ''}</span></p>
             ) : (
               <AmountInput id="oxm-fee" value={e.budget ?? String(node.REVENUE_BASIS ?? node.REVENUE ?? 0)} onChange={v => set({ budget: v })} aria-label="Honorar" />
             )}

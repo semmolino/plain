@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { OfferStructureNode } from '@/api/angebote'
 import {
   aggregateOffer, offerRootTotals, offerLeafBasis, offerLeafFee, offerRowChanges, hoursRate,
+  nodeLines, withFirstLine, serializeLines, rolesLabel, type EffortLineEdit,
 } from './offerStrukturCalc'
 
 /**
@@ -153,12 +154,19 @@ describe('Angebotsstruktur: feste Werte', () => {
   })
 })
 
+const line = (o: Partial<EffortLineEdit>): EffortLineEdit => ({ roleId: '', roleAbbr: '', roleName: '', hours: '0', rate: '0', ...o })
+
 describe('offerLeafFee / hoursRate', () => {
   const bl1 = typical[4]
-  it('Aufwand: Stunden × Satz, mit offenen Eingaben', () => {
+  it('Aufwand: Stunden × Satz, mit offenen Eingaben (erste Zeile)', () => {
     expect(offerLeafFee(bl1, undefined)).toBe(1140)
-    expect(offerLeafFee(bl1, { hours: '12,5'.replace(',', '.') })).toBe(1187.5)
-    expect(hoursRate(bl1, { rate: '100' })).toEqual({ hours: '12', rate: '100' })
+    expect(offerLeafFee(bl1, { lines: withFirstLine(bl1, undefined, { hours: '12.5' }) })).toBe(1187.5)
+    expect(hoursRate(bl1, { lines: withFirstLine(bl1, undefined, { rate: '100' }) })).toEqual({ hours: '12', rate: '100' })
+  })
+  it('Aufwand nach Rollen: Honorar ist die Summe der Zeilen', () => {
+    const lines = [line({ roleAbbr: 'PL', hours: '8', rate: '120' }), line({ roleAbbr: 'BZ', hours: '16', rate: '85' })]
+    expect(offerLeafFee(bl1, { lines })).toBe(960 + 1360)
+    expect(hoursRate(bl1, { lines })).toEqual({ hours: '8', rate: '120' })
   })
   it('Pauschal: eingegebener Betrag, sonst REVENUE_BASIS', () => {
     expect(offerLeafFee(typical[1], undefined)).toBe(10000)
@@ -166,7 +174,32 @@ describe('offerLeafFee / hoursRate', () => {
     expect(offerLeafFee(typical[1], { budget: '' })).toBe(10000)
   })
   it('Wechsel auf Aufwand rechnet mit Stunden × Satz', () => {
-    expect(offerLeafFee(typical[1], { billingTypeId: '2', hours: '10', rate: '90' })).toBe(900)
+    expect(offerLeafFee(typical[1], { billingTypeId: '2', lines: withFirstLine(typical[1], undefined, { hours: '10', rate: '90' }) })).toBe(900)
+  })
+})
+
+describe('Aufwandszeilen', () => {
+  it('Altbestand ist eine Zeile, gespeicherte Zeilen gehen vor', () => {
+    expect(nodeLines(typical[4])).toEqual([line({ roleAbbr: 'PL', hours: '12', rate: '95' })])
+    expect(nodeLines(typical[1])).toEqual([])
+    const multi = n({ ID: 50, BILLING_TYPE_ID: 2, QUANTITY: 24, HOURLY_RATE: null, EFFORT_LINES: [
+      { role_id: 2, role_abbr: 'PL', role_name: 'Projektleitung', hours: 8, rate: 120 },
+      { role_id: null, role_abbr: 'BZ', role_name: null, hours: 16, rate: 85 },
+    ] })
+    expect(nodeLines(multi)).toEqual([
+      line({ roleId: '2', roleAbbr: 'PL', roleName: 'Projektleitung', hours: '8', rate: '120' }),
+      line({ roleAbbr: 'BZ', hours: '16', rate: '85' }),
+    ])
+  })
+  it('leere Zeilen werden nicht gesendet', () => {
+    expect(serializeLines([line({ roleAbbr: 'PL', hours: '8', rate: '120' }), line({ hours: '', rate: '' })]))
+      .toEqual([{ role_id: null, role_abbr: 'PL', role_name: null, hours: 8, rate: 120 }])
+  })
+  it('Kennzeichen: eine Rolle, bis drei mit Punkt, sonst Anzahl', () => {
+    expect(rolesLabel([line({ roleAbbr: 'PL' })])).toBe('PL')
+    expect(rolesLabel([line({ roleAbbr: 'PL' }), line({ roleAbbr: 'BZ' })])).toBe('PL · BZ')
+    expect(rolesLabel([line({ roleAbbr: 'PL' }), line({})])).toBe('2 Rollen')
+    expect(rolesLabel(Array.from({ length: 4 }, (_, i) => line({ roleAbbr: `R${i}` })))).toBe('4 Rollen')
   })
 })
 
@@ -178,7 +211,7 @@ describe('offerRowChanges', () => {
     expect(offerRowChanges(lp3, undefined)).toEqual({})
     // Honorar mit Zuschlag: verglichen wird mit der Basis, nicht mit REVENUE
     expect(offerRowChanges(lp3, { nameShort: 'LP3', budget: '20000', nk: '5', billingTypeId: '1' })).toEqual({})
-    expect(offerRowChanges(bl1, { hours: '12', rate: '95' })).toEqual({})
+    expect(offerRowChanges(bl1, { lines: withFirstLine(bl1, undefined, { hours: '12', rate: '95' }) })).toEqual({})
   })
 
   it('Felder werden kleingeschrieben gesendet (Angebots-Endpunkt)', () => {
@@ -186,18 +219,23 @@ describe('offerRowChanges', () => {
       .toEqual({ abbr: 'LP3a', name: 'Entwurf', extras_percent: 6, revenue: 21000 })
   })
 
-  it('Aufwand: Stunden und Satz, kein Honorar', () => {
-    expect(offerRowChanges(bl1, { hours: '14', budget: '9999' })).toEqual({ quantity: 14 })
-    expect(offerRowChanges(bl1, { rate: '100' })).toEqual({ hourly_rate: 100 })
+  it('Aufwand: die Zeilen gehen als effort_lines, kein Honorar', () => {
+    expect(offerRowChanges(bl1, { lines: withFirstLine(bl1, undefined, { hours: '14' }), budget: '9999' }))
+      .toEqual({ effort_lines: [{ role_id: null, role_abbr: 'PL', role_name: null, hours: 14, rate: 95 }] })
+    expect(offerRowChanges(bl1, { lines: [line({ roleAbbr: 'PL', hours: '12', rate: '95' }), line({ roleAbbr: 'BZ', hours: '4', rate: '80' })] }))
+      .toEqual({ effort_lines: [
+        { role_id: null, role_abbr: 'PL', role_name: null, hours: 12, rate: 95 },
+        { role_id: null, role_abbr: 'BZ', role_name: null, hours: 4, rate: 80 },
+      ] })
   })
 
-  it('Pauschal: Stunden/Satz werden ignoriert', () => {
-    expect(offerRowChanges(lp3, { hours: '5', rate: '5' })).toEqual({})
+  it('Pauschal: Aufwandszeilen werden ignoriert', () => {
+    expect(offerRowChanges(lp3, { lines: [line({ hours: '5', rate: '5' })] })).toEqual({})
   })
 
   it('Wechsel der Abrechnungsart', () => {
-    expect(offerRowChanges(lp3, { billingTypeId: '2', hours: '10', rate: '90' }))
-      .toEqual({ billing_type_id: 2, quantity: 10, hourly_rate: 90 })
+    expect(offerRowChanges(lp3, { billingTypeId: '2', lines: withFirstLine(lp3, undefined, { hours: '10', rate: '90' }) }))
+      .toEqual({ billing_type_id: 2, effort_lines: [{ role_id: null, role_abbr: null, role_name: null, hours: 10, rate: 90 }] })
   })
 
   it('Zuschläge gehen im selben Aufruf mit (SURCHARGE_*)', () => {

@@ -551,6 +551,61 @@ export const HELP = {
       </>
     ),
   },
+  'hoai.leistungsbild': {
+    title: 'Honorarordnung und Leistungsbild',
+    body: (
+      <>
+        Die <strong>Honorarordnung</strong> (HOAI-Fassung oder AHO-Heft) legt fest, nach welchen
+        Tafeln gerechnet wird; das <strong>Leistungsbild</strong> (z. B. § 34 Gebäude, § 51
+        Tragwerksplanung) bestimmt Leistungsphasen, Honorarzonen und Bemessungsgrundlage.
+        <br /><br />
+        Mit „Weiter" legt plan&amp;simple die Kalkulation an. Sie gilt aber erst mit
+        <strong> Übernehmen</strong> im letzten Schritt: wer vorher abbricht oder das Fenster
+        schließt, wird gefragt, und die angefangene Kalkulation wird verworfen.
+      </>
+    ),
+  },
+  'hoai.grundlagen': {
+    title: 'Grundlagen',
+    body: (
+      <>
+        Honorarzone, Lage in der Zone und die Bemessungsgrundlage — meist die
+        <strong> anrechenbaren Kosten</strong>. K0 gilt für alle Leistungsphasen; K1–K4
+        (z. B. Kostenberechnung, Kostenanschlag) nur, wenn eine Leistungsphase im nächsten
+        Schritt ausdrücklich darauf zeigt. Die DIN-276-Hilfe ermittelt K0 aus den Kostengruppen.
+        <br /><br />
+        Bei Flächenplanung, Verrechnungseinheiten oder Brandschutz steht statt der Kosten ein
+        einzelner Wert (ha, VE, m²).
+      </>
+    ),
+  },
+  'hoai.bl': {
+    title: 'Besondere Leistungen',
+    body: (
+      <>
+        Leistungen über die Grundleistungen hinaus (§ 3 Abs. 3 HOAI), frei zu vereinbaren:
+        als <strong>Pauschalbetrag</strong> oder als Prozentsatz — vom Honorar einer
+        Leistungsphase, vom Grundhonorar, vom Tafelwert zu Kx oder von den Baukosten.
+        Jede Besondere Leistung wird ein eigenes Element der Struktur und lässt sich im
+        nächsten Schritt in Zuschläge einbeziehen.
+      </>
+    ),
+  },
+  'hoai.uebernehmen': {
+    title: 'Übernehmen und aktualisieren',
+    body: (
+      <>
+        <strong>Neue Kalkulation:</strong> je Leistungsphase mit Honorar und je Besondere Leistung
+        entsteht ein pauschales Element, Zuschläge werden anteilig auf sie verteilt. Im Projekt
+        steht es unter dem gewählten Element; im Angebot wahlweise unter einem Element oder in
+        einem neuen auf oberster Ebene — beim Beauftragen geht es mit ins Projekt.
+        <br /><br />
+        <strong>Bearbeiten:</strong> jeder Schritt ist mit „Weiter" gespeichert. „Struktur
+        aktualisieren" überschreibt Honorar und Nebenkosten der Projektelemente, die aus dieser
+        Kalkulation entstanden sind; Elemente im Angebot zieht es nicht mit.
+      </>
+    ),
+  },
 
   // ── Reporting / Kennzahlen ───────────────────────────────────────────────
   'report.deckungsbeitrag': {
@@ -1522,8 +1577,54 @@ export const HELP = {
         Elemente mit der Abrechnungsart <strong>nach Aufwand</strong> tragen im Angebot eine{' '}
         <strong>Schätzung</strong>: Stunden × Stundensatz ergibt das Honorar. Der Satz wird beim
         Anlegen aus der gewählten Rolle vorbelegt und lässt sich je Element ändern.<br /><br />
+        Mehrere Rollen in einem Element (z. B. Projektleitung und Bauzeichnung mit eigenen Sätzen):
+        im Menü ⋯ der Zeile <strong>Aufwand nach Rollen</strong>. Das Honorar ist dann die Summe
+        der Zeilen.<br /><br />
         Bei der Beauftragung starten solche Elemente in der Projektstruktur bei 0 — dort zählt, was
-        tatsächlich gebucht wird. Die Schätzung bleibt im Angebot stehen.
+        tatsächlich gebucht wird. Die Schätzung geht als <strong>Plan</strong> mit (Stunden und
+        Honorar); die Budgetwarnung vergleicht das Gebuchte damit.
+      </>
+    ),
+  },
+  'projects.structure.plan': {
+    title: 'Plan eines Elements nach Aufwand',
+    body: (
+      <>
+        Was für ein Element nach Aufwand <strong>angeboten</strong> war: Stunden und Honorar. Beim
+        Beauftragen kommt der Plan aus den Aufwandszeilen des Angebots; hier lässt er sich setzen,
+        ändern oder entfernen (Menü ⋯ → <strong>Plan bearbeiten</strong>).<br /><br />
+        Die Tabelle zeigt unter dem gebuchten Betrag den Plan, „über Plan", sobald mehr gebucht ist.
+        Die <strong>Budgetwarnung</strong> rechnet bei solchen Elementen mit dem Plan als Budget und dem
+        gebuchten Honorar als Verbrauch — ohne Plan wäre das Budget die Summe der Buchungen selbst und
+        könnte nie warnen.
+      </>
+    ),
+  },
+  'offers.convert.preview': {
+    title: 'Was ins Projekt übergeht',
+    body: (
+      <>
+        Die Struktur des Angebots wird die Projektstruktur. <strong>Pauschale</strong> Elemente
+        übernehmen ihr Honorar. Elemente <strong>nach Aufwand</strong> starten bei 0 — gebucht wird,
+        was anfällt — und bekommen die Schätzung aus dem Angebot als <strong>Plan</strong>, gegen den
+        die Budgetwarnung vergleicht.<br /><br />
+        Die Zuordnung der Mitarbeiter legt fest, wer mit welcher Rolle und welchem Satz auf das Projekt
+        bucht (Preisliste). Jede Rolle aus den Aufwandszeilen steht einmal zur Auswahl.
+      </>
+    ),
+  },
+  'offers.structure.effort': {
+    title: 'Aufwand nach Rollen',
+    body: (
+      <>
+        Ein Element nach Aufwand kann mehrere <strong>Aufwandszeilen</strong> tragen: je Zeile eine
+        Rolle, die geschätzten Stunden und der Satz. Die Rolle belegt den Satz vor; ein selbst
+        eingetragener Satz bleibt stehen.<br /><br />
+        Das Honorar des Elements ist die <strong>Summe der Zeilen</strong>. Im Angebots-PDF und in
+        der Auftragsbestätigung steht jede Zeile einzeln unter dem Element.<br /><br />
+        Anders als ein Unterelement je Rolle bleibt es <strong>ein</strong> Element: nach der
+        Beauftragung bucht man auf dieses eine Projekt-Element, gleich in welcher Rolle. Die Summe
+        der Zeilen wird dort sein Plan.
       </>
     ),
   },

@@ -105,6 +105,7 @@ export const offers = OFFERS.map(([short, long, status, prob, total], i) => ({
   VALID_UNTIL: '2025-09-0' + ((i % 8) + 1),
   TOTAL_AMOUNT: total as number,
   STATUS_NAME: status as string, OFFER_STATUS_ID: (i % 4) + 1,
+  EMPLOYEE_ID: (i % 3) + 1,   // IDs wie in projekte/managers
   EMPLOYEE_NAME: ['M. Messina', 'T. Kern', 'S. Braun'][i % 3],
   ADDRESS_NAME: PROJECTS[i % PROJECTS.length][5],
   CONTACT_NAME: 'A. Ansprechpartner',

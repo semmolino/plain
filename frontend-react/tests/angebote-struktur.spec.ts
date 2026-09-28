@@ -93,6 +93,40 @@ test.describe('Angebotsstruktur am Desktop', () => {
     await expect(row.locator('.ox-hours')).toHaveAttribute('title', /= 2\.850,00/)
   })
 
+  test('Aufwand nach Rollen: zweite Rolle über das ⋯, Summe in der Zelle, ein PUT mit beiden Zeilen', async ({ page }) => {
+    const puts = recordPuts(page)
+    await open(page)
+    const row = page.locator('tr[data-struct-id="211"]')
+    // Ohne vorheriges Hinscrollen: die Zeile liegt knapp ueber der festen
+    // Aktionsleiste, der Klick scrollt — das Menue schloss dabei sofort
+    // wieder (RowMenu folgt jetzt dem Ausloeser).
+    await page.setViewportSize({ width: 1280, height: 900 })
+    await row.getByRole('button', { name: 'Aktionen zu BL1' }).click()
+    await page.getByRole('menuitem', { name: 'Aufwand nach Rollen' }).click()
+    const panel = page.getByRole('group', { name: 'Aufwand BL1 nach Rollen' })
+    await expect(panel.getByRole('combobox', { name: 'Rolle, Zeile 1' })).toHaveValue('2')
+    await panel.getByRole('button', { name: 'Rolle hinzufügen' }).click()
+    await panel.getByRole('combobox', { name: 'Rolle, Zeile 2' }).selectOption('4')
+    // Die Rolle belegt den Satz vor
+    await expect(panel.getByRole('textbox', { name: 'Stundensatz, Zeile 2' })).toHaveValue('68,00')
+    await panel.getByRole('textbox', { name: 'Stunden, Zeile 2' }).fill('10')
+    await expect(panel).toContainText('34 h')
+    await expect(panel).toContainText('2.960,00')
+    await panel.getByRole('button', { name: 'Fertig' }).click()
+    // Zu: die Zelle fasst zusammen, das Kennzeichen nennt beide Rollen
+    await expect(row.getByRole('button', { name: 'Aufwand BL1 nach Rollen bearbeiten' })).toHaveText('34 h · 2.960,00 €')
+    await expect(row.locator('.ox-role')).toHaveText('PL · TZ')
+    await expect(page.getByRole('textbox', { name: 'Stunden BL1' })).toHaveCount(0)
+    expect(puts).toHaveLength(0)
+    await page.locator('.action-bar').getByRole('button', { name: /Speichern/ }).click()
+    await expect(page.locator('.toast-message', { hasText: '1 Element gespeichert' })).toBeVisible()
+    expect(puts).toHaveLength(1)
+    expect(puts[0].body).toEqual({ effort_lines: [
+      { role_id: 2, role_abbr: 'PL', role_name: 'Projektleitung', hours: 24, rate: 95 },
+      { role_id: 4, role_abbr: 'TZ', role_name: 'Technische/r Zeichner/in', hours: 10, rate: 68 },
+    ] })
+  })
+
   test('Änderungen sammeln sich, Speichern schickt je Element genau einen PUT', async ({ page }) => {
     const puts = recordPuts(page)
     await open(page)
@@ -113,7 +147,8 @@ test.describe('Angebotsstruktur am Desktop', () => {
     expect(puts).toHaveLength(3)
     const by = (id: number) => puts.find(p => p.url.includes(`/structure/${id}`))?.body
     expect(by(203)).toEqual({ revenue: 15000 })
-    expect(by(211)).toEqual({ quantity: 30 })
+    // Stunden × Satz ist die erste Aufwandszeile — gesendet werden die Zeilen
+    expect(by(211)).toEqual({ effort_lines: [{ role_id: 2, role_abbr: 'PL', role_name: 'Projektleitung', hours: 30, rate: 95 }] })
     expect(by(205)).toMatchObject({ SURCHARGE_1_LABEL: 'Eilzuschlag', SURCHARGE_1_PCT: 5 })
   })
 
@@ -214,13 +249,24 @@ test.describe('Angebotsstruktur am Handy', () => {
     await list.getByRole('button', { name: /^BL1 Bestandsaufnahme/ }).click()
     const sheet = page.getByRole('dialog', { name: /BL1 · Bestandsaufnahme/ })
     await expect(sheet.getByRole('button', { name: 'Speichern' })).toBeDisabled()
-    await sheet.locator('#oxm-hours').fill('30')
+    await sheet.getByRole('textbox', { name: 'Stunden, Zeile 1' }).fill('30')
     await expect(sheet.locator('#oxm-fee')).toContainText('2.850,00')
+    // Aufwand nach Rollen auch am Handy: eine zweite Zeile, 44-px-Ziele
+    await sheet.getByRole('button', { name: 'Rolle hinzufügen' }).click()
+    const role2 = sheet.getByRole('combobox', { name: 'Rolle, Zeile 2' })
+    await role2.selectOption('4')
+    await expect(sheet.getByRole('textbox', { name: 'Stundensatz, Zeile 2' })).toHaveValue('68,00')
+    await sheet.getByRole('textbox', { name: 'Stunden, Zeile 2' }).fill('10')
+    await expect(sheet.locator('#oxm-fee')).toContainText('3.530,00')
+    expect((await role2.boundingBox())!.height).toBeGreaterThanOrEqual(44)
     await sheet.getByRole('button', { name: 'Speichern' }).click()
     await expect(sheet).toBeHidden()
     expect(puts).toHaveLength(1)
     expect(puts[0].url).toMatch(/structure\/211/)
-    expect(puts[0].body).toEqual({ quantity: 30 })
+    expect(puts[0].body).toEqual({ effort_lines: [
+      { role_id: 2, role_abbr: 'PL', role_name: 'Projektleitung', hours: 30, rate: 95 },
+      { role_id: 4, role_abbr: 'TZ', role_name: 'Technische/r Zeichner/in', hours: 10, rate: 68 },
+    ] })
   })
 
   test('Zuklappen in der Liste, Ziele mindestens 44 px', async ({ page }) => {

@@ -720,25 +720,12 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
 // POST /api/stammdaten/fee-calculation-masters/:id/add-to-offer-structure
 // ---------------------------------------------------------------------------
 async function postFeeCalcAddToOfferStructure(req, res, supabase) {
-  const id       = parseInt(req.params.id, 10);
-  const fatherId = parseInt(req.body?.father_id, 10);
-  if (!id)       return res.status(400).json({ error: 'id is required' });
-  if (!fatherId) return res.status(400).json({ error: 'father_id is required' });
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'id is required' });
   try {
-    const { data: calcMaster, error: calcErr } = await supabase
-      .from('FEE_CALCULATION_MASTER').select('ID, OFFER_ID').eq('ID', id).eq('TENANT_ID', req.tenantId).single();
-    if (calcErr || !calcMaster) return res.status(404).json({ error: 'FEE_CALCULATION_MASTER nicht gefunden' });
-
-    const { data: father, error: fatherErr } = await supabase
-      .from('OFFER_STRUCTURE').select('ID, OFFER_ID').eq('ID', fatherId).maybeSingle();
-    if (fatherErr) return res.status(500).json({ error: fatherErr.message });
-    if (!father)   return res.status(404).json({ error: 'Übergeordnetes Angebotselement nicht gefunden' });
-
-    const offerId = father.OFFER_ID;
-    const { attachFeeCalcToOfferStructure } = require('../services/angebote');
-    await attachFeeCalcToOfferStructure(supabase, { calcMasterId: id, fatherId, offerId, tenantId: req.tenantId });
-
-    return res.json({ success: true, message: 'Angebotsstruktur wurde angelegt ✅' });
+    const { addFeeCalcToOffer } = require('../services/angebote');
+    const out = await addFeeCalcToOffer(supabase, { calcMasterId: id, fatherRaw: req.body?.father_id, tenantId: req.tenantId });
+    return res.json({ success: true, fatherId: out.fatherId, message: 'Kalkulation ins Angebot übernommen' });
   } catch (err) {
     return res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
@@ -2063,7 +2050,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       synced,
       projectId: master.PROJECT_ID,
       message: synced > 0
-        ? `${synced} Projektelement${synced !== 1 ? "e" : ""} wurden aktualisiert.`
+        ? `${synced} Projektelement${synced !== 1 ? "e wurden" : " wurde"} aktualisiert.`
         : "Keine Elemente aktualisiert.",
     });
   } catch (e) {

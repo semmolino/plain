@@ -16,12 +16,14 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
  */
 
 // vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
-// vorher3 = nach Runde 2, vorher4 = nach Runde 3, nachher = aktueller Stand.
+// vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
+// nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
-// Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich.
+// Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
+// zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3 }
-const since = (round: number) => (RANK[PHASE] ?? 4) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4 }
+const since = (round: number) => (RANK[PHASE] ?? 5) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -520,4 +522,116 @@ test('Struktur – Spalten', async ({ page }, info) => {
   await page.getByRole('button', { name: /Spalten/ }).click()
   await page.waitForTimeout(200)
   await shoot(page, info.project.name, 'struktur-spalten')
+})
+
+// ── Runde 5: Vom Angebot zum Projekt ─────────────────────────────────────────
+// Vorher-Stand ist main nach Runde 4 (PILOT_PHASE=vorher5, Arbeitsbaum).
+
+test('Angebotsstruktur – Aufwand nach Rollen', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(4), 'Tabelle am Desktop')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  const row = page.locator('tr[data-struct-id="211"]')
+  if (since(5)) {
+    await row.getByRole('button', { name: 'Aktionen zu BL1' }).click()
+    await page.getByRole('menuitem', { name: 'Aufwand nach Rollen' }).click()
+    const panel = page.getByRole('group', { name: 'Aufwand BL1 nach Rollen' })
+    await panel.getByRole('button', { name: 'Rolle hinzufügen' }).click()
+    await panel.getByRole('combobox', { name: 'Rolle, Zeile 2' }).selectOption('4')
+    await panel.getByRole('textbox', { name: 'Stunden, Zeile 2' }).fill('10')
+    await page.getByRole('textbox', { name: 'Stunden, Zeile 1' }).click()
+  }
+  await row.scrollIntoViewIfNeeded()
+  await page.evaluate(() => document.querySelector('.app-main')?.scrollBy(0, 120))
+  await shoot(page, info.project.name, 'angebot-aufwand')
+})
+
+async function openBeauftragt(page: Page) {
+  await openOfferStructure(page)
+  const head = page.getByRole('button', { name: /Beauftragt/ })
+  if (await head.count()) await head.first().click()
+  else {
+    await page.getByRole('button', { name: /Weitere Aktionen|Aktionen/ }).first().click()
+    await page.getByRole('menuitem', { name: /als beauftragt markieren/i }).click()
+  }
+  await page.getByRole('dialog').waitFor()
+  await page.waitForLoadState('networkidle')
+}
+
+test('Beauftragen – Dialog', async ({ page }, info) => {
+  test.skip(!since(4), 'Dialog im Kopf gibt es erst mit Runde 4')
+  await prepare(page, info.project.name)
+  await openBeauftragt(page)
+  await shoot(page, info.project.name, 'beauftragen')
+})
+
+test('Projekt – Plan nach Aufwand', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Tabelle am Desktop')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.locator('.sx-table').waitFor()
+  await page.locator('tr[data-struct-id="124"]').scrollIntoViewIfNeeded()
+  await page.evaluate(() => document.querySelector('.app-main')?.scrollBy(0, 200))
+  await shoot(page, info.project.name, 'projekt-plan')
+})
+
+test('Projekt – Plan bearbeiten', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(5), 'gibt es erst mit Runde 5')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.locator('tr[data-struct-id="124"]').getByRole('button', { name: /Aktionen zu NA2/ }).click()
+  await page.getByRole('menuitem', { name: 'Plan bearbeiten …' }).click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'projekt-plan-dialog')
+})
+
+test('Kalkulationen – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?tab=honorar')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'kalk-liste')
+})
+
+/** Neue Kalkulation im Angebot bis zu Schritt `upto` (2 = Grundlagen …). */
+async function kalkulation(page: Page, device: string, upto: number) {
+  await open(page, '/angebote?offerId=1&tab=kalkulationen')
+  await page.getByRole('button', { name: /Neue Kalkulation|Kalkulation hinzufügen/ }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('select').nth(0).selectOption('1')
+  await page.waitForLoadState('networkidle')
+  await dialog.locator('select').nth(1).selectOption('10')
+  if (upto === 1) { await shoot(page, device, 'kalk-1-leistungsbild'); return }
+  const weiter = () => dialog.getByRole('button', { name: /^(Speichern & )?Weiter/ }).last().click()
+  await weiter()
+  await dialog.locator('select').nth(0).selectOption('3')
+  await dialog.locator('input[type="number"]').nth(0).fill('50')
+  await dialog.locator('input[type="number"]').nth(1).fill('2450000')
+  if (upto === 2) { await shoot(page, device, 'kalk-2-grundlagen'); return }
+  await weiter(); await page.waitForLoadState('networkidle')
+  if (upto === 3) { await shoot(page, device, 'kalk-3-leistungsphasen'); return }
+  await weiter(); await page.waitForLoadState('networkidle')
+  await weiter(); await page.waitForLoadState('networkidle')
+  await dialog.getByRole('button', { name: /Umbauzuschlag/ }).click()
+  await dialog.getByRole('button', { name: /Details/ }).first().click()
+  if (upto === 5) { await shoot(page, device, 'kalk-5-zuschlaege'); return }
+  await weiter(); await page.waitForLoadState('networkidle')
+  await shoot(page, device, 'kalk-6-uebernehmen')
+}
+
+for (const [upto, name] of [[1, 'Leistungsbild'], [2, 'Grundlagen'], [3, 'Leistungsphasen'], [5, 'Zuschläge'], [6, 'Übernehmen']] as const) {
+  test(`Kalkulation – ${name}`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop' && upto !== 2, 'am Handy nur Grundlagen')
+    await prepare(page, info.project.name)
+    await kalkulation(page, info.project.name, upto)
+  })
+}
+
+test('Kalkulation – Schließen fragt nach', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(5), 'Rückfrage gibt es erst mit Runde 5')
+  await prepare(page, info.project.name)
+  await kalkulation(page, info.project.name, 2)
+  await page.keyboard.press('Escape')
+  await page.getByRole('dialog', { name: 'Ungespeicherte Änderungen' }).waitFor()
+  await shoot(page, info.project.name, 'kalk-schliessen')
 })

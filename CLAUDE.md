@@ -285,7 +285,9 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
 
 ## Key business domain patterns
 
-- **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0.
+- **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0 — ihre Schätzung geht als **Plan** mit (`PLAN_HOURS`/`PLAN_REVENUE`, Migration `0173`, abwählbar mit `transfer_plan: false`).
+- **Aufwandszeilen** (Migration `0173`): ein Angebotselement nach Aufwand trägt `EFFORT_LINES` (Rolle · Stunden · Satz, beliebig viele), das Honorar ist die Summe. `QUANTITY`/`HOURLY_RATE`/`ROLE_*` werden daraus abgeleitet (Satz und Rolle nur bei genau einer Zeile); `EFFORT_LINES = NULL` ist Altbestand und gilt als eine Zeile. Prüfen, ableiten und lesen **nur** über `services/effortLines.js` (`normalizeEffortLines`, `effortColumns`, `nodeEffortLines`) — Speichern, PDF, Auftragsbestätigung und Beauftragen gehen alle hindurch. Im Frontend dasselbe über `nodeLines`/`effectiveLines` in `offerStrukturCalc.ts`.
+- **Plan am Projekt-Element**: ein Blatt nach Aufwand mit `PLAN_REVENUE` rechnet in der Budgetwarnung mit dem Plan als Budget und dem **gebuchten Honorar** (Σ `HOURLY_RATE_TOTAL` bestätigter Buchungen) als Verbrauch (`services/budgetWarnings.js`). Ohne Plan bliebe das Budget die Summe der Buchungen selbst und könnte nie warnen. Geändert wird der Plan über `PATCH /projekte/structure/:id/plan` (`projects.structure.edit`) — **nicht** über `patchStructure`, das bei jedem Aufruf einen Leistungsstand-Snapshot schreibt.
 - **Invoice wizard**: draft invoice → assign performance amount + bookings → generate line items → finalize.
   Abschlag, Einzelrechnung und Gutschrift laufen durch **einen** Assistenten
   (`pages/rechnungen/InvoiceWizard.tsx`); was sich je Belegart unterscheidet
@@ -318,6 +320,20 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   anderen Seiten bauen `angebotHref(id, tab)`, alte `state: { offerId }`-
   Einstiege werden umgeschrieben. „Als beauftragt markieren" laeuft in Liste
   und Kopf ueber denselben `BeauftragtDialog`.
+- **Kalkulationen (HOAI-Assistent)** (`pages/projekte/HonorarWizard.tsx`, Liste
+  `HonorarTab.tsx`, im Angebot `angebote/AngeboteHoai.tsx`): im Muster der
+  Rechnungsassistenten — sprechende Schritte, ActionBar (im Dialog am unteren
+  Rand), „Weiter" **und** „Zurück" speichern den Schritt. Eine neue Kalkulation
+  gilt erst mit „Übernehmen" als angelegt; wer vorher geht, verwirft sie
+  (Unmount-Cleanup), und die Rückfrage sagt genau das. Dialoge mit dem
+  Assistenten schließen über `guarded(close, [HONORAR_WIZARD_GUARD])` — `only`
+  beschränkt die Rückfrage auf den Assistenten statt auf die Tabelle dahinter.
+  Im Angebot ohne gewähltes Element legt `addFeeCalcToOffer` ein eigenes auf
+  oberster Ebene an: `ATTACH_TO_OFFER_STRUCTURE_ID` ist der Anker, an dem das
+  Beauftragen erkennt, dass die Phasen schon in der Struktur stehen — direkt an
+  der Wurzel legte es sie ein zweites Mal an. „Struktur aktualisieren" gibt es
+  nur für Projektelemente mit `FEE_CALC_MASTER_ID`; Angebotselemente tragen
+  keine Verknüpfung und ziehen Änderungen nicht mit.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.

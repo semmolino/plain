@@ -29,6 +29,8 @@ export interface BudgetWarningStructureAgg {
   FATHER_ID: number | null
   budget:    number
   verbrauch: number
+  /** Wie viele Blätter nach Plan aus dem Angebot rechnen (Budget = Plan, Verbrauch = gebucht) */
+  plan?:     'none' | 'some' | 'all'
 }
 
 export interface BudgetWarningOverview {

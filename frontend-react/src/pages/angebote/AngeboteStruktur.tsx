@@ -14,12 +14,13 @@ import { RowMenu }       from '@/components/ui/RowMenu'
 import { AmountInput }   from '@/components/ui/AmountInput'
 import { ColumnChooser } from '@/components/ui/ColumnChooser'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { useRegisterDirty } from '@/hooks/useDirtyGuard'
-import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
+import { HonorarWizard, HONORAR_WIZARD_GUARD } from '@/pages/projekte/HonorarWizard'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
 import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
 import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
 import { OfferStrukturMobile } from '@/pages/angebote/struktur/OfferStrukturMobile'
+import { EffortPanelRow } from '@/pages/angebote/struktur/EffortPanelRow'
 import {
   fetchOffer, fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
   deleteOfferStructureNode, moveOfferStructureNode, patchOfferRootSurcharges,
@@ -32,9 +33,11 @@ import {
 } from '@/pages/projekte/struktur/strukturCalc'
 import {
   aggregateOffer, offerRootTotals, offerRowChanges, offerLeafFee, hoursRate, isHourlyBt,
-  type OfferRowEdit, type OfferPutBody,
+  effectiveLines, nodeLines, withFirstLine, rolesLabel, linesHours, linesFee, serializeLines,
+  type OfferRowEdit, type OfferPutBody, type EffortLineEdit,
 } from '@/pages/angebote/struktur/offerStrukturCalc'
 import { fmtEur, money } from '@/utils/money'
+import { fmtHours } from '@/utils/zeit'
 import { usePermission } from '@/store/permissionsStore'
 import { useFeature, useLicenseReadOnly } from '@/store/licenseStore'
 import { useToast } from '@/store/toastStore'
@@ -53,6 +56,9 @@ import { useToast } from '@/store/toastStore'
  *  - Anlegen, Loeschen und Verschieben wirken sofort, mit Rueckfrage.
  *  - Angebots- und Reiterwechsel fragen nach, wenn noch etwas offen ist.
  *  - Das ⋯ jeder Zeile traegt dieselben Befehle wie der Rechtsklick.
+ *  - Aufwand nach Rollen (Runde 5): „Stunden × Satz" ist die erste
+ *    Aufwandszeile; mit mehreren Rollen zeigt die Zelle „24 h · Betrag" und
+ *    oeffnet das Aufwands-Panel unter der Zeile.
  * Die Summen rechnet der mit der Projektstruktur geteilte Kern
  * (struktur/offerStrukturCalc.ts → projekte/struktur/strukturCalc.ts).
  */
@@ -62,6 +68,8 @@ type AddForm = {
   REVENUE: string; EXTRAS_PERCENT: string
   // Aufwand (BT 2): Honorar = Stunden × Satz, Satz aus der Rolle vorbelegt
   QUANTITY: string; HOURLY_RATE: string; ROLE_ID: string; ROLE_ABBR: string; ROLE_NAME: string
+  // Mehrere Aufwandszeilen, uebernommen vom uebergeordneten Element
+  LINES?: EffortLineEdit[]
 }
 
 function emptyAdd(): AddForm {
@@ -122,6 +130,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   const [addError, setAddError]         = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [surchargePanel, setSurchargePanel]       = useState<number | null>(null)
+  const [effortPanel, setEffortPanel]             = useState<number | null>(null)
   const [offerSurchargePanel, setOfferSurchargePanel] = useState(false)
   const [kalkFatherId, setKalkFatherId]           = useState<number | null>(null)
   const [elementSearch, setElementSearch]         = useState('')
@@ -164,7 +173,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   if (seenOid !== oid) {
     setSeenOid(oid)
     setEdits({}); setRootEdit(null); setAddForm(null); setSelectedIds(new Set()); setCollapsed(new Set())
-    setSurchargePanel(null); setOfferSurchargePanel(false); setErrorMsg(null)
+    setSurchargePanel(null); setEffortPanel(null); setOfferSurchargePanel(false); setErrorMsg(null)
   }
 
   useEffect(() => {
@@ -241,7 +250,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   const dirty       = dirtyCount > 0
 
   function discardAll() {
-    setEdits({}); setRootEdit(null); setSurchargePanel(null); setOfferSurchargePanel(false); setErrorMsg(null)
+    setEdits({}); setRootEdit(null); setSurchargePanel(null); setEffortPanel(null); setOfferSurchargePanel(false); setErrorMsg(null)
   }
 
   function invalidateOffer() {
@@ -268,12 +277,13 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
       throw e
     }
     await invalidateOffer()
-    setEdits({}); setRootEdit(null); setSurchargePanel(null); setOfferSurchargePanel(false)
+    setEdits({}); setRootEdit(null); setSurchargePanel(null); setEffortPanel(null); setOfferSurchargePanel(false)
     setSaving(false)
     const n = rows.length + (rootChanged ? 1 : 0)
     toast.success(n === 1 ? '1 Element gespeichert' : `${n} Elemente gespeichert`)
   }
 
+  const guarded = useGuardedAction()
   useRegisterDirty('angebotsstruktur', {
     dirty, count: dirtyCount, label: 'Angebotsstruktur',
     save: () => saveAll(),
@@ -299,7 +309,9 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
         billing_type_id: Number(f.BILLING_TYPE_ID),
         father_id:       f.FATHER_ID ? Number(f.FATHER_ID) : null,
         extras_percent:  f.EXTRAS_PERCENT !== '' ? Number(f.EXTRAS_PERCENT) : undefined,
-        ...(hourly
+        ...(hourly && f.LINES?.length
+          ? { effort_lines: serializeLines(f.LINES) }
+          : hourly
           ? {
               quantity:    f.QUANTITY    !== '' ? Number(f.QUANTITY)    : 0,
               hourly_rate: f.HOURLY_RATE !== '' ? Number(f.HOURLY_RATE) : 0,
@@ -390,6 +402,8 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
     }
     const lv = leafValue(fatherId)
     if (!lv) return base
+    const fLines = nodeLines(f)
+    if (isHourlyBt(f.BILLING_TYPE_ID) && fLines.length > 1) return { ...base, LINES: fLines }
     return isHourlyBt(f.BILLING_TYPE_ID)
       ? { ...base, QUANTITY: String(f.QUANTITY ?? ''), HOURLY_RATE: String(f.HOURLY_RATE ?? ''),
           ROLE_ID: f.ROLE_ID != null ? String(f.ROLE_ID) : '', ROLE_ABBR: f.ROLE_ABBR ?? '', ROLE_NAME: f.ROLE_NAME ?? '' }
@@ -406,6 +420,8 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
     const untouched = !f.REVENUE && !f.QUANTITY && !f.HOURLY_RATE && !f.ROLE_ID
     return {
       ...f,
+      // Uebernommene Zeilen gehoeren zum bisherigen Vater, nicht zur Eingabe
+      LINES: undefined,
       ...(p.BILLING_TYPE_ID ? { BILLING_TYPE_ID: p.BILLING_TYPE_ID } : {}),
       ...(p.EXTRAS_PERCENT !== undefined ? { EXTRAS_PERCENT: p.EXTRAS_PERCENT } : {}),
       ...(untouched ? p : {}),
@@ -565,8 +581,10 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   // Zeilenmenue und Rechtsklick teilen sich dieselben Befehle.
   function rowCommands(node: OfferStructureNode) {
     const isParent = parentIds.has(String(node.ID))
+    const hourly = !isParent && isHourlyBt(edits[node.ID]?.billingTypeId ?? node.BILLING_TYPE_ID)
     return [
       canEdit && { key: 'add',  label: 'Unterelement anlegen', run: () => openAdd(node.ID) },
+      canEdit && hourly && { key: 'eff', label: 'Aufwand nach Rollen', run: () => setEffortPanel(node.ID) },
       canEdit && { key: 'sur',  label: 'Zuschläge bearbeiten', run: () => setSurchargePanel(node.ID) },
       canCalc && { key: 'kalk', label: 'Kalkulation anlegen',  run: () => setKalkFatherId(node.ID) },
       canEdit && { key: 'del',  label: isParent ? 'Löschen (erst Unterelemente)' : 'Element löschen', danger: true, disabled: isParent, run: () => askDelete(node) },
@@ -583,9 +601,9 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   return (
     <div className="sx-root">
       {oid === null && (
-        <div className="sx-empty">
+        <div className="empty-block">
           <p className="empty-note">Kein Angebot gewählt.</p>
-          <p className="sx-empty-why">In der Angebotsliste ein Angebot öffnen. Die Struktur gliedert das Honorar des Angebots — sie wird bei der Beauftragung zur Projektstruktur.</p>
+          <p className="empty-block-why">In der Angebotsliste ein Angebot öffnen. Die Struktur gliedert das Honorar des Angebots — sie wird bei der Beauftragung zur Projektstruktur.</p>
         </div>
       )}
 
@@ -629,7 +647,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
 
           {flatTree.length > 0 && narrow && (
             <OfferStrukturMobile offerId={oid} flat={filteredFlatTree} parentIds={parentIds} aggMap={aggMap}
-              billingTypes={btypes} canEdit={canEdit}
+              billingTypes={btypes} roles={roles} canEdit={canEdit}
               root={{ label: `${currentOffer?.ABBR ?? ''} · Angebot gesamt`, total: rootGesamt }}
               onAdd={openAdd} onDelete={askDelete} />
           )}
@@ -719,6 +737,10 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                     const budgetVal = edit?.budget        ?? String(node.REVENUE_BASIS ?? node.REVENUE ?? 0)
                     const hourly    = !isParent && isHourlyBt(btId)
                     const { hours, rate } = hoursRate(node, edit)
+                    const lines     = effectiveLines(node, edit)
+                    // Mehrere Rollen (oder Panel offen): die Zelle fasst zusammen
+                    const multi     = hourly && (lines.length > 1 || effortPanel === node.ID)
+                    const linesTitle = lines.map(l => `${l.roleAbbr || 'ohne Rolle'}: ${fmtHours(Number(l.hours) || 0)} h × ${fmtEur(Number(l.rate) || 0)}`).join('\n')
                     const isDragOver = dragOverId === node.ID
 
                     const sEdit = edit?.surcharge ?? surchargeDefault(node)
@@ -781,8 +803,8 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                             {isParent && collapsed.has(node.ID) && (
                               <span className="sx-collapsed-count">{descendantCount(node.ID)} ausgeblendet</span>
                             )}
-                            {hourly && node.ROLE_ABBR && (
-                              <span className="ox-role" title={node.ROLE_NAME ? `Rolle: ${node.ROLE_NAME}` : 'Rolle'}>{node.ROLE_ABBR}</span>
+                            {hourly && rolesLabel(lines) && (
+                              <span className="ox-role" title={lines.length > 1 ? linesTitle : lines[0]?.roleName ? `Rolle: ${lines[0].roleName}` : 'Rolle'}>{rolesLabel(lines)}</span>
                             )}
                           </div>
                         </td>
@@ -797,20 +819,27 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                         </td>
                         )}
                         <td className="num">
-                          {hourly && canEdit ? (
-                            // Aufwand: Stunden × Satz statt eines Betrags. Das Produkt steht
-                            // im Tooltip, in „inkl. Zuschl." und in „Gesamt".
+                          {multi && canEdit ? (
+                            <button type="button" className={`sx-surcharge-btn ox-effort-btn${ch('effort_lines')}`}
+                              aria-expanded={effortPanel === node.ID} title={linesTitle}
+                              aria-label={`Aufwand ${nameShort} nach Rollen bearbeiten`}
+                              onClick={() => setEffortPanel(p => p === node.ID ? null : node.ID)}>
+                              {fmtHours(linesHours(lines))} h · {fmtEur(linesFee(lines))}
+                            </button>
+                          ) : hourly && canEdit ? (
+                            // Aufwand: Stunden × Satz der ersten Zeile statt eines Betrags.
+                            // Das Produkt steht im Tooltip, in „inkl. Zuschl." und in „Gesamt".
                             <span className="ox-hours" title={`Honorar = ${hours} h × ${fmtEur(Number(rate))} = ${fmtEur(offerLeafFee(node, edit))}`}>
-                              <input className={`tbl-input sx-input ox-input-hours${ch('quantity')}`} type="text" inputMode="decimal"
+                              <input className={`tbl-input sx-input ox-input-hours${ch('effort_lines')}`} type="text" inputMode="decimal"
                                 aria-label={`Stunden ${nameShort}`} value={hours}
-                                onChange={e => editRow(node.ID, { hours: e.target.value.replace(',', '.') })} />
+                                onChange={e => editRow(node.ID, { lines: withFirstLine(node, edit, { hours: e.target.value.replace(',', '.') }) })} />
                               <span className="ox-times" aria-hidden="true">h ×</span>
-                              <AmountInput className={`tbl-input sx-input ox-input-rate${ch('hourly_rate')}`}
+                              <AmountInput className={`tbl-input sx-input ox-input-rate${ch('effort_lines')}`}
                                 aria-label={`Stundensatz ${nameShort}`} value={rate}
-                                onChange={v => editRow(node.ID, { rate: v })} />
+                                onChange={v => editRow(node.ID, { lines: withFirstLine(node, edit, { rate: v }) })} />
                             </span>
                           ) : isParent || hourly || !canEdit ? (
-                            <span className="sx-muted" title={hourly ? `${hours} h × ${fmtEur(Number(rate))}` : isParent ? 'Summe der Unterelemente' : undefined}>
+                            <span className="sx-muted" title={hourly ? linesTitle : isParent ? 'Summe der Unterelemente' : undefined}>
                               {money(isParent ? (agg?.revenueBasis ?? 0) : offerLeafFee(node, edit))}
                             </span>
                           ) : (
@@ -868,6 +897,11 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                           )}
                         </td>
                       </tr>
+                      {effortPanel === node.ID && hourly && (
+                        <EffortPanelRow colSpan={COLS} abbr={nameShort} lines={lines} roles={roles} readOnly={!canEdit}
+                          onChange={ls => editRow(node.ID, { lines: ls })}
+                          onDone={() => setEffortPanel(null)} />
+                      )}
                       {surchargePanel === node.ID && (
                         <SurchargePanelRow
                           colSpan={COLS} title={`Zuschläge ${node.ABBR ?? ''} – Basis (Honorar)`} basis={surchargeBase}
@@ -885,9 +919,9 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
           )}
 
           {flatTree.length === 0 && !addForm && (
-            <div className="sx-empty">
+            <div className="empty-block">
               <p className="empty-note">Dieses Angebot hat noch keine Struktur.</p>
-              <p className="sx-empty-why">Die Struktur gliedert das Honorar (z. B. Leistungsphasen oder Stunden nach Aufwand). Sie steht so im Angebots-PDF und wird bei der Beauftragung zur Projektstruktur.</p>
+              <p className="empty-block-why">Die Struktur gliedert das Honorar (z. B. Leistungsphasen oder Stunden nach Aufwand). Sie steht so im Angebots-PDF und wird bei der Beauftragung zur Projektstruktur.</p>
               {canEdit && (
                 <button type="button" className="btn-secondary" onClick={() => openAdd(null)}>
                   <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Erstes Element anlegen
@@ -943,7 +977,15 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
                   <label htmlFor="ox-add-name">Bezeichnung</label>
                   <input id="ox-add-name" value={addForm.NAME} onChange={e => set({ NAME: e.target.value })} />
                 </div>
-                {hourly ? (
+                {hourly && addForm.LINES?.length ? (
+                  <div className="form-group sx-add-wide">
+                    <label htmlFor="ox-add-lines">Aufwand</label>
+                    <output id="ox-add-lines" className="sxm-readonly">
+                      {addForm.LINES.length} Rollen · {fmtHours(linesHours(addForm.LINES))} h · {fmtEur(linesFee(addForm.LINES))}
+                      <span className="form-field-hint">Vom übergeordneten Element übernommen, danach über „Aufwand nach Rollen" änderbar.</span>
+                    </output>
+                  </div>
+                ) : hourly ? (
                   <>
                     <div className="form-group">
                       <label htmlFor="ox-add-role">Rolle</label>
@@ -1032,7 +1074,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
         onCancel={() => setConfirmState(null)}
       />
 
-      <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
+      <Modal open={kalkFatherId !== null} onClose={() => guarded(() => setKalkFatherId(null), [HONORAR_WIZARD_GUARD])} title="HOAI-Kalkulation anlegen" className="modal-xl">
         {kalkFatherId !== null && oid && (
           <HonorarWizard
             offerId={oid}

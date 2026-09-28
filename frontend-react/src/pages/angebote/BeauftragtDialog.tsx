@@ -12,7 +12,7 @@ import { BeauftragtModal } from './BeauftragtModal'
  * denselben Ablauf benutzt statt einer zweiten Kopie der beiden Aufrufe.
  */
 export function BeauftragtDialog({ offer, onClose, onDone }: {
-  offer:   { ID: number; ABBR: string | null; NAME: string } | null
+  offer:   { ID: number; ABBR: string | null; NAME: string; EMPLOYEE_ID?: number | null } | null
   onClose: () => void
   onDone:  (message: string) => void
 }) {
@@ -56,6 +56,7 @@ export function BeauftragtDialog({ offer, onClose, onDone }: {
       open
       offerName={offer.ABBR ?? offer.NAME}
       structNodes={structData?.data ?? []}
+      presetManagerId={offer.EMPLOYEE_ID ?? null}
       onConvert={body => convertMut.mutate(body)}
       onMarkOrdered={body => markOrderedMut.mutate(body)}
       onClose={() => { setError(null); onClose() }}
