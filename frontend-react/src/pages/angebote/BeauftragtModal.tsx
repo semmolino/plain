@@ -150,7 +150,7 @@ export function BeauftragtModal({ open, offerName, structNodes, presetManagerId,
 
   return (
     <Modal open={open} onClose={onClose} title={`Beauftragt – ${offerName}`} className="modal-wide">
-      <div className="bw-mode" role="group" aria-label="Wie wird beauftragt?">
+      <div className="seg-toggle bw-mode" role="group" aria-label="Wie wird beauftragt?">
         <button type="button" aria-pressed={mode === 'create'} onClick={() => setMode('create')}>Projekt anlegen</button>
         <button type="button" aria-pressed={mode === 'mark'} onClick={() => setMode('mark')}>Nur als beauftragt markieren</button>
       </div>

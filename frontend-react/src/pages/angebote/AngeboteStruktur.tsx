@@ -14,8 +14,8 @@ import { RowMenu }       from '@/components/ui/RowMenu'
 import { AmountInput }   from '@/components/ui/AmountInput'
 import { ColumnChooser } from '@/components/ui/ColumnChooser'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
-import { useRegisterDirty } from '@/hooks/useDirtyGuard'
-import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
+import { HonorarWizard, HONORAR_WIZARD_GUARD } from '@/pages/projekte/HonorarWizard'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
 import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
 import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
@@ -283,6 +283,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
     toast.success(n === 1 ? '1 Element gespeichert' : `${n} Elemente gespeichert`)
   }
 
+  const guarded = useGuardedAction()
   useRegisterDirty('angebotsstruktur', {
     dirty, count: dirtyCount, label: 'Angebotsstruktur',
     save: () => saveAll(),
@@ -600,9 +601,9 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
   return (
     <div className="sx-root">
       {oid === null && (
-        <div className="sx-empty">
+        <div className="empty-block">
           <p className="empty-note">Kein Angebot gewählt.</p>
-          <p className="sx-empty-why">In der Angebotsliste ein Angebot öffnen. Die Struktur gliedert das Honorar des Angebots — sie wird bei der Beauftragung zur Projektstruktur.</p>
+          <p className="empty-block-why">In der Angebotsliste ein Angebot öffnen. Die Struktur gliedert das Honorar des Angebots — sie wird bei der Beauftragung zur Projektstruktur.</p>
         </div>
       )}
 
@@ -918,9 +919,9 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
           )}
 
           {flatTree.length === 0 && !addForm && (
-            <div className="sx-empty">
+            <div className="empty-block">
               <p className="empty-note">Dieses Angebot hat noch keine Struktur.</p>
-              <p className="sx-empty-why">Die Struktur gliedert das Honorar (z. B. Leistungsphasen oder Stunden nach Aufwand). Sie steht so im Angebots-PDF und wird bei der Beauftragung zur Projektstruktur.</p>
+              <p className="empty-block-why">Die Struktur gliedert das Honorar (z. B. Leistungsphasen oder Stunden nach Aufwand). Sie steht so im Angebots-PDF und wird bei der Beauftragung zur Projektstruktur.</p>
               {canEdit && (
                 <button type="button" className="btn-secondary" onClick={() => openAdd(null)}>
                   <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Erstes Element anlegen
@@ -1073,7 +1074,7 @@ export function AngeboteStruktur({ initialOfferId }: Props) {
         onCancel={() => setConfirmState(null)}
       />
 
-      <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
+      <Modal open={kalkFatherId !== null} onClose={() => guarded(() => setKalkFatherId(null), [HONORAR_WIZARD_GUARD])} title="HOAI-Kalkulation anlegen" className="modal-xl">
         {kalkFatherId !== null && oid && (
           <HonorarWizard
             offerId={oid}

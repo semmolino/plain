@@ -48,6 +48,8 @@ export interface StructureNode {
   // Plan eines Elements nach Aufwand (Migration 0173): aus dem Angebot, änderbar
   PLAN_HOURS?:                 number | null
   PLAN_REVENUE?:               number | null
+  /** Kalkulation, aus der das Element stammt (HOAI-Assistent, „Struktur aktualisieren"). */
+  FEE_CALC_MASTER_ID?:         number | null
   IS_INTERNAL:                 boolean
   REVENUE_BASIS:               number | null
   SURCHARGE_1_LABEL:           string | null

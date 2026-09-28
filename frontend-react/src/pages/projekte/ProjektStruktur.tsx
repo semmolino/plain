@@ -19,8 +19,8 @@ import { PlanDialog } from '@/pages/projekte/struktur/PlanDialog'
 import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
 import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
 import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
-import { useRegisterDirty } from '@/hooks/useDirtyGuard'
-import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
+import { HonorarWizard, HONORAR_WIZARD_GUARD } from '@/pages/projekte/HonorarWizard'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
@@ -281,6 +281,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     }
   }, [dirty, selectedPid, pendingRows, rootChanged, rootEdit]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const guarded = useGuardedAction()
   useRegisterDirty('struktur', {
     dirty, count: dirtyCount, label: 'Struktur',
     save: () => saveAll(),
@@ -933,9 +934,9 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
               )}
 
               {flatTree.length === 0 && !addForm && (
-                <div className="sx-empty">
+                <div className="empty-block">
                   <p className="empty-note">Dieses Projekt hat noch keine Struktur.</p>
-                  <p className="sx-empty-why">Die Struktur gliedert Honorar und Leistungen (z. B. Leistungsphasen). Auf ihre Elemente werden Stunden gebucht und Leistungsstände gemeldet.</p>
+                  <p className="empty-block-why">Die Struktur gliedert Honorar und Leistungen (z. B. Leistungsphasen). Auf ihre Elemente werden Stunden gebucht und Leistungsstände gemeldet.</p>
                   {canEdit && (
                     <button type="button" className="btn-secondary" onClick={() => openAdd(null)}>
                       <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Erstes Element anlegen
@@ -1047,7 +1048,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />
-    <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
+    <Modal open={kalkFatherId !== null} onClose={() => guarded(() => setKalkFatherId(null), [HONORAR_WIZARD_GUARD])} title="HOAI-Kalkulation anlegen" className="modal-xl">
       {kalkFatherId !== null && selectedPid && (
         <HonorarWizard
           initialProjectId={selectedPid}

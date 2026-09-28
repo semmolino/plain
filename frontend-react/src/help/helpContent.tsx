@@ -551,6 +551,61 @@ export const HELP = {
       </>
     ),
   },
+  'hoai.leistungsbild': {
+    title: 'Honorarordnung und Leistungsbild',
+    body: (
+      <>
+        Die <strong>Honorarordnung</strong> (HOAI-Fassung oder AHO-Heft) legt fest, nach welchen
+        Tafeln gerechnet wird; das <strong>Leistungsbild</strong> (z. B. § 34 Gebäude, § 51
+        Tragwerksplanung) bestimmt Leistungsphasen, Honorarzonen und Bemessungsgrundlage.
+        <br /><br />
+        Mit „Weiter" legt plan&amp;simple die Kalkulation an. Sie gilt aber erst mit
+        <strong> Übernehmen</strong> im letzten Schritt: wer vorher abbricht oder das Fenster
+        schließt, wird gefragt, und die angefangene Kalkulation wird verworfen.
+      </>
+    ),
+  },
+  'hoai.grundlagen': {
+    title: 'Grundlagen',
+    body: (
+      <>
+        Honorarzone, Lage in der Zone und die Bemessungsgrundlage — meist die
+        <strong> anrechenbaren Kosten</strong>. K0 gilt für alle Leistungsphasen; K1–K4
+        (z. B. Kostenberechnung, Kostenanschlag) nur, wenn eine Leistungsphase im nächsten
+        Schritt ausdrücklich darauf zeigt. Die DIN-276-Hilfe ermittelt K0 aus den Kostengruppen.
+        <br /><br />
+        Bei Flächenplanung, Verrechnungseinheiten oder Brandschutz steht statt der Kosten ein
+        einzelner Wert (ha, VE, m²).
+      </>
+    ),
+  },
+  'hoai.bl': {
+    title: 'Besondere Leistungen',
+    body: (
+      <>
+        Leistungen über die Grundleistungen hinaus (§ 3 Abs. 3 HOAI), frei zu vereinbaren:
+        als <strong>Pauschalbetrag</strong> oder als Prozentsatz — vom Honorar einer
+        Leistungsphase, vom Grundhonorar, vom Tafelwert zu Kx oder von den Baukosten.
+        Jede Besondere Leistung wird ein eigenes Element der Struktur und lässt sich im
+        nächsten Schritt in Zuschläge einbeziehen.
+      </>
+    ),
+  },
+  'hoai.uebernehmen': {
+    title: 'Übernehmen und aktualisieren',
+    body: (
+      <>
+        <strong>Neue Kalkulation:</strong> je Leistungsphase mit Honorar und je Besondere Leistung
+        entsteht ein pauschales Element, Zuschläge werden anteilig auf sie verteilt. Im Projekt
+        steht es unter dem gewählten Element; im Angebot wahlweise unter einem Element oder in
+        einem neuen auf oberster Ebene — beim Beauftragen geht es mit ins Projekt.
+        <br /><br />
+        <strong>Bearbeiten:</strong> jeder Schritt ist mit „Weiter" gespeichert. „Struktur
+        aktualisieren" überschreibt Honorar und Nebenkosten der Projektelemente, die aus dieser
+        Kalkulation entstanden sind; Elemente im Angebot zieht es nicht mit.
+      </>
+    ),
+  },
 
   // ── Reporting / Kennzahlen ───────────────────────────────────────────────
   'report.deckungsbeitrag': {

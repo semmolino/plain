@@ -175,8 +175,9 @@ export const deleteFeeCalcMaster = (id: number) =>
 export const attachFeeToStructure = (id: number, father_id: number, confirmed?: boolean) =>
   apiClient.post<{ message: string }>(`/stammdaten/fee-calculation-masters/${id}/add-to-project-structure`, { father_id, ...(confirmed ? { confirmed: true } : {}) })
 
-export const attachFeeToOfferStructure = (id: number, father_id: number) =>
-  apiClient.post<{ message: string }>(`/stammdaten/fee-calculation-masters/${id}/add-to-offer-structure`, { father_id })
+/** Ohne `father_id` legt das Backend ein eigenes Element auf oberster Ebene an. */
+export const attachFeeToOfferStructure = (id: number, father_id: number | null) =>
+  apiClient.post<{ message: string; fatherId: number }>(`/stammdaten/fee-calculation-masters/${id}/add-to-offer-structure`, { father_id })
 
 export const fetchFeeSurchargesGlobal = (feeMasterId: number) =>
   apiClient.get<{ data: FeeSurchargeGlobal[] }>(`/stammdaten/fee-surcharges-global?fee_master_id=${feeMasterId}`)

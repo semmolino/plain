@@ -111,6 +111,8 @@ function buildStructure() {
       REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
       TEC_SP_TOT_SUM: tec, IS_INTERNAL: !!s.internal,
       PLAN_HOURS: s.plan?.hours ?? null, PLAN_REVENUE: s.plan?.revenue ?? null,
+      // LP1–LP9 stammen aus der Kalkulation § 34 (Runde 5: „Struktur aktualisieren")
+      FEE_CALC_MASTER_ID: !children.length && s.id >= 102 && s.id <= 116 ? 71 : null,
       ...sur.fields, SURCHARGES_TOTAL: sur.total,
     })
     return { revenue, basis, tec }
@@ -767,6 +769,115 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   })
   await get('projekte/roles/active', { data: ROLES })
   await get('angebote', { data: DEMO_OFFERS.map(o => o.ID === 1 ? { ...o, TOTAL_AMOUNT: OFFER_TOTAL } : o) })
+  await mockKalkulationen(page)
+}
+
+// ── Kalkulationen (HOAI-Assistent, Runde 5) ─────────────────────────────────
+
+// § 34 HOAI 2021, Honorarzone III, anrechenbare Kosten 2.450.000 € — der
+// Tafelwert steht fest im Mock (REVENUE_K0), die Phasen rechnet der Assistent
+// selbst daraus. Prozentsaetze nach § 34 Abs. 3.
+const FEE_K0_REVENUE = 262_418.4
+const FEE_PHASES = [
+  ['LPH 1: Grundlagenermittlung', 2], ['LPH 2: Vorplanung', 7], ['LPH 3: Entwurfsplanung', 15],
+  ['LPH 4: Genehmigungsplanung', 3], ['LPH 5: Ausführungsplanung', 25], ['LPH 6: Vorbereitung der Vergabe', 10],
+  ['LPH 7: Mitwirkung bei der Vergabe', 4], ['LPH 8: Objektüberwachung', 32], ['LPH 9: Objektbetreuung', 2],
+] as const
+const feePhases = (calcId: number, upto = 9) => FEE_PHASES.map(([label, pct], i) => ({
+  ID: calcId * 100 + i + 1, PHASE_LABEL: label, FEE_PERCENT_BASE: pct,
+  FEE_PERCENT: i < upto ? pct : 0, KX: 'K0', REVENUE_BASE: FEE_K0_REVENUE,
+  PHASE_REVENUE: i < upto ? r2(FEE_K0_REVENUE * pct / 100) : 0,
+}))
+const feeCalc = (over: Record<string, unknown>) => ({
+  ID: 77, ABBR: '§ 34', NAME: 'Gebäude und Innenräume', PROJECT_ID: null, OFFER_ID: null,
+  ATTACH_TO_OFFER_STRUCTURE_ID: null, FEE_MASTER_ID: 10, ZONE_ID: 3, ZONE_PERCENT: 50,
+  CONSTRUCTION_COSTS_K0: 2_450_000, CONSTRUCTION_COSTS_K1: null, CONSTRUCTION_COSTS_K2: null,
+  CONSTRUCTION_COSTS_K3: null, CONSTRUCTION_COSTS_K4: null,
+  REVENUE_K0: FEE_K0_REVENUE, REVENUE_K1: null, REVENUE_K2: null, REVENUE_K3: null, REVENUE_K4: null,
+  BASE_TYPE: 'cost_eur', SUPPORTS_ZONE_SPLIT: false, ...over,
+})
+export const FEE_CALCS = [
+  { ...feeCalc({ ID: 71, PROJECT_ID: 1 }), projectLabel: 'P-2024-001 – Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1',
+    grundhonorar: 262_418.4, zuschlaegeSum: 52_483.68, gesamthonorar: 314_902.08 },
+  { ...feeCalc({ ID: 72, PROJECT_ID: 1, ABBR: '§ 51', NAME: 'Tragwerksplanung', FEE_MASTER_ID: 11 }),
+    projectLabel: 'P-2024-001 – Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', grundhonorar: 84_220.1, zuschlaegeSum: 0, gesamthonorar: 84_220.1 },
+  { ...feeCalc({ ID: 73, PROJECT_ID: 4, ABBR: '§ 55', NAME: 'Technische Ausrüstung, Anlagengruppen 1–3', FEE_MASTER_ID: 12 }),
+    projectLabel: 'P-2024-004 – Erweiterung Produktionshalle Werk II', grundhonorar: 118_934.55, zuschlaegeSum: -3_568.04, gesamthonorar: 115_366.51 },
+  { ...feeCalc({ ID: 74, OFFER_ID: 1 }), offerLabel: 'A-2025-014 – Neubau Kita Sonnenblume',
+    grundhonorar: 149_578.49, zuschlaegeSum: 0, gesamthonorar: 149_578.49 },
+]
+
+async function mockKalkulationen(page: Page) {
+  const route = (re: string, h: (r: Route) => unknown) => page.route(new RegExp(`/api/v1/stammdaten/${re}(\\?|$)`), h)
+  const id = (r: Route) => Number(r.request().url().match(/fee-calculation-masters\/(\d+)/)?.[1])
+  // Der Assistent legt die neue Kalkulation 77 an; ihr Stand lebt hier.
+  let draft: Record<string, unknown> = feeCalc({})
+  const calcOf = (cid: number) => cid === 77 ? draft : (FEE_CALCS.find(c => c.ID === cid) ?? feeCalc({ ID: cid }))
+
+  await route('fee-groups', r => r.fulfill(json({ data: [
+    { ID: 1, ABBR: 'HOAI 2021', NAME: 'Honorarordnung für Architekten und Ingenieure' },
+    { ID: 2, ABBR: 'AHO', NAME: 'AHO-Schriftenreihe (Heft 9, 17)' },
+  ] })))
+  await route('fee-masters', r => r.fulfill(json({ data: [
+    { ID: 10, ABBR: '§ 34', NAME: 'Gebäude und Innenräume', BASE_TYPE: 'cost_eur' },
+    { ID: 11, ABBR: '§ 51', NAME: 'Tragwerksplanung', BASE_TYPE: 'cost_eur' },
+    { ID: 12, ABBR: '§ 55', NAME: 'Technische Ausrüstung', BASE_TYPE: 'cost_eur', SUPPORTS_ZONE_SPLIT: true },
+  ] })))
+  await route('fee-zones', r => r.fulfill(json({ data: ['I', 'II', 'III', 'IV', 'V'].map((z, i) => ({
+    ID: i + 1, ABBR: `Zone ${z}`, NAME: ['sehr geringe', 'geringe', 'durchschnittliche', 'hohe', 'sehr hohe'][i] + ' Planungsanforderungen',
+  })) })))
+  await route('fee-surcharges-global', r => r.fulfill(json({ data: [
+    { ID: 1, ABBR: 'Umbauzuschlag', NAME: 'Zuschlag für Umbauten und Modernisierungen', DEFAULT_PERCENT: 20, MAX_PERCENT: 33, LEGAL_REF: '§ 6 Abs. 2, § 36 Abs. 1' },
+    { ID: 2, ABBR: 'Instandsetzung', NAME: 'Zuschlag für Instandhaltungen und Instandsetzungen', DEFAULT_PERCENT: 20, MAX_PERCENT: 20, LEGAL_REF: '§ 12 Abs. 2' },
+    { ID: 3, ABBR: 'Wiederholung', NAME: 'Minderung bei Wiederholungen', DEFAULT_PERCENT: -50, LEGAL_REF: '§ 11 Abs. 3' },
+  ] })))
+  await route('fee-calculation-masters', r => {
+    const offer = new URL(r.request().url()).searchParams.get('offer_id')
+    return r.fulfill(json({ data: offer ? FEE_CALCS.filter(c => String(c.OFFER_ID) === offer) : FEE_CALCS }))
+  })
+  await route('fee-calculation-masters/init', r => {
+    const b = r.request().postDataJSON() ?? {}
+    draft = feeCalc({ PROJECT_ID: b.project_id ?? null, OFFER_ID: b.offer_id ?? null,
+      ZONE_ID: null, ZONE_PERCENT: null, CONSTRUCTION_COSTS_K0: null, REVENUE_K0: null })
+    return r.fulfill(json({ data: draft }))
+  })
+  await page.route(/\/api\/v1\/stammdaten\/fee-calculation-masters\/\d+(\?|$)/, r => {
+    if (r.request().method() === 'DELETE') return r.fulfill(json({ success: true }))
+    return r.fulfill(json({ data: calcOf(id(r)) }))
+  })
+  await route('fee-calculation-masters/\\d+/basis', r => {
+    const b = r.request().postDataJSON() ?? {}
+    const cur = calcOf(id(r))
+    const next = { ...cur, ...b }
+    next.REVENUE_K0 = next.CONSTRUCTION_COSTS_K0 ? FEE_K0_REVENUE : null
+    if (id(r) === 77) draft = next
+    return r.fulfill(json({ data: next }))
+  })
+  await route('fee-calculation-masters/\\d+/phases/(init|save)', r => {
+    const cid = id(r)
+    const rows = feePhases(cid, cid === 74 ? 5 : 9)
+    const saved = (r.request().postDataJSON()?.rows ?? []) as { ID: number; KX: string; FEE_PERCENT: number | null }[]
+    return r.fulfill(json({ data: rows.map(p => {
+      const s2 = saved.find(x => x.ID === p.ID)
+      return s2 ? { ...p, KX: s2.KX, FEE_PERCENT: s2.FEE_PERCENT } : p
+    }) }))
+  })
+  await route('fee-calculation-masters/\\d+/bl', r => r.fulfill(json({ data: id(r) === 71 ? [
+    { ID: 7101, FEE_CALC_MASTER_ID: 71, ABBR: 'BL1', NAME: 'Brandschutzkonzept, Abstimmung mit Prüfsachverständigem',
+      LPH_REF: null, LPH_PHASE_ID: null, AMOUNT_TYPE: 'fixed', PERCENT: null, KX_REF: null, AMOUNT: 24_800, SORT_ORDER: 0 },
+  ] : [] })))
+  await route('fee-calculation-masters/\\d+/bl/save', r => {
+    const rows = (r.request().postDataJSON()?.rows ?? []) as Record<string, unknown>[]
+    return r.fulfill(json({ data: rows.map((x, i) => ({ ...x, ID: x.ID ?? 9000 + i })) }))
+  })
+  await route('fee-calculation-masters/\\d+/surcharges', r => r.fulfill(json({ data: id(r) === 71 ? [
+    { ID: 7111, FEE_CALC_MASTER_ID: 71, FEE_SURCHARGE_ID: 1, ABBR: 'Umbauzuschlag', NAME: 'Zuschlag für Umbauten und Modernisierungen',
+      PERCENT: 20, BASE_AMOUNT: null, AMOUNT: null, SORT_ORDER: 0, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false, BL_FILTER: null },
+  ] : [] })))
+  await route('fee-calculation-masters/\\d+/surcharges/save', r => r.fulfill(json({ data: r.request().postDataJSON()?.rows ?? [] })))
+  await route('fee-calculation-masters/\\d+/add-to-offer-structure', r => r.fulfill(json({ success: true, fatherId: 299, message: 'Kalkulation ins Angebot übernommen' })))
+  await route('fee-calculation-masters/\\d+/add-to-project-structure', r => r.fulfill(json({ message: 'ok' })))
+  await route('fee-calculation-masters/\\d+/sync-to-structure', r => r.fulfill(json({ synced: 9, projectId: 1, message: '9 Projektelemente wurden aktualisiert.' })))
 }
 
 // ── Leistungsstände / Monatsrunde ───────────────────────────────────────────

@@ -320,6 +320,20 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   anderen Seiten bauen `angebotHref(id, tab)`, alte `state: { offerId }`-
   Einstiege werden umgeschrieben. „Als beauftragt markieren" laeuft in Liste
   und Kopf ueber denselben `BeauftragtDialog`.
+- **Kalkulationen (HOAI-Assistent)** (`pages/projekte/HonorarWizard.tsx`, Liste
+  `HonorarTab.tsx`, im Angebot `angebote/AngeboteHoai.tsx`): im Muster der
+  Rechnungsassistenten — sprechende Schritte, ActionBar (im Dialog am unteren
+  Rand), „Weiter" **und** „Zurück" speichern den Schritt. Eine neue Kalkulation
+  gilt erst mit „Übernehmen" als angelegt; wer vorher geht, verwirft sie
+  (Unmount-Cleanup), und die Rückfrage sagt genau das. Dialoge mit dem
+  Assistenten schließen über `guarded(close, [HONORAR_WIZARD_GUARD])` — `only`
+  beschränkt die Rückfrage auf den Assistenten statt auf die Tabelle dahinter.
+  Im Angebot ohne gewähltes Element legt `addFeeCalcToOffer` ein eigenes auf
+  oberster Ebene an: `ATTACH_TO_OFFER_STRUCTURE_ID` ist der Anker, an dem das
+  Beauftragen erkennt, dass die Phasen schon in der Struktur stehen — direkt an
+  der Wurzel legte es sie ein zweites Mal an. „Struktur aktualisieren" gibt es
+  nur für Projektelemente mit `FEE_CALC_MASTER_ID`; Angebotselemente tragen
+  keine Verknüpfung und ziehen Änderungen nicht mit.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.

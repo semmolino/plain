@@ -1032,7 +1032,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
   // EXTRAS_PERCENT from parent node
   let extrasPercent = 0;
   if (fatherId) {
-    const { data: father } = await supabase.from('OFFER_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).single();
+    const { data: father } = await supabase.from('OFFER_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).eq('TENANT_ID', tenantId).single();
     extrasPercent = Number(father?.EXTRAS_PERCENT ?? 0) || 0;
   }
 
@@ -1062,11 +1062,11 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
   } catch (_) { /* soft-fail */ }
 
   // Determine SORT_ORDER start (append after existing children)
+  // Auf oberster Ebene zaehlen die anderen Wurzeln des Angebots als Geschwister.
   let sortBase = 0;
-  if (fatherId) {
-    const { data: siblings } = await supabase.from('OFFER_STRUCTURE').select('SORT_ORDER').eq('FATHER_ID', fatherId);
-    if (siblings && siblings.length > 0) sortBase = Math.max(...siblings.map(s => Number(s.SORT_ORDER ?? 0))) + 10;
-  }
+  const sibQ = supabase.from('OFFER_STRUCTURE').select('SORT_ORDER').eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId);
+  const { data: siblings } = await (fatherId ? sibQ.eq('FATHER_ID', fatherId) : sibQ.is('FATHER_ID', null));
+  if (siblings && siblings.length > 0) sortBase = Math.max(...siblings.map(s => Number(s.SORT_ORDER ?? 0))) + 10;
 
   // Insert LPH rows
   if (activePhases.length) {
@@ -1106,6 +1106,63 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
 
   // Recalculate parent
   if (fatherId) await recalcOfferParent(supabase, { parentId: fatherId });
+}
+
+/**
+ * Kalkulation ins Angebot uebernehmen (POST …/add-to-offer-structure).
+ *
+ * Ohne Element legt sie ein eigenes auf oberster Ebene an (Kuerzel/Name der
+ * Kalkulation) und haengt die Leistungsphasen darunter — der Assistent bot
+ * „Keine Zuordnung" an, die Route wies sie aber ab, und ein frisch
+ * angelegtes Angebot hat noch gar kein Element (UI-Pilot Runde 5). Direkt auf
+ * die Wurzel geht es bewusst nicht: beim Beauftragen erkennt die Umwandlung
+ * nur ueber ATTACH_TO_OFFER_STRUCTURE_ID, dass die Phasen schon in der
+ * Struktur stehen — ohne diesen Anker legte sie sie ein zweites Mal an.
+ *
+ * Das Element muss zum Angebot der Kalkulation gehoeren; vorher bestimmte es
+ * allein, in welches Angebot geschrieben wurde.
+ */
+async function addFeeCalcToOffer(supabase, { calcMasterId, fatherRaw, tenantId }) {
+  const noFather = fatherRaw == null || String(fatherRaw).trim() === '';
+  let fatherId   = noFather ? null : parseInt(fatherRaw, 10);
+  if (!noFather && !fatherId) throw { status: 400, message: 'father_id ist ungültig' };
+
+  const { data: calc, error: calcErr } = await supabase
+    .from('FEE_CALCULATION_MASTER').select('ID, OFFER_ID, ABBR, NAME')
+    .eq('ID', calcMasterId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (calcErr) throw calcErr;
+  if (!calc) throw { status: 404, message: 'Kalkulation nicht gefunden' };
+  if (!calc.OFFER_ID) throw { status: 400, message: 'Diese Kalkulation gehört zu keinem Angebot.' };
+  const offerId = calc.OFFER_ID;
+
+  if (fatherId) {
+    const { data: father, error: fatherErr } = await supabase
+      .from('OFFER_STRUCTURE').select('ID, OFFER_ID').eq('ID', fatherId).eq('TENANT_ID', tenantId).maybeSingle();
+    if (fatherErr) throw fatherErr;
+    if (!father) throw { status: 404, message: 'Übergeordnetes Angebotselement nicht gefunden' };
+    if (String(father.OFFER_ID) !== String(offerId)) {
+      throw { status: 400, message: 'Das Element gehört nicht zum Angebot dieser Kalkulation.' };
+    }
+  } else {
+    const { data: roots } = await supabase.from('OFFER_STRUCTURE').select('SORT_ORDER')
+      .eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId).is('FATHER_ID', null);
+    const sortOrder = roots && roots.length ? Math.max(...roots.map(r => Number(r.SORT_ORDER ?? 0))) + 10 : 0;
+    const { data: wrapper, error: wErr } = await supabase.from('OFFER_STRUCTURE').insert([{
+      ABBR: calc.ABBR || 'Honorar', NAME: calc.NAME || null,
+      OFFER_ID: offerId, FATHER_ID: null, BILLING_TYPE_ID: 1, EXTRAS_PERCENT: 0,
+      REVENUE_BASIS: 0, REVENUE: 0, EXTRAS: 0, SURCHARGES_TOTAL: 0,
+      SORT_ORDER: sortOrder, TENANT_ID: tenantId,
+    }]).select('ID').single();
+    if (wErr) throw wErr;
+    fatherId = wrapper.ID;
+  }
+
+  await attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId, offerId, tenantId });
+  const { error: aErr } = await supabase.from('FEE_CALCULATION_MASTER')
+    .update({ ATTACH_TO_OFFER_STRUCTURE_ID: fatherId })
+    .eq('ID', calcMasterId).eq('TENANT_ID', tenantId);
+  if (aErr) throw aErr;
+  return { fatherId };
 }
 
 // ── offer → project conversion ────────────────────────────────────────────────
@@ -1593,6 +1650,7 @@ module.exports = {
   moveOfferStructureNode,
   recalcOfferRootSurcharges,
   attachFeeCalcToOfferStructure,
+  addFeeCalcToOffer,
   buildOfferPdfViewModel,
   convertOfferToProject,
   copyOffer,
