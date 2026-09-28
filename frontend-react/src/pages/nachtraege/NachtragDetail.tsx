@@ -320,7 +320,7 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
       )}
 
       {releaseOpen && (
-        <Modal open onClose={() => setReleaseOpen(false)} title="Nachtrag freigeben">
+        <Modal open onClose={() => setReleaseOpen(false)} title="Nachtrag freigeben" className="modal-wide">
           <ReleaseForm
             leaves={openLeaves}
             submitting={releaseMut.isPending}
@@ -527,7 +527,7 @@ function ReleaseForm({ leaves, submitting, error, onCancel, onSubmit }: {
                       <AmountInput className="tbl-input nt-amount" value={amounts[l.ID] ?? ''} placeholder={fmtEur(l.REVENUE)}
                         aria-label={`Anerkannter Betrag ${label}`} disabled={!checked.has(l.ID)}
                         onChange={v => setAmounts(a => ({ ...a, [l.ID]: v }))} />
-                    ) : <span className="prl-sub">als Plan, gebucht wird im Projekt</span>}
+                    ) : <span className="prl-sub" title="Nach Aufwand: die Schätzung geht als Plan ins Projekt, gebucht wird dort">als Plan</span>}
                   </td>
                 </tr>
               )
