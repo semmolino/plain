@@ -582,6 +582,43 @@ function finalizeEmployeeRows(rows, ctx) {
  * ein Zurücksetzen beim Zusammenführen die ALTE Kostensatz-Historie eines
  * bestehenden Mitarbeiters mitreißen.
  */
+/**
+ * Darf der Aufrufer diesen Mitarbeiter-Import schreiben? (Runde 10)
+ *
+ * Vorher reichte „Import verwalten" allein: der Import schrieb Kostensaetze
+ * am Recht „Kostensatz bearbeiten" vorbei, vergab Rollen — auch
+ * Administratorrollen — ohne „Rollen zuweisen", aenderte beim Zusammenfuehren
+ * E-Mail-Adressen (der Weg zu „Passwort vergessen") und legte Mitarbeiter
+ * ueber die Grenze des Tarifs hinaus an. Jetzt gelten dieselben Rechte wie in
+ * der Oberflaeche. Geprueft wird vor dem ersten Schreibzugriff.
+ */
+async function authorizeEmployeeCommit({ toInsert, toMerge, wanted, caller, supabase }) {
+  const deny = (message) => { throw { status: 403, message }; };
+  if (toInsert.length && !caller.can("employees.create")) deny("Mitarbeiter anlegen braucht das Recht „Mitarbeiter anlegen“.");
+  if (toMerge.length && !caller.can("employees.edit")) deny("Bestehende Mitarbeiter zusammenführen braucht das Recht „Mitarbeiter bearbeiten“.");
+  if (wanted.some((r) => r._extra?.costRate) && !caller.can("employees.salary.edit")) {
+    deny("Die Datei enthält Kostensätze — die importiert nur, wer Kostensätze bearbeiten darf. Spalte in der Zuordnung auf „nicht importieren“ stellen oder das Recht vergeben.");
+  }
+  if (toMerge.some((r) => r._dbRow?.MAIL) && !caller.can("employees.password.set")) {
+    deny("Beim Zusammenführen würden E-Mail-Adressen bestehender Konten geändert — das darf nur, wer Zugänge verwaltet (Recht „Passwort setzen“).");
+  }
+  const roleIds = [...new Set(wanted.map((r) => r._extra?.roleId).filter((x) => x != null))];
+  if (roleIds.length) {
+    if (!caller.can("employees.role.assign")) deny("Die Datei vergibt Berechtigungsrollen — das darf nur, wer Rollen zuweisen darf.");
+    const { data: rps, error } = await supabase.from("ROLE_PERMISSION").select("PERMISSION!inner ( KEY )").in("ROLE_ID", roleIds);
+    if (error) throw { status: 500, message: error.message };
+    const beyond = caller.keysBeyond(new Set((rps || []).map((x) => x.PERMISSION?.KEY).filter(Boolean)));
+    if (beyond.length) deny(`Die Datei vergibt Rollen mit Rechten, die du selbst nicht hast (${beyond.slice(0, 3).join(", ")}${beyond.length > 3 ? " …" : ""}).`);
+  }
+  const neueAktive = toInsert.filter((r) => Number(r._dbRow?.ACTIVE) !== 2).length;
+  if (neueAktive) {
+    const frei = await caller.seatsLeft();
+    if (frei != null && neueAktive > frei) {
+      throw { status: 402, message: `Der Tarif hat noch Platz für ${frei} aktive Mitarbeiter — die Datei legt ${neueAktive} an. Weniger Zeilen wählen, Ausgeschiedene als „Inaktiv“ importieren oder den Tarif erweitern.` };
+    }
+  }
+}
+
 async function commitEmployeeRows(rows, { supabase, tenantId, batchId, ctx, options }) {
   const mode = options?.duplicateMode || "skip";
 
@@ -3238,6 +3275,7 @@ const DOMAINS = {
     loadContext: loadEmployeeContext,
     buildEntry: buildEmployeeEntry,
     finalizeRows: finalizeEmployeeRows,
+    authorizeCommit: authorizeEmployeeCommit,
     commitRows: commitEmployeeRows,
     rollbackExecute: rollbackEmployee,
   },
@@ -3584,7 +3622,7 @@ async function preview({ domainKey, buffer, filename, mapping, sheetName, supaba
   };
 }
 
-async function commit({ domainKey, buffer, filename, mapping, sheetName, duplicateMode, structureMode, docType, excludeRows, supabase, tenantId, employeeId }) {
+async function commit({ domainKey, buffer, filename, mapping, sheetName, duplicateMode, structureMode, docType, excludeRows, supabase, tenantId, employeeId, caller = null }) {
   const def = getDomain(domainKey);
   const parsed = await parseBuffer(buffer, sheetName);
   const ctx = await def.loadContext(supabase, tenantId);
@@ -3610,6 +3648,10 @@ async function commit({ domainKey, buffer, filename, mapping, sheetName, duplica
     : [];
   const mergeSet = new Set(toMerge);
   const toInsert = wanted.filter((r) => !mergeSet.has(r));
+
+  // 0) Rechte je Inhalt (vor dem ersten Schreibzugriff, Runde 10). Ohne
+  //    Aufrufer-Kontext (interne Aufrufe) gibt es nichts zu pruefen.
+  if (def.authorizeCommit && caller) await def.authorizeCommit({ toInsert, toMerge, wanted, ctx, caller, supabase, tenantId });
 
   // 1) Stapel anlegen
   const { data: batch, error: bErr } = await supabase.from("IMPORT_BATCH").insert([{

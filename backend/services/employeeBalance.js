@@ -88,8 +88,8 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
   const { data, error } = await supabase
     .from('BOOKING')
     .select(`
-      ID, BOOKING_DATE, TIME_START, TIME_FINISH, QUANTITY_INT, POSTING_DESCRIPTION,
-      PROJECT_ID, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND,
+      ID, BOOKING_DATE, TIME_START, TIME_FINISH, QUANTITY_INT, QUANTITY_EXT, POSTING_DESCRIPTION,
+      PROJECT_ID, STRUCTURE_ID, BOOKING_KIND, ENTRY_KIND, INVOICE_ID, ADVANCE_INVOICE_ID,
       PROJECT:PROJECT_ID(ABBR),
       STRUCTURE:STRUCTURE_ID(ABBR)
     `)
@@ -114,6 +114,11 @@ async function buildTecData(supabase, tenantId, employeeId, dateFrom, dateTo) {
     bookingsMap.get(d).push({
       id:           row.ID,
       hours:        h,
+      // Abrechenbare Stunden getrennt: der Dialog im Zeitkonto schrieb vorher
+      // beim Ändern QUANTITY_EXT = QUANTITY_INT und warf so eine bewusst
+      // gekürzte Abrechnungsmenge weg.
+      hours_ext:    row.QUANTITY_EXT == null ? null : Number(row.QUANTITY_EXT),
+      billed:       row.INVOICE_ID != null || row.ADVANCE_INVOICE_ID != null,
       description:  row.POSTING_DESCRIPTION || '',
       project:      row.PROJECT?.ABBR  || '',
       structure:    row.STRUCTURE?.ABBR || '',

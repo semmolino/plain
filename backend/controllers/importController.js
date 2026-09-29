@@ -1,6 +1,8 @@
 "use strict";
 
 const svc = require("../services/importService");
+const { keysBeyondCaller } = require("../middleware/permissions");
+const { seatsLeft } = require("../middleware/limits");
 
 function fail(res, e) {
   return res.status(e?.status || 500).json({ error: e?.message || String(e) });
@@ -68,6 +70,12 @@ async function postCommit(req, res, supabase) {
       docType: req.body?.docType || "partial",
       excludeRows: parseExcludeRows(req),
       supabase, tenantId: req.tenantId, employeeId: req.employeeId,
+      // Dieselben Rechte wie in der Oberflaeche, je Inhalt der Datei (Runde 10)
+      caller: {
+        can: (k) => (typeof req.hasPermission === "function" ? req.hasPermission(k) : false),
+        keysBeyond: (keys) => keysBeyondCaller(req, keys),
+        seatsLeft: () => seatsLeft(supabase, req, "limits.employees"),
+      },
     });
     res.json({ data });
   } catch (e) { fail(res, e); }

@@ -351,7 +351,7 @@ function monthBalance() {
       date, weekday: wd, required: work ? 8 : 0, actual, balance: work && (past || date === PILOT_TODAY) ? r2(actual - 8) : 0,
       isHoliday: false,
       bookings: actual > 0 ? [
-        { id: day * 10, hours: r2(actual * 0.6), description: TEXTS[day % TEXTS.length], project: 'P-2024-001 Neubau Kindertagesstätte Sonnenblume', structure: 'LP5.2 Ausführungsplanung Ausbau', time_start: '08:00', time_finish: null, project_id: 1, structure_id: 108 },
+        { id: day * 10, hours: r2(actual * 0.6), hours_ext: r2(actual * 0.6), billed: day < 8, description: TEXTS[day % TEXTS.length], project: 'P-2024-001 Neubau Kindertagesstätte Sonnenblume', structure: 'LP5.2 Ausführungsplanung Ausbau', time_start: '08:00', time_finish: null, project_id: 1, structure_id: 108 },
         { id: day * 10 + 1, hours: r2(actual * 0.4), description: TEXTS[(day + 3) % TEXTS.length], project: 'P-2024-004 Erweiterung Produktionshalle Werk II', structure: 'LP8 Objektüberwachung', time_start: null, time_finish: null, project_id: 4, structure_id: 408 },
       ] : [],
     })
@@ -782,6 +782,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
   await mockVertragPreiseBudget(page)
   await mockAdressen(page)
   await mockNachtraege(page)
+  await mockMitarbeiter(page)
 }
 
 // ── Kalkulationen (HOAI-Assistent, Runde 5) ─────────────────────────────────
@@ -1247,4 +1248,112 @@ async function mockAdressen(page: Page) {
       : r.fulfill(json({ ok: true }))
     return r.fulfill(json({ data: { ...c, ...(r.request().postDataJSON() ?? {}) } }))
   })
+}
+
+// ── Mitarbeiter-Modul (Runde 10) ─────────────────────────────────────────────
+// Neun Mitarbeiter wie oben, dazu Abteilung, Modell, Kostensatz, Rollen und ein
+// Urlaubsstand — genug, dass Liste und Akte wie in einem kleinen Büro aussehen.
+
+const DEPARTMENTS = [{ ID: 1, ABBR: 'Hochbau' }, { ID: 2, ABBR: 'Tiefbau' }, { ID: 3, ABBR: 'Verwaltung' }]
+const WORK_MODELS = [
+  { ID: 1, NAME: 'Vollzeit 40 h', COUNTRY_CODE: 'DE', STATE_CODE: 'BW', MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 8, SAT: 0, SUN: 0 },
+  { ID: 2, NAME: 'Teilzeit 30 h', COUNTRY_CODE: 'DE', STATE_CODE: 'BW', MON: 6, TUE: 6, WED: 6, THU: 6, FRI: 6, SAT: 0, SUN: 0 },
+  { ID: 3, NAME: 'Teilzeit 20 h (Mo–Mi)', COUNTRY_CODE: 'DE', STATE_CODE: 'BW', MON: 8, TUE: 8, WED: 4, THU: 0, FRI: 0, SAT: 0, SUN: 0 },
+]
+const USER_ROLES = [
+  { ID: 1, ABBR: 'Administrator', NAME: 'Administrator', COLOR: '#1f4e79', IS_SYSTEM: true,  IS_DEFAULT: false, CREATED_AT: '2024-01-01', UPDATED_AT: '2024-01-01', EMPLOYEE_COUNT: 1 },
+  { ID: 2, ABBR: 'Projektleiter', NAME: 'Projektleiter', COLOR: '#2e7d32', IS_SYSTEM: true, IS_DEFAULT: false, CREATED_AT: '2024-01-01', UPDATED_AT: '2024-01-01', EMPLOYEE_COUNT: 3 },
+  { ID: 3, ABBR: 'Mitarbeiter', NAME: 'Mitarbeiter', COLOR: '#6d4c41', IS_SYSTEM: true,  IS_DEFAULT: true,  CREATED_AT: '2024-01-01', UPDATED_AT: '2024-01-01', EMPLOYEE_COUNT: 5 },
+]
+const EMP_DETAIL: Record<number, { dept: number; model: number; rate: number; entry: string; mail: string; phone?: string; mobile?: string; pn: string; gender: number; active?: number; roles: number[] }> = {
+  1: { dept: 1, model: 1, rate: 68.5, entry: '2016-03-01', mail: 's.messina@buero-messina.de', phone: '0751 36 18-10', mobile: '0170 4412 881', pn: 'MA-001', gender: 1, roles: [1] },
+  2: { dept: 1, model: 1, rate: 58.4, entry: '2018-09-01', mail: 't.kern@buero-messina.de', phone: '0751 36 18-12', pn: 'MA-004', gender: 1, roles: [2] },
+  3: { dept: 1, model: 2, rate: 54.2, entry: '2019-01-15', mail: 's.braun-hofmeister@buero-messina.de', pn: 'MA-006', gender: 2, roles: [2] },
+  4: { dept: 2, model: 1, rate: 49.8, entry: '2020-04-01', mail: 'l.hartmann@buero-messina.de', pn: 'MA-007', gender: 2, roles: [3] },
+  5: { dept: 2, model: 1, rate: 47.1, entry: '2021-02-01', mail: 'j.wagner@buero-messina.de', pn: 'MA-009', gender: 1, roles: [3] },
+  6: { dept: 1, model: 3, rate: 44.6, entry: '2022-10-01', mail: 'a.kaya@buero-messina.de', pn: 'MA-011', gender: 2, roles: [3] },
+  7: { dept: 3, model: 2, rate: 39.9, entry: '2017-06-01', mail: 'm.rieger@buero-messina.de', pn: 'MA-005', gender: 1, roles: [3] },
+  8: { dept: 1, model: 1, rate: 42.3, entry: '2023-08-01', mail: 'c.fischer@buero-messina.de', pn: 'MA-013', gender: 2, roles: [2, 3] },
+  9: { dept: 2, model: 1, rate: 36.0, entry: '2025-09-01', mail: '', pn: 'MA-014', gender: 1, active: 2, roles: [3] },
+}
+export const EMPLOYEE_LIST = EMPLOYEES.map(e => {
+  const d = EMP_DETAIL[e.ID]
+  return {
+    ...e, TITLE: e.ID === 1 ? 'Dipl.-Ing.' : null, MAIL: d.mail || null, PHONE: d.phone ?? null, MOBILE: d.mobile ?? null,
+    PERSONNEL_NUMBER: d.pn, BIRTH_DATE: null, NOTES: null, SUPERVISOR_ID: e.ID === 1 ? null : 1,
+    GENDER_ID: d.gender, GENDER: d.gender === 1 ? 'männlich' : 'weiblich', NAME: `${e.FIRST_NAME} ${e.LAST_NAME}`,
+    DEPARTMENT_ID: d.dept, DEPARTMENT_NAME: DEPARTMENTS.find(x => x.ID === d.dept)!.ABBR,
+    ENTRY_DATE: d.entry, EXIT_DATE: d.active === 2 ? '2026-06-30' : null, ACTIVE: d.active ?? 1,
+    CURRENT_MODEL_ID: d.model, CURRENT_MODEL_NAME: WORK_MODELS.find(m => m.ID === d.model)!.NAME,
+    CURRENT_COST_RATE: d.rate, CURRENT_COST_RATE_FROM: '2026-01-01', DASHBOARD_ROLE: e.ID === 1 ? 'geschaeftsleitung' : null,
+  }
+})
+
+async function mockMitarbeiter(page: Page) {
+  const empId = (r: Route) => Number(r.request().url().match(/mitarbeiter\/(\d+)/)?.[1])
+  const r = (re: string, h: (route: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
+  await r('license/usage', route => route.fulfill(json({ usage: [{ key: 'limits.employees', unit: 'Mitarbeitern', used: 8, limit: 15 }] })))
+  await r('mitarbeiter/list', route => route.fulfill(json({ data: EMPLOYEE_LIST })))
+  await r('mitarbeiter/report-list', route => route.fulfill(json({ data: EMPLOYEE_LIST.map((e, i) => ({
+    EMPLOYEE_ID: e.ID, ABBR: e.ABBR, FIRST_NAME: e.FIRST_NAME, LAST_NAME: e.LAST_NAME, DEPARTMENT_NAME: e.DEPARTMENT_NAME,
+    YEAR: 2026, MONTH: 9, REQUIRED: 136, ACTUAL: 136 + [2, -4.5, 6, 0, -1.5, 3.25, 8, -12][i % 8], BALANCE: [2, -4.5, 6, 0, -1.5, 3.25, 8, -12][i % 8],
+    HOURS_EXT: 120, COST: 0, RUNNING_BALANCE: [23.5, -6, 14.25, 0, -2.5, 9, 31, -18.5][i % 8], PRODUCTIVITY_PCT: 78,
+  })) })))
+  await r('mitarbeiter/genders', route => route.fulfill(json({ data: [{ ID: 1, GENDER: 'männlich' }, { ID: 2, GENDER: 'weiblich' }, { ID: 3, GENDER: 'divers' }] })))
+  await r('stammdaten/departments', route => route.fulfill(json({ data: DEPARTMENTS })))
+  await r('stammdaten/working-time-models', route => route.fulfill(json({ data: WORK_MODELS })))
+  await r('mitarbeiter/\\d+/work-models', route => {
+    const d = EMP_DETAIL[empId(route)] ?? EMP_DETAIL[1]
+    const rows = [{ ID: 11, EMPLOYEE_ID: empId(route), MODEL_ID: d.model, VALID_FROM: '2024-01-01', model: WORK_MODELS.find(m => m.ID === d.model) }]
+    if (empId(route) === 3) rows.unshift({ ID: 12, EMPLOYEE_ID: 3, MODEL_ID: 1, VALID_FROM: '2027-01-01', model: WORK_MODELS[0] })
+    return route.fulfill(json({ data: rows }))
+  })
+  await r('mitarbeiter/\\d+/cp-rates', route => {
+    const d = EMP_DETAIL[empId(route)] ?? EMP_DETAIL[1]
+    return route.fulfill(json({ data: [
+      { ID: 21, COST_RATE: d.rate, VALID_FROM: '2026-01-01' },
+      { ID: 22, COST_RATE: Math.round(d.rate * 0.96 * 100) / 100, VALID_FROM: '2025-01-01' },
+      { ID: 23, COST_RATE: Math.round(d.rate * 0.92 * 100) / 100, VALID_FROM: '2024-01-01' },
+    ] }))
+  })
+  await r('mitarbeiter/\\d+/access', route => {
+    const d = EMP_DETAIL[empId(route)] ?? EMP_DETAIL[1]
+    return route.fulfill(json({ has_password: empId(route) !== 8 && !!d.mail, has_mail: !!d.mail, active: (d.active ?? 1) === 1, can_login: empId(route) !== 8 && !!d.mail && (d.active ?? 1) === 1 }))
+  })
+  await r('mitarbeiter/\\d+/avatar', route => route.fulfill(json({ data: { asset_id: null, data_uri: null } })))
+  // Offen = kein Abschluss-Eintrag (die Oberfläche liest `data != null` als abgeschlossen)
+  await r('mitarbeiter/\\d+/month-close/\\d+/\\d+', route => route.fulfill(json({ data: null })))
+  await r('employee2project/employee/\\d+', route => route.fulfill(json({ data: [
+    { ID: 31, PROJECT_ID: 1, PROJECT_NUMBER: 'P-2024-001', PROJECT_NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', STATUS_NAME: 'Laufend', ROLE_ABBR: 'PL', HOURLY_RATE: 95 },
+    { ID: 32, PROJECT_ID: 2, PROJECT_NUMBER: 'P-2024-002', PROJECT_NAME: 'Sanierung Altbau Bahnhofstraße 14', STATUS_NAME: 'Laufend', ROLE_ABBR: 'AR', HOURLY_RATE: 78.5 },
+    { ID: 33, PROJECT_ID: 8, PROJECT_NUMBER: 'P-2025-014', PROJECT_NAME: 'Brandschutzertüchtigung Schulzentrum', STATUS_NAME: 'Angebot', ROLE_ABBR: 'AR', HOURLY_RATE: 78.5 },
+  ] })))
+  await r('roles', route => route.fulfill(json({ data: USER_ROLES })))
+  await r('roles/employees', route => route.fulfill(json({ data: Object.entries(EMP_DETAIL).flatMap(([id, d]) => d.roles.map(rid => ({ EMPLOYEE_ID: Number(id), ROLE_ID: rid }))) })))
+  await r('employees/\\d+/roles', route => route.fulfill(json({ ok: true })))
+  await r('mitarbeiter/\\d+', route => {
+    const m = route.request().method()
+    const row = EMPLOYEE_LIST.find(e => e.ID === empId(route)) ?? EMPLOYEE_LIST[0]
+    if (m === 'PATCH') return route.fulfill(json({ data: { ...row, ...(route.request().postDataJSON() ?? {}) } }))
+    if (m === 'DELETE') return route.fulfill(json({ success: true }))
+    return route.fulfill(json({ data: row }))
+  })
+  await r('mitarbeiter', route => route.request().method() === 'POST'
+    ? route.fulfill(json({ data: { ...EMPLOYEE_LIST[0], ID: 42, ...(route.request().postDataJSON() ?? {}) }, invite: { sent: false, reason: 'no_mail' } }))
+    : route.fulfill(json({ data: [] })))
+  // Abwesenheiten
+  await r('abwesenheit/types', route => route.fulfill(json({ data: [
+    { ID: 1, NAME: 'Urlaub', COLOR: '#2e7d32', COUNTS_AS_WORKED: true, REDUCES_VACATION: true, REQUIRES_APPROVAL: true, IS_PAID: true, ACTIVE: 1, SORT_ORDER: 1 },
+    { ID: 2, NAME: 'Krank', COLOR: '#c62828', COUNTS_AS_WORKED: true, REDUCES_VACATION: false, REQUIRES_APPROVAL: false, IS_PAID: true, ACTIVE: 1, SORT_ORDER: 2 },
+    { ID: 3, NAME: 'Fortbildung', COLOR: '#1565c0', COUNTS_AS_WORKED: true, REDUCES_VACATION: false, REQUIRES_APPROVAL: true, IS_PAID: true, ACTIVE: 1, SORT_ORDER: 3 },
+  ] })))
+  await r('abwesenheit/vacation-balance', route => route.fulfill(json({ data: {
+    year: 2026, carryover: 3, entitled: 30, taken: 17.5, remaining: 15.5, breakdown: [],
+  } })))
+  await r('abwesenheit/entitlements', route => route.fulfill(json({ data: [{ ID: 41, EMPLOYEE_ID: 2, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null, NOTE: null }] })))
+  await r('abwesenheit', route => route.fulfill(json({ data: [
+    { ID: 51, EMPLOYEE_ID: 2, ABSENCE_TYPE_ID: 1, DATE_FROM: '2026-10-12', DATE_TO: '2026-10-16', HALF_DAY: false, STATUS: 'REQUESTED', NOTE: 'Herbstferien', REQUESTED_BY: 2, REQUESTED_AT: '2026-09-20T08:00:00Z', DECIDED_BY: null, DECIDED_AT: null, DECISION_NOTE: null, CLARIFICATION_LOG: null, DAYS: 5, TYPE_NAME: 'Urlaub', TYPE_COLOR: '#2e7d32', REDUCES_VACATION: true, EMPLOYEE_SHORT_NAME: 'TK', EMPLOYEE_FIRST_NAME: 'Thomas', EMPLOYEE_LAST_NAME: 'Kern' },
+    { ID: 52, EMPLOYEE_ID: 2, ABSENCE_TYPE_ID: 1, DATE_FROM: '2026-08-03', DATE_TO: '2026-08-14', HALF_DAY: false, STATUS: 'APPROVED', NOTE: null, REQUESTED_BY: 2, REQUESTED_AT: '2026-05-02T08:00:00Z', DECIDED_BY: 1, DECIDED_AT: '2026-05-03T08:00:00Z', DECISION_NOTE: null, CLARIFICATION_LOG: null, DAYS: 10, TYPE_NAME: 'Urlaub', TYPE_COLOR: '#2e7d32', REDUCES_VACATION: true, EMPLOYEE_SHORT_NAME: 'TK', EMPLOYEE_FIRST_NAME: 'Thomas', EMPLOYEE_LAST_NAME: 'Kern' },
+    { ID: 53, EMPLOYEE_ID: 2, ABSENCE_TYPE_ID: 2, DATE_FROM: '2026-03-09', DATE_TO: '2026-03-10', HALF_DAY: false, STATUS: 'APPROVED', NOTE: null, REQUESTED_BY: 2, REQUESTED_AT: '2026-03-09T07:00:00Z', DECIDED_BY: null, DECIDED_AT: null, DECISION_NOTE: null, CLARIFICATION_LOG: null, DAYS: 2, TYPE_NAME: 'Krank', TYPE_COLOR: '#c62828', REDUCES_VACATION: false, EMPLOYEE_SHORT_NAME: 'TK', EMPLOYEE_FIRST_NAME: 'Thomas', EMPLOYEE_LAST_NAME: 'Kern' },
+  ] })))
 }

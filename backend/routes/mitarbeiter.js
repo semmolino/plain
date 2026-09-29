@@ -2,8 +2,14 @@ const express      = require("express");
 const bcrypt       = require("bcryptjs");
 const balanceSvc   = require("../services/employeeBalance");
 const { findAssetForTenant } = require("../services/assetAccess");
-const { requirePermission } = require("../middleware/permissions");
-const { enforceLimit } = require("../middleware/limits");
+const { requirePermission, requireAnyPermission, loadPermissions, LOAD_FAILED, keysBeyondCaller } = require("../middleware/permissions");
+const { enforceLimit, limitReached } = require("../middleware/limits");
+const { revokeSessions } = require("../middleware/sessionGuard");
+
+/** Dashboard-Rollen, die die Oberflaeche anbietet (MitarbeiterPage, AdminPage). */
+const DASHBOARD_ROLES = new Set(["geschaeftsleitung", "controller", "bereichsleiter", "mitarbeiter"]);
+
+const hasPerm = (req, key) => (typeof req.hasPermission === "function" ? req.hasPermission(key) : false);
 const objectStorage = require("../services/objectStorage");
 const { sendInvite } = require("../services/accountInvite");
 const { suchwert } = require("../services/pgrestFilter");
@@ -32,6 +38,23 @@ async function checkEmployeeDuplicates(supabase, tenantId, { abbr, personnel_num
   return null;
 }
 
+/** Kostensatz aus der Anfrage: Zahl ab 0, sonst undefined. Vorher wurde "" zu 0 €/h. */
+function costRateValue(v) {
+  if (v === null || v === undefined || (typeof v === "string" && !v.trim())) return undefined;
+  const n = Number(String(v).replace(",", "."));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : undefined;
+}
+
+const isIsoDate = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
+
+async function ownEmployee(supabase, tenantId, id) {
+  if (!id) return null;
+  const { data, error } = await supabase.from("EMPLOYEE").select("ID, MAIL, ACTIVE")
+    .eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 module.exports = (supabase) => {
   const router = express.Router();
 
@@ -55,22 +78,27 @@ module.exports = (supabase) => {
   }
 
   router.use((req, res, next) => {
-    if (lookupPaths.has(req.path)) return next();
-    if (meRegex.test(req.path)) return next();
+    // Express 5 vergleicht Routen ohne Gross-/Kleinschreibung und ohne
+    // abschliessenden Schraegstrich. Die Pruefung hier tat beides nicht:
+    // „/5/cp-rates/" oder „/5/CP-RATES" liefen am Gehalts-Guard vorbei und
+    // erreichten trotzdem den Handler (Runde 10). Deshalb derselbe Vergleich.
+    const path = req.path.toLowerCase().replace(/\/+$/, "") || "/";
+    if (lookupPaths.has(path)) return next();
+    if (meRegex.test(path)) return next();
 
-    // Salary (cp-rate / cp-rates): GET -> salary.view, mutationen werden
-    // bereits an den Endpoints mit salary.edit gegated.
-    const cpr = req.path.match(/^\/(\d+)\/(cp-rate|cp-rates)$/);
+    // Salary (cp-rate / cp-rates): GET -> salary.view. Zusaetzlich direkt an
+    // den Routen, damit ein kuenftiger Pfad-Sonderfall nicht wieder oeffnet.
+    const cpr = path.match(/^\/(\d+)\/(cp-rate|cp-rates)$/);
     if (cpr && req.method === "GET") {
       return SALARY_GUARD(req, res, next);
     }
 
     // Own-data implicit right:
-    const mBal = req.path.match(/^\/(\d+)\/balance/);
+    const mBal = path.match(/^\/(\d+)\/balance/);
     if (mBal && isOwn(req, mBal[1])) return next();
-    const mWm = req.path.match(/^\/(\d+)\/work-models$/);
+    const mWm = path.match(/^\/(\d+)\/work-models$/);
     if (mWm && req.method === "GET" && isOwn(req, mWm[1])) return next();
-    const mMc = req.path.match(/^\/(\d+)\/month-close\//);
+    const mMc = path.match(/^\/(\d+)\/month-close\//);
     if (mMc && req.method === "GET" && isOwn(req, mMc[1])) return next();
 
     return VIEW_GUARD(req, res, next);
@@ -130,8 +158,14 @@ module.exports = (supabase) => {
       // wurde es allein ueber die ID geladen — ein Hochzaehlen von asset_id
       // lieferte damit jede hochgeladene Datei der Plattform base64-kodiert in
       // der Antwort dieses Endpunkts zurueck (Pentest 2026-08-06).
-      const asset = await findAssetForTenant(supabase, assetId, req.tenantId, "STORAGE_KEY, MIME_TYPE");
+      const asset = await findAssetForTenant(supabase, assetId, req.tenantId, "STORAGE_KEY, MIME_TYPE, ASSET_TYPE");
       if (!asset) return res.status(404).json({ error: "Asset nicht gefunden." });
+      // Nur ein hochgeladenes Profilfoto. Vorher ging jede Datei des Mandanten
+      // — Rechnungs-PDF, Vertrag, Unterschrift — und kam base64-kodiert in der
+      // Antwort zurueck, ohne das Recht, sie zu sehen (Runde 10).
+      if (asset.ASSET_TYPE !== "AVATAR" || !/^image\//i.test(String(asset.MIME_TYPE || ""))) {
+        return res.status(400).json({ error: "Als Profilfoto geht nur ein hochgeladenes Bild." });
+      }
 
       let dataUri = null;
       if (asset?.STORAGE_KEY && asset?.MIME_TYPE) {
@@ -279,9 +313,33 @@ module.exports = (supabase) => {
 
   // POST /api/mitarbeiter
   router.post("/", requirePermission("employees.create"), enforceLimit(supabase, "limits.employees"), async (req, res) => {
-    const body = req.body;
-    if (!body.abbr || !body.first_name || !body.last_name || !body.gender_id) {
-      return res.status(400).json({ error: "Pflichtfelder fehlen" });
+    // Eingaben wie beim Aendern (Runde 10): getrimmt, leer = null. Vorher
+    // landete eine leere E-Mail als "" in der Datenbank, ein Kuerzel mit
+    // Leerzeichen am Ende galt als neu, und ein Vorgesetzter aus einem
+    // fremden Buero ging durch.
+    const raw = req.body || {};
+    const text = (v) => (v == null ? "" : String(v).trim());
+    const textOrNull = (v) => text(v) || null;
+    const body = {
+      ...raw,
+      abbr: text(raw.abbr), first_name: text(raw.first_name), last_name: text(raw.last_name),
+      title: textOrNull(raw.title), email: textOrNull(raw.email), phone: textOrNull(raw.phone),
+      mobile: textOrNull(raw.mobile), personnel_number: textOrNull(raw.personnel_number),
+    };
+    const genderId = parseInt(String(raw.gender_id ?? ""), 10);
+    if (!body.abbr || !body.first_name || !body.last_name || !(genderId > 0)) {
+      return res.status(400).json({ error: "Bitte Kürzel, Vorname, Nachname und Geschlecht angeben." });
+    }
+    body.gender_id = genderId;
+    for (const k of ["entry_date", "exit_date", "birth_date"]) {
+      if (raw[k] && !isIsoDate(raw[k])) return res.status(400).json({ error: "Bitte ein gültiges Datum angeben." });
+    }
+    if (raw.supervisor_id != null && raw.supervisor_id !== "") {
+      try {
+        if (!(await ownEmployee(supabase, req.tenantId, Number(raw.supervisor_id)))) {
+          return res.status(400).json({ error: "Diesen Vorgesetzten gibt es nicht." });
+        }
+      } catch (e) { return res.status(500).json({ error: e.message }); }
     }
 
     // Uniqueness check within tenant
@@ -311,11 +369,9 @@ module.exports = (supabase) => {
         "PERSONNEL_NUMBER": body.personnel_number,
         "BIRTH_DATE": body.birth_date || null,
         "NOTES": body.notes || null,
-        // Vorgesetzter: ein anderer Mitarbeiter desselben Mandanten. Die
-        // Mandantengrenze haelt hier der Fremdschluessel NICHT — er zeigt nur
-        // auf EMPLOYEE.ID. Dass eine fremde ID nicht durchgeht, sorgt die
-        // RLS-Policy beim spaeteren Lesen; gepruefte Auswahl liefert die
-        // Oberflaeche aus der eigenen Mitarbeiterliste.
+        // Vorgesetzter: ein anderer Mitarbeiter desselben Mandanten. Der
+        // Fremdschluessel zeigt nur auf EMPLOYEE.ID und haelt die
+        // Mandantengrenze nicht — deshalb die Pruefung oben (seit Runde 10).
         "SUPERVISOR_ID": body.supervisor_id != null && body.supervisor_id !== '' ? Number(body.supervisor_id) : null,
         "GENDER_ID": body.gender_id,
         "DEPARTMENT_ID": body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
@@ -563,64 +619,146 @@ router.get("/", async (req, res) => {
   router.delete("/:id", requirePermission("employees.delete"), async (req, res) => {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: "ID fehlt" });
+    // Runde 10: das eigene Konto und der letzte Administrator liessen sich
+    // loeschen — danach konnte niemand mehr Rollen vergeben.
+    if (id === req.employeeId) return res.status(409).json({ error: "Das eigene Konto lässt sich nicht löschen." });
+    if (!(await ownEmployee(supabase, req.tenantId, id))) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+    const { countAdminCapableEmployees, SELF_LOCKOUT_ERROR } = require("../controllers/roles");
+    const admins = await countAdminCapableEmployees(supabase, { tenantId: req.tenantId, employeeOverrides: new Map([[id, new Set()]]) });
+    if (admins === 0) return res.status(409).json({ error: SELF_LOCKOUT_ERROR.message });
     const depCheck = require("../services/dependencyCheck");
     const check = await depCheck.checkEmployee(supabase, { tenantId: req.tenantId, id });
     if (check.blocked) return res.status(409).json({ error: check.message, refs: check.refs });
+    // Wer Rollen vergeben hat, steht als ASSIGNED_BY daran — ein Nachweis,
+    // kein Grund, das Loeschen per Fremdschluessel scheitern zu lassen.
+    await supabase.from("EMPLOYEE_ROLE").update({ ASSIGNED_BY: null }).eq("ASSIGNED_BY", id);
     const { error } = await supabase.from("EMPLOYEE").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) {
+      // Ein weiterer Fremdschluessel, den die Pruefung nicht kennt: sagen, was
+      // zu tun ist, statt den Datenbankfehler durchzureichen.
+      if (error.code === "23503") {
+        return res.status(409).json({ error: "Dieser Mitarbeiter wird noch an anderer Stelle verwendet. Stattdessen auf „inaktiv“ setzen — die Historie bleibt erhalten." });
+      }
+      return res.status(500).json({ error: error.message });
+    }
     res.json({ success: true });
   });
 
-  // Update EMPLOYEE (for Mitarbeiterliste edit modal)
+  // Update EMPLOYEE
   // PATCH /api/mitarbeiter/:id
+  //
+  // Teil-Update (Runde 10): nur Schluessel, die mitkommen, werden geschrieben.
+  // Vorher setzte jeder fehlende Schluessel die Spalte auf NULL, und die
+  // Liste musste fuer eine geaenderte Abteilung die ganze Zeile schicken —
+  // bei einem Mitarbeiter ohne Geschlecht (Import) mit gender_id 0, was der
+  // Server als „Pflichtfelder fehlen" abwies.
   router.patch("/:id", requirePermission("employees.edit"), async (req, res) => {
-    const id = req.params.id;
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: "ID fehlt" });
     const body = req.body || {};
+    const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+    const text = (v) => (v == null ? "" : String(v).trim());
+    const textOrNull = (v) => text(v) || null;
 
-    if (!body.abbr || !body.first_name || !body.last_name || !body.gender_id) {
-      return res.status(400).json({ error: "Pflichtfelder fehlen" });
+    let cur;
+    try { cur = await ownEmployee(supabase, req.tenantId, id); }
+    catch (e) { return res.status(500).json({ error: e.message }); }
+    if (!cur) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+
+    // Pflichtfelder duerfen sich aendern, aber nicht leeren.
+    for (const [k, label] of [["abbr", "Kürzel"], ["first_name", "Vorname"], ["last_name", "Nachname"]]) {
+      if (has(k) && !text(body[k])) return res.status(400).json({ error: `${label} fehlt.` });
+    }
+    if (has("gender_id") && !(parseInt(String(body.gender_id), 10) > 0)) {
+      return res.status(400).json({ error: "Geschlecht fehlt." });
     }
 
-    // Uniqueness check within tenant (exclude current employee)
+    // Die E-Mail-Adresse ist der Weg zu „Passwort vergessen". Wer sie bei einem
+    // fremden Konto aendert, kann es uebernehmen — deshalb dasselbe Recht wie
+    // fuer das Setzen eines Passworts (Runde 10; vorher reichte employees.edit).
+    const mail = has("mail") ? textOrNull(body.mail) : undefined;
+    const mailChanges = mail !== undefined && (mail || "").toLowerCase() !== (cur.MAIL || "").toLowerCase();
+    if (mailChanges && id !== req.employeeId && !hasPerm(req, "employees.password.set")) {
+      return res.status(403).json({
+        error: "Die E-Mail-Adresse eines anderen Kontos ändert nur, wer Zugänge verwalten darf (Recht „Passwort setzen“) — über die Adresse läuft „Passwort vergessen“.",
+      });
+    }
+
+    let supervisor;
+    if (has("supervisor_id")) {
+      supervisor = body.supervisor_id === "" || body.supervisor_id == null ? null : Number(body.supervisor_id);
+      if (supervisor === id) return res.status(400).json({ error: "Ein Mitarbeiter kann nicht sein eigener Vorgesetzter sein." });
+      if (supervisor && !(await ownEmployee(supabase, req.tenantId, supervisor))) {
+        return res.status(400).json({ error: "Diesen Vorgesetzten gibt es nicht." });
+      }
+    }
+
+    let dashboardRole;
+    if (has("dashboard_role")) {
+      dashboardRole = textOrNull(body.dashboard_role);
+      if (dashboardRole && !DASHBOARD_ROLES.has(dashboardRole)) return res.status(400).json({ error: "Unbekannte Dashboard-Rolle." });
+    }
+
+    let active;
+    if (has("active") && body.active != null) {
+      active = Number(body.active);
+      if (active !== 1 && active !== 2) return res.status(400).json({ error: "Status ist aktiv (1) oder inaktiv (2)." });
+      // Reaktivieren belegt einen Platz wie eine Neuanlage.
+      if (active === 1 && Number(cur.ACTIVE) === 2) {
+        const blocked = await limitReached(supabase, req, "limits.employees");
+        if (blocked) return res.status(402).json(blocked);
+      }
+      // Deaktivieren: nicht sich selbst und nicht den letzten Administrator.
+      if (active === 2 && Number(cur.ACTIVE) !== 2) {
+        if (id === req.employeeId) return res.status(409).json({ error: "Das eigene Konto lässt sich nicht deaktivieren." });
+        const { countAdminCapableEmployees, SELF_LOCKOUT_ERROR } = require("../controllers/roles");
+        const admins = await countAdminCapableEmployees(supabase, { tenantId: req.tenantId, employeeOverrides: new Map([[id, new Set()]]) });
+        if (admins === 0) return res.status(409).json({ error: SELF_LOCKOUT_ERROR.message });
+      }
+    }
+
     const dupConflict = await checkEmployeeDuplicates(supabase, req.tenantId, {
-      abbr: body.abbr,
-      personnel_number: body.personnel_number,
-      email: body.mail,
-    }, Number(id));
+      abbr: has("abbr") ? text(body.abbr) : undefined,
+      personnel_number: has("personnel_number") ? text(body.personnel_number) : undefined,
+      email: mail || undefined,
+    }, id);
     if (dupConflict) return res.status(409).json({ error: dupConflict });
 
-
-    const updateObj = {
-      ABBR:       body.abbr,
-      TITLE:            body.title || null,
-      FIRST_NAME:       body.first_name,
-      LAST_NAME:        body.last_name,
-      MAIL:             body.mail || null,
-      PHONE:            body.phone !== undefined ? (body.phone || null) : undefined,
-      MOBILE:           body.mobile || null,
-      PERSONNEL_NUMBER: body.personnel_number || null,
-      BIRTH_DATE:       body.birth_date !== undefined ? (body.birth_date || null) : undefined,
-      NOTES:            body.notes !== undefined ? (body.notes || null) : undefined,
-      SUPERVISOR_ID:    body.supervisor_id !== undefined
-                          ? (body.supervisor_id === '' || body.supervisor_id == null ? null : Number(body.supervisor_id))
-                          : undefined,
-      GENDER_ID:        body.gender_id,
-      DEPARTMENT_ID:  body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
-      ENTRY_DATE:     body.entry_date !== undefined ? (body.entry_date || null) : undefined,
-      EXIT_DATE:      body.exit_date  !== undefined ? (body.exit_date  || null) : undefined,
-      ACTIVE:         body.active != null ? Number(body.active) : undefined,
-      DASHBOARD_ROLE: body.dashboard_role !== undefined ? (body.dashboard_role || null) : undefined,
-    };
+    const dateOrNull = (v) => (v ? String(v) : null);
+    const updateObj = {};
+    if (has("abbr"))             updateObj.ABBR = text(body.abbr);
+    if (has("title"))            updateObj.TITLE = textOrNull(body.title);
+    if (has("first_name"))       updateObj.FIRST_NAME = text(body.first_name);
+    if (has("last_name"))        updateObj.LAST_NAME = text(body.last_name);
+    if (mail !== undefined)      updateObj.MAIL = mail;
+    if (has("phone"))            updateObj.PHONE = textOrNull(body.phone);
+    if (has("mobile"))           updateObj.MOBILE = textOrNull(body.mobile);
+    if (has("personnel_number")) updateObj.PERSONNEL_NUMBER = textOrNull(body.personnel_number);
+    if (has("birth_date"))       updateObj.BIRTH_DATE = dateOrNull(body.birth_date);
+    if (has("notes"))            updateObj.NOTES = body.notes ? String(body.notes) : null;
+    if (supervisor !== undefined) updateObj.SUPERVISOR_ID = supervisor;
+    if (has("gender_id"))        updateObj.GENDER_ID = parseInt(String(body.gender_id), 10);
+    if (has("department_id"))    updateObj.DEPARTMENT_ID = body.department_id != null && body.department_id !== "" ? Number(body.department_id) : null;
+    if (has("entry_date"))       updateObj.ENTRY_DATE = dateOrNull(body.entry_date);
+    if (has("exit_date"))        updateObj.EXIT_DATE = dateOrNull(body.exit_date);
+    if (active !== undefined)    updateObj.ACTIVE = active;
+    if (dashboardRole !== undefined) updateObj.DASHBOARD_ROLE = dashboardRole;
+    if (!Object.keys(updateObj).length) return res.status(400).json({ error: "Nichts zu ändern." });
 
     const { data: upd, error: updErr } = await supabase
       .from("EMPLOYEE")
       .update(updateObj)
       .eq("ID", id)
       .eq("TENANT_ID", req.tenantId)
-      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, PHONE, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DASHBOARD_ROLE, BIRTH_DATE, NOTES, SUPERVISOR_ID")
-      .single();
+      .select("ID, ABBR, TITLE, FIRST_NAME, LAST_NAME, MAIL, PHONE, MOBILE, PERSONNEL_NUMBER, GENDER_ID, DASHBOARD_ROLE, BIRTH_DATE, NOTES, SUPERVISOR_ID, DEPARTMENT_ID, ACTIVE, ENTRY_DATE, EXIT_DATE")
+      .maybeSingle();
 
     if (updErr) return res.status(500).json({ error: updErr.message });
+    if (!upd) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+
+    // Neue Adresse eines fremden Kontos: laufende Sitzungen enden, damit ein
+    // Wechsel nicht unbemerkt neben einer offenen Anmeldung passiert.
+    if (mailChanges && id !== req.employeeId) await revokeSessions(supabase, id);
 
     const { data: genders, error: genErr } = await supabase.from("GENDER").select("ID, GENDER");
     if (genErr) return res.status(500).json({ error: genErr.message });
@@ -638,7 +776,11 @@ router.get("/", async (req, res) => {
 
 // ── Month-close overview (must be before /:id routes) ─────────────────────────
 // GET /mitarbeiter/month-close-overview
-router.get("/month-close-overview", requirePermission("employees.bookings.view_all"), async (req, res) => {
+// Wer Monate abschliesst, braucht die Uebersicht — sie nennt nur Kuerzel,
+// Namen und den Abschlussstand, keine Stunden. Vorher war sie an „alle
+// Buchungen sehen" gebunden, und das Recht „Monatsabschluss" allein fuehrte
+// auf einen Reiter mit einer Fehlermeldung.
+router.get("/month-close-overview", requireAnyPermission("employees.bookings.view_all", "employees.month_close.edit"), async (req, res) => {
   const { data: employees, error: empErr } = await supabase
     .from("EMPLOYEE")
     .select("ID, ABBR, FIRST_NAME, LAST_NAME")
@@ -724,36 +866,77 @@ router.get("/:id/work-models", async (req, res) => {
   res.json({ data: assignments.map(a => ({ ...a, model: modelMap.get(a.MODEL_ID) ?? null })) });
 });
 
+// Arbeitszeitmodell-Zuordnungen (Runde 10): vorher ohne jede Pruefung —
+// ein Modell eines fremden Bueros liess sich zuordnen, ein Tippfehler im Datum
+// endete als Serverfehler, und zwei Zuordnungen am selben Tag machten
+// „welches gilt?“ zum Zufall der Sortierung.
+async function workModelInput(supabase, tenantId, body, { partial }) {
+  const out = {};
+  if (!partial || body.model_id !== undefined) {
+    const modelId = Number(body.model_id);
+    if (!(modelId > 0)) return { error: "Bitte ein Arbeitszeitmodell wählen." };
+    const { data: model, error } = await supabase.from("WORKING_TIME_MODEL").select("ID")
+      .eq("ID", modelId).eq("TENANT_ID", tenantId).maybeSingle();
+    if (error) throw error;
+    if (!model) return { error: "Dieses Arbeitszeitmodell gibt es nicht." };
+    out.MODEL_ID = modelId;
+  }
+  if (!partial || body.valid_from !== undefined) {
+    if (!isIsoDate(body.valid_from)) return { error: "Bitte ein gültiges Datum angeben." };
+    out.VALID_FROM = body.valid_from;
+  }
+  if (!Object.keys(out).length) return { error: "Nichts zu ändern." };
+  return { update: out };
+}
+
+/** Gibt es fuer diesen Tag schon einen Eintrag? (ausser dem, der sich gerade aendert) */
+async function sameDayTaken(supabase, table, tenantId, empId, validFrom, exceptId) {
+  const { data, error } = await supabase.from(table).select("ID")
+    .eq("TENANT_ID", tenantId).eq("EMPLOYEE_ID", empId).eq("VALID_FROM", validFrom);
+  if (error) throw error;
+  return (data || []).some(r => r.ID !== exceptId);
+}
+
 router.post("/:id/work-models", requirePermission("employees.edit"), async (req, res) => {
   const empId = Number(req.params.id);
-  const { model_id, valid_from } = req.body;
-  if (!model_id || !valid_from) return res.status(400).json({ error: 'model_id und valid_from sind Pflichtfelder' });
-  const { data, error } = await supabase
-    .from("EMPLOYEE_WORK_MODEL")
-    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, MODEL_ID: Number(model_id), VALID_FROM: valid_from }])
-    .select("ID, MODEL_ID, VALID_FROM")
-    .single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  try {
+    if (!(await ownEmployee(supabase, req.tenantId, empId))) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+    const input = await workModelInput(supabase, req.tenantId, req.body || {}, { partial: false });
+    if (input.error) return res.status(400).json({ error: input.error });
+    if (await sameDayTaken(supabase, "EMPLOYEE_WORK_MODEL", req.tenantId, empId, input.update.VALID_FROM)) {
+      return res.status(409).json({ error: "Für diesen Tag ist schon ein Modell eingetragen — bitte den Eintrag ändern statt einen zweiten anzulegen." });
+    }
+    const { data, error } = await supabase
+      .from("EMPLOYEE_WORK_MODEL")
+      .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, ...input.update }])
+      .select("ID, MODEL_ID, VALID_FROM")
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch("/:id/work-models/:wid", requirePermission("employees.edit"), async (req, res) => {
   const wid   = Number(req.params.wid);
   const empId = Number(req.params.id);
-  const { model_id, valid_from } = req.body;
-  const update = {};
-  if (model_id)    update.MODEL_ID    = Number(model_id);
-  if (valid_from)  update.VALID_FROM  = valid_from;
-  const { data, error } = await supabase
-    .from("EMPLOYEE_WORK_MODEL")
-    .update(update)
-    .eq("ID", wid)
-    .eq("EMPLOYEE_ID", empId)
-    .eq("TENANT_ID", req.tenantId)
-    .select("ID, MODEL_ID, VALID_FROM")
-    .single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  try {
+    const input = await workModelInput(supabase, req.tenantId, req.body || {}, { partial: true });
+    if (input.error) return res.status(400).json({ error: input.error });
+    if (input.update.VALID_FROM && await sameDayTaken(supabase, "EMPLOYEE_WORK_MODEL", req.tenantId, empId, input.update.VALID_FROM, wid)) {
+      return res.status(409).json({ error: "Für diesen Tag ist schon ein Modell eingetragen." });
+    }
+    const { data, error } = await supabase
+      .from("EMPLOYEE_WORK_MODEL")
+      .update(input.update)
+      .eq("ID", wid)
+      .eq("EMPLOYEE_ID", empId)
+      .eq("TENANT_ID", req.tenantId)
+      .select("ID, MODEL_ID, VALID_FROM")
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: "Zuordnung nicht gefunden" });
+    res.json({ data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete("/:id/work-models/:wid", requirePermission("employees.edit"), async (req, res) => {
@@ -771,10 +954,10 @@ router.delete("/:id/work-models/:wid", requirePermission("employees.edit"), asyn
 
 // ── CP-rate lookup for a specific date ────────────────────────────────────────
 // GET /mitarbeiter/:id/cp-rate?date=YYYY-MM-DD
-router.get("/:id/cp-rate", async (req, res) => {
+router.get("/:id/cp-rate", SALARY_GUARD, async (req, res) => {
   const empId = Number(req.params.id);
   const date  = String(req.query.date || new Date().toISOString().slice(0, 10));
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("EMPLOYEE_COST_RATE")
     .select("COST_RATE")
     .eq("TENANT_ID", req.tenantId)
@@ -782,13 +965,15 @@ router.get("/:id/cp-rate", async (req, res) => {
     .lte("VALID_FROM", date)
     .order("VALID_FROM", { ascending: false })
     .limit(1);
+  // Vorher wurde ein Fehler hier zu „0 €/h, nicht gefunden".
+  if (error) return res.status(500).json({ error: error.message });
   const found = data && data.length > 0;
   res.json({ data: { rate: found ? Number(data[0].COST_RATE) : 0, found: !!found } });
 });
 
 // ── CP-rate history ────────────────────────────────────────────────────────────
 
-router.get("/:id/cp-rates", async (req, res) => {
+router.get("/:id/cp-rates", SALARY_GUARD, async (req, res) => {
   const empId = Number(req.params.id);
   const { data, error } = await supabase
     .from("EMPLOYEE_COST_RATE")
@@ -802,11 +987,18 @@ router.get("/:id/cp-rates", async (req, res) => {
 
 router.post("/:id/cp-rates", requirePermission("employees.salary.edit"), async (req, res) => {
   const empId = Number(req.params.id);
-  const { cost_rate, valid_from } = req.body;
-  if (cost_rate == null || !valid_from) return res.status(400).json({ error: 'cost_rate und valid_from sind Pflichtfelder' });
+  const { cost_rate, valid_from } = req.body || {};
+  const rate = costRateValue(cost_rate);
+  if (rate === undefined || !isIsoDate(valid_from)) {
+    return res.status(400).json({ error: "Bitte einen Kostensatz ab 0 €/h und ein gültiges Datum angeben." });
+  }
+  if (!(await ownEmployee(supabase, req.tenantId, empId))) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+  if (await sameDayTaken(supabase, "EMPLOYEE_COST_RATE", req.tenantId, empId, valid_from)) {
+    return res.status(409).json({ error: "Für diesen Tag ist schon ein Kostensatz eingetragen — bitte den Eintrag ändern statt einen zweiten anzulegen." });
+  }
   const { data, error } = await supabase
     .from("EMPLOYEE_COST_RATE")
-    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, COST_RATE: Number(cost_rate), VALID_FROM: valid_from }])
+    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, COST_RATE: rate, VALID_FROM: valid_from }])
     .select("ID, COST_RATE, VALID_FROM")
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -816,10 +1008,21 @@ router.post("/:id/cp-rates", requirePermission("employees.salary.edit"), async (
 router.patch("/:id/cp-rates/:rid", requirePermission("employees.salary.edit"), async (req, res) => {
   const rid   = Number(req.params.rid);
   const empId = Number(req.params.id);
-  const { cost_rate, valid_from } = req.body;
+  const { cost_rate, valid_from } = req.body || {};
   const update = {};
-  if (cost_rate != null)  update.COST_RATE    = Number(cost_rate);
-  if (valid_from)       update.VALID_FROM = valid_from;
+  if (cost_rate !== undefined) {
+    const rate = costRateValue(cost_rate);
+    if (rate === undefined) return res.status(400).json({ error: "Bitte einen Kostensatz ab 0 €/h angeben." });
+    update.COST_RATE = rate;
+  }
+  if (valid_from !== undefined) {
+    if (!isIsoDate(valid_from)) return res.status(400).json({ error: "Bitte ein gültiges Datum angeben." });
+    update.VALID_FROM = valid_from;
+  }
+  if (!Object.keys(update).length) return res.status(400).json({ error: "Nichts zu ändern." });
+  if (update.VALID_FROM && await sameDayTaken(supabase, "EMPLOYEE_COST_RATE", req.tenantId, empId, update.VALID_FROM, rid)) {
+    return res.status(409).json({ error: "Für diesen Tag ist schon ein Kostensatz eingetragen." });
+  }
   const { data, error } = await supabase
     .from("EMPLOYEE_COST_RATE")
     .update(update)
@@ -827,8 +1030,9 @@ router.patch("/:id/cp-rates/:rid", requirePermission("employees.salary.edit"), a
     .eq("EMPLOYEE_ID", empId)
     .eq("TENANT_ID", req.tenantId)
     .select("ID, COST_RATE, VALID_FROM")
-    .single();
+    .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Kostensatz nicht gefunden" });
   res.json({ data });
 });
 
@@ -852,14 +1056,33 @@ router.patch("/:id/set-password", requirePermission("employees.password.set"), a
   const id = Number(req.params.id);
   const { new_password } = req.body || {};
 
-  if (new_password !== null && new_password !== undefined && typeof new_password === 'string' && new_password.length > 0 && new_password.length < 8) {
+  // Nur ein Text (setzen) oder null (Passwort loeschen). Vorher loeschte jeder
+  // andere Wert — etwa eine Zahl — das Passwort still und meldete Erfolg.
+  if (new_password !== null && typeof new_password !== "string") {
+    return res.status(400).json({ error: "Bitte ein Passwort als Text angeben oder null zum Löschen." });
+  }
+  if (typeof new_password === "string" && new_password.length < 8) {
     return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
   }
 
-  let hashed = null;
-  if (new_password && typeof new_password === 'string' && new_password.length >= 8) {
-    hashed = await bcrypt.hash(new_password, 10);
+  // Das eigene Passwort loeschen sperrt einen selbst aus — und ist es das des
+  // letzten Administrators, kommt niemand mehr an die Zugaenge.
+  if (id === req.employeeId && new_password === null) {
+    return res.status(409).json({ error: "Das eigene Passwort lässt sich nicht löschen — du würdest dich selbst aussperren." });
   }
+
+  // Wer ein fremdes Passwort setzt, kann sich danach als diese Person anmelden.
+  // Das darf nur fuer Konten gehen, die nicht mehr duerfen als man selbst.
+  if (id !== req.employeeId) {
+    const target = await loadPermissions(supabase, id);
+    if (target === LOAD_FAILED) return res.status(503).json({ error: "Die Berechtigungen konnten gerade nicht geladen werden. Bitte gleich noch einmal versuchen." });
+    const beyond = target ? keysBeyondCaller(req, target) : [];
+    if (beyond.length) {
+      return res.status(403).json({ error: "Dieses Konto hat Rechte, die du selbst nicht hast — sein Passwort kann nur jemand mit mindestens denselben Rechten setzen." });
+    }
+  }
+
+  const hashed = typeof new_password === "string" ? await bcrypt.hash(new_password, 10) : null;
 
   // .select() erzwingt eine Rueckmeldung ueber die geschriebenen Zeilen: ohne
   // es antwortet PostgREST mit 204, und ein Schreiben, das an einer Policy
@@ -875,6 +1098,9 @@ router.patch("/:id/set-password", requirePermission("employees.password.set"), a
   if (!geaendert || geaendert.length !== 1) {
     return res.status(404).json({ error: "Mitarbeiter nicht gefunden oder nicht änderbar." });
   }
+  // Laufende Sitzungen enden — wie bei „Passwort vergessen". Vorher blieb
+  // angemeldet, wer das alte Passwort kannte.
+  await revokeSessions(supabase, id);
   res.json({ success: true });
 });
 
@@ -941,7 +1167,9 @@ router.get("/report-list", requirePermission("employees.bookings.view_all"), asy
   const employeeId = req.query.employee_id ? Number(req.query.employee_id) : null;
   try {
     const rows = await balanceSvc.buildEmployeeReportList(supabase, req.tenantId, { mode, asOfDate, dateFrom, dateTo, employeeId });
-    res.json({ data: rows });
+    // COST = Stunden × Kostensatz — ohne Gehaltsrecht nicht (Runde 10).
+    const darfGehalt = hasPerm(req, "employees.salary.view");
+    res.json({ data: darfGehalt ? rows : (rows || []).map(({ COST, ...rest }) => ({ ...rest, COST: null })) });
   } catch (e) {
     res.status(e?.status || 500).json({ error: e?.message || String(e) });
   }
@@ -949,10 +1177,21 @@ router.get("/report-list", requirePermission("employees.bookings.view_all"), asy
 
 // ── Balance / Reporting ────────────────────────────────────────────────────────
 
-router.get("/:id/balance", async (req, res) => {
+// Fremde Salden enthalten die Buchungen samt Text und Projekt — dafuer reicht
+// „Mitarbeiter ansehen" nicht (Runde 10). Eigene gehen immer.
+const OTHERS_BOOKINGS = (req, res, next) => (
+  Number(req.params.id) === req.employeeId || hasPerm(req, "employees.bookings.view_all")
+    ? next()
+    : res.status(403).json({ error: "Fehlende Berechtigung: employees.bookings.view_all" })
+);
+
+router.get("/:id/balance", OTHERS_BOOKINGS, async (req, res) => {
   const empId = Number(req.params.id);
   const year  = parseInt(req.query.year  || new Date().getFullYear(), 10);
   const month = parseInt(req.query.month || (new Date().getMonth() + 1), 10);
+  if (!(year >= 2000 && year <= 2100) || !(month >= 1 && month <= 12)) {
+    return res.status(400).json({ error: "Jahr oder Monat ungültig." });
+  }
   try {
     const result = await balanceSvc.calculateMonthBalance(supabase, req.tenantId, empId, year, month);
     res.json({ data: result });
@@ -961,7 +1200,7 @@ router.get("/:id/balance", async (req, res) => {
   }
 });
 
-router.get("/:id/balance/running", async (req, res) => {
+router.get("/:id/balance/running", OTHERS_BOOKINGS, async (req, res) => {
   const empId = Number(req.params.id);
   try {
     const result = await balanceSvc.calculateRunningBalance(supabase, req.tenantId, empId);

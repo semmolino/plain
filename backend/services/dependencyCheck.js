@@ -22,16 +22,18 @@
 const SAMPLE_LIMIT = 3;
 
 async function safeReferences(supabase, table, selectFields, filter) {
-  try {
-    let q = supabase.from(table).select(selectFields);
-    for (const [k, v] of Object.entries(filter)) q = q.eq(k, v);
-    const { data, error } = await q.limit(50);
-    if (error) {
-      if (/relation .* does not exist|column .* does not exist/i.test(error.message)) return [];
-      throw error;
-    }
-    return data || [];
-  } catch (_) { return []; }
+  let q = supabase.from(table).select(selectFields);
+  for (const [k, v] of Object.entries(filter)) q = q.eq(k, v);
+  const { data, error } = await q.limit(50);
+  if (error) {
+    // Nur eine fehlende Tabelle/Spalte (Migration noch nicht gelaufen) heisst
+    // „keine Verweise". Jeder andere Fehler bricht ab: vorher schluckte ein
+    // catch alles, und eine gescheiterte Abfrage galt als „frei zum Loeschen"
+    // (Runde 10).
+    if (/relation .* does not exist|column .* does not exist/i.test(error.message)) return [];
+    throw error;
+  }
+  return data || [];
 }
 
 function formatRefBlock(kind, rows, labelFn) {
@@ -189,17 +191,28 @@ async function checkEmployee(supabase, { tenantId, id }) {
       const { data: projs } = await supabase
         .from("PROJECT")
         .select("ID, ABBR")
+        .eq("TENANT_ID", tenantId)
         .in("ID", projIds.slice(0, SAMPLE_LIMIT));
       tecProjectSamples = (projs || []).map(p => p.ABBR || `#${p.ID}`);
     }
   }
 
-  const [managedProjects, e2pAssignments, monthCloses, cpRates, workModels] = await Promise.all([
+  // Runde 10: Angebote, Rechnungen, Abschlaege, Mahnungen, Nachtraege und
+  // Abwesenheiten fehlten. Die ersten vier blockierten per Fremdschluessel mit
+  // einem rohen Datenbankfehler, die letzten blieben verwaist zurueck.
+  const [managedProjects, e2pAssignments, monthCloses, cpRates, workModels,
+         offers, invoices, advances, dunnings, nachtraege, absences] = await Promise.all([
     safeReferences(supabase, "PROJECT",                "ID, ABBR",  { PROJECT_MANAGER_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE2PROJECT",       "ID, PROJECT_ID",  { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE_MONTH_CLOSE",   "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE_COST_RATE",       "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
     safeReferences(supabase, "EMPLOYEE_WORK_MODEL",    "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "OFFER",                  "ID, ABBR",        { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "INVOICE",                "ID, INVOICE_NUMBER", { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ADVANCE_INVOICE",        "ID, ADVANCE_INVOICE_NUMBER", { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "MAHNUNG",                "ID",              { RESPONSIBLE_EMPLOYEE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "NACHTRAG",               "ID, ABBR",        { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
+    safeReferences(supabase, "ABSENCE",                "ID",              { EMPLOYEE_ID: id, TENANT_ID: tenantId }),
   ]);
 
   const refs = [];
@@ -225,6 +238,20 @@ async function checkEmployee(supabase, { tenantId, id }) {
   if (workModels.length > 0) {
     refs.push({ kind: "work_models", count: workModels.length, sample: [], label: workModels.length === 1 ? "Arbeitszeitmodell-Zuordnung" : "Arbeitszeitmodell-Zuordnungen" });
   }
+  const offerBlock = formatRefBlock("offers", offers, o => o.ABBR || `#${o.ID}`);
+  if (offerBlock) refs.push({ ...offerBlock, label: offerBlock.count === 1 ? "Angebot (zuständig)" : "Angeboten (zuständig)" });
+  const invBlock = formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`);
+  if (invBlock) refs.push({ ...invBlock, label: invBlock.count === 1 ? "Rechnung" : "Rechnungen" });
+  const advBlock = formatRefBlock("advance_invoices", advances, a => a.ADVANCE_INVOICE_NUMBER || `#${a.ID}`);
+  if (advBlock) refs.push({ ...advBlock, label: advBlock.count === 1 ? "Abschlag" : "Abschlägen" });
+  if (dunnings.length > 0) {
+    refs.push({ kind: "dunnings", count: dunnings.length, sample: [], label: dunnings.length === 1 ? "Mahnung (zuständig)" : "Mahnungen (zuständig)" });
+  }
+  const ntBlock = formatRefBlock("nachtraege", nachtraege, n => n.ABBR || `#${n.ID}`);
+  if (ntBlock) refs.push({ ...ntBlock, label: ntBlock.count === 1 ? "Nachtrag" : "Nachträgen" });
+  if (absences.length > 0) {
+    refs.push({ kind: "absences", count: absences.length, sample: [], label: absences.length === 1 ? "Abwesenheit" : "Abwesenheiten" });
+  }
 
   const blocked = refs.length > 0;
 
@@ -242,7 +269,7 @@ async function checkEmployee(supabase, { tenantId, id }) {
     entity:  { label: entityLabel },
     refs,
     message: blocked
-      ? `${entityLabel} kann nicht gelöscht werden — referenziert in ${joinEmpRefs(refs)}.`
+      ? `${entityLabel} kann nicht gelöscht werden — referenziert in ${joinEmpRefs(refs)}. Wer das Büro verlassen hat, wird stattdessen auf „inaktiv“ gesetzt; die Historie bleibt erhalten.`
       : "",
   };
 }

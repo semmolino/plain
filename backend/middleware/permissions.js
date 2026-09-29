@@ -70,17 +70,27 @@ async function loadPermissions(supabase, employeeId) {
     const keys = new Set((perms || []).map(p => p.KEY).filter(Boolean));
     return keys;
   } catch (e) {
+    // Fail-closed (UI-Pilot Runde 10): vorher lieferte jeder Ladefehler — ein
+    // Zeitlimit, eine abgerissene Verbindung — null, und null heisst
+    // „unrestricted": fuer diese Anfrage galt dann JEDES Recht. „Keine
+    // Migration" bleibt der einzige Fall ohne Enforcement (oben, je Abfrage).
     console.warn("[permissions] load failed:", e?.message);
-    return null;  // soft-fail: kein Enforcement bei Lade-Fehler
+    return LOAD_FAILED;
   }
 }
+
+/** Rechte liessen sich nicht laden — die Anfrage wird abgewiesen (503). */
+const LOAD_FAILED = Symbol("permissions.loadFailed");
 
 const { loadPermissionCapabilityMap, suppressUnlicensed, loadPermissionActionMap, restrictToReadOnly } = require("./license");
 
 function makeMiddleware(supabase) {
   return async function permissionsMiddleware(req, res, next) {
     let set = await loadPermissions(supabase, req.employeeId);
-    // Wenn null: Migration fehlt oder Loader scheiterte → wir markieren als "unrestricted"
+    if (set === LOAD_FAILED) {
+      return res.status(503).json({ error: "Die Berechtigungen konnten gerade nicht geladen werden. Bitte gleich noch einmal versuchen." });
+    }
+    // Wenn null: Migration 0062 fehlt → "unrestricted" (Foundation-Phase)
     req._permissionsUnrestricted = (set === null);
     // Lizenz-Engine (L3): Rechte unlizenzierter Capabilities aus dem effektiven Set
     // entfernen. req.license stammt aus licenseMiddleware (laeuft DAVOR). Bei
@@ -151,4 +161,15 @@ function requireAnyPermission(...keys) {
   };
 }
 
-module.exports = { makeMiddleware, requirePermission, requireAnyPermission };
+/**
+ * Rechte aus `keys`, die der Aufrufer selbst nicht hat — leer im Foundation-
+ * Modus. Grundlage fuer „nicht mehr vergeben, als man selbst hat" (Rollen
+ * zuweisen, Passwort eines anderen Kontos setzen; Runde 10).
+ */
+function keysBeyondCaller(req, keys) {
+  if (req._permissionsUnrestricted) return [];
+  const own = req.permissions || new Set();
+  return [...keys].filter(k => !own.has(k));
+}
+
+module.exports = { makeMiddleware, requirePermission, requireAnyPermission, loadPermissions, LOAD_FAILED, keysBeyondCaller };

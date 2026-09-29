@@ -54,7 +54,9 @@ const COUNTERS = {
       .from("EMPLOYEE")
       .select("ID", { count: "exact", head: true })
       .eq("TENANT_ID", tenantId)
-      .neq("ACTIVE", 2);
+      // ACTIVE = NULL (Altbestand) zaehlt als aktiv — .neq allein liesse diese
+      // Zeilen fallen, weil NULL <> 2 nicht wahr ist.
+      .or("ACTIVE.is.null,ACTIVE.neq.2");
     if (error) throw error;
     return count || 0;
   },
@@ -93,29 +95,51 @@ function limitFor(req, capKey) {
  * Route-Guard: prüft VOR dem Anlegen, ob das Limit erreicht ist.
  * Nur wirksam, wenn im Plan eine Grenze gesetzt ist — sonst No-Op (wie bisher).
  */
-function enforceLimit(supabase, capKey) {
+/**
+ * Ist das Limit erreicht? null = frei, sonst die 402-Antwort. Auch direkt im
+ * Handler nutzbar — etwa beim Reaktivieren eines Mitarbeiters, das einen Platz
+ * belegt wie eine Neuanlage (Runde 10: das lief vorher an der Grenze vorbei).
+ */
+async function limitReached(supabase, req, capKey) {
   const counter = COUNTERS[capKey];
+  try {
+    const limit = limitFor(req, capKey);
+    if (limit == null || !counter) return null; // unbegrenzt / (noch) nicht zählbar
+    const used = await counter(supabase, req.tenantId);
+    if (!isOverLimit(used, limit)) return null;
+    const meta = LIMIT_META[capKey] || {};
+    return {
+      error: `Limit erreicht: ${limit} ${meta.unit || ""}`.trim() + ". Für mehr bitte den Tarif erweitern.",
+      limit_reached: true,
+      capability: capKey,
+      limit,
+      used,
+    };
+  } catch (e) {
+    // Soft-Fail: ein Zählfehler darf legitime Anlage nicht blockieren.
+    console.warn("[limits] check failed:", e?.message || e);
+    return null;
+  }
+}
+
+/** Wie viele passen noch hinein? null = unbegrenzt (oder nicht zaehlbar). */
+async function seatsLeft(supabase, req, capKey) {
+  const counter = COUNTERS[capKey];
+  const limit = limitFor(req, capKey);
+  if (limit == null || !counter) return null;
+  try {
+    return Math.max(0, limit - (await counter(supabase, req.tenantId)));
+  } catch (e) {
+    console.warn("[limits] seats check failed:", e?.message || e);
+    return null;
+  }
+}
+
+function enforceLimit(supabase, capKey) {
   return async function limitGuard(req, res, next) {
-    try {
-      const limit = limitFor(req, capKey);
-      if (limit == null || !counter) return next(); // unbegrenzt / (noch) nicht zählbar
-      const used = await counter(supabase, req.tenantId);
-      if (isOverLimit(used, limit)) {
-        const meta = LIMIT_META[capKey] || {};
-        return res.status(402).json({
-          error: `Limit erreicht: ${limit} ${meta.unit || ""}`.trim() + ". Für mehr bitte den Tarif erweitern.",
-          limit_reached: true,
-          capability: capKey,
-          limit,
-          used,
-        });
-      }
-      next();
-    } catch (e) {
-      // Soft-Fail: ein Zählfehler darf legitime Anlage nicht blockieren.
-      console.warn("[limits] check failed:", e?.message || e);
-      next();
-    }
+    const blocked = await limitReached(supabase, req, capKey);
+    if (blocked) return res.status(402).json(blocked);
+    next();
   };
 }
 
@@ -170,6 +194,7 @@ async function getUsage(supabase, req) {
 }
 
 module.exports = {
+  limitReached, seatsLeft,
   enforceLimit, getUsage, isOverLimit, COUNTERS, LIMIT_META,
   tenantStorageBytes, checkStorageLimit, fitsStorage,
 };

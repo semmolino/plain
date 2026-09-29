@@ -18,13 +18,13 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 // vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
 // vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
 // vorher6 = nach Runde 5, vorher7 = nach Runde 6, vorher8 = nach Runde 7,
-// vorher9 = nach Runde 8, nachher = aktueller Stand.
+// vorher9 = nach Runde 8, vorher10 = nach Runde 9, nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8 }
-const since = (round: number) => (RANK[PHASE] ?? 9) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9 }
+const since = (round: number) => (RANK[PHASE] ?? 10) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -928,4 +928,67 @@ test('Vertrag – Rechnungsempfänger gewählt', async ({ page }, info) => {
   await open(page, '/projekte?projectId=1&tab=vertraege')
   await pick9(page, '#vt-address', 'Stadtw', 'Stadtwerke Ravensburg GmbH')
   await shoot(page, info.project.name, 'vertrag-kontakt')
+})
+
+// ── Runde 10: Mitarbeiter ────────────────────────────────────────────────────
+
+/** Vorher: Abschnitte der Akte im Dialog; nachher: Reiter der Mitarbeiterseite. */
+const AKTE_ABSCHNITT: Record<string, string> = {
+  stammdaten: 'Stammdaten', kostensatz: 'Kostensatz', arbeitszeit: 'Arbeitszeit', zeitkonto: 'Zeitkonto',
+  abwesenheit: 'Abwesenheit', rollen: 'Rolle & Rechte', zugang: 'Zugang',
+}
+
+async function openEmployee(page: Page, tab: keyof typeof AKTE_ABSCHNITT) {
+  if (since(10)) {
+    await open(page, `/mitarbeiter/2?tab=${tab}`)
+    await page.getByRole('heading', { level: 1, name: /Thomas Kern/ }).waitFor()
+  } else {
+    await open(page, '/mitarbeiter')
+    await page.getByRole('cell', { name: 'Kern', exact: true }).click()
+    const dlg = page.getByRole('dialog')
+    await dlg.waitFor()
+    if (tab !== 'stammdaten') await dlg.getByRole('button', { name: AKTE_ABSCHNITT[tab], exact: true }).click()
+  }
+  await page.waitForLoadState('networkidle')
+}
+
+test('Mitarbeiter – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter')
+  await page.getByText('Kern').first().waitFor()
+  await shoot(page, info.project.name, 'mitarbeiter-liste')
+})
+
+for (const tab of Object.keys(AKTE_ABSCHNITT)) {
+  test(`Mitarbeiter – ${AKTE_ABSCHNITT[tab]}`, async ({ page }, info) => {
+    await prepare(page, info.project.name)
+    await openEmployee(page, tab)
+    await shoot(page, info.project.name, `mitarbeiter-${tab}`)
+  })
+}
+
+test('Mitarbeiter – neu', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter')
+  await page.getByRole('button', { name: /Neuer Mitarbeiter/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'mitarbeiter-neu')
+})
+
+// Buchung im Zeitkonto ändern — dort schrieb „Speichern" nach einer Zeitänderung 0 Stunden.
+test('Mitarbeiter – Buchung im Zeitkonto', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openEmployee(page, 'zeitkonto')
+  if (since(10)) {
+    await page.getByRole('button', { name: /Buchungen anzeigen: 22\.09\.2026/ }).click()
+    await page.getByRole('button', { name: /^Buchung .* bearbeiten$/ }).first().click()
+  } else {
+    await page.getByRole('row', { name: /2026-09-22/ }).getByRole('button').click()
+    await page.locator('tr[title="Klicken zum Bearbeiten"]').first().click()
+  }
+  // Vorher liegt der Buchungsdialog über dem Mitarbeiterdialog
+  const dlg = page.getByRole('dialog', { name: 'Buchung bearbeiten' })
+  await dlg.waitFor()
+  await dlg.locator('input[type="time"]').nth(1).fill('13:30')
+  await shoot(page, info.project.name, 'mitarbeiter-buchung')
 })

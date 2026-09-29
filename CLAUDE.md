@@ -328,6 +328,10 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   und Ändern, dass die Adresse dem Mandanten und der Kontakt genau dieser
   Adresse gehört (`assertOwnAddress`/`assertContactOfAddress`,
   `services/adressen.js`); Pflichtfelder dürfen sich ändern, aber nicht leeren.
+  Kopf- und Fußtext bleiben beim Anlegen leer: das PDF nimmt dann den
+  Standardtext aus `TEXT_TEMPLATE` (`offer_angebot`, Einstellungen →
+  Dokumentvorlagen), das Formular zeigt ihn grau im Feld. Eine zweite
+  Vorlage unter den Vorbelegungen gibt es bewusst nicht.
 - **Kalkulationen (HOAI-Assistent)** (`pages/projekte/HonorarWizard.tsx`, Liste
   `HonorarTab.tsx`, im Angebot `angebote/AngeboteHoai.tsx`): im Muster der
   Rechnungsassistenten — sprechende Schritte, ActionBar (im Dialog am unteren
@@ -377,6 +381,18 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   einzigen Kontakt der Adresse) — über `useContactPreset`, nie beim Laden
   eines gespeicherten Stands; `GET /stammdaten/contacts/by-address` liefert
   dafür `IS_PRIMARY` und stellt ihn nach vorn.
+- **Mitarbeiter als Arbeitsbereich** (`/mitarbeiter/:id?tab=stammdaten|arbeitszeit|kostensatz|zeitkonto|abwesenheit|projekte|rollen|zugang`,
+  `pages/mitarbeiter/MitarbeiterDetailPage.tsx`, UI-Pilot Runde 10): Kopf mit Kontakt, Kostensatz
+  (nur `employees.salary.view` + Tarif) und Saldo (nur `employees.bookings.view_all`), Reiter je Recht.
+  Einen Bearbeiten-Dialog gibt es nicht mehr; Liste, Rollen-Abzeichen und Neuanlage führen hin
+  (`mitarbeiterHref`). Einen Einzelabruf gibt es am Server nicht — die Seite liest aus der Liste
+  (`['employees']`). `PATCH /mitarbeiter/:id` ist ein **Teil-Update**: Stammdaten und die
+  Direktbearbeitung der Liste schicken nur geänderte Felder. Datierte Verläufe (Arbeitszeitmodell,
+  Kostensatz) laufen über eine Tabelle (`EmployeeHistory.tsx`); je Tag gibt es höchstens einen
+  Eintrag (409). Das Zeitkonto ändert eine Buchung nur mit `projects.bookings.edit/delete`, nie eine
+  abgerechnete, und zieht `QUANTITY_EXT` nur mit, solange es `QUANTITY_INT` entsprach.
+  Stundencontrolling zeigt Auswertung und Einzelansicht nur mit `employees.bookings.view_all`; wer
+  nur `employees.month_close.edit` hat, sieht den Monatsabschluss.
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
@@ -630,9 +646,19 @@ Windows): `owner-console/README.md`.
 - **Registrierung neuer Mandanten braucht zwei Tore** (`services/signupApproval.js`, Migration 0135): E-Mail-Bestätigung des Anmelders, dann Freigabe in der Owner-Konsole (Tab „Registrierungen"). Bis dahin ist die Anmeldung gesperrt — geprüft **nach** der Passwortprüfung, damit der Zustand eines Mandanten nichts über ihn verrät. Ablehnen löscht den Antrag, aber **nur** im Zustand pending. Der Spaltenstandard von `SIGNUP_STATE` ist `active`: Import, Demo-Daten und manuelles SQL sollen weiterhin benutzbare Mandanten erzeugen.
 - Serverfehler tragen nach außen eine allgemeine Meldung plus Fehlerkennung (`middleware/errorSanitizer.js`); das Original steht im Protokoll. Fachfehler mit `status < 500` bleiben unberührt. Ein 500er, dessen Meldung der Nutzer braucht, kennzeichnet sich mit `userFacing: true`.
 
-**Offen (Stand 2026-09-04):**
+- **Mitarbeiter-Modul (UI-Pilot Runde 10, `tests/mitarbeiter.security.test.js`):**
+  - Rechte laden ist **fail-closed**: ein Ladefehler ist eine 503, nicht „alle Rechte". Nur eine fehlende RBAC-Migration bleibt unrestricted (`middleware/permissions.js`, `LOAD_FAILED`).
+  - Der Gehalts-Guard vergleicht den Pfad wie Express 5 (klein, ohne abschließenden Schrägstrich) und hängt zusätzlich an den Routen — `/5/cp-rates/` lief vorher vorbei.
+  - Die E-Mail eines **fremden** Kontos ändert nur, wer `employees.password.set` hat (sonst Übernahme über „Passwort vergessen"); danach enden dessen Sitzungen. `PATCH /mitarbeiter/:id` ist ein Teil-Update.
+  - „Nicht mehr vergeben, als man selbst hat" (`keysBeyondCaller`): Passwort setzen und Rollen zuweisen nur für Konten und Rollen, deren Rechte der Aufrufer selbst hat. Passwort setzen beendet Sitzungen. Der Import prüft dieselben Rechte je Inhalt (Kostensatz, Rolle, E-Mail beim Zusammenführen) und die Platzgrenze (`authorizeEmployeeCommit`).
+  - Das eigene Konto und der letzte Administrator lassen sich weder löschen noch deaktivieren; inaktive Admins zählen nicht. Die Löschprüfung kennt Angebote, Rechnungen, Abschläge, Mahnungen, Nachträge und Abwesenheiten und schluckt keine Fehler mehr (`safeReferences`).
+  - Arbeitszeitmodell zuordnen nur mit einem Modell des eigenen Büros, gültigem Datum und für einen eigenen Mitarbeiter; Neuanlage prüft den Vorgesetzten wie das Ändern und legt leere Angaben als `null` ab; das eigene Passwort lässt sich nicht löschen (Selbstaussperrung); Urlaubsansprüche je Jahr (`PUT /abwesenheit/entitlements/bulk`) nehmen keine leeren oder ungültigen Tage mehr als 0 und melden Teilfehler statt Erfolg.
+  - Profilfoto nur aus einem `AVATAR`-Bild; ArbZG-Audit/Export/Grenzen nur eigene oder mit Recht; Stundensätze der Team-Zuordnung nur mit `projects.hourly_rates.view`; Kosten im Stundencontrolling nur mit `employees.salary.view`; fremde Salden nur mit `employees.bookings.view_all`; Kostensatzrechner-Gehaltsdaten nur mit den Gehaltsrechten.
+
+**Offen (Stand 2026-09-29):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht
 - CSP bewusst abgeschaltet (SPA-Bundles, PDF) — erhöht die Wirkung jeder Datei-Auslieferungslücke (N2)
+- Aus dem Mitarbeiter-Audit (Runde 10) noch offen: Kostensatz-Import mit „Buchungen neu rechnen" rechnet auch Pauschal-/Pausenbuchungen, abgeschlossene Monate und spätere Sätze um (`costRateCalc.js`); Import-Rücknahme nicht atomar (`importService.js`); Urlaubssaldo zählt Mo–Fr statt Arbeitszeitmodell und Jahreswechsel im Startjahr (`abwesenheit.js`); ohne SMTP geht der Einladungslink an den Anleger zurück
 
 ---
 

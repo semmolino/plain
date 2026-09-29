@@ -1,9 +1,11 @@
 import { useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { Disclosure } from '@/components/ui/Disclosure'
 import { FormSection } from '@/components/ui/FormSection'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { searchAddressesApi, type AddressContactOption } from '@/api/stammdaten'
+import { fetchTextTemplates } from '@/api/mahnungen'
 
 /**
  * Felder eines Angebots (UI-Pilot Runde 9) — eine Stelle für den Reiter
@@ -104,18 +106,35 @@ export function OfferFields({
     return (res.data ?? []).map(a => ({ id: a.ID, label: a.ADDRESS_NAME_1 }))
   }, [])
 
+  // Standardtext aus Einstellungen → Dokumentvorlagen: das PDF nimmt ihn, wenn
+  // das Angebot keinen eigenen Text hat (injectOfferTextTemplate). Vorher sah
+  // man das im Formular nicht — ein leeres Feld sah aus wie „kein Text".
+  const { data: templates } = useQuery({
+    queryKey: ['text-templates'], queryFn: () => fetchTextTemplates().then(r => r.data), staleTime: 5 * 60_000,
+  })
+  const tpl = templates?.find(t => t.documentType === 'offer_angebot')
+
+  const textField = (k: 'text1' | 'text2', label: string, std: string | null | undefined, placeholder: string) => {
+    const usesStd = !form[k] && !!std
+    return (
+      <div className="form-group form-section-wide">
+        <label htmlFor={id(k)}>{label}</label>
+        <textarea id={id(k)} rows={4} value={form[k]} onChange={e => set(k, e.target.value)}
+          placeholder={usesStd ? std! : placeholder} aria-describedby={usesStd ? id(`${k}-std`) : undefined} />
+        {usesStd && (
+          <p id={id(`${k}-std`)} className="form-field-hint of-std-hint">
+            <span>Leer: im PDF steht der Standardtext (grau im Feld) aus Einstellungen → Dokumentvorlagen.</span>
+            <button type="button" className="link-btn" onClick={() => set(k, std!)}>Zum Anpassen übernehmen</button>
+          </p>
+        )}
+      </div>
+    )
+  }
+
   const texts = (
     <>
-      <div className="form-group form-section-wide">
-        <label htmlFor={id('t1')}>Kopftext</label>
-        <textarea id={id('t1')} rows={4} value={form.text1} onChange={e => set('text1', e.target.value)}
-          placeholder="Steht im PDF vor den Positionen, z. B. Anrede und Einleitung" />
-      </div>
-      <div className="form-group form-section-wide">
-        <label htmlFor={id('t2')}>Fußtext</label>
-        <textarea id={id('t2')} rows={4} value={form.text2} onChange={e => set('text2', e.target.value)}
-          placeholder="Steht im PDF nach den Positionen, z. B. Zahlungsbedingungen und Gruß" />
-      </div>
+      {textField('text1', 'Kopftext', tpl?.headerText, 'Steht im PDF vor den Positionen, z. B. Anrede und Einleitung')}
+      {textField('text2', 'Fußtext', tpl?.footerText, 'Steht im PDF nach den Positionen, z. B. Zahlungsbedingungen und Gruß')}
     </>
   )
 
@@ -219,7 +238,7 @@ export function OfferFields({
           <div className="form-section-body">{texts}</div>
         </Disclosure>
       ) : (
-        <FormSection title="Texte im PDF" hint="Der Kopftext steht vor den Positionen, der Fußtext danach.">
+        <FormSection title="Texte im PDF" hint="Der Kopftext steht vor den Positionen, der Fußtext danach. Leer gelassen nimmt das PDF den Standardtext aus Einstellungen → Dokumentvorlagen, sofern einer hinterlegt ist.">
           {texts}
         </FormSection>
       )}

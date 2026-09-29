@@ -1602,6 +1602,9 @@ input::placeholder { color: var(--text-4); }
 .mastery-tip-body { /* bewusst ohne eigene Deklarationen */ }
 
 .form-field-hint  { font-size: 12px; color: var(--text-3); margin: var(--space-1) 0 0; }
+/* Hinweis mit Aktion darin (Angebot: Standardtext übernehmen, Runde 10) */
+.of-std-hint { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+@media (pointer: coarse) { .of-std-hint .link-btn { min-height: 44px; } }
 .form-field-error { font-size: 12px; color: var(--danger); margin: var(--space-1) 0 0; font-weight: 600; }
 
 .sr-only {
@@ -4623,6 +4626,8 @@ th.doc-actions, td.doc-actions {
 .form-section-body { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: var(--space-5); }
 .form-section-wide { grid-column: 1 / -1; }
 .form-section .form-group { margin-bottom: var(--space-4); min-width: 0; }
+/* Pflichtfeld fehlte beim Speichern (aria-invalid) — vorher nur der Text unten */
+.form-section .form-group :is(input, select, textarea)[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 .form-section .form-field-hint.form-section-wide { margin: calc(-1 * var(--space-2)) 0 var(--space-4); }
 .form-group label.ws-label-help { display: flex; align-items: center; gap: var(--space-1); }
 .ws-check { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; font-size: 14px; cursor: pointer; }
@@ -4688,6 +4693,129 @@ fieldset:disabled .ws-check { cursor: default; }
 .ad-create-body { display: flex; flex-direction: column; gap: var(--space-3); }
 .ad-create-body .form-section { padding: var(--space-3) var(--space-4) var(--space-1); }
 .ad-more { margin: 0; }
+
+/* ── Mitarbeiter als Arbeitsbereich (Runde 10) ──────────────────────────────
+   Seite /mitarbeiter/:id statt Dialog: Kopf mit Bild, Kontakt, Kostensatz
+   und Saldo; Reiter Stammdaten · Arbeitszeit · Kostensatz · Zeitkonto · …
+   Vorher ein Kopf mit festem Weiß auf einer errechneten Farbe und Knöpfe
+   „✎ × ✓ ✗" in 11px. */
+.ma-title { display: inline-flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.ma-avatar {
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-fg); font-size: 15px; font-weight: 700;
+}
+.ma-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.status-pill.ma-pill-inactive { background: var(--danger-bg); color: var(--danger-strong); }
+.ma-balance { font-weight: 600; font-variant-numeric: tabular-nums; }
+.ma-balance-neg { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--kpi-critical); }
+.ma-none { color: var(--text-3); }
+.ma-name { white-space: nowrap; }
+.ma-mail { overflow-wrap: anywhere; min-width: 160px; }
+.ma-foot td { font-size: 13px; color: var(--text-3); padding-top: var(--space-2); border-top: 2px solid var(--border); font-weight: 600; }
+.ma-card-link { text-decoration: none; color: inherit; min-height: 44px; justify-content: center; }
+/* Rollen: Punkt in der Rollenfarbe + Text in Textfarbe — die Rollenfarbe ist
+   frei gewählt, Weiß darauf war in hellen Farben unlesbar. */
+.ma-role-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-1); }
+.ma-role-link { text-decoration: none; color: inherit; border-radius: var(--radius-sm); }
+.ma-role-link:hover .ma-role-chip { border-color: var(--accent); }
+.ma-role-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px;
+  border: 1px solid var(--border); border-radius: var(--radius-pill);
+  font-size: 12px; font-weight: 600; color: var(--text);
+}
+.ma-role-dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.ma-role-none { font-size: 12px; color: var(--text-3); }
+.ma-roles { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.ma-role {
+  display: flex; align-items: center; gap: var(--space-3); min-height: 44px; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-md); cursor: pointer;
+}
+.ma-role input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; accent-color: var(--accent); }
+.ma-role--on { background: var(--accent-bg); border-color: var(--accent); }
+.ma-roles:disabled .ma-role { cursor: default; }
+.ma-role-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.ma-role-name { font-size: 14px; font-weight: 600; }
+.ma-role-sub { font-size: 12px; color: var(--text-3); }
+/* Datierte Verläufe (Arbeitszeitmodell, Kostensatz) */
+.ma-hist-table td { vertical-align: middle; }
+.ma-hist-actions { white-space: nowrap; text-align: right; }
+.ma-hist-editing .ma-hist-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
+.ma-hist-sub { color: var(--text-3); }
+.ma-hist-badge { display: inline-flex; margin-left: var(--space-2); padding: 1px 7px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; }
+.ma-hist-badge--current { background: var(--success-bg); color: var(--success-strong); }
+.ma-hist-badge--planned { background: var(--info-bg); color: var(--info-strong); }
+.ma-hist-add { display: flex; justify-content: flex-end; padding-bottom: var(--space-3); }
+.ma-hist-add .btn-primary, .ma-access-actions .btn-primary, .ma-access-actions .btn-danger { width: auto; margin-top: 0; display: inline-flex; align-items: center; gap: 6px; }
+/* Zugang */
+.ma-access { margin: 0; display: flex; align-items: center; gap: var(--space-2); font-size: 14px; font-weight: 600; }
+.ma-access--ok { color: var(--success-strong); }
+.ma-access--open { color: var(--warning-strong); }
+.ma-access-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; padding-bottom: var(--space-3); }
+.ma-invite-hint { display: flex; align-items: flex-start; gap: 6px; }
+.ma-invite-hint svg { flex: 0 0 auto; margin-top: 2px; }
+/* Zeitkonto (Mitarbeiterseite, Stundencontrolling) */
+.ta-toolbar { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-4); }
+.ta-month-nav { display: inline-flex; align-items: center; gap: var(--space-2); }
+.ta-month { font-weight: 700; font-size: 14px; min-width: 120px; text-align: center; }
+.ta-tiles { margin-bottom: var(--space-4); }
+.ta-table { font-size: 13px; }
+.ta-table td.num { font-variant-numeric: tabular-nums; }
+.ta-col-toggle { width: 36px; text-align: center; }
+.ta-toggle {
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0;
+  background: none; border: 0; border-radius: var(--radius-sm); color: var(--text-3); cursor: pointer; box-shadow: none;
+}
+.ta-toggle:hover { background: var(--hover-bg); color: var(--text); }
+.ta-weekend td { background: var(--surface-2); color: var(--text-3); }
+.ta-holiday { margin-left: var(--space-2); font-size: 11px; font-weight: 700; color: var(--info-strong); }
+.ta-absence { display: block; font-size: 11px; font-weight: 600; color: var(--accent2-strong); }
+.ta-booking td { background: var(--info-bg); font-size: 12px; }
+.ta-booking-main { padding-left: var(--space-3); color: var(--text); }
+.ta-booking-time { margin-right: var(--space-2); }
+.ta-booking-desc { color: var(--text-2); }
+.ta-lock { display: inline-flex; color: var(--text-3); }
+.ta-total { margin: 0 0 var(--space-3); font-weight: 600; font-size: 14px; }
+.ta-edit { display: flex; flex-direction: column; gap: var(--space-3); }
+.ta-edit-context { margin: 0; font-size: 13px; color: var(--text-2); }
+.ta-edit-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ta-edit-fields input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.ta-note { margin: 0; display: flex; align-items: flex-start; gap: 6px; font-size: 12px; color: var(--warning-strong); background: var(--warning-bg); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); }
+.ta-note svg { flex: 0 0 auto; margin-top: 2px; }
+.ta-conflict { margin: 0; font-size: 13px; color: var(--danger-strong); background: var(--danger-bg); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); }
+.ta-conflict ul { margin: var(--space-1) 0 0; padding-left: var(--space-4); font-size: 12px; }
+@media (pointer: coarse) { .ta-toggle { width: 44px; height: 44px; } }
+/* Monatsabschluss-Übersicht (Stundencontrolling) — vorher „✓ ○" in 16px */
+.mc-cell {
+  display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0;
+  background: none; border: 0; border-radius: var(--radius-sm); color: var(--text-4); cursor: pointer; box-shadow: none;
+}
+.mc-cell:hover:not(:disabled) { background: var(--hover-bg); }
+.mc-cell:disabled { cursor: default; }
+.mc-cell--closed, .mc-legend-closed { color: var(--success-strong); }
+.mc-legend { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: 12px; color: var(--text-3); margin-top: var(--space-2); }
+.mc-legend span { display: inline-flex; align-items: center; gap: 4px; }
+@media (pointer: coarse) { .mc-cell { width: 44px; height: 44px; } }
+/* Urlaubsansprüche je Jahr (Abwesenheiten → Ansprüche) */
+.ent-editor { max-width: 640px; }
+.ent-toolbar { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.ent-year-btn { width: 36px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.ent-year { font-weight: 700; min-width: 56px; text-align: center; font-variant-numeric: tabular-nums; }
+.ent-bulk { margin-left: var(--space-3); display: inline-flex; align-items: center; gap: var(--space-2); }
+.ent-input { width: 90px; text-align: right; }
+.ent-input[aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.ent-hint { font-size: 12px; color: var(--text-3); margin: 0 0 var(--space-3); }
+.ent-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
+.ent-status { font-size: 13px; color: var(--text-2); margin-right: auto; }
+@media (pointer: coarse) { .ent-year-btn, .ent-actions button, .ent-bulk button { min-height: 44px; min-width: 44px; } }
+@media (pointer: coarse) {
+  .ma-hist-editing .ma-hist-actions button, .ma-access-actions button, .ma-hist-add button { min-height: 44px; }
+}
+@media (max-width: 640px) {
+  .ma-avatar { width: 34px; height: 34px; font-size: 13px; }
+  .ma-hist-editing td { display: block; }
+  .ma-hist-editing .ma-hist-actions { justify-content: flex-start; }
+}
 
 /* ── Umschalter aus Segmenten (aria-pressed) ───────────────────────────────
    „Wie wird beauftragt?", Berechnungsmodus eines Zuschlags. Vorher faerbte
@@ -5798,7 +5926,7 @@ fieldset:disabled .ws-check { cursor: default; }
 .iw-docs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-3); }
 .iw-docs .btn-secondary { display: inline-flex; align-items: center; gap: 6px; height: 36px; }
 .iw-note { font-size: 13px; color: var(--text-3); margin: 0 0 var(--space-2); }
-.iw-danger-text { color: var(--danger-strong); }
+.iw-danger-text, .btn-danger-text { color: var(--danger-strong); }
 .iw-more { min-width: 44px; }
 
 @media (max-width: 640px) {

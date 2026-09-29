@@ -191,6 +191,8 @@ describe("POST /abwesenheit/:id/reply", () => {
 describe("PUT /abwesenheit/entitlements/bulk", () => {
   it("legt neue Ansprueche an und aktualisiert bestehende (NOTE bleibt erhalten)", async () => {
     const sb = makeFakeSupabase({
+      // Seit Runde 10 prüft der Bulk, dass die Mitarbeiter zum Büro gehören
+      EMPLOYEE: [{ ID: 5, TENANT_ID: TENANT }, { ID: 6, TENANT_ID: TENANT }],
       VACATION_ENTITLEMENT: [{ ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, YEAR: 2027, DAYS_ENTITLED: 25, CARRYOVER_OVERRIDE: null, NOTE: "Altfall" }],
     });
     const r = await request(sb, { tenantId: TENANT, employeeId: 1, permissions: ["absence.manage"] },

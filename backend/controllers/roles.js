@@ -1,6 +1,7 @@
 "use strict";
 
 const { revokeSessions } = require("../middleware/sessionGuard");
+const { loadPermissions, LOAD_FAILED, keysBeyondCaller } = require("../middleware/permissions");
 
 /**
  * Controller fuer Rollen-Verwaltung + Permissions (RBAC Phase 0)
@@ -65,11 +66,14 @@ async function countAdminCapableEmployees(supabase, { tenantId, roleOverrides = 
   if (adminRoles.size === 0) return 0;
 
   // 3. Wieviele Mitarbeiter haben mindestens eine Admin-faehige Rolle?
+  // Nur aktive Mitarbeiter (ACTIVE NULL = Altbestand, gilt als aktiv): ein
+  // deaktivierter Administrator kann sich nicht anmelden und zaehlte trotzdem
+  // als „noch ein Admin" (Runde 10).
   const { data: emps } = await supabase
     .from("EMPLOYEE")
-    .select("ID")
+    .select("ID, ACTIVE")
     .eq("TENANT_ID", tenantId);
-  const empIds = (emps || []).map(e => e.ID);
+  const empIds = (emps || []).filter(e => Number(e.ACTIVE) !== 2).map(e => e.ID);
   if (empIds.length === 0) return 0;
 
   const { data: ers } = await supabase
@@ -454,13 +458,39 @@ async function setEmployeeRoles(req, res, supabase) {
       }
     }
 
+    // Nicht mehr vergeben, als man selbst hat (Runde 10): vorher konnte, wer
+    // Rollen zuweisen darf, sich selbst oder anderen jede Rolle geben — auch
+    // eine mit Rechten, die er selbst nicht hat. Ebenso nimmt er einem Konto
+    // mit mehr Rechten keine Rollen weg.
+    if (!req._permissionsUnrestricted) {
+      const target = await loadPermissions(supabase, employeeId);
+      if (target === LOAD_FAILED) return res.status(503).json({ error: "Die Berechtigungen konnten gerade nicht geladen werden. Bitte gleich noch einmal versuchen." });
+      if (target && keysBeyondCaller(req, target).length) {
+        return res.status(403).json({ error: "Dieses Konto hat Rechte, die du selbst nicht hast — seine Rollen ändert nur jemand mit mindestens denselben Rechten." });
+      }
+      if (roleIds.length) {
+        const { data: rps, error: rpErr } = await supabase
+          .from("ROLE_PERMISSION")
+          .select("PERMISSION!inner ( KEY )")
+          .in("ROLE_ID", roleIds);
+        if (rpErr) return res.status(500).json({ error: rpErr.message });
+        const keys = new Set((rps || []).map(r => r.PERMISSION?.KEY).filter(Boolean));
+        const beyond = keysBeyondCaller(req, keys);
+        if (beyond.length) {
+          return res.status(403).json({ error: `Diese Rollen enthalten Rechte, die du selbst nicht hast (${beyond.slice(0, 3).join(", ")}${beyond.length > 3 ? " …" : ""}).` });
+        }
+      }
+    }
+
     // Phase 5: Self-Lockout-Schutz
     const employeeOverrides = new Map([[employeeId, new Set(roleIds)]]);
     const adminCount = await countAdminCapableEmployees(supabase, { tenantId: req.tenantId, employeeOverrides });
     if (adminCount === 0) return res.status(SELF_LOCKOUT_ERROR.status).json({ error: SELF_LOCKOUT_ERROR.message });
 
-    // Atomar: alles loeschen + neu einfuegen
-    await supabase.from("EMPLOYEE_ROLE").delete().eq("EMPLOYEE_ID", employeeId);
+    // Alles loeschen + neu einfuegen. Ein Fehler beim Loeschen brach vorher
+    // nicht ab — die Antwort war trotzdem „ok".
+    const { error: delErr } = await supabase.from("EMPLOYEE_ROLE").delete().eq("EMPLOYEE_ID", employeeId);
+    if (delErr) return res.status(500).json({ error: delErr.message });
     if (roleIds.length > 0) {
       const rows = roleIds.map(rid => ({
         EMPLOYEE_ID: employeeId,
@@ -488,4 +518,5 @@ module.exports = {
   getMyPermissions, listPermissions,
   listRoles, getRole, createRole, patchRole, deleteRole, duplicateRole,
   listEmployeeRoleMap, setEmployeeRoles,
+  countAdminCapableEmployees, SELF_LOCKOUT_ERROR,
 };

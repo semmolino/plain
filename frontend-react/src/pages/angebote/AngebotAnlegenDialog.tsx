@@ -24,7 +24,7 @@ import { OfferFields, OFFER_FIELDS, missingOfferFields, offerPayload, type Offer
  * „HOAI-Kalkulationen", der nie erschien: nach dem Anlegen öffnete sich das
  * Angebot jedes Mal gleich. Kalkulationen stehen dort im eigenen Reiter.
  *
- * Vorbelegt wird wie bisher (Firma, Status, Gültigkeit, Texte aus den
+ * Vorbelegt wird wie bisher (Firma, Status, Gültigkeit aus den
  * Vorbelegungen), dazu „Zuständig" mit dem angemeldeten Mitarbeiter und der
  * Kontakt mit dem Hauptansprechpartner der gewählten Adresse.
  */
@@ -85,8 +85,10 @@ function AnlegenInner({ onClose, onCreated }: { onClose: () => void; onCreated: 
     statusId:   presetId(statuses, defs.default_offer_status_id),
     employeeId: ownId != null && managers.some(m => m.ID === ownId) ? String(ownId) : '',
     validUntil: Number.isFinite(validDays) && validDays > 0 ? addDays(offerDate || todayIso(), validDays) : '',
-    text1:      defs.offer_text_1 ?? '',
-    text2:      defs.offer_text_2 ?? '',
+    // Kopf-/Fußtext bleiben leer: das PDF nimmt dann den Standardtext aus
+    // Einstellungen → Dokumentvorlagen, und eine Änderung dort wirkt weiter.
+    // Die Schlüssel offer_text_1/2 der Vorbelegungen, die hier vorher gelesen
+    // wurden, ließen sich nirgends pflegen.
   }
   const form: OfferForm = { ...base, ...edits }
   const dirty = OFFER_FIELDS.some(k => edits[k] !== undefined && edits[k] !== base[k])

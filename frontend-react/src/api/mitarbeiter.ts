@@ -111,6 +111,10 @@ export interface DayBooking {
   time_finish:  string | null
   project_id:   number | null
   structure_id: number | null
+  /** Abrechenbare Stunden (QUANTITY_EXT); null = nicht gesetzt. */
+  hours_ext?:   number | null
+  /** An einer Rechnung oder einem Abschlag — nicht mehr änderbar. */
+  billed?:      boolean
 }
 
 export interface DayBalance {
@@ -166,7 +170,8 @@ export interface EmployeeAccessState {
 export const fetchEmployeeAccess = (id: number) =>
   apiClient.get<EmployeeAccessState>(`/mitarbeiter/${id}/access`)
 
-export const updateEmployee = (id: number, body: UpdateEmployeePayload) =>
+/** Teil-Update: nur mitgeschickte Felder ändern sich (seit Runde 10). */
+export const updateEmployee = (id: number, body: Partial<UpdateEmployeePayload>) =>
   apiClient.patch<{ data: Employee }>(`/mitarbeiter/${id}`, body)
 
 export const deleteEmployee = (id: number) =>
