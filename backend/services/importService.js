@@ -956,7 +956,7 @@ const PROJECT_FIELDS = [
 async function loadProjectContext(supabase, tenantId) {
   const [companyRes, statusRes, typeRes, empRes, addrRes, projRes] = await Promise.all([
     supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
-    supabase.from("PROJECT_STATUS").select("ID, ABBR"),                          // global
+    supabase.from("PROJECT_STATUS").select("ID, ABBR").eq("TENANT_ID", tenantId),   // je Büro (0176)
     supabase.from("PROJECT_TYPE").select("ID, ABBR").eq("TENANT_ID", tenantId),
     supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
@@ -1642,7 +1642,7 @@ async function loadProjectFullContext(supabase, tenantId) {
   const [companyRes, statusRes, typeRes, empRes, addrRes, projRes, settingsRes,
          masterRes, zoneRes, phaseRes, tabelleRes] = await Promise.all([
     supabase.from("COMPANY").select("ID").eq("TENANT_ID", tenantId).order("ID", { ascending: true }).limit(1),
-    supabase.from("PROJECT_STATUS").select("ID, ABBR"),                          // global, ohne Mandant
+    supabase.from("PROJECT_STATUS").select("ID, ABBR").eq("TENANT_ID", tenantId),   // je Büro (0176)
     supabase.from("PROJECT_TYPE").select("ID, ABBR").eq("TENANT_ID", tenantId),
     supabase.from("EMPLOYEE").select("ID, ABBR, FIRST_NAME, LAST_NAME").eq("TENANT_ID", tenantId).limit(100000),
     supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(100000),
@@ -3982,7 +3982,7 @@ async function loadTemplateLists(supabase, tenantId) {
     safe(() => supabase.from("COUNTRY").select("NAME")),
     safe(() => supabase.from("GENDER").select("GENDER")),
     safe(() => supabase.from("SALUTATION").select("SALUTATION")),
-    safe(() => supabase.from("PROJECT_STATUS").select("ABBR")),
+    safe(() => supabase.from("PROJECT_STATUS").select("ABBR").eq("TENANT_ID", tenantId)),
     safe(() => supabase.from("PROJECT_TYPE").select("ABBR").eq("TENANT_ID", tenantId)),
     safe(() => supabase.from("EMPLOYEE").select("ABBR").eq("TENANT_ID", tenantId).limit(2000)),
     safe(() => supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("TENANT_ID", tenantId).limit(2000)),

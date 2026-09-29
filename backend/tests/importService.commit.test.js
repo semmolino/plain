@@ -44,7 +44,7 @@ describe("buildTemplate", () => {
   const seed = () => makeFakeSupabase({
     COUNTRY: [{ NAME: "Deutschland" }, { NAME: "Österreich" }],
     GENDER: [{ GENDER: "weiblich" }, { GENDER: "männlich" }],
-    PROJECT_STATUS: [{ ABBR: "in Bearbeitung" }, { ABBR: "abgeschlossen" }],
+    PROJECT_STATUS: [{ TENANT_ID: TENANT, ABBR: "in Bearbeitung" }, { TENANT_ID: TENANT, ABBR: "abgeschlossen" }, { TENANT_ID: 999, ABBR: "fremder Status" }],
     PROJECT_TYPE: [{ TENANT_ID: TENANT, ABBR: "Neubau" }],
     EMPLOYEE: [{ TENANT_ID: TENANT, ABBR: "MMu" }, { TENANT_ID: TENANT, ABBR: "TBe" }],
     ADDRESS: [{ TENANT_ID: TENANT, ADDRESS_NAME_1: "Stadt Musterhausen" }],
@@ -75,6 +75,8 @@ describe("buildTemplate", () => {
     expect(listen.headers).toEqual(expect.arrayContaining(["Status", "Projekttyp", "Mitarbeiter (Kürzel)", "Adresse/Firma"]));
     const werte = listen.rows.flatMap(r => Object.values(r));
     expect(werte).toEqual(expect.arrayContaining(["in Bearbeitung", "Neubau", "MMu", "Stadt Musterhausen"]));
+    // Projektstatus gehören dem Büro (Migration 0176): der eines anderen fehlt in der Liste
+    expect(werte).not.toContain("fremder Status");
 
     // Datenvalidierung zeigt auf das Listen-Blatt (Dropdown in Excel).
     const ExcelJS = require("exceljs");
@@ -664,7 +666,7 @@ describe("commit (project_full)", () => {
 
   const seed = () => makeFakeSupabase({
     COMPANY: [{ ID: 1, TENANT_ID: TENANT }],
-    PROJECT_STATUS: [{ ID: 2, ABBR: "Aktiv" }],
+    PROJECT_STATUS: [{ ID: 2, TENANT_ID: TENANT, ABBR: "Aktiv" }],
     PROJECT_TYPE: [],
     EMPLOYEE: [{ ID: 10, TENANT_ID: TENANT, ABBR: "MMu", FIRST_NAME: "Maria", LAST_NAME: "Muster" }],
     ADDRESS: [{ ID: 20, TENANT_ID: TENANT, ADDRESS_NAME_1: "Stadt Musterhausen" }],

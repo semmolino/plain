@@ -59,7 +59,7 @@ import {
   type OpenPosten,
   type CompanySnapshot,
 } from '@/api/reports'
-import { fetchOffers, fetchOfferStatuses, type OfferListItem } from '@/api/angebote'
+import { fetchOffers, fetchOfferStatuses, type OfferListItem, statusIdByCode } from '@/api/angebote'
 import { fetchAbsences, type Absence } from '@/api/abwesenheit'
 import { InfoHint } from '@/components/ui/InfoHint'
 import { Modal } from '@/components/ui/Modal'
@@ -1406,7 +1406,7 @@ function TopOpenOffersCard() {
   const offersQ   = useQuery({ queryKey: ['dashboard', 'top-open-offers'], queryFn: fetchOffers,        staleTime: 300000 })
   const statusesQ = useQuery({ queryKey: ['offer-statuses'],               queryFn: fetchOfferStatuses, staleTime: 600000 })
 
-  const rejectedId = statusesQ.data?.data?.find(s => s.ABBR === 'Abgelehnt')?.ID ?? null
+  const rejectedId = statusIdByCode(statusesQ.data?.data, 'REJECTED')
   const offers: OfferListItem[] = offersQ.data?.data ?? []
   const open = offers
     .filter(o => o.PROJECT_ID === null && (rejectedId === null || o.OFFER_STATUS_ID !== rejectedId))

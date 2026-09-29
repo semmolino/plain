@@ -217,7 +217,10 @@ export async function mockDemo(page: Page, opts: DemoOptions = {}) {
     ['stammdaten/contacts/list',  { data: contacts }],
     ['stammdaten/countries',      { data: [{ ID: 'DE', NAME: 'Deutschland' }, { ID: 'AT', NAME: 'Österreich' }] }],
     ['adressen',             { data: addresses }],
-    ['angebote/statuses',    { data: named(['Entwurf', 'Angebot', 'Beauftragt', 'Abgelehnt']) }],
+    // Seit Migration 0176 je Büro; „Beauftragt"/„Abgelehnt" erkennt die Oberfläche am CODE
+    ['angebote/statuses',    { data: named(['Entwurf', 'Angebot', 'Beauftragt', 'Abgelehnt']).map(s => ({
+      ...s, CODE: s.ABBR === 'Beauftragt' ? 'ORDERED' : s.ABBR === 'Abgelehnt' ? 'REJECTED' : null,
+    })) }],
     ['angebote',             { data: offers }],
 
     // Uebersicht (Geschaeftsleitung). Der Auffang-Mock lieferte hier

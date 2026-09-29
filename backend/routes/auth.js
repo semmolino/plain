@@ -660,6 +660,16 @@ module.exports = (supabase) => {
       // Best-effort: eine fehlende Lizenz darf die Registrierung nicht kippen.
       await assignDefaultLicense(supabase, tenantId);
 
+      // 6b. Projekt- und Angebotsstatus: jedes Buero hat seine eigene Liste
+      // (Migration 0176). Ohne sie liesse sich weder ein Projekt noch ein
+      // Angebot anlegen — Status ist Pflicht. Best-effort wie die Lizenz: eine
+      // fehlende Liste ist in Einstellungen → Stammdaten nachzuholen.
+      try {
+        await require("../services/statusCatalog").seedDefaultStatuses(supabase, tenantId);
+      } catch (e) {
+        console.error("[signup] Standard-Status nicht angelegt:", e?.message || e);
+      }
+
       // 7. Bestaetigungsmail. NICHT best-effort wie die Schritte davor: ohne
       // diese Mail kommt der Anmelder nie in sein Konto, und ein stilles
       // "Konto erstellt" waere dann eine Luege. Schlaegt der Versand fehl,

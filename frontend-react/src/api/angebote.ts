@@ -2,10 +2,22 @@ import { apiClient, openPdfWithAuth } from './client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Angebotsstatus des Büros (seit Migration 0176 je Mandant). `CODE` markiert
+ * die beiden Status, an denen Logik hängt — erkennen immer über den Code,
+ * nie über den Namen: den darf das Büro ändern.
+ */
+export type OfferStatusCode = 'ORDERED' | 'REJECTED'
 export interface OfferStatus {
-  ID:         number
-  ABBR: string
+  ID:          number
+  ABBR:        string
+  SORT_ORDER?: number
+  CODE?:       OfferStatusCode | null
 }
+
+/** ID des Status mit diesem Code — oder null, wenn das Büro ihn nicht führt. */
+export const statusIdByCode = (list: OfferStatus[] | undefined, code: OfferStatusCode): number | null =>
+  list?.find(s => s.CODE === code)?.ID ?? null
 
 export interface Offer {
   ID:              number

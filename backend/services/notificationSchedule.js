@@ -100,6 +100,11 @@ async function listAllSchedules(supabase, tenantId) {
 
 async function upsertSchedule(supabase, { tenantId, typeKey, body, employeeId }) {
   if (!tenantId || !typeKey) throw { status: 400, message: 'tenantId und typeKey erforderlich' };
+  // Nur Projektstatus dieses Büros (Migration 0176) — eine fremde ID filterte
+  // die Erinnerung auf einen Status, den es hier nicht gibt.
+  const projectStatusIds = Array.isArray(body?.projectStatusIds)
+    ? await require('./statusCatalog').ownProjectStatusIds(supabase, tenantId, body.projectStatusIds)
+    : null;
   const b = body || {};
   const row = {
     TENANT_ID:             tenantId,
@@ -113,9 +118,7 @@ async function upsertSchedule(supabase, { tenantId, typeKey, body, employeeId })
     SCHEDULE_TIME_OF_DAY:  parseTimeHhmm(b.scheduleTimeOfDay),
     NOTIFY_PROJECT_PM:     b.notifyProjectPm !== false,
     PM_NOTIFY_MODE:        b.pmNotifyMode === 'summary' ? 'summary' : 'per_project',
-    PROJECT_STATUS_IDS:    Array.isArray(b.projectStatusIds)
-                            ? b.projectStatusIds.map(Number).filter(Number.isFinite)
-                            : null,
+    PROJECT_STATUS_IDS:    projectStatusIds,
     AUDIENCE_ROLES:        Array.isArray(b.audienceRoles)       ? b.audienceRoles.filter(Boolean) : null,
     AUDIENCE_DEPARTMENTS:  Array.isArray(b.audienceDepartments) ? b.audienceDepartments.map(Number).filter(Number.isFinite) : null,
     AUDIENCE_EMPLOYEES:    Array.isArray(b.audienceEmployees)   ? b.audienceEmployees.map(Number).filter(Number.isFinite)   : null,

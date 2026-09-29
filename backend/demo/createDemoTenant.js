@@ -112,6 +112,8 @@ async function main() {
 
   // 6) Rollen + Admin
   await seedRolesAndAssignAdmin(supabase, tenantId, emp.ID);
+  // Projekt- und Angebotsstatus je Büro (Migration 0176), wie bei der Registrierung
+  await require("../services/statusCatalog").seedDefaultStatuses(supabase, tenantId);
 
   // 7) Lizenz: Standard-Plan zuweisen (sonst fehlt der Mandant in der
   // Owner-Konsole und gilt als "unbeschränkt"). Best-effort.

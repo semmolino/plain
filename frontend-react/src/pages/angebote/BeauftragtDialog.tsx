@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   convertOffer, fetchOfferStatuses, fetchOfferStructure, updateOffer,
-  type ConvertOfferPayload,
+  type ConvertOfferPayload, statusIdByCode,
 } from '@/api/angebote'
 import { BeauftragtModal } from './BeauftragtModal'
 
@@ -21,7 +21,7 @@ export function BeauftragtDialog({ offer, onClose, onDone }: {
   const oid = offer?.ID ?? null
 
   const { data: statusData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
-  const beauftragtId = statusData?.data?.find(s => s.ABBR === 'Beauftragt')?.ID ?? null
+  const beauftragtId = statusIdByCode(statusData?.data, 'ORDERED')
   const { data: structData } = useQuery({
     queryKey: ['offer-structure', oid],
     queryFn:  () => fetchOfferStructure(oid!),

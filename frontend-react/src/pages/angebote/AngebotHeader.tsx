@@ -9,7 +9,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { ProjectPicker } from '@/components/projekte/ProjectPicker'
 import {
   fetchOffers, fetchOfferStatuses, openOfferPdf, openAuftragsbestaetigungPdf,
-  copyOffer, deleteOffer, updateOffer,
+  copyOffer, deleteOffer, updateOffer, statusIdByCode,
 } from '@/api/angebote'
 import { usePermission } from '@/store/permissionsStore'
 import { useToast } from '@/store/toastStore'
@@ -56,7 +56,7 @@ export function AngebotHeader({ offerId, onBack, onSwitch, onEditData, onDeleted
   const offer   = offers.find(o => o.ID === offerId)
   const abbr    = offer?.ABBR ?? ''
   const name    = offer?.NAME ?? ''
-  const rejectedId = statusData?.data?.find(s => s.ABBR === 'Abgelehnt')?.ID ?? null
+  const rejectedId = statusIdByCode(statusData?.data, 'REJECTED')
   const isOpen  = !!offer && offer.PROJECT_ID == null && (rejectedId == null || offer.OFFER_STATUS_ID !== rejectedId)
   const expired = !!offer?.VALID_UNTIL && isOpen && offer.VALID_UNTIL.slice(0, 10) < todayIso()
 

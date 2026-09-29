@@ -47,8 +47,8 @@ function tables() {
     VAT: [{ ID: 3, VAT: "USt 19" }],
     CURRENCY: [{ ID: 1, ABBR: "EUR" }],
     COUNTRY: [{ ID: 1, ABBR: "DE" }],
-    PROJECT_STATUS: [{ ID: 2, ABBR: "Laufend" }],
-    OFFER_STATUS: [{ ID: 1, ABBR: "Offen" }],
+    PROJECT_STATUS: [{ ID: 2, TENANT_ID: T, ABBR: "Laufend" }, { ID: 8, TENANT_ID: 99, ABBR: "Fremd" }],
+    OFFER_STATUS: [{ ID: 1, TENANT_ID: T, ABBR: "Offen" }],
     PAYMENT_MEANS: [{ ID: 1, ABBR: "58" }],
     ROLE: [{ ID: 5, TENANT_ID: T, ABBR: "PL", NAME: "Projektleitung", HOURLY_RATE: 95 }],
   };
@@ -179,11 +179,11 @@ describe("Leser, die an leeren Einstellungen scheiterten", () => {
 });
 
 describe("Stammdaten", () => {
-  it("POST /stammdaten/status gibt es nicht mehr — der Katalog ist global", async () => {
+  it("POST /stammdaten/status ohne Liste gibt es nicht (Runde 12: schrieb für alle Büros)", async () => {
     const sb = makeFakeSupabase(tables());
     const r = await request(sb, { tenantId: T, permissions: ["settings.basedata.edit"] }, "POST", "/stammdaten/status", { abbr: "Hack" });
     expect(r.status).toBe(404);
-    expect(sb._tables.PROJECT_STATUS).toHaveLength(1);
+    expect(sb._tables.PROJECT_STATUS).toHaveLength(2);
   });
 
   it("Stundensatz einer Rolle: Komma geht, Unsinn nicht", async () => {

@@ -50,7 +50,8 @@ async function loadMasterData(supabase, tenantId) {
   const vats = (await supabase.from("VAT").select("*")).data || [];
   const currencies = (await supabase.from("CURRENCY").select("*")).data || [];
   const paymentMeans = (await supabase.from("PAYMENT_MEANS").select("*")).data || [];
-  const projectStatus = (await supabase.from("PROJECT_STATUS").select("*")).data || [];
+  // Projektstatus gehören seit Migration 0176 dem Büro — mit Mandantenfilter.
+  const projectStatus = (await supabase.from("PROJECT_STATUS").select("*").eq("TENANT_ID", tenantId)).data || [];
 
   // Kostensatz-Historie je Mitarbeiter
   const cpByEmp = new Map();

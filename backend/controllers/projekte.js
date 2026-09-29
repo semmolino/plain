@@ -14,7 +14,7 @@ async function getDepartments(req, res, supabase) {
 
 async function getStatuses(req, res, supabase) {
   try {
-    const data = await svc.getStatuses(supabase);
+    const data = await svc.getStatuses(supabase, { tenantId: req.tenantId });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message || err });

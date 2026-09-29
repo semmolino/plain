@@ -29,7 +29,7 @@ function arg(name, fallback) {
 // Eltern→Kind (für den späteren Import relevant; beim Export egal).
 // Defensiv: existiert eine Tabelle/Spalte nicht, wird sie übersprungen.
 const TENANT_TABLES = [
-  "COMPANY", "DEPARTMENT", "EMPLOYEE", "USER_ROLE",
+  "COMPANY", "DEPARTMENT", "PROJECT_STATUS", "OFFER_STATUS", "EMPLOYEE", "USER_ROLE",
   "ADDRESS", "CONTACTS",
   "BREAK_RULE", "WORKING_TIME_MODEL", "EMPLOYEE_WORK_MODEL", "EMPLOYEE_COST_RATE",
   "OFFER", "OFFER_STRUCTURE",

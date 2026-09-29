@@ -5,7 +5,7 @@ const { renderOfferPdf, renderAuftragsbestaetigungPdf } = require('../services_p
 
 async function getOfferStatuses(req, res, supabase) {
   try {
-    const data = await svc.getOfferStatuses(supabase);
+    const data = await svc.getOfferStatuses(supabase, { tenantId: req.tenantId });
     return res.json({ data });
   } catch (e) {
     return res.status(e?.status || 500).json({ error: e?.message || String(e) });

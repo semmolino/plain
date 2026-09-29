@@ -4698,6 +4698,12 @@ fieldset:disabled .ws-check { cursor: default; }
 .st-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border-4); max-width: 560px; }
 .st-list-row { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid var(--border-4); }
 .st-list-name { flex: 1 1 auto; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.st-status-list { max-width: 720px; }
+.st-status-row { padding: var(--space-1) 0; }
+.st-status-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.st-status-main .st-list-name { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.st-status-sub { font-size: 12px; color: var(--text-3); }
+.st-badge--system { display: inline-flex; align-items: center; gap: 3px; margin-left: 0; }
 .st-list-input { flex: 1 1 auto; min-width: 0; }
 /* Tabellen der Kataloge */
 .st-table-wrap { max-width: 100%; }

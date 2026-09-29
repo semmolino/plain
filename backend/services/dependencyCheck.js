@@ -399,43 +399,11 @@ async function checkMahnung(supabase, { tenantId, id }) {
   };
 }
 
-// ── PROJECT_STATUS / OFFER_STATUS (gemeinsam in PROJECT_STATUS) ────────────
-
-async function checkProjectStatus(supabase, { tenantId, id }) {
-  // Status-Tabelle ist global (kein TENANT_ID), Name aufloesen
-  const { data: st } = await supabase.from("PROJECT_STATUS").select("ABBR").eq("ID", id).maybeSingle();
-  const entityLabel = `Status „${st?.ABBR || `#${id}`}"`;
-
-  const [projects, offers, invoices, partials] = await Promise.all([
-    safeReferences(supabase, "PROJECT",         "ID, ABBR",            { PROJECT_STATUS_ID: id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "OFFER",           "ID, ABBR",            { OFFER_STATUS_ID:   id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "INVOICE",         "ID, INVOICE_NUMBER",        { STATUS_ID:         id, TENANT_ID: tenantId }),
-    safeReferences(supabase, "ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER",{ STATUS_ID:         id, TENANT_ID: tenantId }),
-  ]);
-  const refs = [
-    formatRefBlock("projects", projects, p => p.ABBR || `#${p.ID}`),
-    formatRefBlock("offers",   offers,   o => o.ABBR || `#${o.ID}`),
-    formatRefBlock("invoices", invoices, i => i.INVOICE_NUMBER || `#${i.ID}`),
-    formatRefBlock("partials", partials, p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`),
-  ].filter(Boolean);
-  const labeled = refs.map(r => ({
-    ...r,
-    label:
-      r.kind === "projects" ? (r.count === 1 ? "Projekt"  : "Projekten") :
-      r.kind === "offers"   ? (r.count === 1 ? "Angebot"  : "Angeboten") :
-      r.kind === "invoices" ? (r.count === 1 ? "Rechnung" : "Rechnungen") :
-      r.kind === "partials" ? (r.count === 1 ? "Abschlag" : "Abschlägen") : r.kind,
-  }));
-  const blocked = labeled.length > 0;
-  return {
-    blocked,
-    entity: { label: entityLabel },
-    refs:   labeled,
-    message: blocked
-      ? `${entityLabel} wird noch in ${joinRefs(labeled)} genutzt — bitte erst dort umstellen.`
-      : "",
-  };
-}
+// ── PROJECT_STATUS / OFFER_STATUS ──────────────────────────────────────────
+// Seit Migration 0176 je Büro; wo ein Status hängt, prüft
+// services/statusCatalog.js (usageOf). Die frühere checkProjectStatus hatte
+// keinen Aufrufer und verglich obendrein Rechnungs-STATUS_ID mit der
+// Projektstatus-ID.
 
 // ── PROJECT_TYPE (Projekttyp) ─────────────────────────────────────────────
 
@@ -678,7 +646,6 @@ module.exports = {
   checkProject,
   checkOffer,
   checkMahnung,
-  checkProjectStatus,
   checkProjectTyp,
   checkDepartment,
   checkUserRole,

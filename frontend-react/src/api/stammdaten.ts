@@ -256,6 +256,31 @@ export const putDefaults = (values: Record<string, string | null>) =>
 export interface StammdatenItem { ID: number; ABBR: string }
 export interface Rolle { ID: number; ABBR: string; NAME: string | null; HOURLY_RATE: number | null }
 
+// ── Projekt- und Angebotsstatus je Büro (Migration 0176) ─────────────────────
+
+export type StatusKind = 'project' | 'offer'
+export interface StatusCatalogItem {
+  ID:          number
+  ABBR:        string
+  SORT_ORDER:  number
+  /** ORDERED/REJECTED — nur Angebotsstatus; umbenennbar, nicht löschbar. */
+  CODE?:       'ORDERED' | 'REJECTED' | null
+  CODE_HINT?:  string
+  /** Wo der Status hängt: „12 Projekten", „Vorbelegung", … */
+  USAGE:       { count: number; refs: string[] }
+}
+
+export const fetchStatusCatalog = (kind: StatusKind) =>
+  apiClient.get<{ data: StatusCatalogItem[] }>(`/stammdaten/status/${kind}`)
+export const createStatusEntry = (kind: StatusKind, abbr: string) =>
+  apiClient.post<{ data: StatusCatalogItem }>(`/stammdaten/status/${kind}`, { abbr })
+export const updateStatusEntry = (kind: StatusKind, id: number, abbr: string) =>
+  apiClient.patch<{ data: StatusCatalogItem }>(`/stammdaten/status/${kind}/${id}`, { abbr })
+export const deleteStatusEntry = (kind: StatusKind, id: number) =>
+  apiClient.delete<{ data: { ok: boolean } }>(`/stammdaten/status/${kind}/${id}`)
+export const reorderStatusEntries = (kind: StatusKind, ids: number[]) =>
+  apiClient.put<{ data: StatusCatalogItem[] }>(`/stammdaten/status/${kind}/order`, { ids })
+
 export const fetchDepartments = () =>
   apiClient.get<{ data: StammdatenItem[] }>('/stammdaten/departments')
 export const deleteDepartment = (id: number) =>

@@ -100,6 +100,7 @@ describe("Struktur aktualisieren im Projekt", () => {
 describe("Beauftragen", () => {
   test("die Verknüpfung geht ins Projekt über", async () => {
     const sb = makeFakeSupabase({
+      PROJECT_STATUS: [{ ID: 1, TENANT_ID: T, ABBR: "Laufend", SORT_ORDER: 10 }],
       OFFER: [{ ID: 1, TENANT_ID: T, ABBR: "A-1", NAME: "Kita", COMPANY_ID: 5, ADDRESS_ID: 9, CONTACT_ID: 11, PROJECT_ID: null, SURCHARGES_TOTAL: 0 }],
       OFFER_STRUCTURE: [
         { ID: 10, OFFER_ID: 1, TENANT_ID: T, FATHER_ID: null, BILLING_TYPE_ID: 1, ABBR: "§ 34", SORT_ORDER: 0, REVENUE: 3300, REVENUE_BASIS: 3300 },

@@ -233,20 +233,36 @@ ausdrücklich zulässt (wie beim Adressimport: „trotzdem neu anlegen"), gehör
 die Prüfung ganz in die Anwendung, wo sie fragen kann statt nur abzuweisen.
 
 **Globale Kataloge tragen keinen Mandanten**: `CURRENCY`, `VAT`, `COUNTRY`,
-`PROJECT_STATUS`, `OFFER_STATUS`, `PAYMENT_MEANS`. Sie werden **ohne**
-`.eq("TENANT_ID", …)` gelesen — ein Filter darauf liefert nicht etwa alles,
-sondern einen PostgREST-Fehler, und wer ihn wegfängt, bekommt stillschweigend
-eine leere Liste. Genau so stand monatelang ein `vat: null` im Demo-Seed
-(`demo/seed/lib/masterData.js`).
+`PAYMENT_MEANS`. Sie werden **ohne** `.eq("TENANT_ID", …)` gelesen — ein Filter
+darauf liefert nicht etwa alles, sondern einen PostgREST-Fehler, und wer ihn
+wegfängt, bekommt stillschweigend eine leere Liste. Genau so stand monatelang
+ein `vat: null` im Demo-Seed (`demo/seed/lib/masterData.js`).
 
-`PAYMENT_MEANS` ist seit Migration `0163` zusätzlich **schreibgeschützt**: die
-Werte sind die Codeliste UNTDID 4461 (`einvoice/codelists.js`), `ABBR` trägt
-den Code. Die Policy lässt Lesen für alle zu, Schreiben nur mit `sys`-Claim —
-also nur aus einer Migration. Der Mandant wählt daraus eine Vorbelegung
-(`default_payment_means_id`), mehr nicht. Das ist die Form für jeden weiteren
-Katalog, den der Betreiber und nicht das Büro definiert; **ohne `FORCE` wäre
-der Schutz wirkungslos**, weil PostgREST sich als Tabelleneigentümer verbindet
-und an jeder Policy vorbeigeht.
+Alle vier sind **schreibgeschützt** — `PAYMENT_MEANS` seit Migration `0163`,
+`CURRENCY`/`VAT`/`COUNTRY` seit `0175`: Lesen für alle, Schreiben nur mit
+`sys`-Claim, also nur aus einer Migration. Bei `PAYMENT_MEANS` sind die Werte
+die Codeliste UNTDID 4461 (`einvoice/codelists.js`), `ABBR` trägt den Code; der
+Mandant wählt daraus eine Vorbelegung (`default_payment_means_id`), mehr nicht.
+Das ist die Form für jeden weiteren Katalog, den der Betreiber und nicht das
+Büro definiert; **ohne `FORCE` wäre der Schutz wirkungslos**, weil PostgREST
+sich als Tabelleneigentümer verbindet und an jeder Policy vorbeigeht.
+
+**`PROJECT_STATUS` und `OFFER_STATUS` gehören seit Migration `0176` dem Büro**
+(vorher global, siehe `0022`/`0027`): `TENANT_ID`, `SORT_ORDER`, RLS wie jede
+Mandantentabelle, gelesen **mit** Mandantenfilter und sortiert nach
+`SORT_ORDER`. Alles läuft über `services/statusCatalog.js` — Liste,
+Pflege (`/stammdaten/status/:kind`, `settings.basedata.edit`), Löschprüfung
+(Projekte/Angebote, Vorbelegung, „laufende Projekte", Erinnerungen) und
+`assertOwnStatus`, das **jeder** Weg ruft, der einen Status an ein Projekt,
+Angebot, eine Vorbelegung oder Einstellung hängt: der Fremdschlüssel kennt
+keine Mandanten. Neue Büros bekommen `DEFAULT_STATUSES` bei der Registrierung
+(`seedDefaultStatuses`), nicht aus einer Migration.
+Zwei Angebotsstatus tragen Logik und deshalb einen **`CODE`**: `ORDERED`
+(„Als beauftragt markieren" und das Beauftragen setzen ihn) und `REJECTED`
+(„Als abgelehnt markieren"; abgelehnte Angebote zählen nicht als offen).
+Erkannt werden sie **nur** über den Code (`statusIdByCode`), nie über den Namen
+— den darf das Büro ändern. Sie sind umbenennbar, aber nicht löschbar; je Büro
+gibt es jeden Code höchstens einmal (Unique-Index `TENANT_ID, CODE`).
 
 **Namensumstellung 2026-09 — alte Namen in aelteren Texten.** Tabellen und
 Spalten wurden systemweit umbenannt (acht Bloecke, Migrationen 0140–0159).
@@ -414,7 +430,9 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   (`pages/admin/StammdatenPage.tsx`) je Katalog ein Unterreiter (am Handy eine Auswahl); Löschen fragt
   nach, und die 409 der Löschprüfung bleibt als Meldung stehen. Bearbeiten je Katalog mit dessen Recht
   (`settings.basedata.edit`, `settings.booking_types.edit`, `settings.booking_text_templates.edit`,
-  `absence.manage`, `settings.work_time.edit`) — ohne Recht nur lesen.
+  `absence.manage`, `settings.work_time.edit`) — ohne Recht nur lesen. Projekt- und Angebotsstatus sind eigene
+  Unterreiter (`StatusEditor.tsx`): anlegen, umbenennen, sortieren, löschen nur Unbenutztes — die Zeile
+  sagt, wo ein Status hängt.
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
@@ -684,6 +702,7 @@ Windows): `owner-console/README.md`.
   - Der Einladungslink verlässt den Server nicht mehr: ohne Mailversand kam er in der Antwort der Neuanlage und von „Einladung senden" zurück.
   - Eine eigene genehmigte Abwesenheit storniert man selbst nur, solange sie nicht begonnen hat (`POST /abwesenheit/:id/cancel`, sonst 409; mit `absence.manage` immer). Vorher ließ sich genommener Urlaub hinterher stornieren — die Tage kamen auf den Resturlaub zurück. Abgelehnte und stornierte Einträge lassen sich nicht erneut stornieren.
 - **Einstellungen (UI-Pilot Runde 12):** `PUT /stammdaten/defaults` nahm jeden Schlüssel ungeprüft an — wer Vorbelegungen pflegen durfte, überschrieb damit Firmenlogo (`co_<id>_logo_data_uri`), Monatsabschluss, Arbeitszeitregeln und Urlaubsverfall. Jetzt feste Liste mit Recht je Schlüssel (`settings.defaults.edit` bzw. `settings.company.edit` fürs Branding), Wertprüfung, Firma/Anmeldebild nur aus dem eigenen Büro (`services/tenantDefaults.js`). `GET /defaults` lieferte allen Angemeldeten sämtliche Einstellungen samt gespeichertem Monatsabschluss-Bericht — jetzt nur die Liste. `POST /stammdaten/status` ist entfernt: es schrieb in den **globalen** Katalog `PROJECT_STATUS`, ein Büro legte so einen Status für alle an. Arbeitszeitmodelle nahmen jedes Soll an (−8 h, 30 h), jedes Land und eine Pausenregel eines fremden Büros — jetzt 0–24 h je Tag, Land/Bundesland aus der festen Liste, Pausenregel nur aus dem eigenen Büro, fremde oder unbekannte Modelle 404 statt 500 (`services/workingTimeModels.js`).
+- **Kataloge (UI-Pilot Runde 13):** `CURRENCY`, `VAT` und `COUNTRY` waren trotz „global" in der Datenbank beschreibbar (RLS ohne `FORCE`, ohne Policy) — seit `0175` schreibgeschützt wie `PAYMENT_MEANS`. Projekt- und Angebotsstatus sind seit `0176` mandanteneigen; `assertOwnStatus` verhindert, dass Projekt, Angebot, Vorbelegung, Monatsabschluss oder Erinnerung auf einen Status eines anderen Büros zeigen (vorher nahm z. B. `default_project_status_id` jede ID an). Gegenprobe: `backend/scripts/verify_0175_0176_kataloge.sql`.
 
 **Offen (Stand 2026-09-29):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht

@@ -3,6 +3,7 @@
 const { contractDefaults } = require('./contractDefaults');
 const { normalizeEffortLines, effortColumns, nodeEffortLines, lineAmount } = require('./effortLines');
 const { assertOwnAddress, assertContactOfAddress } = require('./adressen');
+const statusCatalog = require('./statusCatalog');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,13 +65,9 @@ function flattenOfferStructure(rows) {
 
 // ── offer statuses ────────────────────────────────────────────────────────────
 
-async function getOfferStatuses(supabase) {
-  const { data, error } = await supabase
-    .from('OFFER_STATUS')
-    .select('ID, ABBR')
-    .order('ID', { ascending: true });
-  if (error) throw error;
-  return data || [];
+/** Angebotsstatus des Büros, sortiert, mit CODE (ORDERED/REJECTED) — Migration 0176. */
+async function getOfferStatuses(supabase, { tenantId } = {}) {
+  return statusCatalog.listStatuses(supabase, tenantId, 'offer');
 }
 
 // ── offers ────────────────────────────────────────────────────────────────────
@@ -106,7 +103,7 @@ async function listOffers(supabase, { tenantId }) {
   const projectIds = [...new Set(rows.map(r => r.PROJECT_ID).filter(Boolean))];
 
   const [statusRes, empRes, addrRes, contactRes, structRes, projectRes] = await Promise.all([
-    statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, ABBR').in('ID', statusIds) : Promise.resolve({ data: [] }),
+    statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, ABBR').eq('TENANT_ID', tenantId).in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
     // CONTACTS — die Tabelle heisst im Plural. Mit „CONTACT" lief die Abfrage
@@ -203,6 +200,7 @@ async function createOffer(supabase, { tenantId, body }) {
   if (!b.company_id)      throw { status: 400, message: 'Firma ist erforderlich' };
   const createProbability = probabilityOrNull(b.probability);
   await assertRecipient(supabase, { tenantId, addressId: b.address_id, contactId: b.contact_id });
+  const offerStatusId = await statusCatalog.assertOwnStatus(supabase, tenantId, 'offer', b.offer_status_id);
 
   // Resolve offer number via RPC
   const { data: numData, error: numErr } = await supabase.rpc('next_offer_number', {
@@ -231,7 +229,7 @@ async function createOffer(supabase, { tenantId, body }) {
       OFFER_TEXT_2:    b.offer_text_2 ? String(b.offer_text_2) : null,
       ADDRESS_ID:      parseInt(String(b.address_id), 10),
       CONTACT_ID:      parseInt(String(b.contact_id), 10),
-      OFFER_STATUS_ID: parseInt(String(b.offer_status_id), 10),
+      OFFER_STATUS_ID: offerStatusId,
       COMPANY_ID:      parseInt(String(b.company_id), 10),
       TENANT_ID:       tenantId,
       OFFER_DATE:      b.offer_date   || new Date().toISOString().slice(0, 10),
@@ -358,7 +356,7 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
   if (b.offer_text_2    !== undefined) patch.OFFER_TEXT_2    = b.offer_text_2 || null;
   if (b.address_id      !== undefined) patch.ADDRESS_ID      = required('address_id', 'Adresse');
   if (b.contact_id      !== undefined) patch.CONTACT_ID      = required('contact_id', 'Kontakt');
-  if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = required('offer_status_id', 'Angebotsstatus');
+  if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = await statusCatalog.assertOwnStatus(supabase, tenantId, 'offer', required('offer_status_id', 'Angebotsstatus'));
   if (b.company_id      !== undefined) patch.COMPANY_ID      = required('company_id', 'Firma');
   if (patch.ADDRESS_ID !== undefined || patch.CONTACT_ID !== undefined) {
     // Nur eine Seite geaendert: die andere kommt aus dem gespeicherten Angebot.
@@ -1334,6 +1332,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   if (!b.order_date)         throw { status: 400, message: 'Auftragsdatum ist erforderlich' };
   if (!b.project_status_id)  throw { status: 400, message: 'Projektstatus ist erforderlich' };
   if (!b.project_manager_id) throw { status: 400, message: 'Projektleiter ist erforderlich' };
+  const projectStatusId = await statusCatalog.assertOwnStatus(supabase, tenantId, 'project', b.project_status_id);
 
   // Fetch offer
   const { data: offer, error: offerErr } = await supabase
@@ -1373,7 +1372,7 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     ABBR:         num,
     NAME:          offer.NAME,
     COMPANY_ID:         companyId,
-    PROJECT_STATUS_ID:  parseInt(String(b.project_status_id), 10),
+    PROJECT_STATUS_ID:  projectStatusId,
     PROJECT_TYPE_ID:    b.project_type_id  ? parseInt(String(b.project_type_id), 10)  : null,
     DEPARTMENT_ID:      b.department_id    ? parseInt(String(b.department_id), 10)    : null,
     PROJECT_MANAGER_ID: parseInt(String(b.project_manager_id), 10),
@@ -1593,8 +1592,11 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
 
   // Update OFFER — wrap in try/catch in case columns not yet migrated
   try {
-    await supabase.from('OFFER').update({ PROJECT_ID: project.ID, ORDER_DATE: b.order_date })
-      .eq('ID', offerId);
+    // Beauftragt heißt beauftragt — auch wenn daraus gleich ein Projekt wird.
+    // Vorher setzte nur „ohne Projekt markieren" den Status (Runde 13).
+    const orderedId = await statusCatalog.statusIdByCode(supabase, tenantId, 'ORDERED');
+    await supabase.from('OFFER').update({ PROJECT_ID: project.ID, ORDER_DATE: b.order_date, ...(orderedId ? { OFFER_STATUS_ID: orderedId } : {}) })
+      .eq('ID', offerId).eq('TENANT_ID', tenantId);
   } catch (_) { /* non-fatal */ }
 
   // Attach HOAI calculations that were linked to this offer

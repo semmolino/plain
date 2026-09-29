@@ -155,6 +155,8 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0172 beschreibt die Rechnungsrechte (Entwurf mit Anlege-Recht).
     // 0173 fuehrt Aufwandszeilen im Angebot und den Plan am Projekt-Element ein.
     // 0174 verknuepft Angebotselemente mit ihrer Kalkulation.
+    // 0175 schuetzt CURRENCY, VAT und COUNTRY gegen Schreiben (lesen alle, schreiben nur sys).
+    // 0176 macht Projekt- und Angebotsstatus mandanteneigen (Kopie je Buero, Verweise umgehaengt).
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -198,6 +200,8 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0172_rechnung_entwurf_rechte_texte.sql",
       "0173_aufwandszeilen_und_plan.sql",
       "0174_angebot_kalkulation_verknuepfung.sql",
+      "0175_kataloge_schreibschutz.sql",
+      "0176_status_je_mandant.sql",
     ]);
   });
 

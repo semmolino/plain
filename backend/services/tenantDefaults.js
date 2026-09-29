@@ -27,8 +27,8 @@ const C = "settings.company.edit";
 const SPEC = {
   default_country_id:            { perm: D, kind: "ref",  table: "COUNTRY",        label: "Land" },
   default_company_id:            { perm: D, kind: "ref",  table: "COMPANY",        label: "Firma", tenant: true },
-  default_project_status_id:     { perm: D, kind: "ref",  table: "PROJECT_STATUS", label: "Projektstatus" },
-  default_offer_status_id:       { perm: D, kind: "ref",  table: "OFFER_STATUS",   label: "Angebotsstatus" },
+  default_project_status_id:     { perm: D, kind: "ref",  table: "PROJECT_STATUS", label: "Projektstatus", tenant: true },
+  default_offer_status_id:       { perm: D, kind: "ref",  table: "OFFER_STATUS",   label: "Angebotsstatus", tenant: true },
   default_currency_id:           { perm: D, kind: "ref",  table: "CURRENCY",       label: "Währung" },
   default_vat_id:                { perm: D, kind: "ref",  table: "VAT",            label: "MwSt." },
   default_payment_means_id:      { perm: D, kind: "ref",  table: "PAYMENT_MEANS",  label: "Zahlungsart" },

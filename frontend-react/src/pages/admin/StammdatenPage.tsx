@@ -16,6 +16,7 @@ import {
 } from '@/api/stammdaten'
 import { SegmentNav } from '@/pages/mitarbeiter/SegmentNav'
 import { ProjektrollenEditor } from './ProjektrollenEditor'
+import { StatusEditor } from './StatusEditor'
 import { BuchungsartenSection } from './BuchungsartenSection'
 import { BuchungstextvorlagenSection } from './BuchungstextvorlagenSection'
 import { AbwesenheitsartenSection } from './AbwesenheitsartenSection'
@@ -40,6 +41,8 @@ import { ArbeitszeitmodelleSection } from './ArbeitszeitmodelleSection'
 const SUBS = [
   { id: 'abteilungen',        label: 'Abteilungen' },
   { id: 'projekttypen',       label: 'Projekttypen' },
+  { id: 'projektstatus',      label: 'Projektstatus' },
+  { id: 'angebotsstatus',     label: 'Angebotsstatus' },
   { id: 'projektrollen',      label: 'Projektrollen' },
   { id: 'buchungsarten',      label: 'Buchungsarten' },
   { id: 'textvorlagen',       label: 'Textvorlagen' },
@@ -81,6 +84,8 @@ export function StammdatenPage() {
       <div className="st-body">
         {sub === 'abteilungen'        && <AbteilungenEditor />}
         {sub === 'projekttypen'       && <ProjekttypenEditor />}
+        {sub === 'projektstatus'      && <StatusEditor kind="project" />}
+        {sub === 'angebotsstatus'     && <StatusEditor kind="offer" />}
         {sub === 'projektrollen'      && <ProjektrollenEditor />}
         {sub === 'buchungsarten'      && <div className="admin-section st-legacy"><BuchungsartenSection /></div>}
         {sub === 'textvorlagen'       && <div className="admin-section st-legacy"><BuchungstextvorlagenSection /></div>}

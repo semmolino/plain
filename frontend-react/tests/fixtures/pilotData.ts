@@ -1510,6 +1510,48 @@ export async function mockEinstellungen(page: Page) {
     AT: [{ code: null, label: 'Österreich (gesamt)' }],
     CH: [{ code: null, label: 'Schweiz (gesamt)' }],
   } })))
+  // Projekt- und Angebotsstatus je Büro (Runde 13): Liste mit Verwendung, Pflege
+  const statusLists: Record<string, Array<Record<string, unknown>>> = {
+    project: [
+      { ID: 1, ABBR: 'Akquise',       SORT_ORDER: 10, USAGE: { count: 3, refs: ['3 Projekten'] } },
+      { ID: 2, ABBR: 'Laufend',       SORT_ORDER: 20, USAGE: { count: 12, refs: ['12 Projekten', 'Vorbelegung', '„laufende Projekte“ im Monatsabschluss'] } },
+      { ID: 3, ABBR: 'Pausiert',      SORT_ORDER: 30, USAGE: { count: 0, refs: [] } },
+      { ID: 4, ABBR: 'Abgeschlossen', SORT_ORDER: 40, USAGE: { count: 21, refs: ['21 Projekten'] } },
+    ],
+    offer: [
+      { ID: 11, ABBR: 'In Bearbeitung', SORT_ORDER: 10, CODE: null, USAGE: { count: 4, refs: ['4 Angeboten', 'Vorbelegung'] } },
+      { ID: 12, ABBR: 'Versendet',      SORT_ORDER: 20, CODE: null, USAGE: { count: 6, refs: ['6 Angeboten'] } },
+      { ID: 13, ABBR: 'Beauftragt',     SORT_ORDER: 30, CODE: 'ORDERED',  CODE_HINT: 'wird gesetzt, wenn ein Angebot als beauftragt markiert wird', USAGE: { count: 9, refs: ['9 Angeboten'] } },
+      { ID: 14, ABBR: 'Abgelehnt',      SORT_ORDER: 40, CODE: 'REJECTED', CODE_HINT: 'wird gesetzt, wenn ein Angebot als abgelehnt markiert wird', USAGE: { count: 2, refs: ['2 Angeboten'] } },
+      { ID: 15, ABBR: 'Abgebrochen',    SORT_ORDER: 50, CODE: null, USAGE: { count: 0, refs: [] } },
+    ],
+  }
+  await r('stammdaten/status/(project|offer)(/\\d+|/order)?', route => {
+    const url = new URL(route.request().url())
+    const [, kind, tail] = url.pathname.match(/status\/(project|offer)(?:\/(\d+|order))?$/) ?? []
+    const list = statusLists[kind] ?? []
+    const m = route.request().method()
+    const body = route.request().postDataJSON() ?? {}
+    if (m === 'GET') return route.fulfill(json({ data: list }))
+    if (m === 'POST') {
+      const row = { ID: 100 + list.length, ABBR: String(body.abbr).trim(), SORT_ORDER: (list.length + 1) * 10, USAGE: { count: 0, refs: [] } }
+      list.push(row)
+      return route.fulfill(json({ data: row }))
+    }
+    if (m === 'PUT' && tail === 'order') {
+      const ids: number[] = body.ids ?? []
+      statusLists[kind] = ids.map(id => list.find(x => x.ID === id)!).filter(Boolean)
+      return route.fulfill(json({ data: statusLists[kind] }))
+    }
+    const row = list.find(x => x.ID === Number(tail))
+    if (!row) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'nicht gefunden' }) })
+    if (m === 'PATCH') { row.ABBR = String(body.abbr).trim(); return route.fulfill(json({ data: row })) }
+    if (m === 'DELETE') {
+      statusLists[kind] = list.filter(x => x !== row)
+      return route.fulfill(json({ data: { ok: true } }))
+    }
+    return route.fallback()
+  })
   await r('arbzg/break-rules', route => route.fulfill(json({ data: [
     { ID: 1, NAME: 'ArbZG-Standard', T1_HOURS: 6, T1_BREAK_MIN: 30, T2_HOURS: 9, T2_BREAK_MIN: 45, MIN_BLOCK_MIN: 15 },
   ] })))

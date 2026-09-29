@@ -11,8 +11,23 @@ const { requirePermission, requireAnyPermission } = require("../middleware/permi
 module.exports = (supabase) => {
   const router = express.Router();
 
-  // POST /status gibt es nicht mehr (Runde 12): PROJECT_STATUS ist ein globaler
-  // Katalog — ein Büro legte dort einen Status an, der bei allen Büros erschien.
+  // Projekt- und Angebotsstatus je Büro (Runde 13, Migration 0176). Das alte
+  // POST /status schrieb in den damals globalen Katalog — für alle Büros.
+  const st = require("../services/statusCatalog");
+  const stRun = (fn) => async (req, res) => {
+    try { res.json({ data: await fn(req) }); }
+    catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
+  };
+  router.get("/status/:kind",           requireAnyPermission("settings.basedata.view", "settings.basedata.edit"),
+    stRun(req => st.listForSettings(supabase, req.tenantId, req.params.kind)));
+  router.post("/status/:kind",          requirePermission("settings.basedata.edit"),
+    stRun(req => st.createStatus(supabase, req.tenantId, req.params.kind, req.body)));
+  router.put("/status/:kind/order",     requirePermission("settings.basedata.edit"),
+    stRun(req => st.reorderStatuses(supabase, req.tenantId, req.params.kind, req.body?.ids)));
+  router.patch("/status/:kind/:id",     requirePermission("settings.basedata.edit"),
+    stRun(req => st.updateStatus(supabase, req.tenantId, req.params.kind, req.params.id, req.body)));
+  router.delete("/status/:kind/:id",    requirePermission("settings.basedata.edit"),
+    stRun(req => st.deleteStatus(supabase, req.tenantId, req.params.kind, req.params.id)));
   router.post("/typ",                                                requirePermission("settings.basedata.edit"), (req, res) => ctrl.postTyp(req, res, supabase));
   router.patch("/typ/:id",                                           requirePermission("settings.basedata.edit"), (req, res) => ctrl.patchTyp(req, res, supabase));
   router.delete("/typ/:id",                                          requirePermission("settings.basedata.edit"), (req, res) => ctrl.deleteTyp(req, res, supabase));

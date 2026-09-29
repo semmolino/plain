@@ -309,6 +309,32 @@ export const HELP = {
       </>
     ),
   },
+  'settings.projektstatus': {
+    title: 'Projektstatus',
+    body: (
+      <>
+        Die Phasen, die ein Projekt in Ihrem Büro durchläuft — etwa Akquise, Laufend, Pausiert,
+        Abgeschlossen. Die Liste gehört Ihrem Büro: Namen und Reihenfolge sind frei, die
+        Reihenfolge gilt in jeder Auswahl. Welche Status als <strong>„laufend"</strong> zählen
+        (Monatsabschluss, Leistungsstand-Runde, „Eigene Zeit buchen"), stellen Sie unter
+        Einstellungen → Monatsabschluss ein. Ein Status, an dem noch Projekte oder Einstellungen
+        hängen, lässt sich erst löschen, wenn er dort ersetzt ist.
+      </>
+    ),
+  },
+  'settings.angebotsstatus': {
+    title: 'Angebotsstatus',
+    body: (
+      <>
+        Wo ein Angebot steht. Zwei Status tragen eine feste Bedeutung und sind mit
+        <strong> System</strong> markiert: der Status für <strong>beauftragte</strong> Angebote
+        (gesetzt von „Als beauftragt markieren" und beim Anlegen des Projekts) und der für
+        <strong> abgelehnte</strong> (gesetzt von „Als abgelehnt markieren"; abgelehnte Angebote
+        zählen nicht mehr als offen). Beide lassen sich umbenennen, aber nicht löschen. Alle
+        übrigen sind frei.
+      </>
+    ),
+  },
   'settings.abwesenheitsarten': {
     title: 'Abwesenheitsarten',
     body: (

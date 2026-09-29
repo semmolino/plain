@@ -57,10 +57,12 @@ async function getSettings(supabase, tenantId) {
 }
 
 async function saveSettings(supabase, tenantId, { enabled, statuses }) {
+  // „Laufende Projekte" nur aus den Projektstatus dieses Büros (Migration 0176).
+  const own = await require("./statusCatalog").ownProjectStatusIds(supabase, tenantId, statuses);
   const now = new Date().toISOString();
   const upserts = [
     { TENANT_ID: tenantId, KEY: KEY_ENABLED,  VALUE: enabled ? "true" : "false", UPDATED_AT: now },
-    { TENANT_ID: tenantId, KEY: KEY_STATUSES, VALUE: JSON.stringify(statuses || []), UPDATED_AT: now },
+    { TENANT_ID: tenantId, KEY: KEY_STATUSES, VALUE: JSON.stringify(own), UPDATED_AT: now },
   ];
   const { error } = await supabase.from("TENANT_SETTINGS").upsert(upserts, { onConflict: "TENANT_ID,KEY" });
   if (error) throw { status: 500, message: error.message };

@@ -1,5 +1,6 @@
 "use strict";
 
+const statusCatalog = require("./statusCatalog");
 const { contractDefaults } = require("./contractDefaults");
 const runde = require("./leistungsstandRunde");
 const { suchwert } = require("./pgrestFilter");
@@ -36,10 +37,9 @@ async function getDepartments(supabase, { tenantId }) {
   return data || [];
 }
 
-async function getStatuses(supabase) {
-  const { data, error } = await supabase.from("PROJECT_STATUS").select("ID, ABBR");
-  if (error) throw error;
-  return data;
+/** Projektstatus des Büros, sortiert (Migration 0176 — vorher eine Liste für alle). */
+async function getStatuses(supabase, { tenantId }) {
+  return statusCatalog.listStatuses(supabase, tenantId, "project");
 }
 
 async function getTypes(supabase, { tenantId }) {
@@ -105,6 +105,8 @@ async function createProject(supabase, { body, tenantId }) {
   if (!companyId || Number.isNaN(companyId)) {
     throw { status: 400, message: "Firma ist erforderlich" };
   }
+  // Der Status muss diesem Büro gehören — der Fremdschlüssel kennt keine Mandanten.
+  const projectStatusId = await statusCatalog.assertOwnStatus(supabase, tenantId, "project", b.project_status_id);
 
   const { data: num, error: numErr } = await supabase.rpc("next_project_number", { p_company_id: companyId });
   if (numErr || !num) {
@@ -115,7 +117,7 @@ async function createProject(supabase, { body, tenantId }) {
     ABBR: num,
     NAME: b.name,
     COMPANY_ID: companyId,
-    PROJECT_STATUS_ID: b.project_status_id,
+    PROJECT_STATUS_ID: projectStatusId,
     PROJECT_TYPE_ID: b.project_type_id || null,
     DEPARTMENT_ID: b.department_id ? parseInt(b.department_id, 10) : null,
     PROJECT_MANAGER_ID: b.project_manager_id,
@@ -383,7 +385,7 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
   const deptIds   = [...new Set((projects || []).map((p) => p.DEPARTMENT_ID).filter(Boolean))];
 
   const [stRes, tyRes, mgRes, addrRes, ctctRes, deptRes] = await Promise.all([
-    statusIds.length ? supabase.from("PROJECT_STATUS").select("ID, ABBR").in("ID", statusIds) : Promise.resolve({ data: [] }),
+    statusIds.length ? supabase.from("PROJECT_STATUS").select("ID, ABBR").eq("TENANT_ID", tenantId).in("ID", statusIds) : Promise.resolve({ data: [] }),
     typeIds.length   ? supabase.from("PROJECT_TYPE").select("ID, ABBR").in("ID", typeIds)     : Promise.resolve({ data: [] }),
     mgrIds.length    ? supabase.from("EMPLOYEE").select("ID, ABBR").in("ID", mgrIds)          : Promise.resolve({ data: [] }),
     addrIds.length   ? supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").in("ID", addrIds)      : Promise.resolve({ data: [] }),
@@ -427,7 +429,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
   if (b.abbr !== undefined) upd.ABBR = String(b.abbr || "").trim();
   if (b.name !== undefined) upd.NAME = String(b.name || "").trim();
   if (b.project_status_id !== undefined) {
-    upd.PROJECT_STATUS_ID = b.project_status_id ? parseInt(String(b.project_status_id), 10) : null;
+    upd.PROJECT_STATUS_ID = await statusCatalog.assertOwnStatus(supabase, tenantId, "project", b.project_status_id);
   }
   if (b.project_type_id !== undefined) {
     upd.PROJECT_TYPE_ID = b.project_type_id ? parseInt(String(b.project_type_id), 10) : null;
@@ -483,7 +485,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
 
   const [st, ty, mg] = await Promise.all([
     updated.PROJECT_STATUS_ID
-      ? supabase.from("PROJECT_STATUS").select("ID, ABBR").eq("ID", updated.PROJECT_STATUS_ID).single()
+      ? supabase.from("PROJECT_STATUS").select("ID, ABBR").eq("ID", updated.PROJECT_STATUS_ID).eq("TENANT_ID", tenantId).maybeSingle()
       : Promise.resolve({ data: null }),
     updated.PROJECT_TYPE_ID
       ? supabase.from("PROJECT_TYPE").select("ID, ABBR").eq("ID", updated.PROJECT_TYPE_ID).single()

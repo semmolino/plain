@@ -13,6 +13,12 @@ const T = 7, F = 99;
 
 function db(extra = {}) {
   const sb = makeFakeSupabase({
+    // Angebotsstatus gehören dem Büro (Migration 0176); ID 50 ist fremd
+    OFFER_STATUS: [
+      { ID: 1, TENANT_ID: T, ABBR: "In Bearbeitung", SORT_ORDER: 10 },
+      { ID: 3, TENANT_ID: T, ABBR: "Beauftragt", SORT_ORDER: 20, CODE: "ORDERED" },
+      { ID: 50, TENANT_ID: F, ABBR: "Fremd", SORT_ORDER: 10 },
+    ],
     ADDRESS: [
       { ID: 1, TENANT_ID: T, ADDRESS_NAME_1: "Stadt Musterstadt" },
       { ID: 2, TENANT_ID: T, ADDRESS_NAME_1: "Wohnbau Süd GmbH" },

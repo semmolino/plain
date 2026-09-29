@@ -14,6 +14,7 @@ const T = 7;
 
 function offerDb(extra = {}) {
   const sb = makeFakeSupabase({
+    PROJECT_STATUS: [{ ID: 1, TENANT_ID: T, ABBR: "Laufend", SORT_ORDER: 10 }],
     OFFER: [{ ID: 1, TENANT_ID: T, ABBR: "A-1", NAME: "Kita", COMPANY_ID: 5, ADDRESS_ID: 9, CONTACT_ID: 11, PROJECT_ID: null, SURCHARGES_TOTAL: 0 }],
     OFFER_STRUCTURE: [
       { ID: 20, OFFER_ID: 1, TENANT_ID: T, FATHER_ID: null, BILLING_TYPE_ID: 2, ABBR: "BL", SORT_ORDER: 0, REVENUE: 3240, REVENUE_BASIS: 3240 },
@@ -43,6 +44,19 @@ describe("Beauftragen: Plan aus den Aufwandszeilen", () => {
     expect(s.BL.PLAN_REVENUE).toBeUndefined();
     expect(s.LP1.PLAN_REVENUE).toBeUndefined();
     expect(s.LP1.REVENUE).toBe(5000);
+  });
+
+  test("das Angebot steht danach auf „Beauftragt“ (Runde 13)", async () => {
+    const sb = offerDb({ OFFER_STATUS: [{ ID: 12, TENANT_ID: T, ABBR: "Auftrag", CODE: "ORDERED" }, { ID: 91, TENANT_ID: 99, ABBR: "Fremd", CODE: "ORDERED" }] });
+    await angebote.convertOfferToProject(sb, { tenantId: T, offerId: 1, body: BODY });
+    expect(sb._tables.OFFER[0]).toMatchObject({ OFFER_STATUS_ID: 12, ORDER_DATE: "2026-09-28" });
+  });
+
+  test("Projektstatus eines anderen Büros wird abgewiesen", async () => {
+    const sb = offerDb({ PROJECT_STATUS: [{ ID: 90, TENANT_ID: 99, ABBR: "Fremd" }] });
+    await expect(angebote.convertOfferToProject(sb, { tenantId: T, offerId: 1, body: { ...BODY, project_status_id: 90 } }))
+      .rejects.toMatchObject({ status: 400, message: "Projektstatus nicht gefunden." });
+    expect(sb._tables.PROJECT || []).toHaveLength(0);
   });
 
   test("transfer_plan: false laesst den Plan weg", async () => {

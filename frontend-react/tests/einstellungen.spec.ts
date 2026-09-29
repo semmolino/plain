@@ -213,8 +213,76 @@ test.describe('Stammdaten', () => {
   })
 })
 
+test.describe('Projekt- und Angebotsstatus je Büro', () => {
+  test('Liste zeigt die Verwendung; Benutztes löschen erklärt, statt zu fragen', async ({ page }) => {
+    await setup(page)
+    const dels = record(page, 'DELETE', /\/api\/v1\/stammdaten\/status\/project\/\d+$/)
+    await page.goto('/admin?tab=stammdaten&sub=projektstatus')
+    const laufend = page.getByRole('listitem').filter({ hasText: 'Laufend' })
+    await expect(laufend).toContainText('Verwendet: 12 Projekten, Vorbelegung')
+    await page.getByRole('button', { name: 'Laufend löschen' }).click()
+    await expect(page.getByText('„Laufend“ wird noch verwendet: 12 Projekten, Vorbelegung, „laufende Projekte“ im Monatsabschluss. Erst dort umstellen, dann löschen.')).toBeVisible()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    expect(dels).toHaveLength(0)
+    // Unbenutzt: Rückfrage, dann weg
+    await page.getByRole('button', { name: 'Pausiert löschen' }).click()
+    await page.getByRole('dialog', { name: 'Projektstatus löschen?' }).getByRole('button', { name: 'Löschen' }).click()
+    await expect.poll(() => dels.length).toBe(1)
+    await expect(page.getByRole('listitem').filter({ hasText: 'Pausiert' })).toHaveCount(0)
+  })
+
+  test('Anlegen, umbenennen und sortieren', async ({ page }) => {
+    await setup(page)
+    const puts = record(page, 'PUT', /\/api\/v1\/stammdaten\/status\/project\/order$/)
+    const posts = record(page, 'POST', /\/api\/v1\/stammdaten\/status\/project$/)
+    await page.goto('/admin?tab=stammdaten&sub=projektstatus')
+    await page.getByLabel('Neuer Projektstatus').fill('laufend')
+    await page.getByRole('button', { name: 'Hinzufügen' }).click()
+    await expect(page.getByText('Projektstatus „laufend“ gibt es schon.')).toBeVisible()
+    await page.getByLabel('Neuer Projektstatus').fill('Gewährleistung')
+    await page.getByLabel('Neuer Projektstatus').press('Enter')
+    await expect.poll(() => posts.length).toBe(1)
+    expect(posts[0].body).toEqual({ abbr: 'Gewährleistung' })
+    await page.getByRole('button', { name: 'Akquise nach unten' }).click()
+    await expect.poll(() => puts.length).toBe(1)
+    expect((puts[0].body as { ids: number[] }).ids.slice(0, 2)).toEqual([2, 1])
+    await expect(page.getByRole('list', { name: 'Projektstatus' }).getByRole('listitem').first()).toContainText('Laufend')
+  })
+
+  test('Angebotsstatus: Beauftragt/Abgelehnt sind System — umbenennen ja, löschen nein', async ({ page }) => {
+    await setup(page)
+    const patches = record(page, 'PATCH', /\/api\/v1\/stammdaten\/status\/offer\/\d+$/)
+    await page.goto('/admin?tab=stammdaten&sub=angebotsstatus')
+    const row = page.getByRole('listitem').filter({ hasText: 'Abgelehnt' })
+    await expect(row).toContainText('System')
+    await expect(row).toContainText('Wird gesetzt, wenn ein Angebot als abgelehnt markiert wird.')
+    await expect(page.getByRole('button', { name: 'Abgelehnt löschen' })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Abgebrochen löschen' })).toBeVisible()
+    await page.getByRole('button', { name: 'Abgelehnt umbenennen' }).click()
+    await page.getByLabel('Neuer Name für Abgelehnt').fill('Absage')
+    await page.getByLabel('Neuer Name für Abgelehnt').press('Enter')
+    await expect.poll(() => patches.length).toBe(1)
+    expect(patches[0].body).toEqual({ abbr: 'Absage' })
+  })
+
+  test('„Als abgelehnt markieren" hängt am Code, nicht am Namen', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Menü im Kopf am Desktop')
+    await mockPilot(page)
+    await page.route(/\/api\/v1\/angebote\/statuses(\?|$)/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: [
+      { ID: 1, ABBR: 'Entwurf', CODE: null }, { ID: 3, ABBR: 'Auftrag erteilt', CODE: 'ORDERED' }, { ID: 4, ABBR: 'Absage', CODE: 'REJECTED' },
+    ] }) }))
+    const puts = record(page, 'PUT', /\/api\/v1\/angebote\/\d+$/)
+    await page.goto('/angebote?offerId=1&tab=struktur')
+    await page.getByRole('button', { name: 'Weitere Aktionen zum Angebot' }).click()
+    await page.getByRole('menuitem', { name: 'Als abgelehnt markieren' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Als abgelehnt markieren' }).click()
+    await expect.poll(() => puts.length).toBe(1)
+    expect(puts[0].body).toMatchObject({ offer_status_id: 4 })
+  })
+})
+
 test.describe('Einstellungen am Handy', () => {
-  for (const url of ['/admin?tab=vorbelegungen', '/admin?tab=stammdaten&sub=projektrollen', '/admin?tab=stammdaten&sub=abwesenheitsarten', '/admin?tab=stammdaten&sub=arbeitszeitmodelle']) {
+  for (const url of ['/admin?tab=vorbelegungen', '/admin?tab=stammdaten&sub=projektrollen', '/admin?tab=stammdaten&sub=abwesenheitsarten', '/admin?tab=stammdaten&sub=arbeitszeitmodelle', '/admin?tab=stammdaten&sub=projektstatus', '/admin?tab=stammdaten&sub=angebotsstatus']) {
     test(`kein Querscrollen: ${url}`, async ({ page }, info) => {
       test.skip(!/mobile/i.test(info.project.name), 'nur am Handy')
       await setup(page)

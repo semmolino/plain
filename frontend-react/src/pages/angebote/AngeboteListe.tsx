@@ -21,7 +21,7 @@ import { trackRecent } from '@/api/recents'
 import {
   fetchOffers, deleteOffer, openOfferPdf, openAuftragsbestaetigungPdf, updateOffer,
   fetchOfferStatuses,
-  type OfferListItem, type UpdateOfferPayload,
+  type OfferListItem, type UpdateOfferPayload, statusIdByCode,
 } from '@/api/angebote'
 import { BeauftragtDialog } from './BeauftragtDialog'
 import { AngebotAnlegenDialog } from './AngebotAnlegenDialog'
@@ -59,7 +59,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
 
   const { data, isLoading } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
   const { data: statusData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
-  const rejectedId   = statusData?.data?.find(s => s.ABBR === 'Abgelehnt')?.ID ?? null
+  const rejectedId   = statusIdByCode(statusData?.data, 'REJECTED')
 
   const deleteMut = useMutation({
     mutationFn: deleteOffer,
