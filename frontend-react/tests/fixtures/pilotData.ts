@@ -1490,5 +1490,27 @@ export async function mockEinstellungen(page: Page) {
     { ID: 1, LABEL: 'Baubesprechung', TEXT: 'Teilnahme Baubesprechung vor Ort', SORT_ORDER: 1, SCOPE: 'global', KIND: null, BOOKING_TYPE_ID: null },
   ] })))
   await r('abwesenheit/settings', route => route.fulfill(json({ data: { carryoverExpires: true, carryoverExpiryDate: '03-31' } })))
-  await r('stammdaten/working-time-models/country-states', route => route.fulfill(json({ data: { DE: [{ CODE: 'BW', NAME: 'Baden-Württemberg' }, { CODE: 'BY', NAME: 'Bayern' }] } })))
+  // Anlegen/Ändern/Löschen — die Listen kommen aus mockMitarbeiter
+  await r('abwesenheit/types(/\\d+)?', route => {
+    const m = route.request().method()
+    if (m === 'GET') return route.fallback()
+    return route.fulfill(json(m === 'DELETE' ? { ok: true, deactivated: /types\/1$/.test(route.request().url()) } : { data: route.request().postDataJSON() ?? {} }))
+  })
+  await r('stammdaten/working-time-models(/\\d+)?', route => {
+    const m = route.request().method()
+    if (m === 'GET') return route.fallback()
+    // Vollzeit ist zugeordnet — Löschen scheitert wie am Server
+    if (m === 'DELETE' && /working-time-models\/1$/.test(route.request().url())) {
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Arbeitszeitmodell „Vollzeit 40 h" wird noch von 6 Mitarbeiter:innen verwendet.' }) })
+    }
+    return route.fulfill(json(m === 'DELETE' ? { ok: true } : { data: { ID: 9, ...(route.request().postDataJSON() ?? {}) } }))
+  })
+  await r('stammdaten/working-time-models/country-states', route => route.fulfill(json({ data: {
+    DE: [{ code: 'BW', label: 'Baden-Württemberg' }, { code: 'BY', label: 'Bayern' }, { code: 'BE', label: 'Berlin' }],
+    AT: [{ code: null, label: 'Österreich (gesamt)' }],
+    CH: [{ code: null, label: 'Schweiz (gesamt)' }],
+  } })))
+  await r('arbzg/break-rules', route => route.fulfill(json({ data: [
+    { ID: 1, NAME: 'ArbZG-Standard', T1_HOURS: 6, T1_BREAK_MIN: 30, T2_HOURS: 9, T2_BREAK_MIN: 45, MIN_BLOCK_MIN: 15 },
+  ] })))
 }

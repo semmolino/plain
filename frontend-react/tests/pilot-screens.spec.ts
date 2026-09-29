@@ -1129,14 +1129,14 @@ test('Einstellungen – Abteilungen', async ({ page }, info) => {
 })
 
 test('Einstellungen – Projektrollen', async ({ page }, info) => {
-  await openSettings(page, info.project.name, 'stammdaten', 'rollen')
+  await openSettings(page, info.project.name, 'stammdaten', 'projektrollen')
   await page.getByText('Projektleitung').first().waitFor()
   await page.getByText('Projektleitung').first().scrollIntoViewIfNeeded()
   await shoot(page, info.project.name, 'einst-rollen')
 })
 
 test('Einstellungen – Rolle bearbeiten', async ({ page }, info) => {
-  await openSettings(page, info.project.name, 'stammdaten', 'rollen')
+  await openSettings(page, info.project.name, 'stammdaten', 'projektrollen')
   if (since(12)) {
     await page.getByRole('button', { name: 'Rolle PL bearbeiten' }).click()
     await page.getByRole('dialog').waitFor()
@@ -1153,9 +1153,17 @@ test('Einstellungen – Abwesenheitsarten', async ({ page }, info) => {
   await shoot(page, info.project.name, 'einst-abwesenheitsarten')
 })
 
+test('Einstellungen – Arbeitszeitmodelle', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'arbeitszeitmodelle')
+  await page.getByText('Teilzeit 30 h').first().waitFor()
+  await page.getByText('Teilzeit 30 h').first().scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'einst-arbeitszeitmodelle')
+})
+
 test('Einstellungen – Abwesenheitsart bearbeiten', async ({ page }, info) => {
   await openSettings(page, info.project.name, 'stammdaten', 'abwesenheitsarten')
-  await page.getByRole('row', { name: /Urlaub/ }).getByRole('button', { name: /bearbeiten/i }).first().click()
+  if (since(12)) await page.getByRole('button', { name: 'Urlaub bearbeiten' }).click()
+  else await page.getByRole('row', { name: /Urlaub/ }).getByRole('button', { name: /bearbeiten/i }).first().click()
   await page.getByRole('dialog').waitFor()
   await shoot(page, info.project.name, 'einst-abwesenheitsart')
 })

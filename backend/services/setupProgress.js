@@ -309,14 +309,14 @@ async function computeSetupProgress(supabase, { tenantId, employeeId, hasFeature
       key:  "custom_role",
       label:"Rolle mit Stundensatz angelegt",
       hint: "Tätigkeitsprofil mit Standard-Stundensatz unter Stammdaten",
-      href: "/admin?tab=stammdaten",
+      href: "/admin?tab=stammdaten&sub=projektrollen",
       done: hasRoleWithRate,
     },
     {
       key:  "departments",
       label:"Abteilung angelegt",
       hint: "Stammdaten für die Mitarbeiter-Zuordnung",
-      href: "/admin?tab=stammdaten",
+      href: "/admin?tab=stammdaten&sub=abteilungen",
       done: hasDepartment,
     },
     {

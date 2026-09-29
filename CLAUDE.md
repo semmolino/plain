@@ -407,6 +407,14 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Status, Zeitraum, Tage und Verlauf über `absenceUi.tsx`. Den Resturlaub liefert
   `vacationBalanceFor` in `routes/abwesenheit.js` (auch `pending` = offen beantragt). Die Seite hat
   einen DirtyGuard: offene Urlaubsansprüche fragen beim Wechsel von Reiter oder Unterreiter.
+- **Einstellungen** (`/admin?tab=…&sub=…`, UI-Pilot Runde 12): Reiter und Unterreiter stehen in der URL,
+  die Seite hat einen DirtyGuard. Vorbelegungen (`pages/admin/VorbelegungenPage.tsx`) im Muster der
+  Seitenformulare: Eingaben über dem geladenen Stand, gespeichert werden **nur geänderte** Schlüssel in
+  einem `PUT /stammdaten/defaults` mit `{ values }`; Zahlen nehmen „2,5". Stammdaten
+  (`pages/admin/StammdatenPage.tsx`) je Katalog ein Unterreiter (am Handy eine Auswahl); Löschen fragt
+  nach, und die 409 der Löschprüfung bleibt als Meldung stehen. Bearbeiten je Katalog mit dessen Recht
+  (`settings.basedata.edit`, `settings.booking_types.edit`, `settings.booking_text_templates.edit`,
+  `absence.manage`, `settings.work_time.edit`) — ohne Recht nur lesen.
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
@@ -675,7 +683,7 @@ Windows): `owner-console/README.md`.
   - Import-Rücknahme prüft alle Blocker **vor** der ersten Änderung, schluckt keine Fehler und steht nach einem Abbruch auf `rollback_partial` — ein erneuter Versuch setzt fort (`rollback`, `services/importService.js`).
   - Der Einladungslink verlässt den Server nicht mehr: ohne Mailversand kam er in der Antwort der Neuanlage und von „Einladung senden" zurück.
   - Eine eigene genehmigte Abwesenheit storniert man selbst nur, solange sie nicht begonnen hat (`POST /abwesenheit/:id/cancel`, sonst 409; mit `absence.manage` immer). Vorher ließ sich genommener Urlaub hinterher stornieren — die Tage kamen auf den Resturlaub zurück. Abgelehnte und stornierte Einträge lassen sich nicht erneut stornieren.
-- **Einstellungen (UI-Pilot Runde 12):** `PUT /stammdaten/defaults` nahm jeden Schlüssel ungeprüft an — wer Vorbelegungen pflegen durfte, überschrieb damit Firmenlogo (`co_<id>_logo_data_uri`), Monatsabschluss, Arbeitszeitregeln und Urlaubsverfall. Jetzt feste Liste mit Recht je Schlüssel (`settings.defaults.edit` bzw. `settings.company.edit` fürs Branding), Wertprüfung, Firma/Anmeldebild nur aus dem eigenen Büro (`services/tenantDefaults.js`). `GET /defaults` lieferte allen Angemeldeten sämtliche Einstellungen samt gespeichertem Monatsabschluss-Bericht — jetzt nur die Liste. `POST /stammdaten/status` ist entfernt: es schrieb in den **globalen** Katalog `PROJECT_STATUS`, ein Büro legte so einen Status für alle an.
+- **Einstellungen (UI-Pilot Runde 12):** `PUT /stammdaten/defaults` nahm jeden Schlüssel ungeprüft an — wer Vorbelegungen pflegen durfte, überschrieb damit Firmenlogo (`co_<id>_logo_data_uri`), Monatsabschluss, Arbeitszeitregeln und Urlaubsverfall. Jetzt feste Liste mit Recht je Schlüssel (`settings.defaults.edit` bzw. `settings.company.edit` fürs Branding), Wertprüfung, Firma/Anmeldebild nur aus dem eigenen Büro (`services/tenantDefaults.js`). `GET /defaults` lieferte allen Angemeldeten sämtliche Einstellungen samt gespeichertem Monatsabschluss-Bericht — jetzt nur die Liste. `POST /stammdaten/status` ist entfernt: es schrieb in den **globalen** Katalog `PROJECT_STATUS`, ein Büro legte so einen Status für alle an. Arbeitszeitmodelle nahmen jedes Soll an (−8 h, 30 h), jedes Land und eine Pausenregel eines fremden Büros — jetzt 0–24 h je Tag, Land/Bundesland aus der festen Liste, Pausenregel nur aus dem eigenen Büro, fremde oder unbekannte Modelle 404 statt 500 (`services/workingTimeModels.js`).
 
 **Offen (Stand 2026-09-29):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht

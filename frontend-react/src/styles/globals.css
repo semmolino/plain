@@ -1709,7 +1709,8 @@ input::placeholder { color: var(--text-4); }
 .master-table.master-table--sticky-actions tbody tr:hover td.doc-actions {
   background-image: linear-gradient(var(--accent-tint), var(--accent-tint));
 }
-.master-table tbody tr:last-child td { border-bottom: none; }
+.master-table tbody tr:last-child td,
+.master-table tbody tr:last-child th { border-bottom: none; }
 
 /* Zebrastreifen: bei 10+ Spalten verrutscht das Auge sonst leicht in die
    Nachbarzeile. tbody-Kinder, damit der sticky Header unberuehrt bleibt. */
@@ -4163,7 +4164,8 @@ th.doc-actions, td.doc-actions {
   .btn-sm,
   .pl-col-btn,
   .filter-chip-btn,
-  .tab-btn {
+  .tab-btn,
+  .seg-nav-btn {
     min-height: 44px;
   }
   .row-action-btn { min-width: 44px; }
@@ -4649,6 +4651,110 @@ fieldset:disabled .ws-check { cursor: default; }
 .ws-facts-link:hover { text-decoration: underline; }
 @media (min-width: 900px) { .form-section-body { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .form-section { padding: var(--space-3) var(--space-3) var(--space-1); } }
+
+/* ── Einstellungen: Vorbelegungen und Stammdaten (Runde 12) ──────────────────
+   Vorher eine Spalte von 480px mit Kästen, deren Überschrift ein grauer
+   Versalien-Absatz war, und acht Kataloge untereinander. Jetzt Seitenformular
+   (.ws-form/FormSection) bzw. ein Unterreiter je Katalog. */
+.ws-form-intro.vb-intro { display: block; }
+.ws-form-intro.vb-intro .info-hint { vertical-align: middle; margin-left: 2px; }
+.vb-static-label { display: block; font-size: 13px; margin-bottom: 6px; color: var(--text-2); }
+.form-section .form-field-hint.vb-static { margin: 0; font-size: 13px; }
+/* Unterfelder eines Schalters (Sicherheitseinbehalt): eingerückt, eigenes Raster */
+.vb-sub {
+  display: grid; grid-template-columns: minmax(0, 1fr); column-gap: var(--space-5);
+  margin: 0 0 var(--space-2) var(--space-2); padding-left: var(--space-4); border-left: 2px solid var(--border);
+}
+@media (min-width: 900px) { .vb-sub { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.vb-recipients { margin-bottom: var(--space-3); }
+.vb-recipients legend { display: flex; align-items: center; gap: var(--space-1); font-size: 13px; color: var(--text-2); }
+
+.st-page { max-width: 960px; }
+.st-body { display: flex; flex-direction: column; gap: var(--space-4); }
+/* Kataloge, die diese Runde nicht umgebaut hat, behalten ihre Kästen */
+.st-legacy { max-width: 720px; }
+.st-legacy.admin-section { max-width: 720px; }
+.st-section .form-section-block { display: flex; flex-direction: column; gap: var(--space-3); }
+.st-btn { width: auto; margin-top: 0; height: 38px; padding: 0 16px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.st-empty { margin: 0; font-size: 13px; color: var(--text-2); max-width: 60ch; }
+.st-add { display: flex; flex-direction: column; gap: 6px; }
+.st-add-label { font-size: 13px; color: var(--text-2); }
+.st-add-row { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.st-add-row input { flex: 1 1 220px; min-width: 0; max-width: 420px; }
+.st-add-row input, .st-list-input, .st-date select {
+  height: 38px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text); font-size: 14px;
+}
+.st-sub-select { display: flex; flex-direction: column; gap: 6px; margin-bottom: var(--space-3); }
+.st-sub-select label { font-size: 13px; color: var(--text-2); }
+.st-sub-select select {
+  height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text); font-size: 15px;
+}
+.st-table abbr { text-decoration: none; }
+.st-row-actions { display: inline-flex; gap: 2px; justify-content: flex-end; }
+.st-row-actions-cell { width: 1%; white-space: nowrap; text-align: right; }
+/* Einzeilige Liste (Abteilungen, Projekttypen) */
+.st-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border-4); max-width: 560px; }
+.st-list-row { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid var(--border-4); }
+.st-list-name { flex: 1 1 auto; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.st-list-input { flex: 1 1 auto; min-width: 0; }
+/* Tabellen der Kataloge */
+.st-table-wrap { max-width: 100%; }
+.st-table { min-width: 0; }
+.st-table tbody th { vertical-align: middle; }
+.st-role-abbr, .st-type-name { font-weight: 600; }
+.st-role-name { display: block; font-size: 12px; color: var(--text-3); font-weight: 400; }
+.st-flag-col { text-align: center; }
+.master-table th.st-flag-col { text-align: center; white-space: normal; font-size: 12px; }
+.st-flag-on { color: var(--text); vertical-align: middle; }
+.st-flag-off { color: var(--text-4); }
+.st-row--inactive th, .st-row--inactive td { color: var(--text-3); }
+.st-badge {
+  display: inline-block; margin-left: var(--space-2); padding: 0 6px; border-radius: var(--radius-pill);
+  background: var(--surface-3); color: var(--text-2); font-size: 11px; font-weight: 600; line-height: 18px;
+}
+.st-zero { color: var(--text-4); }
+.st-week { font-weight: 600; }
+/* Karten am Handy (Abwesenheitsarten, Arbeitszeitmodelle) */
+.st-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.st-card {
+  display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.st-card--inactive .st-type-name { color: var(--text-3); }
+.st-card-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.st-card-sub { font-size: 13px; color: var(--text-2); }
+/* Verfall des Urlaubsübertrags */
+.st-verfall { gap: var(--space-2); }
+.st-date { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-3); }
+.st-date-label { font-size: 13px; color: var(--text-2); }
+.st-date-note { font-size: 12px; color: var(--text-3); }
+/* Dialoge der Kataloge */
+.st-dialog { display: flex; flex-direction: column; gap: var(--space-2); }
+.st-field-abbr { flex: 0 0 120px; }
+.st-field-rate { max-width: 260px; }
+.st-field-color { flex: 0 0 96px; }
+.st-field-color input[type="color"] { width: 100%; height: 38px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); }
+.st-flags, .st-days, .st-arbzg { border: 0; margin: 0; padding: 0; min-width: 0; }
+.st-flags legend, .st-days legend, .st-arbzg legend { padding: 0; margin-bottom: var(--space-1); font-size: 13px; font-weight: 600; color: var(--text-2); display: flex; align-items: center; gap: var(--space-1); }
+.st-flag { margin-bottom: var(--space-1); }
+.st-flag .ws-check { min-height: 36px; }
+.form-field-hint.st-flag-hint { margin: -6px 0 0 calc(18px + var(--space-2)); }
+.st-templates { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.st-templates-label { font-size: 13px; color: var(--text-2); }
+.st-days-sum { font-weight: 400; color: var(--text-3); }
+.st-days-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--space-2); }
+.st-day { display: flex; flex-direction: column; align-items: stretch; gap: 2px; min-width: 0; }
+.st-day label { font-size: 12px; font-weight: 600; color: var(--text-3); text-align: center; }
+.st-day abbr { text-decoration: none; }
+.st-day input { width: 100%; min-width: 0; height: 38px; text-align: center; padding: 0 4px; }
+.st-days, .st-arbzg { padding-top: var(--space-2); border-top: 1px solid var(--border-4); }
+@media (max-width: 640px) {
+  .st-days-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .st-add-row input { max-width: none; }
+  .st-list-row { padding: 0; }
+}
 
 /* ── Adresse als Arbeitsbereich (Runde 8) ──────────────────────────────────
    Kopf mit Anschrift/Telefon/E-Mail, Reiter Kontakte · Adressdaten ·
