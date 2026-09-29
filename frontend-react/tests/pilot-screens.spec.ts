@@ -18,13 +18,14 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 // vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
 // vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
 // vorher6 = nach Runde 5, vorher7 = nach Runde 6, vorher8 = nach Runde 7,
-// vorher9 = nach Runde 8, vorher10 = nach Runde 9, nachher = aktueller Stand.
+// vorher9 = nach Runde 8, vorher10 = nach Runde 9, vorher11 = nach Runde 10,
+// nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9 }
-const since = (round: number) => (RANK[PHASE] ?? 10) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9, vorher11: 10 }
+const since = (round: number) => (RANK[PHASE] ?? 11) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -991,4 +992,109 @@ test('Mitarbeiter – Buchung im Zeitkonto', async ({ page }, info) => {
   await dlg.waitFor()
   await dlg.locator('input[type="time"]').nth(1).fill('13:30')
   await shoot(page, info.project.name, 'mitarbeiter-buchung')
+})
+
+// ── Runde 11: Abwesenheiten und Stundencontrolling ───────────────────────────
+
+test('Abwesenheiten – Anträge', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten')
+  await page.getByText('Herbstferien').first().waitFor()
+  await shoot(page, info.project.name, 'abw-antraege')
+})
+
+// Vorher lehnte „Ablehnen" sofort ab — ohne Rückfrage und ohne Begründung.
+test('Abwesenheiten – Ablehnen', async ({ page }, info) => {
+  test.skip(!since(11), 'Gibt es erst mit Runde 11')
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten')
+  await page.getByRole('button', { name: /Antrag von LH ablehnen/ }).first().click()
+  const dlg = page.getByRole('dialog', { name: 'Antrag ablehnen?' })
+  await dlg.waitFor()
+  await dlg.getByLabel(/Begründung/).fill('In der Woche ist die Abgabe Werk II, bitte eine Woche später.')
+  await shoot(page, info.project.name, 'abw-ablehnen')
+})
+
+test('Abwesenheiten – Kalender', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=calendar')
+  await page.getByText('September 2026').first().waitFor()
+  await shoot(page, info.project.name, 'abw-kalender')
+})
+
+test('Abwesenheiten – Meine Anträge', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=my')
+  await page.getByText(/31\.12\.2026/).first().waitFor()
+  await shoot(page, info.project.name, 'abw-meine')
+})
+
+test('Abwesenheiten – Antrag stellen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=my')
+  await page.getByRole('button', { name: /Antrag stellen|Abwesenheit beantragen/ }).first().click()
+  if (since(11)) {
+    const dlg = page.getByRole('dialog', { name: 'Abwesenheit beantragen' })
+    await dlg.getByLabel('Art *').selectOption({ label: 'Urlaub' })
+    await dlg.getByLabel('Von *').fill('2026-10-19')
+    await dlg.getByLabel('Bis').fill('2026-10-23')
+    await dlg.getByText(/Arbeitstage/).first().waitFor()
+  } else {
+    await page.locator('select').filter({ hasText: 'Bitte wählen' }).selectOption({ label: 'Urlaub' })
+    await page.locator('input[type="date"]').nth(0).fill('2026-10-19')
+    await page.locator('input[type="date"]').nth(1).fill('2026-10-23')
+  }
+  await shoot(page, info.project.name, 'abw-antrag')
+})
+
+test('Abwesenheiten – Urlaubsansprüche', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=entitlements')
+  await page.getByText('Kern').first().waitFor()
+  await shoot(page, info.project.name, 'abw-ansprueche')
+})
+
+test('Mitarbeiter – Abwesenheit erfassen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openEmployee(page, 'abwesenheit')
+  await page.getByRole('button', { name: /Abwesenheit erfassen/ }).first().click()
+  if (since(11)) await page.getByRole('dialog', { name: /Abwesenheit erfassen/ }).waitFor()
+  await shoot(page, info.project.name, 'mitarbeiter-abw-erfassen')
+})
+
+async function openControlling(page: Page, sub: 'list' | 'single' | 'close') {
+  if (since(11)) {
+    await open(page, `/mitarbeiter?tab=zeitwirtschaft${sub === 'list' ? '' : `&sub=${sub}`}${sub === 'single' ? '&emp=2' : ''}`)
+    return
+  }
+  await open(page, '/mitarbeiter?tab=zeitwirtschaft')
+  if (sub === 'single') {
+    await page.getByRole('button', { name: 'Einzelne/r Mitarbeiter' }).click()
+    const pick = page.getByPlaceholder('Mitarbeiter suchen …')
+    await pick.fill('Kern')
+    await pick.press('Enter')
+  }
+  if (sub === 'close') await page.getByRole('button', { name: 'Monatsabschluss' }).click()
+  await page.waitForLoadState('networkidle')
+}
+
+test('Stundencontrolling – Auswertung', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openControlling(page, 'list')
+  await page.getByText('Thomas Kern', { exact: false }).filter({ visible: true }).first().waitFor()
+  await shoot(page, info.project.name, 'sc-auswertung')
+})
+
+test('Stundencontrolling – Einzelne/r Mitarbeiter', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openControlling(page, 'single')
+  await page.getByText(/22\.09\.2026|2026-09-22/).first().waitFor()
+  await shoot(page, info.project.name, 'sc-einzeln')
+})
+
+test('Stundencontrolling – Monatsabschluss', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openControlling(page, 'close')
+  await page.getByText('Braun-Hofmeister').first().waitFor()
+  await shoot(page, info.project.name, 'sc-abschluss')
 })

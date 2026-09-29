@@ -98,7 +98,7 @@ function MitarbeiterDetailInner() {
         {tab === 'arbeitszeit' && <ArbeitszeitVerlauf key={employee.ID} employee={employee} />}
         {tab === 'kostensatz'  && <KostensatzVerlauf key={employee.ID} employee={employee} />}
         {tab === 'zeitkonto'   && <EmployeeTimeAccount key={employee.ID} empId={employee.ID} />}
-        {tab === 'abwesenheit' && <EmployeeAbsenceSection key={employee.ID} employeeId={employee.ID} />}
+        {tab === 'abwesenheit' && <EmployeeAbsenceSection key={employee.ID} employeeId={employee.ID} employeeLabel={`${employee.FIRST_NAME} ${employee.LAST_NAME}`} />}
         {tab === 'projekte'    && <EmployeeProjectsSection key={employee.ID} employeeId={employee.ID} />}
         {tab === 'rollen'      && <MitarbeiterRollen key={employee.ID} employee={employee} />}
         {tab === 'zugang'      && <MitarbeiterZugang key={employee.ID} employee={employee} />}

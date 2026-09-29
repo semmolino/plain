@@ -1184,6 +1184,45 @@ export const HELP = {
       </>
     ),
   },
+  'mitarbeiter.saldo_laufend': {
+    title: 'Laufender Saldo',
+    body: (
+      <>
+        Das Gleitzeitkonto bis heute (beim Stichtag: bis zum Stichtag) — alle
+        Monatssalden seit Beginn der Aufzeichnung zusammen. Der Monatssaldo
+        daneben ist nur der gewählte Monat.
+        <br /><br />
+        Im Modus „Zeitraum" steht an dieser Stelle der <strong>Saldo im
+        Zeitraum</strong>: die Monatssalden ab dem ersten Monat des Zeitraums,
+        ohne den Stand davor.
+      </>
+    ),
+  },
+  'mitarbeiter.produktivitaet': {
+    title: 'Produktivität',
+    body: (
+      <>
+        Anteil der abrechenbaren Stunden auf Kundenprojekten an allen
+        gebuchten Stunden. Stunden auf internen Projekten zählen mit, aber
+        nicht als produktiv. Urlaub, Krankheit und Feiertage gehen nicht ein —
+        sie sind keine Buchungen.
+      </>
+    ),
+  },
+  'mitarbeiter.monatsabschluss': {
+    title: 'Monatsabschluss',
+    body: (
+      <>
+        Ein abgeschlossener Monat sperrt die Buchungen des Mitarbeiters in
+        diesem Monat: sie lassen sich nicht mehr ändern, löschen oder
+        umbuchen. So bleiben Zeitkonto, Auswertungen und Abrechnungen
+        verlässlich.
+        <br /><br />
+        Abschließen geht mit einem Klick, <strong>Öffnen</strong> fragt nach —
+        danach sind Änderungen im Monat wieder möglich.
+      </>
+    ),
+  },
   'arbzg.strict': {
     title: 'Strikter Modus (ArbZG)',
     body: (
@@ -1488,6 +1527,25 @@ export const HELP = {
         verfällt der Rest. Der Übertrag wird dabei <strong>zuerst</strong> verbraucht, erst dann der
         Anspruch des laufenden Jahres. Vor dem Stichtag zieht der Saldo noch nichts ab, sondern weist die
         gefährdeten Tage als Hinweis aus. Ist der Verfall aus, wird der Übertrag unbegrenzt vorgetragen.
+      </>
+    ),
+  },
+
+  'absence.vacation_balance': {
+    title: 'Resturlaub',
+    body: (
+      <>
+        <strong>Anspruch + Übertrag − genommen.</strong> Genommen sind die
+        genehmigten Urlaubstage. Gezählt wird nach dem Arbeitszeitmodell, das
+        am jeweiligen Tag gilt: wer Montag bis Mittwoch arbeitet, verbraucht
+        für eine Urlaubswoche drei Tage. Feiertage zählen nicht, ein Urlaub
+        über den Jahreswechsel zählt in jedem Jahr anteilig.
+        <br /><br />
+        Beantragte, noch nicht genehmigte Tage stehen daneben und mindern den
+        Resturlaub erst mit der Genehmigung. Der Übertrag ist der Rest des
+        Vorjahres — außer unter „Urlaubsansprüche" ist ein fester Wert
+        hinterlegt — und kann zum Stichtag verfallen (Einstellungen →
+        Stammdaten, Abwesenheitsarten).
       </>
     ),
   },

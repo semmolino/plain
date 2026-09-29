@@ -634,4 +634,4 @@ async function buildEmployeeReportList(supabase, tenantId, { mode, asOfDate, dat
   return result;
 }
 
-module.exports = { calculateMonthBalance, calculateRunningBalance, buildEmployeeReportList };
+module.exports = { calculateMonthBalance, calculateRunningBalance, buildEmployeeReportList, WEEKDAY_COLS, findActiveModel };

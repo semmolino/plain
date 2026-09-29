@@ -426,7 +426,11 @@ module.exports = (supabase) => {
       });
     }
 
-    res.json({ data, invite });
+    // Der Link bleibt am Server (Runde 11): ohne Mailversand kam er vorher in
+    // der Antwort zurück — wer nur anlegen darf, konnte damit selbst das
+    // Passwort des neuen Kontos festlegen und sich als dieses anmelden.
+    const { url: _link, ...inviteOut } = invite;
+    res.json({ data, invite: inviteOut });
   });
 
   // ── Zugangsstatus ─────────────────────────────────────────────────────────
@@ -505,7 +509,9 @@ module.exports = (supabase) => {
 
     // Der Grund ist hier fuer den Administrator gedacht (kein SMTP, Adresse
     // fehlt) und enthaelt keine Datenbankinterna.
-    if (!invite.sent) return res.status(500).json({ error: invite.reason, userFacing: true, ...(invite.url ? { url: invite.url } : {}) });
+    // Kein Link in der Antwort (Runde 11) — er ist ein Zugang zu einem fremden
+    // Konto, und diese Route prüft nicht, ob das Konto mehr darf als man selbst.
+    if (!invite.sent) return res.status(500).json({ error: invite.reason, userFacing: true });
     res.json({ sent: true, mail: emp.MAIL });
   });
 

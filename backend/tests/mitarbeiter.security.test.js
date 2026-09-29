@@ -311,6 +311,37 @@ describe("Neuanlage", () => {
   });
 });
 
+describe("Einladungslink ohne Mailversand", () => {
+  const withCreate = () => baseData({
+    ROLE_PERMISSION: [...baseData().ROLE_PERMISSION, { ROLE_ID: 1, PERMISSION_ID: 18, PERMISSION: { KEY: "employees.create" } }],
+    PERMISSION: [...baseData().PERMISSION, { ID: 18, KEY: "employees.create" }],
+    USER_ROLE: [{ ID: 1, TENANT_ID: T, IS_DEFAULT: false }],
+  });
+  const smtp = ["SMTP_HOST", "SMTP_USER", "SMTP_PASS", "MAIL_FROM"].map(k => [k, process.env[k]]);
+  const secret = process.env.JWT_SECRET;
+  beforeEach(() => { for (const [k] of smtp) delete process.env[k]; process.env.JWT_SECRET = "test-secret-mindestens-32-zeichen-lang-xx"; });
+  afterAll(() => {
+    for (const [k, v] of smtp) if (v !== undefined) process.env[k] = v;
+    if (secret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = secret;
+  });
+
+  test("Neuanlage: kein Link in der Antwort", async () => {
+    const sb = makeFakeSupabase(withCreate());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter", { abbr: "NE", first_name: "Nina", last_name: "Eck", gender_id: 2, email: "n.eck@buero.de" });
+    expect(r.status).toBe(200);
+    expect(r.body.invite.sent).toBe(false);
+    expect(r.body.invite).not.toHaveProperty("url");
+    expect(r.text).not.toMatch(/token=|passwort-festlegen|set-password\?/i);
+  });
+
+  test("Einladung erneut senden: kein Link in der Fehlermeldung", async () => {
+    const sb = makeFakeSupabase(baseData());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/2/invite", {});
+    expect(r.status).toBe(500);
+    expect(r.body).not.toHaveProperty("url");
+  });
+});
+
 describe("H6 Mitarbeiter löschen", () => {
   const withDelete = () => baseData({
     PERMISSION: [...baseData().PERMISSION, { ID: 18, KEY: "employees.delete" }],

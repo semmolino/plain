@@ -1348,12 +1348,89 @@ async function mockMitarbeiter(page: Page) {
     { ID: 3, NAME: 'Fortbildung', COLOR: '#1565c0', COUNTS_AS_WORKED: true, REDUCES_VACATION: false, REQUIRES_APPROVAL: true, IS_PAID: true, ACTIVE: 1, SORT_ORDER: 3 },
   ] })))
   await r('abwesenheit/vacation-balance', route => route.fulfill(json({ data: {
-    year: 2026, carryover: 3, entitled: 30, taken: 17.5, remaining: 15.5, breakdown: [],
+    year: 2026, carryover: 3, entitled: 30, taken: 17.5, remaining: 15.5, pending: 4, breakdown: [],
   } })))
+  // Vorschau wie der Server: Mo–Fr, je Jahr, Überschneidungen mit eigenen Einträgen
+  await r('abwesenheit/preview', route => {
+    const q = new URL(route.request().url()).searchParams
+    const emp = Number(q.get('employee_id') || 1), from = q.get('date_from') ?? '', to = q.get('date_to') || from
+    const half = q.get('half_day') === 'true' && from === to, typeId = Number(q.get('absence_type_id') || 0), ex = Number(q.get('exclude_id') || 0)
+    const byYear: Record<number, number> = {}
+    for (const d = new Date(`${from}T00:00:00`); d <= new Date(`${to}T00:00:00`); d.setDate(d.getDate() + 1)) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) byYear[d.getFullYear()] = (byYear[d.getFullYear()] ?? 0) + (half ? 0.5 : 1)
+    }
+    const days = Object.values(byYear).reduce((a, b) => a + b, 0)
+    const reduces = typeId === 1
+    return route.fulfill(json({ data: {
+      days, by_year: Object.entries(byYear).map(([year, d]) => ({ year: Number(year), days: d })),
+      reduces_vacation: reduces, requires_approval: typeId ? typeId !== 2 : null,
+      balance: reduces ? Object.entries(byYear).map(([year, d]) => ({ year: Number(year), remaining: 15.5, pending: 4, days: d, after: 15.5 - 4 - d })) : null,
+      overlaps: ABSENCES.filter(a => a.EMPLOYEE_ID === emp && a.ID !== ex && ['REQUESTED', 'APPROVED'].includes(a.STATUS) && a.DATE_FROM <= to && a.DATE_TO >= from)
+        .map(a => ({ ID: a.ID, DATE_FROM: a.DATE_FROM, DATE_TO: a.DATE_TO, HALF_DAY: a.HALF_DAY, STATUS: a.STATUS, TYPE_NAME: a.TYPE_NAME })),
+    } }))
+  })
   await r('abwesenheit/entitlements', route => route.fulfill(json({ data: [{ ID: 41, EMPLOYEE_ID: 2, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null, NOTE: null }] })))
-  await r('abwesenheit', route => route.fulfill(json({ data: [
-    { ID: 51, EMPLOYEE_ID: 2, ABSENCE_TYPE_ID: 1, DATE_FROM: '2026-10-12', DATE_TO: '2026-10-16', HALF_DAY: false, STATUS: 'REQUESTED', NOTE: 'Herbstferien', REQUESTED_BY: 2, REQUESTED_AT: '2026-09-20T08:00:00Z', DECIDED_BY: null, DECIDED_AT: null, DECISION_NOTE: null, CLARIFICATION_LOG: null, DAYS: 5, TYPE_NAME: 'Urlaub', TYPE_COLOR: '#2e7d32', REDUCES_VACATION: true, EMPLOYEE_SHORT_NAME: 'TK', EMPLOYEE_FIRST_NAME: 'Thomas', EMPLOYEE_LAST_NAME: 'Kern' },
-    { ID: 52, EMPLOYEE_ID: 2, ABSENCE_TYPE_ID: 1, DATE_FROM: '2026-08-03', DATE_TO: '2026-08-14', HALF_DAY: false, STATUS: 'APPROVED', NOTE: null, REQUESTED_BY: 2, REQUESTED_AT: '2026-05-02T08:00:00Z', DECIDED_BY: 1, DECIDED_AT: '2026-05-03T08:00:00Z', DECISION_NOTE: null, CLARIFICATION_LOG: null, DAYS: 10, TYPE_NAME: 'Urlaub', TYPE_COLOR: '#2e7d32', REDUCES_VACATION: true, EMPLOYEE_SHORT_NAME: 'TK', EMPLOYEE_FIRST_NAME: 'Thomas', EMPLOYEE_LAST_NAME: 'Kern' },
-    { ID: 53, EMPLOYEE_ID: 2, ABSENCE_TYPE_ID: 2, DATE_FROM: '2026-03-09', DATE_TO: '2026-03-10', HALF_DAY: false, STATUS: 'APPROVED', NOTE: null, REQUESTED_BY: 2, REQUESTED_AT: '2026-03-09T07:00:00Z', DECIDED_BY: null, DECIDED_AT: null, DECISION_NOTE: null, CLARIFICATION_LOG: null, DAYS: 2, TYPE_NAME: 'Krank', TYPE_COLOR: '#c62828', REDUCES_VACATION: false, EMPLOYEE_SHORT_NAME: 'TK', EMPLOYEE_FIRST_NAME: 'Thomas', EMPLOYEE_LAST_NAME: 'Kern' },
-  ] })))
+  await r('abwesenheit/entitlements/all', route => route.fulfill(json({ data: EMPLOYEE_LIST.filter(e => e.ACTIVE !== 2).slice(0, 6).map((e, i) => ({
+    ID: 40 + e.ID, EMPLOYEE_ID: e.ID, YEAR: 2026, DAYS_ENTITLED: [30, 30, 28, 30, 25, 30][i], CARRYOVER_OVERRIDE: i === 2 ? 2 : null, NOTE: null,
+  })) })))
+  // Gefiltert wie der Server: Mitarbeiter, Status, Zeitraum als Überlappung
+  await r('abwesenheit', route => {
+    const q = new URL(route.request().url()).searchParams
+    const emp = q.get('employee_id'), st = q.get('status'), from = q.get('from'), to = q.get('to')
+    return route.fulfill(json({ data: ABSENCES.filter(a =>
+      (!emp || a.EMPLOYEE_ID === Number(emp)) && (!st || a.STATUS === st) &&
+      (!from || a.DATE_TO >= from) && (!to || a.DATE_FROM <= to)) }))
+  })
+  await r('mitarbeiter/month-close-overview', route => route.fulfill(json({
+    months: [{ year: 2026, month: 6 }, { year: 2026, month: 7 }, { year: 2026, month: 8 }, { year: 2026, month: 9 }],
+    data: EMPLOYEE_LIST.filter(e => e.ACTIVE !== 2).map(e => ({
+      ID: e.ID, ABBR: e.ABBR, FIRST_NAME: e.FIRST_NAME, LAST_NAME: e.LAST_NAME,
+      months: [6, 7, 8, 9].map(m => {
+        const closed = m < 8 || (m === 8 && e.ID % 3 !== 0)
+        return { year: 2026, month: m, closed, closed_at: closed ? `2026-${String(m + 1).padStart(2, '0')}-05T09:00:00Z` : null }
+      }),
+    })),
+  })))
 }
+
+// ── Abwesenheiten (Runde 11) ─────────────────────────────────────────────────
+
+const ABS_TYPE: Record<number, { TYPE_NAME: string; TYPE_COLOR: string; REDUCES_VACATION: boolean }> = {
+  1: { TYPE_NAME: 'Urlaub', TYPE_COLOR: '#2e7d32', REDUCES_VACATION: true },
+  2: { TYPE_NAME: 'Krank', TYPE_COLOR: '#c62828', REDUCES_VACATION: false },
+  3: { TYPE_NAME: 'Fortbildung', TYPE_COLOR: '#1565c0', REDUCES_VACATION: false },
+}
+const absence = (ID: number, EMPLOYEE_ID: number, ABSENCE_TYPE_ID: number, DATE_FROM: string, DATE_TO: string, DAYS: number,
+  STATUS: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED', extra: Record<string, unknown> = {}) => {
+  const e = EMPLOYEES.find(x => x.ID === EMPLOYEE_ID)!
+  return {
+    ID, EMPLOYEE_ID, ABSENCE_TYPE_ID, DATE_FROM, DATE_TO, HALF_DAY: false, STATUS, NOTE: null as string | null,
+    REQUESTED_BY: EMPLOYEE_ID, REQUESTED_AT: '2026-09-20T08:00:00Z',
+    DECIDED_BY: STATUS === 'APPROVED' ? 1 : null, DECIDED_AT: STATUS === 'APPROVED' ? '2026-09-01T08:00:00Z' : null,
+    DECISION_NOTE: null as string | null, CLARIFICATION_LOG: null as unknown, DAYS, ...ABS_TYPE[ABSENCE_TYPE_ID],
+    EMPLOYEE_SHORT_NAME: e.ABBR, EMPLOYEE_FIRST_NAME: e.FIRST_NAME, EMPLOYEE_LAST_NAME: e.LAST_NAME,
+    ...extra,
+  }
+}
+export const ABSENCES = [
+  absence(51, 2, 1, '2026-10-12', '2026-10-16', 5, 'REQUESTED', { NOTE: 'Herbstferien' }),
+  absence(54, 4, 1, '2026-09-28', '2026-10-02', 5, 'REQUESTED', { NOTE: 'Umzug' }),
+  absence(56, 6, 3, '2026-10-06', '2026-10-06', 1, 'REQUESTED', {
+    NOTE: 'BIM-Schulung Revit, extern',
+    CLARIFICATION_LOG: [
+      { role: 'approver', by: 1, at: '2026-09-22T09:00:00Z', text: 'Wer übernimmt die Baubesprechung Kita an dem Tag?' },
+      { role: 'requester', by: 6, at: '2026-09-22T11:30:00Z', text: 'Jonas ist eingearbeitet und übernimmt.' },
+    ],
+  }),
+  absence(55, 5, 1, '2026-09-21', '2026-09-30', 8, 'APPROVED'),
+  absence(60, 3, 1, '2026-09-24', '2026-09-24', 0.5, 'APPROVED', { HALF_DAY: true }),
+  absence(59, 7, 2, '2026-09-15', '2026-09-16', 2, 'APPROVED'),
+  absence(57, 1, 1, '2026-09-07', '2026-09-11', 5, 'APPROVED'),
+  absence(58, 1, 1, '2026-12-28', '2026-12-31', 4, 'REQUESTED', {
+    NOTE: 'Zwischen den Jahren',
+    CLARIFICATION_LOG: [{ role: 'approver', by: 4, at: '2026-09-23T10:00:00Z', text: 'Ist der Bauantrag Werk II bis dahin eingereicht?' }],
+  }),
+  absence(61, 1, 3, '2026-05-18', '2026-05-18', 1, 'REJECTED', { DECISION_NOTE: 'Termin kollidiert mit der Abnahme.' }),
+  absence(52, 2, 1, '2026-08-03', '2026-08-14', 10, 'APPROVED'),
+  absence(53, 2, 2, '2026-03-09', '2026-03-10', 2, 'APPROVED', { DECIDED_BY: null, DECIDED_AT: null }),
+]

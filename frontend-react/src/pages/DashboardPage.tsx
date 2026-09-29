@@ -915,7 +915,7 @@ function AbsenceOverviewCard() {
   return (
     <div className="dash-card">
       <CardTitle style={{ cursor: 'pointer' }}>
-        <span onClick={() => navigate('/mitarbeiter?tab=abwesenheiten')} title="Zu Abwesenheiten">Wer ist abwesend</span>
+        <span onClick={() => navigate('/mitarbeiter?tab=abwesenheiten&sub=calendar')} title="Zum Abwesenheitskalender">Wer ist abwesend</span>
       </CardTitle>
       {rows.length === 0 && <p className="empty-note">Niemand ist in den nächsten 14 Tagen abwesend.</p>}
       {heute.length > 0 && (

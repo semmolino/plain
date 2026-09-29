@@ -2189,10 +2189,13 @@ function KostensatzSection() {
       const rates = calcResults
         .filter(r => selected.has(r.employee_id))
         .map(r => ({ employee_id: r.employee_id, rate: r.breakdown.import_rate }))
-      await importRates(rates, importDate, recalcBookings)
+      const res = await importRates(rates, importDate, recalcBookings)
       void qc.invalidateQueries({ queryKey: ['employees'] })
       void qc.invalidateQueries({ queryKey: ['emp-cp-rates'] })
-      const recalcNote = recalcBookings ? ' · Buchungen neu berechnet' : ''
+      const skipped = (res.skipped_closed_month ?? 0) + (res.skipped_not_hours ?? 0)
+      const recalcNote = recalcBookings
+        ? ` · ${res.recalculated ?? 0} Buchungen neu berechnet${skipped ? ` (${res.skipped_closed_month ?? 0} in abgeschlossenen Monaten und ${res.skipped_not_hours ?? 0} Pauschalen/Pausen unverändert)` : ''}`
+        : ''
       setCalcMsg({ text: `${rates.length} Kostensätze übernommen (gültig ab ${importDate})${recalcNote}`, type: 'success' })
       setShowImport(false); setImportDate(''); setSelected(new Set()); setRecalcBookings(false)
     } catch (e: unknown) { setCalcMsg({ text: (e as Error).message, type: 'error' }) }
@@ -2528,8 +2531,9 @@ function KostensatzSection() {
                     <span>
                       <strong>Bestehende Buchungen neu berechnen</strong>
                       <span style={{ color: 'var(--text-3)', display: 'block', fontSize: 12, marginTop: 2 }}>
-                        Alle Buchungen ab dem gewählten Datum werden mit dem neuen Kostensatz (COST_RATE) und dem
-                        daraus resultierenden COST_TOTAL neu berechnet. Buchungen vor diesem Datum bleiben unverändert.
+                        Stundenbuchungen ab dem gewählten Datum bekommen den neuen Satz — bis zum nächsten schon
+                        eingetragenen Satz des Mitarbeiters. Pauschalen, Pausen und abgeschlossene Monate bleiben,
+                        wie sie sind; die Kosten der Projektelemente werden nachgerechnet.
                       </span>
                     </span>
                   </label>

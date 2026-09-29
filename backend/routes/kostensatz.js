@@ -96,8 +96,8 @@ module.exports = (supabase) => {
     if (!valid_from || !Array.isArray(rates) || !rates.length)
       return res.status(400).json({ error: 'valid_from and rates[] required' });
     try {
-      await svc.importCostRates(supabase, req.tenantId, rates, valid_from, !!recalc_bookings);
-      res.json({ ok: true });
+      const summary = await svc.importCostRates(supabase, req.tenantId, rates, valid_from, !!recalc_bookings);
+      res.json({ ok: true, ...summary });
     } catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }) }
   });
 

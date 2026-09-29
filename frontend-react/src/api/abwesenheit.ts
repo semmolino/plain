@@ -58,6 +58,7 @@ export interface VacationBalanceYear {
   remaining: number
 }
 export interface VacationBalance extends VacationBalanceYear {
+  pending?:              number   // offen beantragte Urlaubstage im Jahr (mindern den Saldo erst mit der Genehmigung)
   carryoverExpires?:     boolean
   carryoverExpiryDate?:  string   // 'MM-DD'
   carryoverExpiryLabel?: string   // 'TT.MM.'
@@ -146,6 +147,29 @@ export const cancelAbsence = (id: number) =>
 
 export const deleteAbsence = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/abwesenheit/${id}`)
+
+// Was ein Antrag kostet, bevor er gestellt wird (Runde 11): Tage nach
+// Arbeitszeitmodell und Feiertagen, Resturlaub danach, Überschneidungen.
+export interface AbsencePreview {
+  days:              number
+  by_year:           { year: number; days: number }[]
+  reduces_vacation:  boolean
+  requires_approval: boolean | null
+  /** Nur bei Arten, die den Urlaub mindern — und fremd nur mit absence.view. */
+  balance:           { year: number; remaining: number; pending: number; days: number; after: number }[] | null
+  overlaps:          { ID: number; DATE_FROM: string; DATE_TO: string; HALF_DAY: boolean; STATUS: AbsenceStatus; TYPE_NAME: string | null }[]
+}
+
+export const fetchAbsencePreview = (params: {
+  employee_id?: number; absence_type_id?: number; date_from: string; date_to: string; half_day?: boolean; exclude_id?: number
+}) => {
+  const p = new URLSearchParams({ date_from: params.date_from, date_to: params.date_to })
+  if (params.employee_id != null)     p.set('employee_id', String(params.employee_id))
+  if (params.absence_type_id != null) p.set('absence_type_id', String(params.absence_type_id))
+  if (params.half_day)                p.set('half_day', 'true')
+  if (params.exclude_id != null)      p.set('exclude_id', String(params.exclude_id))
+  return apiClient.get<{ data: AbsencePreview }>(`/abwesenheit/preview?${p}`)
+}
 
 // ── Urlaubsanspruch + Saldo ───────────────────────────────────────────────────
 

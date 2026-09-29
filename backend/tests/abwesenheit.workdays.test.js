@@ -98,3 +98,54 @@ describe("computeVacationBreakdown", () => {
     expect(current.remaining).toBe(15); // -5 + 30 - 10, wie ohne Verfall
   });
 });
+
+// ── Runde 11: nach Arbeitszeitmodell und je Kalenderjahr ────────────────────
+const { workdaysByYear, takenVacationByYear } = require("../routes/abwesenheit");
+
+const VOLLZEIT = { MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 8, SAT: 0, SUN: 0 };
+const MO_MI    = { MON: 8, TUE: 8, WED: 4, THU: 0, FRI: 0, SAT: 0, SUN: 0 };
+const MIT_SA   = { MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 0, SAT: 6, SUN: 0 };
+
+describe("workdayCount nach Arbeitszeitmodell", () => {
+  test("Teilzeit Mo–Mi: eine Urlaubswoche kostet 3 Tage, nicht 5", () => {
+    expect(workdayCount("2026-01-05", "2026-01-09", false, null, [{ VALID_FROM: "2020-01-01", model: MO_MI }])).toBe(3);
+  });
+  test("Samstagsarbeit zählt, der freie Freitag nicht", () => {
+    expect(workdayCount("2026-01-05", "2026-01-11", false, null, [{ VALID_FROM: "2020-01-01", model: MIT_SA }])).toBe(5);
+  });
+  test("Modellwechsel mitten im Urlaub: je Tag das dann gültige Modell", () => {
+    const assignments = [{ VALID_FROM: "2020-01-01", model: VOLLZEIT }, { VALID_FROM: "2026-01-08", model: MO_MI }];
+    // Mo 5. bis Mi 7. Vollzeit (3), Do 8. und Fr 9. Mo–Mi-Modell (0)
+    expect(workdayCount("2026-01-05", "2026-01-09", false, null, assignments)).toBe(3);
+  });
+  test("vor der ersten Zuordnung und ohne Modell: Mo–Fr wie bisher", () => {
+    expect(workdayCount("2026-01-05", "2026-01-09", false, null, [{ VALID_FROM: "2027-01-01", model: MO_MI }])).toBe(5);
+    expect(workdayCount("2026-01-05", "2026-01-09", false, null, null)).toBe(5);
+  });
+  test("halber Tag an einem freien Tag des Modells zählt nichts", () => {
+    expect(workdayCount("2026-01-08", "2026-01-08", true, null, [{ VALID_FROM: "2020-01-01", model: MO_MI }])).toBe(0);
+    expect(workdayCount("2026-01-07", "2026-01-07", true, null, [{ VALID_FROM: "2020-01-01", model: MO_MI }])).toBe(0.5);
+  });
+});
+
+describe("Urlaub über den Jahreswechsel", () => {
+  test("workdaysByYear teilt je Jahr (Neujahr frei)", () => {
+    // Mo 28.12.2026 – Fr 08.01.2027: 2026 → 28.–31. (4), 2027 → 4.–8. (5), 1.1. Feiertag
+    expect(workdaysByYear("2026-12-28", "2027-01-08", false, new Set(["2027-01-01"]))).toEqual({ 2026: 4, 2027: 5 });
+  });
+  test("takenVacationByYear bucht anteilig — vorher alles ins Startjahr", () => {
+    const r = takenVacationByYear([{ DATE_FROM: "2026-12-28", DATE_TO: "2027-01-08", HALF_DAY: false }], { holidays: new Set(["2027-01-01"]) });
+    expect(r.takenByYear).toEqual({ 2026: 4, 2027: 5 });
+  });
+  test("mit Verfall: der Anteil im neuen Jahr liegt vor dessen Stichtag", () => {
+    const r = takenVacationByYear([{ DATE_FROM: "2026-12-28", DATE_TO: "2027-01-08", HALF_DAY: false }],
+      { holidays: new Set(["2027-01-01"]), expires: true, expiryDate: "03-31" });
+    expect(r.takenBeforeByYear).toEqual({ 2026: 0, 2027: 5 });
+    expect(r.takenAfterByYear).toEqual({ 2026: 4, 2027: 0 });
+  });
+  test("über den Stichtag: vor und nach getrennt", () => {
+    const r = takenVacationByYear([{ DATE_FROM: "2027-03-29", DATE_TO: "2027-04-02", HALF_DAY: false }], { expires: true, expiryDate: "03-31" });
+    expect(r.takenBeforeByYear[2027]).toBe(3);
+    expect(r.takenAfterByYear[2027]).toBe(2);
+  });
+});
