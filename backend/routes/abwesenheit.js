@@ -4,6 +4,7 @@ const { requirePermission } = require("../middleware/permissions");
 const { createNotification } = require("../services/notifications");
 const { getEmployeeCountryState } = require("../services/costRateCalc");
 const { exakterWert } = require("../services/pgrestFilter");
+const { WEEKDAY_COLS, findActiveModel } = require("../services/employeeBalance");
 
 // ── Feiertage ─────────────────────────────────────────────────────────────────
 // Laedt die Feiertage (Land/Bundesland) im Bereich [from,to] als Set von
@@ -42,25 +43,64 @@ async function buildHolidayResolver(supabase, tenantId, empIds, from, to) {
   };
 }
 
-// Werktage (Mo–Fr) im Zeitraum ohne Wochenenden und Feiertage; halber Tag nur
-// bei Eintagesabwesenheit. `holidays` ist ein optionales Set von 'YYYY-MM-DD';
-// fehlt es, werden nur Wochenenden ausgenommen.
-function workdayCount(from, to, halfDay, holidays) {
+// Abwesenheitstage je Kalenderjahr (Runde 10/11 des UI-Pilots).
+//
+// Ein Tag zaehlt, wenn das an diesem Tag gueltige Arbeitszeitmodell fuer den
+// Wochentag Soll-Stunden hat und er kein Feiertag ist. Vorher zaehlte immer
+// Mo–Fr: wer Mo–Mi arbeitet, verlor fuer eine Urlaubswoche 5 statt 3 Tage,
+// wer samstags arbeitet, verlor fuer den Samstag nichts. Ohne Modell
+// (Altbestand, Tage vor der ersten Zuordnung) bleibt es bei Mo–Fr.
+//
+// Das Ergebnis ist nach Jahr getrennt: ein Urlaub vom 28.12. bis 5.1. zaehlte
+// vorher ganz im Startjahr — der Resturlaub des alten Jahres war zu klein, der
+// des neuen zu gross. Halber Tag nur bei Eintagesabwesenheit.
+//
+// `holidays`: Set von 'YYYY-MM-DD' (optional); `assignments`: Zuordnungen
+// aufsteigend nach VALID_FROM mit `model` (optional).
+function workdaysByYear(from, to, halfDay, holidays, assignments) {
   const a = new Date(`${from}T00:00:00`);
   const b = new Date(`${to}T00:00:00`);
-  if (isNaN(a.getTime()) || isNaN(b.getTime()) || b < a) return 0;
+  if (isNaN(a.getTime()) || isNaN(b.getTime()) || b < a) return {};
   const pad = (n) => String(n).padStart(2, "0");
   const key = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const isFree = (d) => {
+  const isWorkday = (d, k) => {
+    if (holidays && holidays.has(k)) return false;
+    const model = assignments && assignments.length ? findActiveModel(assignments, k) : null;
+    if (model) return Number(model[WEEKDAY_COLS[d.getDay()]] || 0) > 0;
     const wd = d.getDay();
-    return wd === 0 || wd === 6 || (holidays && holidays.has(key(d)));
+    return wd !== 0 && wd !== 6;
   };
-  if (halfDay && from === to) return isFree(a) ? 0 : 0.5;
-  let days = 0;
+  if (halfDay && from === to) return isWorkday(a, from) ? { [a.getFullYear()]: 0.5 } : {};
+  const out = {};
   for (const d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) {
-    if (!isFree(d)) days++;
+    if (isWorkday(d, key(d))) out[d.getFullYear()] = (out[d.getFullYear()] || 0) + 1;
   }
-  return days;
+  return out;
+}
+
+function workdayCount(from, to, halfDay, holidays, assignments) {
+  return Object.values(workdaysByYear(from, to, halfDay, holidays, assignments)).reduce((s, n) => s + n, 0);
+}
+
+// Zuordnungen je Mitarbeiter (aufsteigend) — eine Abfrage fuer alle.
+async function buildAssignmentResolver(supabase, tenantId, empIds) {
+  const byEmp = new Map();
+  if (!empIds.length) return () => null;
+  const { data: assigns, error } = await supabase.from("EMPLOYEE_WORK_MODEL")
+    .select("EMPLOYEE_ID, MODEL_ID, VALID_FROM").eq("TENANT_ID", tenantId).in("EMPLOYEE_ID", empIds)
+    .order("VALID_FROM", { ascending: true });
+  if (error) throw error;
+  const modelIds = [...new Set((assigns || []).map(x => x.MODEL_ID))];
+  const { data: models, error: mErr } = modelIds.length
+    ? await supabase.from("WORKING_TIME_MODEL").select("ID, MON, TUE, WED, THU, FRI, SAT, SUN").eq("TENANT_ID", tenantId).in("ID", modelIds)
+    : { data: [] };
+  if (mErr) throw mErr;
+  const modelMap = new Map((models || []).map(m => [m.ID, m]));
+  for (const x of (assigns || []).slice().sort((p, q) => String(p.VALID_FROM).localeCompare(String(q.VALID_FROM)))) {
+    if (!byEmp.has(x.EMPLOYEE_ID)) byEmp.set(x.EMPLOYEE_ID, []);
+    byEmp.get(x.EMPLOYEE_ID).push({ VALID_FROM: String(x.VALID_FROM).slice(0, 10), model: modelMap.get(x.MODEL_ID) ?? null });
+  }
+  return (empId) => byEmp.get(empId) || null;
 }
 
 // ── Abwesenheits-Settings (TENANT_SETTINGS, key/value) ───────────────────────
@@ -97,6 +137,37 @@ async function saveAbsenceSettings(supabase, tenantId, patch) {
   if (!upserts.length) return;
   const { error } = await supabase.from("TENANT_SETTINGS").upsert(upserts, { onConflict: "TENANT_ID,KEY" });
   if (error) throw { status: 500, message: error.message };
+}
+
+const localToday = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+// Genommene Urlaubstage je Jahr; bei aktivem Verfall zusaetzlich nach dem
+// Stichtag des jeweiligen Jahres getrennt (der Uebertrag muss bis dahin
+// genutzt sein). Ein Antrag ueber den Jahreswechsel zaehlt je Jahr anteilig.
+function takenVacationByYear(absences, { holidays = null, assignments = null, expires = false, expiryDate = "03-31" } = {}) {
+  const takenByYear = {}, takenBeforeByYear = {}, takenAfterByYear = {};
+  const r2 = (n) => Math.round(n * 100) / 100;
+  for (const a of absences) {
+    const byYear = workdaysByYear(a.DATE_FROM, a.DATE_TO, a.HALF_DAY, holidays, assignments);
+    for (const [ys, total] of Object.entries(byYear)) {
+      const y = Number(ys);
+      takenByYear[y] = r2((takenByYear[y] || 0) + total);
+      if (!expires) continue;
+      const cutoff = `${y}-${expiryDate}`;
+      const from = a.DATE_FROM > `${y}-01-01` ? a.DATE_FROM : `${y}-01-01`;
+      const to   = a.DATE_TO   < `${y}-12-31` ? a.DATE_TO   : `${y}-12-31`;
+      let before;
+      if (to <= cutoff)        before = total;                                                  // ganz vor Stichtag
+      else if (from > cutoff)  before = 0;                                                      // ganz nach Stichtag
+      else                     before = workdayCount(from, cutoff, false, holidays, assignments); // ueber Stichtag -> splitten
+      takenBeforeByYear[y] = r2((takenBeforeByYear[y] || 0) + before);
+      takenAfterByYear[y]  = r2((takenAfterByYear[y]  || 0) + total - before);
+    }
+  }
+  return { takenByYear, takenBeforeByYear, takenAfterByYear };
 }
 
 // Reine Urlaubssaldo-Berechnung ueber die Jahre (Auto-Uebertrag; optionaler
@@ -388,15 +459,18 @@ module.exports = (supabase) => {
 
     // Feiertage fuer die Tage-Zaehlung (min–max-Zeitraum, je Mitarbeiter-Bundesland).
     let holidaysFor = () => null;
+    let assignmentsFor = () => null;
     if (rows.length) {
       const minFrom = rows.reduce((m, r) => (r.DATE_FROM < m ? r.DATE_FROM : m), rows[0].DATE_FROM);
       const maxTo   = rows.reduce((m, r) => (r.DATE_TO   > m ? r.DATE_TO   : m), rows[0].DATE_TO);
       holidaysFor = await buildHolidayResolver(supabase, req.tenantId, empIds, minFrom, maxTo);
+      try { assignmentsFor = await buildAssignmentResolver(supabase, req.tenantId, empIds); }
+      catch (e) { return res.status(500).json({ error: e.message }); }
     }
 
     const enriched = rows.map(r => ({
       ...r,
-      DAYS:                workdayCount(r.DATE_FROM, r.DATE_TO, r.HALF_DAY, holidaysFor(r.EMPLOYEE_ID)),
+      DAYS:                workdayCount(r.DATE_FROM, r.DATE_TO, r.HALF_DAY, holidaysFor(r.EMPLOYEE_ID), assignmentsFor(r.EMPLOYEE_ID)),
       TYPE_NAME:           typeMap[r.ABSENCE_TYPE_ID]?.NAME  ?? null,
       TYPE_COLOR:          typeMap[r.ABSENCE_TYPE_ID]?.COLOR ?? null,
       REDUCES_VACATION:    typeMap[r.ABSENCE_TYPE_ID]?.REDUCES_VACATION ?? false,
@@ -706,23 +780,12 @@ module.exports = (supabase) => {
     const expires    = settings.carryoverExpires;
     const expiryDate = settings.carryoverExpiryDate; // 'MM-DD'
 
-    // Genommene Urlaubstage je Jahr; bei aktivem Verfall zusaetzlich nach
-    // Stichtag getrennt (der Uebertrag muss bis zum Stichtag genutzt sein).
-    const takenByYear = {}, takenBeforeByYear = {}, takenAfterByYear = {};
-    for (const a of absences || []) {
-      const y = Number(String(a.DATE_FROM).slice(0, 4));
-      const total = workdayCount(a.DATE_FROM, a.DATE_TO, a.HALF_DAY, holidays);
-      takenByYear[y] = (takenByYear[y] || 0) + total;
-      if (expires) {
-        const cutoff = `${y}-${expiryDate}`;
-        let before;
-        if (a.DATE_TO <= cutoff)        before = total;                                        // ganz vor Stichtag
-        else if (a.DATE_FROM > cutoff)  before = 0;                                            // ganz nach Stichtag
-        else                            before = workdayCount(a.DATE_FROM, cutoff, false, holidays); // ueber Stichtag -> splitten
-        takenBeforeByYear[y] = (takenBeforeByYear[y] || 0) + before;
-        takenAfterByYear[y]  = (takenAfterByYear[y]  || 0) + Math.round((total - before) * 100) / 100;
-      }
-    }
+    let assignments = null;
+    try { assignments = (await buildAssignmentResolver(supabase, req.tenantId, [empId]))(empId); }
+    catch (e) { return res.status(500).json({ error: e.message }); }
+
+    const { takenByYear, takenBeforeByYear, takenAfterByYear } =
+      takenVacationByYear(absences || [], { holidays, assignments, expires, expiryDate });
     const entByYear = {};
     for (const e of entitlements || []) entByYear[e.YEAR] = e;
 
@@ -731,7 +794,7 @@ module.exports = (supabase) => {
 
     const { breakdown, current: cur } = computeVacationBreakdown({
       entByYear, takenByYear, takenBeforeByYear, takenAfterByYear,
-      minYear, year, expires, expiryDate,
+      minYear, year, expires, expiryDate, todayStr: localToday(),
     });
 
     const [mm, dd] = expiryDate.split("-");
@@ -763,4 +826,6 @@ module.exports = (supabase) => {
 
 // Fuer Unit-Tests exportiert (reine Funktionen, kein DB-Zugriff).
 module.exports.workdayCount = workdayCount;
+module.exports.workdaysByYear = workdaysByYear;
+module.exports.takenVacationByYear = takenVacationByYear;
 module.exports.computeVacationBreakdown = computeVacationBreakdown;

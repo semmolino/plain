@@ -731,63 +731,91 @@ async function commitEmployeeRows(rows, { supabase, tenantId, batchId, ctx, opti
 }
 
 /**
- * Zurücksetzen: erst die Nebenzeilen dieses Stapels, dann die Mitarbeiter,
+ * Zurücksetzen: erst prüfen (employeeRollbackBlockers, von rollback() VOR
+ * jeder Änderung aufgerufen), dann die Nebenzeilen, dann die Mitarbeiter,
  * zuletzt die vom Stapel angelegten Abteilungen (auf die zeigt EMPLOYEE).
  *
- * Der Schutz gegen Live-Daten muss hier selbst stehen — der allgemeine Weg in
- * rollback() prüft `dependents` nur, wenn die Domäne KEIN rollbackExecute hat.
+ * Runde 11: vorher prüfte die Rücknahme nur Buchungen, Projektleitung,
+ * Zuordnungen und Abwesenheiten, schluckte Fehler beim Löschen der
+ * Nebenzeilen und löschte nur, was der Stapel selbst angelegt hatte. Hing an
+ * einem importierten Mitarbeiter ein Angebot, eine Rechnung oder ein von Hand
+ * ergänzter Kostensatz, scheiterte das Löschen am Fremdschlüssel — nachdem
+ * Rollen, Sätze und Modelle schon weg waren. Übrig blieben Mitarbeiter ohne
+ * Rechte, und der Stapel stand weiter auf „aktiv".
  */
-async function rollbackEmployee({ supabase, tenantId, batchId }) {
-  const def = DOMAINS.employee;
-  const { data: idRows, error: idErr } = await supabase
+async function importedEmployeeIds(supabase, tenantId, batchId) {
+  const { data, error } = await supabase
     .from("EMPLOYEE").select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
-  if (idErr) throw { status: 500, message: idErr.message };
-  const ids = (idRows || []).map((r) => r.ID);
+  if (error) throw { status: 500, message: error.message };
+  return (data || []).map((r) => r.ID);
+}
 
+const chunks = (arr, n = 200) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };
+const fehltTabelle = (e) => /relation .* does not exist|column .* does not exist/i.test(e?.message || "");
+
+async function employeeRollbackBlockers({ supabase, tenantId, batchId }) {
+  const ids = await importedEmployeeIds(supabase, tenantId, batchId);
   const blocker = [];
-  for (const dep of (ids.length ? def.dependents || [] : [])) {
-    const { count, error } = await supabase
-      .from(dep.table).select("ID", { count: "exact", head: true })
-      .eq("TENANT_ID", tenantId).in(dep.column, ids);
-    if (error) {
-      if (/relation .* does not exist|column .* does not exist/i.test(error.message)) continue;
-      throw { status: 500, message: error.message };
+  for (const dep of (ids.length ? DOMAINS.employee.dependents || [] : [])) {
+    let count = 0;
+    for (const part of chunks(ids)) {
+      const { count: c, error } = await supabase
+        .from(dep.table).select("ID", { count: "exact", head: true })
+        .eq("TENANT_ID", tenantId).in(dep.column, part);
+      if (error) {
+        if (fehltTabelle(error)) break;
+        throw { status: 500, message: error.message };
+      }
+      count += c || 0;
     }
     if (count > 0) blocker.push(`${count}× ${dep.label}`);
   }
-  if (blocker.length) {
-    throw { status: 409, message: `Rollback nicht möglich: An importierten Mitarbeitern hängen bereits ${blocker.join(", ")}. Bitte diese zuerst entfernen.` };
-  }
+  return blocker;
+}
 
+async function rollbackEmployee({ supabase, tenantId, batchId }) {
+  const ids = await importedEmployeeIds(supabase, tenantId, batchId);
+  const pruefe = (was) => ({ error }) => {
+    if (error && !fehltTabelle(error)) throw { status: 500, message: `${was}: ${error.message}` };
+  };
+
+  // Was der Stapel an bestehende (zusammengeführte) Mitarbeiter gehängt hat.
   // EMPLOYEE_ROLE trägt keinen Mandanten — es hängt über EMPLOYEE_ID am
   // Elternsatz (RLS-Policy aus Migration 0160). Ein .eq("TENANT_ID", …) darauf
   // wäre ein Spaltenfehler, kein Filter.
-  await supabase.from("EMPLOYEE_ROLE").delete().eq("IMPORT_BATCH_ID", batchId);
-  await supabase.from("EMPLOYEE_COST_RATE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
-  await supabase.from("EMPLOYEE_WORK_MODEL").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  pruefe("Rollen des Stapels")(await supabase.from("EMPLOYEE_ROLE").delete().eq("IMPORT_BATCH_ID", batchId));
+  pruefe("Kostensätze des Stapels")(await supabase.from("EMPLOYEE_COST_RATE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId));
+  pruefe("Arbeitszeitmodelle des Stapels")(await supabase.from("EMPLOYEE_WORK_MODEL").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId));
 
-  // Vorgesetzten-Verweise aus dem Bestand auf die gleich gelöschten Zeilen
-  // lösen: der Fremdschlüssel steht auf SET NULL, aber nur die Datenbank weiß
-  // das — ohne diesen Schritt bliebe es der Zufall, ob PostgREST zuerst die
-  // Kinder oder die Eltern anfasst.
-  if (ids.length) {
-    await supabase.from("EMPLOYEE").update({ SUPERVISOR_ID: null })
-      .eq("TENANT_ID", tenantId).in("SUPERVISOR_ID", ids);
+  for (const part of chunks(ids)) {
+    // Alles, was an den importierten Mitarbeitern hängt und mit ihnen geht —
+    // auch von Hand ergänzt. Blockierende Belege hat die Prüfung vorher
+    // ausgeschlossen.
+    pruefe("Rollen")(await supabase.from("EMPLOYEE_ROLE").delete().in("EMPLOYEE_ID", part));
+    pruefe("Rollenvergabe-Nachweis")(await supabase.from("EMPLOYEE_ROLE").update({ ASSIGNED_BY: null }).in("ASSIGNED_BY", part));
+    for (const t of ["EMPLOYEE_COST_RATE", "EMPLOYEE_WORK_MODEL", "VACATION_ENTITLEMENT", "EMPLOYEE_MONTH_CLOSE"]) {
+      pruefe(t)(await supabase.from(t).delete().eq("TENANT_ID", tenantId).in("EMPLOYEE_ID", part));
+    }
+    // Vorgesetzten-Verweise aus dem Bestand lösen: der Fremdschlüssel steht auf
+    // SET NULL, aber nur die Datenbank weiß das.
+    pruefe("Vorgesetzte")(await supabase.from("EMPLOYEE").update({ SUPERVISOR_ID: null })
+      .eq("TENANT_ID", tenantId).in("SUPERVISOR_ID", part));
   }
 
   const { data: del, error: delErr } = await supabase
     .from("EMPLOYEE").delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId).select("ID");
-  if (delErr) throw { status: 500, message: delErr.message };
+  if (delErr) throw { status: 500, message: `Mitarbeiter: ${delErr.message}` };
 
   // Zuletzt die Abteilungen, die dieser Lauf angelegt hat. Hängt inzwischen
   // ein anderer Mitarbeiter daran, bleibt sie stehen — eine Abteilung zu
   // entfernen, die jemand benutzt, wäre ein Schaden statt einer Rücknahme.
-  const { data: depts } = await supabase
+  const { data: depts, error: dErr } = await supabase
     .from("DEPARTMENT").select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+  if (dErr && !fehltTabelle(dErr)) throw { status: 500, message: dErr.message };
   for (const d of depts || []) {
     const { count } = await supabase.from("EMPLOYEE")
       .select("ID", { count: "exact", head: true }).eq("TENANT_ID", tenantId).eq("DEPARTMENT_ID", d.ID);
-    if (!count) await supabase.from("DEPARTMENT").delete().eq("ID", d.ID).eq("TENANT_ID", tenantId);
+    if (!count) pruefe("Abteilung")(await supabase.from("DEPARTMENT").delete().eq("ID", d.ID).eq("TENANT_ID", tenantId));
   }
 
   return { deleted: (del || []).length };
@@ -3271,12 +3299,20 @@ const DOMAINS = {
       { table: "BOOKING",              column: "EMPLOYEE_ID", label: "Buchung(en)" },
       { table: "EMPLOYEE2PROJECT", column: "EMPLOYEE_ID", label: "Projektzuordnung(en)" },
       { table: "ABSENCE",          column: "EMPLOYEE_ID", label: "Abwesenheit(en)" },
+      // Runde 11: dieselben Belege, die auch das Löschen eines Mitarbeiters
+      // blockieren (services/dependencyCheck.js, checkEmployee).
+      { table: "OFFER",            column: "EMPLOYEE_ID", label: "Angebot(e) als Zuständige:r" },
+      { table: "INVOICE",          column: "EMPLOYEE_ID", label: "Rechnung(en)" },
+      { table: "ADVANCE_INVOICE",  column: "EMPLOYEE_ID", label: "Abschlagsrechnung(en)" },
+      { table: "MAHNUNG",          column: "RESPONSIBLE_EMPLOYEE_ID", label: "Mahnung(en)" },
+      { table: "NACHTRAG",         column: "EMPLOYEE_ID", label: "Nachtrag/Nachträge" },
     ],
     loadContext: loadEmployeeContext,
     buildEntry: buildEmployeeEntry,
     finalizeRows: finalizeEmployeeRows,
     authorizeCommit: authorizeEmployeeCommit,
     commitRows: commitEmployeeRows,
+    rollbackCheck: employeeRollbackBlockers,
     rollbackExecute: rollbackEmployee,
   },
   contact: {
@@ -3798,79 +3834,107 @@ async function listBatches(supabase, tenantId) {
   }));
 }
 
+// Ein Stapel, dessen Rücknahme unterwegs abbrach, darf erneut zurückgesetzt
+// werden: jeder Schritt (Zurückschreiben, Löschen nach Stapel-Kennung) ist
+// wiederholbar und setzt dort fort, wo der erste Versuch stehen blieb.
+const ROLLBACK_START = new Set(["committed", "rollback_partial"]);
+
 async function rollback({ batchId, supabase, tenantId }) {
   if (!batchId) throw { status: 400, message: "Ungültige Stapel-ID" };
   const { data: batch, error } = await supabase
     .from("IMPORT_BATCH").select("*").eq("ID", batchId).eq("TENANT_ID", tenantId).maybeSingle();
   if (error) throw { status: 500, message: error.message };
   if (!batch) throw { status: 404, message: "Import-Stapel nicht gefunden" };
-  if (batch.STATUS !== "committed") throw { status: 400, message: "Dieser Import wurde bereits zurückgesetzt" };
+  if (!ROLLBACK_START.has(batch.STATUS)) throw { status: 400, message: "Dieser Import wurde bereits zurückgesetzt" };
 
   const def = getDomain(batch.DOMAIN);
 
-  // Zusammengeführte Datensätze zuerst auf ihren alten Stand zurücksetzen —
-  // sie wurden aktualisiert, nicht angelegt, und tragen deshalb keine
-  // Stapel-Kennung, an der ein Löschen ansetzen könnte.
-  const undo = Array.isArray(batch.SUMMARY_JSON?.undo) ? batch.SUMMARY_JSON.undo : [];
-  let restored = 0;
-  for (const u of undo) {
-    if (!u?.table || u.id == null || !u.before) continue;
-    const { error } = await supabase.from(u.table).update(u.before).eq("ID", u.id).eq("TENANT_ID", tenantId);
-    if (error) throw { status: 500, message: `Zusammengeführter Datensatz konnte nicht zurückgesetzt werden: ${error.message}` };
-    restored++;
-  }
-
-  // Domänen mit eigener Rollback-Logik (z. B. Anfangsbestände: gebuchte Finanz-
-  // Aggregate reversieren statt nur Zeilen löschen).
-  if (def.rollbackExecute) {
-    const r = await def.rollbackExecute({ supabase, tenantId, batchId });
-    await supabase.from("IMPORT_BATCH")
-      .update({ STATUS: "rolled_back", ROLLED_BACK_AT: new Date().toISOString() })
-      .eq("ID", batchId).eq("TENANT_ID", tenantId);
-    return { rolledBack: true, deleted: r?.deleted ?? 0, restored };
-  }
-
-  // Schutz: hängen Live-Daten an den importierten Datensätzen? Dann blockieren.
+  // ── 1. Prüfen, bevor irgendetwas geändert wird (Runde 11) ─────────────────
+  // Vorher wurden zusammengeführte Datensätze zuerst zurückgeschrieben und
+  // erst danach geprüft — ein 409 ließ sie zurückgesetzt, den Stapel aber
+  // „aktiv" zurück.
   let blockers = [];
-  if (def.computeBlockers) {
-    blockers = await def.computeBlockers({ supabase, tenantId, batchId });
-  } else {
-    const { data: idRows, error: idErr } = await supabase
-      .from(def.table).select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
-    if (idErr) throw { status: 500, message: idErr.message };
-    const ids = (idRows || []).map((r) => r.ID);
-    for (const dep of (ids.length ? def.dependents || [] : [])) {
-      const { count, error: dErr } = await supabase
-        .from(dep.table).select("ID", { count: "exact", head: true })
-        .eq("TENANT_ID", tenantId).in(dep.column, ids);
-      if (dErr) {
-        if (/relation .* does not exist|column .* does not exist/i.test(dErr.message)) continue;
-        throw { status: 500, message: dErr.message };
+  if (def.rollbackCheck) {
+    blockers = await def.rollbackCheck({ supabase, tenantId, batchId });
+  } else if (!def.rollbackExecute) {
+    if (def.computeBlockers) {
+      blockers = await def.computeBlockers({ supabase, tenantId, batchId });
+    } else {
+      const { data: idRows, error: idErr } = await supabase
+        .from(def.table).select("ID").eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId);
+      if (idErr) throw { status: 500, message: idErr.message };
+      const ids = (idRows || []).map((r) => r.ID);
+      for (const dep of (ids.length ? def.dependents || [] : [])) {
+        const { count, error: dErr } = await supabase
+          .from(dep.table).select("ID", { count: "exact", head: true })
+          .eq("TENANT_ID", tenantId).in(dep.column, ids);
+        if (dErr) {
+          if (/relation .* does not exist|column .* does not exist/i.test(dErr.message)) continue;
+          throw { status: 500, message: dErr.message };
+        }
+        if (count > 0) blockers.push(`${count}× ${dep.label}`);
       }
-      if (count > 0) blockers.push(`${count}× ${dep.label}`);
     }
   }
   if (blockers.length) {
     throw { status: 409, message: `Rollback nicht möglich: An importierten Datensätzen hängen bereits ${blockers.join(", ")}. Bitte diese zuerst entfernen.` };
   }
 
-  // Löschen: je Tabelle nach IMPORT_BATCH_ID (Reihenfolge beachtet FK-Abhängigkeiten).
-  const tables = def.rollbackTables || [def.table];
-  let deleted = 0;
-  for (const t of tables) {
-    const { data: del, error: delErr } = await supabase
-      .from(t).delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId).select("ID");
-    if (delErr) {
-      if (/relation .* does not exist|column .* does not exist/i.test(delErr.message)) continue;
-      throw { status: 500, message: delErr.message };
+  // ── 2. Ändern ─────────────────────────────────────────────────────────────
+  let restored = 0;
+  const done = async (payload) => {
+    const { error: bErr } = await supabase.from("IMPORT_BATCH")
+      .update({ STATUS: "rolled_back", ROLLED_BACK_AT: new Date().toISOString() })
+      .eq("ID", batchId).eq("TENANT_ID", tenantId);
+    if (bErr) throw { status: 500, message: `Stapel konnte nicht als zurückgesetzt markiert werden: ${bErr.message}` };
+    return { rolledBack: true, restored, ...payload };
+  };
+  try {
+    // Zusammengeführte Datensätze auf ihren alten Stand zurücksetzen — sie
+    // wurden aktualisiert, nicht angelegt, und tragen deshalb keine
+    // Stapel-Kennung, an der ein Löschen ansetzen könnte.
+    const undo = Array.isArray(batch.SUMMARY_JSON?.undo) ? batch.SUMMARY_JSON.undo : [];
+    for (const u of undo) {
+      if (!u?.table || u.id == null || !u.before) continue;
+      const { error: uErr } = await supabase.from(u.table).update(u.before).eq("ID", u.id).eq("TENANT_ID", tenantId);
+      if (uErr) throw { status: 500, message: `Zusammengeführter Datensatz konnte nicht zurückgesetzt werden: ${uErr.message}` };
+      restored++;
     }
-    if (t === def.table) deleted = (del || []).length;
-  }
 
-  await supabase.from("IMPORT_BATCH")
-    .update({ STATUS: "rolled_back", ROLLED_BACK_AT: new Date().toISOString() })
-    .eq("ID", batchId).eq("TENANT_ID", tenantId);
-  return { rolledBack: true, deleted, restored };
+    // Domänen mit eigener Rollback-Logik (z. B. Anfangsbestände: gebuchte
+    // Finanz-Aggregate reversieren statt nur Zeilen löschen).
+    if (def.rollbackExecute) {
+      const r = await def.rollbackExecute({ supabase, tenantId, batchId });
+      return await done({ deleted: r?.deleted ?? 0 });
+    }
+
+    // Löschen: je Tabelle nach IMPORT_BATCH_ID (Reihenfolge beachtet FK-Abhängigkeiten).
+    const tables = def.rollbackTables || [def.table];
+    let deleted = 0;
+    for (const t of tables) {
+      const { data: del, error: delErr } = await supabase
+        .from(t).delete().eq("TENANT_ID", tenantId).eq("IMPORT_BATCH_ID", batchId).select("ID");
+      if (delErr) {
+        if (/relation .* does not exist|column .* does not exist/i.test(delErr.message)) continue;
+        throw { status: 500, message: delErr.message };
+      }
+      if (t === def.table) deleted = (del || []).length;
+    }
+    return await done({ deleted });
+  } catch (e) {
+    // Eigene Prüfungen einer Domäne (409) vor der ersten Änderung: nichts ist
+    // passiert, der Stapel bleibt, wie er war.
+    if (e?.status === 409 && restored === 0) throw e;
+    const msg = e?.message || String(e);
+    await supabase.from("IMPORT_BATCH")
+      .update({ STATUS: "rollback_partial", SUMMARY_JSON: { ...(batch.SUMMARY_JSON || {}), rollbackError: msg, rollbackFailedAt: new Date().toISOString() } })
+      .eq("ID", batchId).eq("TENANT_ID", tenantId);
+    throw {
+      status: e?.status && e.status >= 400 && e.status < 500 ? e.status : 500,
+      userFacing: true,
+      message: `Zurücksetzen unvollständig: ${msg} Der Import steht jetzt auf „teilweise zurückgesetzt" — ein erneuter Versuch setzt dort fort.`,
+    };
+  }
 }
 
 // ── Vorlagen ─────────────────────────────────────────────────────────────────

@@ -289,48 +289,115 @@ async function calculateCostRates(supabase, tenantId, year, employeeIds, profitM
 }
 
 // ── Import to EMPLOYEE_COST_RATE ────────────────────────────────────────────────
+//
+// Runde 11 des UI-Pilots. Vorher schrieb „Buchungen neu rechnen" den neuen
+// Satz auf JEDE Buchung ab dem Stichtag:
+//   * auch über einen späteren Satz hinweg — ein am 1.1. gültiger Satz
+//     überschrieb Buchungen, für die längst der Satz vom 1.7. galt;
+//   * auf Pauschalen und Stückleistungen (dort ist COST_TOTAL ein fester
+//     Betrag, keine Menge × Satz) und auf Pausen, die keine Arbeitszeit sind;
+//   * in abgeschlossenen Monaten, die der Monatsabschluss einfrieren soll.
+// Die Kosten der Projektelemente wurden danach nicht nachgerechnet, und ein
+// zweiter Import am selben Tag legte einen zweiten Satz daneben.
+
+const SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE']);
+const round2 = (n) => Math.round(n * 100) / 100;
+const isIsoDate = (v) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
 
 async function importCostRates(supabase, tenantId, rates, validFrom, recalcBookings = false) {
-  if (!rates || !rates.length) return;
-
-  // Insert new rate entries
-  const rows = rates.map(r => ({
-    TENANT_ID:   tenantId,
-    EMPLOYEE_ID: r.employee_id,
-    COST_RATE:     r.rate,
-    VALID_FROM:  validFrom,
-  }));
-  const { error } = await supabase.from('EMPLOYEE_COST_RATE').insert(rows);
-  if (error) throw { status: 500, message: error.message };
-
-  if (!recalcBookings) return;
-
-  // Recalculate COST_RATE + COST_TOTAL on BOOKING bookings dated >= validFrom
+  if (!isIsoDate(validFrom)) throw { status: 400, message: 'Bitte ein gültiges Datum für „Gültig ab" angeben.' };
+  if (!Array.isArray(rates) || !rates.length) throw { status: 400, message: 'Keine Kostensätze übergeben.' };
+  const byEmp = new Map();
   for (const r of rates) {
-    const { data: tecRows, error: fetchErr } = await supabase
-      .from('BOOKING')
-      .select('ID, QUANTITY_INT')
-      .eq('TENANT_ID', tenantId)
-      .eq('EMPLOYEE_ID', r.employee_id)
-      .gte('BOOKING_DATE', validFrom);
-    if (fetchErr) throw { status: 500, message: fetchErr.message };
-    if (!tecRows || !tecRows.length) continue;
-
-    // TENANT_ID muss mit in die Nutzlast: .upsert() wird zu
-    // INSERT ... ON CONFLICT, und RLS prueft WITH CHECK gegen die
-    // vorgeschlagene Zeile. Ohne Mandant bricht das Speichern mit
-    // "new row violates row-level security policy" ab.
-    const updates = tecRows.map(row => ({
-      ID:        row.ID,
-      TENANT_ID: tenantId,
-      COST_RATE:   r.rate,
-      COST_TOTAL:    Math.round(Number(row.QUANTITY_INT) * r.rate * 100) / 100,
-    }));
-    const { error: updErr } = await supabase
-      .from('BOOKING')
-      .upsert(updates, { onConflict: 'ID' });
-    if (updErr) throw { status: 500, message: updErr.message };
+    const empId = Number(r?.employee_id);
+    const rate = Number(String(r?.rate ?? '').replace(',', '.'));
+    if (!(empId > 0) || r?.rate === '' || r?.rate == null || !Number.isFinite(rate) || rate < 0) {
+      throw { status: 400, message: 'Jeder Kostensatz braucht einen Mitarbeiter und einen Betrag ab 0 €/h.' };
+    }
+    byEmp.set(empId, round2(rate));
   }
+  const empIds = [...byEmp.keys()];
+
+  const { data: emps, error: empErr } = await supabase.from('EMPLOYEE').select('ID')
+    .eq('TENANT_ID', tenantId).in('ID', empIds);
+  if (empErr) throw { status: 500, message: empErr.message };
+  if ((emps || []).length !== empIds.length) throw { status: 404, message: 'Mitarbeiter nicht gefunden' };
+
+  // Je Mitarbeiter und Tag ein Satz: vorhandenen ändern statt einen zweiten anlegen.
+  const { data: sameDay, error: sdErr } = await supabase.from('EMPLOYEE_COST_RATE').select('ID, EMPLOYEE_ID')
+    .eq('TENANT_ID', tenantId).eq('VALID_FROM', validFrom).in('EMPLOYEE_ID', empIds);
+  if (sdErr) throw { status: 500, message: sdErr.message };
+  const existing = new Map((sameDay || []).map(x => [x.EMPLOYEE_ID, x.ID]));
+  const inserts = empIds.filter(id => !existing.has(id)).map(id => ({
+    TENANT_ID: tenantId, EMPLOYEE_ID: id, COST_RATE: byEmp.get(id), VALID_FROM: validFrom,
+  }));
+  if (inserts.length) {
+    const { error } = await supabase.from('EMPLOYEE_COST_RATE').insert(inserts);
+    if (error) throw { status: 500, message: error.message };
+  }
+  for (const [empId, rowId] of existing) {
+    const { error } = await supabase.from('EMPLOYEE_COST_RATE').update({ COST_RATE: byEmp.get(empId) })
+      .eq('ID', rowId).eq('TENANT_ID', tenantId);
+    if (error) throw { status: 500, message: error.message };
+  }
+
+  const summary = { rates: empIds.length, replaced: existing.size, recalculated: 0, skipped_closed_month: 0, skipped_not_hours: 0, until: {} };
+  if (!recalcBookings) return summary;
+
+  const structures = new Set();
+  for (const empId of empIds) {
+    const rate = byEmp.get(empId);
+
+    // Nur bis zum nächsten Satz — für die Zeit danach gilt der.
+    const { data: later, error: lErr } = await supabase.from('EMPLOYEE_COST_RATE').select('VALID_FROM')
+      .eq('TENANT_ID', tenantId).eq('EMPLOYEE_ID', empId).gt('VALID_FROM', validFrom)
+      .order('VALID_FROM', { ascending: true }).limit(1);
+    if (lErr) throw { status: 500, message: lErr.message };
+    const until = later && later.length ? String(later[0].VALID_FROM).slice(0, 10) : null;
+    if (until) summary.until[empId] = until;
+
+    const { data: closes, error: cErr } = await supabase.from('EMPLOYEE_MONTH_CLOSE').select('YEAR, MONTH')
+      .eq('TENANT_ID', tenantId).eq('EMPLOYEE_ID', empId);
+    if (cErr) throw { status: 500, message: cErr.message };
+    const closed = new Set((closes || []).map(c => `${c.YEAR}-${String(c.MONTH).padStart(2, '0')}`));
+
+    let q = supabase.from('BOOKING')
+      .select('ID, QUANTITY_INT, BOOKING_KIND, ENTRY_KIND, BOOKING_DATE, STRUCTURE_ID')
+      .eq('TENANT_ID', tenantId).eq('EMPLOYEE_ID', empId).gte('BOOKING_DATE', validFrom);
+    if (until) q = q.lt('BOOKING_DATE', until);
+    const { data: rows, error: fetchErr } = await q;
+    if (fetchErr) throw { status: 500, message: fetchErr.message };
+
+    // Gleiche Menge = gleicher Betrag: je Menge ein update statt je Zeile.
+    // Bewusst kein .upsert(): dessen INSERT-Teil verlangt jede Pflichtspalte
+    // der Buchung und scheitert daran, bevor der Konflikt greift.
+    const byQty = new Map();
+    for (const row of rows || []) {
+      if (SPECIAL_KINDS.has(row.BOOKING_KIND) || row.ENTRY_KIND === 'BREAK') { summary.skipped_not_hours++; continue; }
+      if (closed.has(String(row.BOOKING_DATE).slice(0, 7))) { summary.skipped_closed_month++; continue; }
+      const qty = Number(row.QUANTITY_INT) || 0;
+      if (!byQty.has(qty)) byQty.set(qty, []);
+      byQty.get(qty).push(row.ID);
+      if (row.STRUCTURE_ID) structures.add(row.STRUCTURE_ID);
+    }
+    for (const [qty, ids] of byQty) {
+      // In Stücken — die IDs stehen in der URL der Anfrage.
+      for (let i = 0; i < ids.length; i += 200) {
+        const part = ids.slice(i, i + 200);
+        const { error: updErr } = await supabase.from('BOOKING')
+          .update({ COST_RATE: rate, COST_TOTAL: round2(qty * rate) })
+          .eq('TENANT_ID', tenantId).eq('EMPLOYEE_ID', empId).in('ID', part);
+        if (updErr) throw { status: 500, message: updErr.message };
+        summary.recalculated += part.length;
+      }
+    }
+  }
+
+  // Kosten der Projektelemente nachziehen — sonst zeigten Struktur und
+  // Controlling weiter die alten Kosten.
+  const { recomputeStructure } = require('./buchungen');
+  for (const sid of structures) await recomputeStructure(supabase, sid);
+  return summary;
 }
 
 module.exports = {

@@ -68,7 +68,8 @@ export interface ImportBatch {
   id:           number
   domain:       string
   domainLabel:  string
-  status:       'committed' | 'rolled_back'
+  /** rollback_partial: Zurücksetzen brach unterwegs ab und lässt sich erneut starten (Runde 11). */
+  status:       'committed' | 'rolled_back' | 'rollback_partial'
   filename:     string | null
   rowOk:        number
   rowSkipped:   number

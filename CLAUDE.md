@@ -655,10 +655,15 @@ Windows): `owner-console/README.md`.
   - Arbeitszeitmodell zuordnen nur mit einem Modell des eigenen Büros, gültigem Datum und für einen eigenen Mitarbeiter; Neuanlage prüft den Vorgesetzten wie das Ändern und legt leere Angaben als `null` ab; das eigene Passwort lässt sich nicht löschen (Selbstaussperrung); Urlaubsansprüche je Jahr (`PUT /abwesenheit/entitlements/bulk`) nehmen keine leeren oder ungültigen Tage mehr als 0 und melden Teilfehler statt Erfolg.
   - Profilfoto nur aus einem `AVATAR`-Bild; ArbZG-Audit/Export/Grenzen nur eigene oder mit Recht; Stundensätze der Team-Zuordnung nur mit `projects.hourly_rates.view`; Kosten im Stundencontrolling nur mit `employees.salary.view`; fremde Salden nur mit `employees.bookings.view_all`; Kostensatzrechner-Gehaltsdaten nur mit den Gehaltsrechten.
 
+- **Aus dem Mitarbeiter-Audit, Runde 11 geschlossen:**
+  - Urlaubstage zählen nach dem am Tag gültigen Arbeitszeitmodell (Tage ohne Soll sind frei) und je Kalenderjahr getrennt (`workdaysByYear`, `takenVacationByYear` in `routes/abwesenheit.js`); ohne Modell weiter Mo–Fr.
+  - Kostensatz-Übernahme (`importCostRates`, `services/costRateCalc.js`): je Mitarbeiter und Tag ein Satz; „Buchungen neu rechnen" nur für Stundenbuchungen bis zum nächsten Satz, nie in abgeschlossenen Monaten, Projektkosten werden nachgerechnet; bewusst `update` statt `upsert` (der INSERT-Teil scheitert an Pflichtspalten).
+  - Import-Rücknahme prüft alle Blocker **vor** der ersten Änderung, schluckt keine Fehler und steht nach einem Abbruch auf `rollback_partial` — ein erneuter Versuch setzt fort (`rollback`, `services/importService.js`).
+  - Der Einladungslink verlässt den Server nicht mehr: ohne Mailversand kam er in der Antwort der Neuanlage und von „Einladung senden" zurück.
+
 **Offen (Stand 2026-09-29):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht
 - CSP bewusst abgeschaltet (SPA-Bundles, PDF) — erhöht die Wirkung jeder Datei-Auslieferungslücke (N2)
-- Aus dem Mitarbeiter-Audit (Runde 10) noch offen: Kostensatz-Import mit „Buchungen neu rechnen" rechnet auch Pauschal-/Pausenbuchungen, abgeschlossene Monate und spätere Sätze um (`costRateCalc.js`); Import-Rücknahme nicht atomar (`importService.js`); Urlaubssaldo zählt Mo–Fr statt Arbeitszeitmodell und Jahreswechsel im Startjahr (`abwesenheit.js`); ohne SMTP geht der Einladungslink an den Anleger zurück
 
 ---
 
