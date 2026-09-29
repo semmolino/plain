@@ -3080,8 +3080,17 @@ th.doc-actions, td.doc-actions {
   border-color: var(--danger);
   background: var(--danger-bg);
 }
-/* Sticky table headers — desktop only (mobile uses static to avoid overflow issues) */
-@media (max-width: 1023px) { .master-table th { position: static !important; } }
+/* Sticky table headers — desktop only (mobile uses static to avoid overflow issues).
+   Ohne positionierte Zelle wurde am Handy der Rand der Seite zum Bezug fuer
+   absolut positionierte Kinder: ein .sr-only „Aktionen" in der letzten Spalte
+   lag bei x ≈ 1100 und machte die Seite 1111 px breit — Dialoge, Bottom-Nav und
+   Toasts liefen ueber den Bildschirm hinaus (Angebotsliste, Runde 9; vorher je
+   Liste einzeln geflickt, siehe .list-section.ad-list). Die Tabelle selbst ist
+   jetzt der Bezug; sie liegt im Scrollrahmen, der schneidet ab. */
+@media (max-width: 1023px) {
+  .master-table { position: relative; }
+  .master-table th { position: static !important; }
+}
 
 /* Mahnungen stats widget */
 .mahnung-stufe-row        { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; }
