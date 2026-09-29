@@ -46,7 +46,7 @@ export function BuchungstextvorlagenSection() {
           Textvorlagen für Stundenleistungen <HelpHint id="settings.booking_text_templates" />
         </h3>
         <Can permission="settings.booking_text_templates.edit">
-          <button className="btn-small" onClick={() => setCreateOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <button type="button" className="btn-small" onClick={() => setCreateOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <Plus size={13} strokeWidth={2} /> Neue Textvorlage
           </button>
         </Can>
@@ -78,10 +78,10 @@ export function BuchungstextvorlagenSection() {
                 <td style={{ padding: '4px 6px 4px 0', color: 'var(--text-2)', whiteSpace: 'pre-line' }}>{r.TEXT}</td>
                 <td style={{ padding: '4px 0', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <Can permission="settings.booking_text_templates.edit">
-                    <button className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
+                    <button type="button" className="row-action-btn" onClick={() => setEditRow(r)} title="Bearbeiten">
                       <Pencil size={13} strokeWidth={2} />
                     </button>
-                    <button className="row-action-btn row-action-btn--danger"
+                    <button type="button" className="row-action-btn row-action-btn--danger"
                       onClick={() => setDelConfirm({ id: r.ID, label: r.LABEL || r.TEXT.slice(0, 30) })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>
@@ -145,8 +145,8 @@ function SnippetModal({ existing, onClose, onSaved }: { existing?: TextSnippet; 
         </div>
         <Message text={msg?.text ?? null} type={msg?.type} />
         <DialogFooter>
-          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
             {saveMut.isPending ? 'Speichert …' : 'Speichern'}
           </button>
         </DialogFooter>

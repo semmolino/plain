@@ -1,4 +1,5 @@
 "use strict";
+const tenantDefaults = require("../services/tenantDefaults");
 const { findAssetForTenant } = require("../services/assetAccess");
 
 const objectStorage = require("../services/objectStorage");
@@ -58,23 +59,12 @@ async function selectWithFallback(makeQuery, fullCols, baseCols) {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/stammdaten/status
-// ---------------------------------------------------------------------------
-async function postStatus(req, res, supabase) {
-  const abbr = req.body.abbr;
-  if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("PROJECT_STATUS").insert([{ ABBR: abbr }]);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
-}
-
-// ---------------------------------------------------------------------------
 // POST /api/stammdaten/typ
 // ---------------------------------------------------------------------------
 async function postTyp(req, res, supabase) {
-  const abbr = req.body.abbr;
-  if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("PROJECT_TYPE").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]);
+  const abbr = typeof req.body?.abbr === "string" ? req.body.abbr.trim() : "";
+  if (!abbr) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("PROJECT_TYPE").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]).select("ID, ABBR");
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -83,9 +73,9 @@ async function postTyp(req, res, supabase) {
 // POST /api/stammdaten/department
 // ---------------------------------------------------------------------------
 async function postDepartment(req, res, supabase) {
-  const abbr = req.body.abbr;
-  if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("DEPARTMENT").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]);
+  const abbr = typeof req.body?.abbr === "string" ? req.body.abbr.trim() : "";
+  if (!abbr) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("DEPARTMENT").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]).select("ID, ABBR");
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -880,6 +870,17 @@ async function postAddress(req, res, supabase) {
   } catch (e) { fail(res, e); }
 }
 
+// Stundensatz einer Rolle: „95,50" wie „95.50", leer = kein Satz. Vorher
+// schnitt parseFloat bei „95,50" still auf 95 ab, „abc" wurde zu null.
+function parseHourlyRate(v) {
+  if (v === undefined || v === null || String(v).trim() === "") return null;
+  const t = String(v).trim().replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(t)) throw { status: 400, message: "Stundensatz: bitte einen Betrag wie 95,50." };
+  const n = Number(t);
+  if (n > 10000) throw { status: 400, message: "Stundensatz: höchstens 10.000 €/h." };
+  return n;
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/stammdaten/rollen
 // ---------------------------------------------------------------------------
@@ -887,10 +888,13 @@ async function postRollen(req, res, supabase) {
   const { abbr, name, hourly_rate } = req.body || {};
   if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
 
+  if (!abbr.trim()) return res.status(400).json({ error: "Kürzel erforderlich" });
+  let rate;
+  try { rate = parseHourlyRate(hourly_rate); } catch (e) { return res.status(e.status).json({ error: e.message }); }
   const insertRow = {
     ABBR: abbr.trim(),
     NAME:  (name || "").trim() || null,
-    HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
+    HOURLY_RATE:    rate,
     TENANT_ID:  req.tenantId ?? null,
     ACTIVE:     1,
   };
@@ -1199,24 +1203,25 @@ async function getVat(req, res, supabase) {
 async function getDefaults(req, res, supabase) {
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(401).json({ error: "no tenant" });
-  const { data, error } = await supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId);
-  if (error) return res.status(500).json({ error: error.message });
-  const settings = {};
-  for (const row of data || []) settings[row.KEY] = row.VALUE;
-  res.json({ data: settings });
+  try { res.json({ data: await tenantDefaults.readDefaults(supabase, tenantId) }); }
+  catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
 }
 
+// PUT /defaults — { values: { key: value, … } } oder wie bisher { key, value }.
+// Geprüft wird je Schlüssel: Recht, Art, Grenzen (services/tenantDefaults.js).
 async function putDefault(req, res, supabase) {
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(401).json({ error: "no tenant" });
-  const { key, value } = req.body || {};
-  if (!key) return res.status(400).json({ error: "key required" });
-  const { error } = await supabase.from("TENANT_SETTINGS").upsert(
-    [{ TENANT_ID: tenantId, KEY: key, VALUE: value ?? null, UPDATED_AT: new Date().toISOString() }],
-    { onConflict: "TENANT_ID,KEY" }
-  );
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ ok: true });
+  const b = req.body || {};
+  const values = b.values && typeof b.values === "object" && !Array.isArray(b.values)
+    ? b.values
+    : (b.key ? { [b.key]: b.value ?? null } : null);
+  if (!values) return res.status(400).json({ error: "key oder values erforderlich" });
+  const can = (p) => (typeof req.hasPermission === "function" ? req.hasPermission(p) : false);
+  try {
+    const saved = await tenantDefaults.writeDefaults(supabase, tenantId, values, can);
+    res.json({ ok: true, data: saved });
+  } catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
 }
 
 // ---------------------------------------------------------------------------
@@ -1339,9 +1344,10 @@ async function patchDepartment(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   const { abbr } = req.body || {};
-  if (!abbr) return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("DEPARTMENT").update({ ABBR: abbr.trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").single();
+  if (!abbr || !String(abbr).trim()) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("DEPARTMENT").update({ ABBR: String(abbr).trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Abteilung nicht gefunden" });
   res.json({ data });
 }
 
@@ -1349,9 +1355,10 @@ async function patchTyp(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   const { abbr } = req.body || {};
-  if (!abbr) return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("PROJECT_TYPE").update({ ABBR: abbr.trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").single();
+  if (!abbr || !String(abbr).trim()) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("PROJECT_TYPE").update({ ABBR: String(abbr).trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Projekttyp nicht gefunden" });
   res.json({ data });
 }
 
@@ -1359,13 +1366,16 @@ async function patchRolle(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   const { abbr, name, hourly_rate } = req.body || {};
-  if (!abbr) return res.status(400).json({ error: "abbr is required" });
+  if (!abbr || !String(abbr).trim()) return res.status(400).json({ error: "Kürzel erforderlich" });
+  let rate;
+  try { rate = parseHourlyRate(hourly_rate); } catch (e) { return res.status(e.status).json({ error: e.message }); }
   const { data, error } = await supabase.from("ROLE").update({
-    ABBR: abbr.trim(),
+    ABBR: String(abbr).trim(),
     NAME:  (name || "").trim() || null,
-    HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
-  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR, NAME, HOURLY_RATE").single();
+    HOURLY_RATE:    rate,
+  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR, NAME, HOURLY_RATE").maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Rolle nicht gefunden" });
   res.json({ data });
 }
 
@@ -2101,7 +2111,7 @@ async function saveFeeCalcZoneSplits(req, res, supabase) {
 }
 
 module.exports = {
-  postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones, getFeeZoneLookup, getFeeZoneCriteria,
+  postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones, getFeeZoneLookup, getFeeZoneCriteria,
   getFeeCalcZoneSplits, saveFeeCalcZoneSplits,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, postFeeCalcAddToOfferStructure, syncFeeCalcToStructure,

@@ -285,6 +285,55 @@ export const HELP = {
     ),
   },
 
+  'settings.vorbelegungen': {
+    title: 'Vorbelegungen',
+    body: (
+      <>
+        Startwerte, mit denen neue Adressen, Projekte, Angebote, Verträge und Rechnungen
+        angelegt werden. Sie sparen Tipparbeit und sorgen für einheitliche Belege — im
+        jeweiligen Formular bleibt jeder Wert änderbar. <strong>Bestehende Datensätze ändern
+        sich nicht</strong>, wenn eine Vorbelegung geändert wird. Ein leeres Feld heißt „keine
+        Vorbelegung": dann gilt der Standard, den das Feld nennt.
+      </>
+    ),
+  },
+  'settings.projektrollen': {
+    title: 'Projektrollen und Stundensätze',
+    body: (
+      <>
+        Eine Projektrolle (z. B. „PL" für Projektleitung) trägt einen <strong>Standard-Stundensatz</strong>
+        für den Verkauf. Er wird vorgeschlagen, wenn jemand einem Projekt mit dieser Rolle
+        zugeordnet oder ein Angebotselement nach Aufwand kalkuliert wird, und bleibt dort je
+        Projekt änderbar. Bestehende Zuordnungen und Buchungen behalten ihren Satz. Der
+        Kostensatz hängt nicht an der Rolle, sondern am Mitarbeiter.
+      </>
+    ),
+  },
+  'settings.abwesenheitsarten': {
+    title: 'Abwesenheitsarten',
+    body: (
+      <>
+        <strong>Zählt als gearbeitet</strong>: der Tag gilt im Zeitkonto als erfüllt (Urlaub, Krankheit).
+        {' '}<strong>Zehrt vom Urlaub</strong>: die Arbeitstage gehen vom Urlaubsanspruch ab.
+        {' '}<strong>Freigabepflichtig</strong>: ein Antrag zählt erst, wenn er genehmigt ist.
+        {' '}<strong>Bezahlt</strong> ist ein Kennzeichen für Auswertungen. Eine Art, die schon
+        verwendet wird, lässt sich nicht löschen, sondern nur deaktivieren — sie steht dann bei
+        neuen Anträgen nicht mehr zur Wahl.
+      </>
+    ),
+  },
+  'settings.arbeitszeitmodelle': {
+    title: 'Arbeitszeitmodelle',
+    body: (
+      <>
+        Das Soll je Wochentag. Daraus rechnen Zeitkonto, Urlaubstage und Monatsabschluss: ein Tag
+        mit 0 Stunden ist frei, Feiertage kommen aus dem gewählten Bundesland. Ein Modell wird dem
+        Mitarbeiter mit einem Gültig-ab-Datum zugeordnet; ändert sich das Modell, gilt die Änderung
+        für alle, denen es zugeordnet ist.
+      </>
+    ),
+  },
+
   // ── E-Rechnung / Peppol ──────────────────────────────────────────────────
   'einvoice.what': {
     title: 'Was ist eine E-Rechnung?',

@@ -1361,12 +1361,14 @@ async function mockMitarbeiter(page: Page) {
     }
     const days = Object.values(byYear).reduce((a, b) => a + b, 0)
     const reduces = typeId === 1
+    const overlaps = ABSENCES.filter(a => a.EMPLOYEE_ID === emp && a.ID !== ex && ['REQUESTED', 'APPROVED'].includes(a.STATUS) && a.DATE_FROM <= to && a.DATE_TO >= from)
+      .map(a => ({ ID: a.ID, DATE_FROM: a.DATE_FROM, DATE_TO: a.DATE_TO, HALF_DAY: a.HALF_DAY, STATUS: a.STATUS, TYPE_NAME: a.TYPE_NAME }))
     return route.fulfill(json({ data: {
       days, by_year: Object.entries(byYear).map(([year, d]) => ({ year: Number(year), days: d })),
       reduces_vacation: reduces, requires_approval: typeId ? typeId !== 2 : null,
       balance: reduces ? Object.entries(byYear).map(([year, d]) => ({ year: Number(year), remaining: 15.5, pending: 4, days: d, after: 15.5 - 4 - d })) : null,
-      overlaps: ABSENCES.filter(a => a.EMPLOYEE_ID === emp && a.ID !== ex && ['REQUESTED', 'APPROVED'].includes(a.STATUS) && a.DATE_FROM <= to && a.DATE_TO >= from)
-        .map(a => ({ ID: a.ID, DATE_FROM: a.DATE_FROM, DATE_TO: a.DATE_TO, HALF_DAY: a.HALF_DAY, STATUS: a.STATUS, TYPE_NAME: a.TYPE_NAME })),
+      // Eigener Antrag (ohne employee_id) sperrt, die Erfassung durch die Verwaltung nicht
+      overlaps, overlap_blocks: overlaps.length > 0 && !q.get('employee_id'),
     } }))
   })
   await r('abwesenheit/entitlements', route => route.fulfill(json({ data: [{ ID: 41, EMPLOYEE_ID: 2, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null, NOTE: null }] })))
@@ -1434,3 +1436,81 @@ export const ABSENCES = [
   absence(52, 2, 1, '2026-08-03', '2026-08-14', 10, 'APPROVED'),
   absence(53, 2, 2, '2026-03-09', '2026-03-10', 2, 'APPROVED', { DECIDED_BY: null, DECIDED_AT: null }),
 ]
+
+// ── Einstellungen (Runde 12) ─────────────────────────────────────────────────
+// Eigene Funktion statt in mockPilot: die Vorbelegungen fließen in viele
+// Formulare ein (Gültigkeit, Status, Zahlungsziel) — die übrigen Tests sollen
+// weiter ohne sie laufen.
+
+export const TENANT_DEFAULTS: Record<string, string> = {
+  default_country_id: 'DE', default_project_status_id: '2', default_offer_status_id: '2',
+  default_currency_id: '1', default_vat_id: '1', offer_valid_days: '30',
+  default_cash_discount_percent: '2', default_cash_discount_days: '14', default_payment_term_days: '30',
+  default_payment_means_id: '1', budget_warning_default_pcts: '75, 90, 100', kpi_cpi_watch_threshold: '0.95',
+}
+export const DEPT_ROWS = [{ ID: 1, ABBR: 'Hochbau' }, { ID: 2, ABBR: 'Tiefbau' }, { ID: 3, ABBR: 'Verwaltung' }]
+export const TYPE_ROWS = [{ ID: 1, ABBR: 'Neubau' }, { ID: 2, ABBR: 'Sanierung' }, { ID: 3, ABBR: 'Umbau' }, { ID: 4, ABBR: 'Gutachten' }]
+
+export async function mockEinstellungen(page: Page) {
+  const r = (re: string, h: (route: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
+  let defaults = { ...TENANT_DEFAULTS }
+  await r('stammdaten/defaults', route => {
+    if (route.request().method() === 'PUT') {
+      const b = route.request().postDataJSON() ?? {}
+      const values: Record<string, string | null> = b.values ?? { [b.key]: b.value ?? null }
+      const next = { ...defaults }
+      for (const [k, v] of Object.entries(values)) { if (v == null || v === '') delete next[k]; else next[k] = String(v).replace(',', '.') }
+      defaults = next
+      return route.fulfill(json({ ok: true, data: values }))
+    }
+    return route.fulfill(json({ data: defaults }))
+  })
+  await r('stammdaten/currencies', route => route.fulfill(json({ data: [{ ID: 1, ABBR: 'EUR' }, { ID: 2, ABBR: 'CHF' }] })))
+  await r('stammdaten/companies', route => route.fulfill(json({ data: [{ ID: 1, COMPANY_NAME_1: 'Messina Architekten GmbH' }] })))
+  await r('stammdaten/departments', route => route.fulfill(json({ data: DEPT_ROWS })))
+  await r('stammdaten/typen', route => route.fulfill(json({ data: TYPE_ROWS })))
+  await r('stammdaten/rollen', route => route.fulfill(json({ data: ROLES })))
+  await r('stammdaten/(department|typ|rolle)/\\d+', route => {
+    const m = route.request().method()
+    // Hochbau hängt an Mitarbeitern und Projekten — Löschen scheitert wie am Server
+    if (m === 'DELETE' && /department\/1$/.test(route.request().url())) {
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Abteilung „Hochbau" wird noch in 5 Mitarbeiter:innen und 12 Projekten verwendet.' }) })
+    }
+    return route.fulfill(json(m === 'DELETE' ? { ok: true } : { data: route.request().postDataJSON() ?? {} }))
+  })
+  // Anlegen (POST) — GET /stammdaten/rollen ist die Liste oben
+  await r('stammdaten/(department|typ|rollen)', route => route.request().method() === 'POST'
+    ? route.fulfill(json({ data: [{ ID: 99, ...(route.request().postDataJSON() ?? {}) }] }))
+    : route.fallback())
+  await r('stammdaten/booking-types', route => route.fulfill(json({ data: [
+    { ID: 1, KIND: 'UNIT', ABBR: 'Plot', NAME: 'Plot A0', UNIT_LABEL: 'Stk', UNIT_CODE: 'C62', DEFAULT_SP_RATE: 18, DEFAULT_CP_RATE: 6.5, SCOPE: 'global', PROJECT_ID: null, ACTIVE: 1, SORT_ORDER: 1 },
+    { ID: 2, KIND: 'LUMP_COST', ABBR: 'Reise', NAME: 'Reisekosten', UNIT_LABEL: null, UNIT_CODE: null, DEFAULT_SP_RATE: null, DEFAULT_CP_RATE: null, SCOPE: 'global', PROJECT_ID: null, ACTIVE: 1, SORT_ORDER: 2 },
+  ] })))
+  await r('stammdaten/booking-text-templates', route => route.fulfill(json({ data: [
+    { ID: 1, LABEL: 'Baubesprechung', TEXT: 'Teilnahme Baubesprechung vor Ort', SORT_ORDER: 1, SCOPE: 'global', KIND: null, BOOKING_TYPE_ID: null },
+  ] })))
+  await r('abwesenheit/settings', route => route.fulfill(json({ data: { carryoverExpires: true, carryoverExpiryDate: '03-31' } })))
+  // Anlegen/Ändern/Löschen — die Listen kommen aus mockMitarbeiter
+  await r('abwesenheit/types(/\\d+)?', route => {
+    const m = route.request().method()
+    if (m === 'GET') return route.fallback()
+    return route.fulfill(json(m === 'DELETE' ? { ok: true, deactivated: /types\/1$/.test(route.request().url()) } : { data: route.request().postDataJSON() ?? {} }))
+  })
+  await r('stammdaten/working-time-models(/\\d+)?', route => {
+    const m = route.request().method()
+    if (m === 'GET') return route.fallback()
+    // Vollzeit ist zugeordnet — Löschen scheitert wie am Server
+    if (m === 'DELETE' && /working-time-models\/1$/.test(route.request().url())) {
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Arbeitszeitmodell „Vollzeit 40 h" wird noch von 6 Mitarbeiter:innen verwendet.' }) })
+    }
+    return route.fulfill(json(m === 'DELETE' ? { ok: true } : { data: { ID: 9, ...(route.request().postDataJSON() ?? {}) } }))
+  })
+  await r('stammdaten/working-time-models/country-states', route => route.fulfill(json({ data: {
+    DE: [{ code: 'BW', label: 'Baden-Württemberg' }, { code: 'BY', label: 'Bayern' }, { code: 'BE', label: 'Berlin' }],
+    AT: [{ code: null, label: 'Österreich (gesamt)' }],
+    CH: [{ code: null, label: 'Schweiz (gesamt)' }],
+  } })))
+  await r('arbzg/break-rules', route => route.fulfill(json({ data: [
+    { ID: 1, NAME: 'ArbZG-Standard', T1_HOURS: 6, T1_BREAK_MIN: 30, T2_HOURS: 9, T2_BREAK_MIN: 45, MIN_BLOCK_MIN: 15 },
+  ] })))
+}

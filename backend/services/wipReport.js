@@ -300,8 +300,12 @@ async function resolveCostFactor(supabase, tenantId, override) {
     }
     return n;
   }
+  // Runde 12: Number(null) ist 0 — ohne gepflegte Einstellung rechnete der
+  // Report deshalb mit 0 % statt 100 %, und der HGB-Ansatz stand überall bei
+  // 0 €. Fehlt der Wert, gilt 100 %.
   const raw = await readSetting(supabase, tenantId, SETTING_COST_FACTOR);
-  const n = Number(raw);
+  if (raw == null || String(raw).trim() === "") return 100;
+  const n = Number(String(raw).replace(",", "."));
   return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 100;
 }
 
@@ -644,6 +648,8 @@ module.exports = {
   listClosings,
   getClosing,
   deleteClosing,
+  // Einstellungen lesen — für Tests
+  resolveCostFactor,
   // Rechenkern — für Tests und den PDF-Renderer
   computeWipRow,
   aggregateWip,

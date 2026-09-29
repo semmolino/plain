@@ -74,7 +74,7 @@ export function LeistungsphasenBloeckeSection() {
       return saveLphBlocks({ fee_master_id: feeMasterId!, blocks: payloadBlocks, assignments: cleanAssign })
     },
     onSuccess: () => {
-      setMsg({ text: 'Leistungsphasen-Blöcke gespeichert ✅', type: 'success' })
+      setMsg({ text: 'Leistungsphasen-Blöcke gespeichert.', type: 'success' })
       void qc.invalidateQueries({ queryKey: ['lph-blocks', feeMasterId] })
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
@@ -83,7 +83,7 @@ export function LeistungsphasenBloeckeSection() {
   const seedMut = useMutation({
     mutationFn: () => seedDefaultLphBlocks(feeMasterId!),
     onSuccess: () => {
-      setMsg({ text: 'Standard-Blöcke angelegt ✅', type: 'success' })
+      setMsg({ text: 'Standard-Blöcke angelegt.', type: 'success' })
       void qc.invalidateQueries({ queryKey: ['lph-blocks', feeMasterId] })
     },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),

@@ -90,7 +90,7 @@ test.describe('Abwesenheiten', () => {
     expect(posts[0].body).toEqual({ absence_type_id: 1, date_from: '2026-10-19', date_to: '2026-10-23', half_day: false, note: '' })
   })
 
-  test('Antrag über einen schon genehmigten Urlaub warnt vor doppelter Zählung', async ({ page }) => {
+  test('Antrag über einen schon genehmigten Urlaub lässt sich nicht einreichen', async ({ page }) => {
     await setup(page)
     await page.goto('/mitarbeiter?tab=abwesenheiten&sub=my')
     await page.getByRole('button', { name: 'Abwesenheit beantragen' }).click()
@@ -98,8 +98,9 @@ test.describe('Abwesenheiten', () => {
     await dlg.getByLabel('Art *').selectOption({ label: 'Urlaub' })
     await dlg.getByLabel('Von *').fill('2026-09-10')
     await dlg.getByLabel('Bis').fill('2026-09-14')
-    await expect(dlg).toContainText('Überschneidet sich mit Urlaub 07.09.–11.09.2026 (genehmigt)')
-    await expect(dlg).toContainText('zählen doppelt')
+    await expect(dlg.getByRole('alert')).toContainText('Überschneidet sich mit Urlaub 07.09.–11.09.2026 (genehmigt)')
+    await expect(dlg.getByRole('alert')).toContainText('nicht einreichen')
+    await expect(dlg.getByRole('button', { name: 'Antrag einreichen' })).toBeDisabled()
   })
 
   test('Pflichtfelder: ohne Art und Datum kein Antrag; Schließen mit Eingaben fragt nach', async ({ page }) => {
@@ -152,6 +153,20 @@ test.describe('Abwesenheiten', () => {
     await dlg.getByRole('button', { name: 'Eintragen' }).click()
     await expect(dlg).toBeHidden()
     expect(posts[0].body).toMatchObject({ employee_id: 2, absence_type_id: 2, date_from: '2026-09-21', date_to: '2026-09-21' })
+  })
+})
+
+test.describe('Abwesenheiten – Verwaltung', () => {
+  test('Erfassen über einen bestehenden Antrag warnt nur, sperrt nicht', async ({ page }) => {
+    await setup(page)
+    await page.goto('/mitarbeiter/2?tab=abwesenheit')
+    await page.getByRole('button', { name: 'Abwesenheit erfassen' }).click()
+    const dlg = page.getByRole('dialog', { name: 'Abwesenheit erfassen – Thomas Kern' })
+    await dlg.getByLabel('Art *').selectOption({ label: 'Krank' })
+    await dlg.getByLabel('Von *').fill('2026-10-13')
+    await expect(dlg).toContainText('Überschneidet sich mit Urlaub 12.10.–16.10.2026 (beantragt)')
+    await expect(dlg.getByRole('alert')).toHaveCount(0)
+    await expect(dlg.getByRole('button', { name: 'Eintragen' })).toBeEnabled()
   })
 })
 

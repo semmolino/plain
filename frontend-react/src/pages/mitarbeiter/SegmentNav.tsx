@@ -16,6 +16,7 @@ export function SegmentNav<T extends string>({ items, active, onChange, style }:
           key={it.id}
           type="button"
           className={`seg-nav-btn${active === it.id ? ' active' : ''}`}
+          aria-pressed={active === it.id}
           onClick={() => onChange(it.id)}
         >
           {it.label}

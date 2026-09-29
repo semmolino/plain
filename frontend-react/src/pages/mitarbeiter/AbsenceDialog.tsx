@@ -165,7 +165,7 @@ function AbsenceDialogBody({ onClose, mode, employeeId, employeeLabel, absence }
         </div>
         <DialogFooter>
           <button type="button" className="btn-secondary" onClick={() => void requestClose()}>Abbrechen</button>
-          <button type="button" className="btn-primary" disabled={saveMut.isPending} onClick={save}>{primary}</button>
+          <button type="button" className="btn-primary" disabled={saveMut.isPending || !!preview?.overlap_blocks} onClick={save}>{primary}</button>
         </DialogFooter>
       </Modal>
       {confirmDialog}
@@ -197,11 +197,13 @@ function PreviewBox({ preview, loading, error, ready, mode, editing }: {
         </p>
       ))}
       {preview.overlaps.length > 0 && (
-        <div className="abs-preview-warn">
+        <div className={preview.overlap_blocks ? 'abs-preview-block' : 'abs-preview-warn'} role={preview.overlap_blocks ? 'alert' : undefined}>
           <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
           <span>
             Überschneidet sich mit {preview.overlaps.map(o => `${o.TYPE_NAME ?? 'Abwesenheit'} ${fmtAbsenceRange(o)} (${o.STATUS === 'APPROVED' ? 'genehmigt' : 'beantragt'})`).join(', ')}.
-            {preview.reduces_vacation && ' Überschneidende Tage zählen doppelt.'}
+            {preview.overlap_blocks
+              ? ' So lässt sich der Antrag nicht einreichen — bitte den bestehenden Eintrag ändern oder zurückziehen.'
+              : preview.reduces_vacation ? ' Überschneidende Tage zählen doppelt.' : ''}
           </span>
         </div>
       )}
