@@ -4870,10 +4870,11 @@ fieldset:disabled .ws-check { cursor: default; }
 .abs-preview-main strong { font-size: 15px; }
 .abs-preview-line { color: var(--text-2); }
 .abs-preview-sub { color: var(--text-3); }
-.abs-preview-warn, .abs-preview-note { display: flex; align-items: flex-start; gap: 6px; }
+.abs-preview-warn, .abs-preview-note, .abs-preview-block { display: flex; align-items: flex-start; gap: 6px; }
+.abs-preview-block { color: var(--danger-strong); background: var(--danger-bg); font-weight: 600; padding: var(--space-2); border-radius: var(--radius-sm); }
 .abs-preview-warn { color: var(--warning-strong); font-weight: 600; }
 .abs-preview-note { color: var(--text-3); }
-.abs-preview-warn svg, .abs-preview-note svg { flex: 0 0 auto; margin-top: 2px; }
+.abs-preview-warn svg, .abs-preview-note svg, .abs-preview-block svg { flex: 0 0 auto; margin-top: 2px; }
 .abs-decision-summary { margin: 0; font-size: 13px; color: var(--text-2); }
 /* Teamkalender: Kürzel-Spalte bleibt beim Querscrollen stehen, heute ist markiert.
    --abs-c ist die gespeicherte Farbe der Abwesenheitsart. */

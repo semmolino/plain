@@ -400,6 +400,9 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Erfassen laufen durch **einen** Dialog (`AbsenceDialog.tsx`); was ein Antrag kostet, rechnet
   `GET /abwesenheit/preview` am Server wie das Speichern (Modell, Feiertage, je Jahr, Resturlaub
   danach samt offener Anträge, Überschneidungen mit eigenen Einträgen) — nie im Browser nachbauen.
+  Eine Überschneidung mit einem eigenen beantragten oder genehmigten Eintrag lehnt der Server beim
+  eigenen Antrag ab (`findOverlaps`, 409 bei POST und PATCH; die Vorschau meldet `overlap_blocks`);
+  mit `absence.manage` bleibt es eine Warnung — etwa für eine Krankmeldung mitten im Urlaub.
   Genehmigen, Ablehnen (mit Begründung → `DECISION_NOTE`) und Rückfrage über `AbsenceDecision.tsx`;
   Status, Zeitraum, Tage und Verlauf über `absenceUi.tsx`. Den Resturlaub liefert
   `vacationBalanceFor` in `routes/abwesenheit.js` (auch `pending` = offen beantragt). Die Seite hat

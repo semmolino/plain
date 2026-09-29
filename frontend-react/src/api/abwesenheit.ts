@@ -158,6 +158,8 @@ export interface AbsencePreview {
   /** Nur bei Arten, die den Urlaub mindern — und fremd nur mit absence.view. */
   balance:           { year: number; remaining: number; pending: number; days: number; after: number }[] | null
   overlaps:          { ID: number; DATE_FROM: string; DATE_TO: string; HALF_DAY: boolean; STATUS: AbsenceStatus; TYPE_NAME: string | null }[]
+  /** Speichern lehnt der Server wegen der Überschneidung ab (eigener Antrag ohne absence.manage). */
+  overlap_blocks:    boolean
 }
 
 export const fetchAbsencePreview = (params: {

@@ -378,3 +378,73 @@ describe("POST /abwesenheit/:id/cancel", () => {
     expect(r.status).toBe(403);
   });
 });
+
+// ── Überschneidungen sperren (Runde 12) ──────────────────────────────────────
+describe("POST/PATCH /abwesenheit — Überschneidung", () => {
+  function tables() {
+    return {
+      TENANT_SETTINGS: [],
+      EMPLOYEE: [{ ID: 5, TENANT_ID: TENANT, ABBR: "TK" }],
+      ABSENCE_TYPE: [
+        { ID: 1, TENANT_ID: TENANT, NAME: "Urlaub", REDUCES_VACATION: true, REQUIRES_APPROVAL: true },
+        { ID: 2, TENANT_ID: TENANT, NAME: "Krank", REDUCES_VACATION: false, REQUIRES_APPROVAL: false },
+      ],
+      ABSENCE: [
+        { ID: 10, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-10-12", DATE_TO: "2026-10-16", HALF_DAY: false, STATUS: "APPROVED" },
+        { ID: 11, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-11-02", DATE_TO: "2026-11-03", HALF_DAY: false, STATUS: "REQUESTED" },
+        { ID: 12, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-12-01", DATE_TO: "2026-12-04", HALF_DAY: false, STATUS: "CANCELLED" },
+        // anderer Mitarbeiter, gleicher Zeitraum — kein Konflikt
+        { ID: 13, TENANT_ID: TENANT, EMPLOYEE_ID: 6, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-10-19", DATE_TO: "2026-10-23", HALF_DAY: false, STATUS: "APPROVED" },
+      ],
+      EMPLOYEE_WORK_MODEL: [],
+      PUBLIC_HOLIDAY: [],
+    };
+  }
+  const self = { tenantId: TENANT, employeeId: 5, permissions: ["absence.request"] };
+  const body = (from, to, type = 1) => ({ absence_type_id: type, date_from: from, date_to: to });
+
+  it("eigener Antrag über einen genehmigten Urlaub: 409 mit Klartext, nichts angelegt", async () => {
+    const sb = makeFakeSupabase(tables());
+    const r = await request(sb, self, "POST", "/abwesenheit", body("2026-10-15", "2026-10-20"));
+    expect(r.status).toBe(409);
+    expect(r.body.error).toMatch(/^Überschneidet sich mit Urlaub 12\.10\.2026 – 16\.10\.2026 \(genehmigt\)\./);
+    expect(r.body.overlaps.map(o => o.ID)).toEqual([10]);
+    expect(sb._tables.ABSENCE).toHaveLength(4);
+  });
+
+  it("auch über einen offenen Antrag; stornierte und fremde zählen nicht", async () => {
+    const sb = makeFakeSupabase(tables());
+    expect((await request(sb, self, "POST", "/abwesenheit", body("2026-11-03", "2026-11-03"))).status).toBe(409);
+    const ok1 = await request(sb, self, "POST", "/abwesenheit", body("2026-12-02", "2026-12-03"));
+    expect(ok1.status).toBe(200);
+    const ok2 = await request(sb, self, "POST", "/abwesenheit", body("2026-10-19", "2026-10-23"));
+    expect(ok2.status).toBe(200);
+  });
+
+  it("die Verwaltung darf überschneiden (Krank im Urlaub)", async () => {
+    const sb = makeFakeSupabase(tables());
+    const r = await request(sb, { tenantId: TENANT, employeeId: 1, permissions: ["absence.manage"] },
+      "POST", "/abwesenheit", { ...body("2026-10-14", "2026-10-14", 2), employee_id: 5 });
+    expect(r.status).toBe(200);
+  });
+
+  it("Ändern des eigenen Antrags prüft die neuen Daten, ohne sich selbst zu zählen", async () => {
+    const sb = makeFakeSupabase(tables());
+    const bad = await request(sb, self, "PATCH", "/abwesenheit/11", { date_from: "2026-10-16", date_to: "2026-10-19" });
+    expect(bad.status).toBe(409);
+    expect(sb._tables.ABSENCE.find(a => a.ID === 11).DATE_FROM).toBe("2026-11-02");
+    const ok = await request(sb, self, "PATCH", "/abwesenheit/11", { date_from: "2026-11-02", date_to: "2026-11-05" });
+    expect(ok.status).toBe(200);
+    const note = await request(sb, self, "PATCH", "/abwesenheit/11", { note: "nur Notiz" });
+    expect(note.status).toBe(200);
+  });
+
+  it("die Vorschau sagt, ob der Server sperren wird", async () => {
+    const q = "/abwesenheit/preview?absence_type_id=1&date_from=2026-10-15&date_to=2026-10-20";
+    const own = await request(makeFakeSupabase(tables()), self, "GET", q);
+    expect(own.body.data.overlap_blocks).toBe(true);
+    const mgr = await request(makeFakeSupabase(tables()), { tenantId: TENANT, employeeId: 1, permissions: ["absence.manage", "absence.view"] }, "GET", `${q}&employee_id=5`);
+    expect(mgr.body.data.overlaps).toHaveLength(1);
+    expect(mgr.body.data.overlap_blocks).toBe(false);
+  });
+});

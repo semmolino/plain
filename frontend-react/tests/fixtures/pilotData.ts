@@ -1361,12 +1361,14 @@ async function mockMitarbeiter(page: Page) {
     }
     const days = Object.values(byYear).reduce((a, b) => a + b, 0)
     const reduces = typeId === 1
+    const overlaps = ABSENCES.filter(a => a.EMPLOYEE_ID === emp && a.ID !== ex && ['REQUESTED', 'APPROVED'].includes(a.STATUS) && a.DATE_FROM <= to && a.DATE_TO >= from)
+      .map(a => ({ ID: a.ID, DATE_FROM: a.DATE_FROM, DATE_TO: a.DATE_TO, HALF_DAY: a.HALF_DAY, STATUS: a.STATUS, TYPE_NAME: a.TYPE_NAME }))
     return route.fulfill(json({ data: {
       days, by_year: Object.entries(byYear).map(([year, d]) => ({ year: Number(year), days: d })),
       reduces_vacation: reduces, requires_approval: typeId ? typeId !== 2 : null,
       balance: reduces ? Object.entries(byYear).map(([year, d]) => ({ year: Number(year), remaining: 15.5, pending: 4, days: d, after: 15.5 - 4 - d })) : null,
-      overlaps: ABSENCES.filter(a => a.EMPLOYEE_ID === emp && a.ID !== ex && ['REQUESTED', 'APPROVED'].includes(a.STATUS) && a.DATE_FROM <= to && a.DATE_TO >= from)
-        .map(a => ({ ID: a.ID, DATE_FROM: a.DATE_FROM, DATE_TO: a.DATE_TO, HALF_DAY: a.HALF_DAY, STATUS: a.STATUS, TYPE_NAME: a.TYPE_NAME })),
+      // Eigener Antrag (ohne employee_id) sperrt, die Erfassung durch die Verwaltung nicht
+      overlaps, overlap_blocks: overlaps.length > 0 && !q.get('employee_id'),
     } }))
   })
   await r('abwesenheit/entitlements', route => route.fulfill(json({ data: [{ ID: 41, EMPLOYEE_ID: 2, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null, NOTE: null }] })))

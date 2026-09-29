@@ -290,6 +290,32 @@ async function vacationBalanceFor(supabase, tenantId, empId, year, { excludeId =
   };
 }
 
+// Eigene offene oder genehmigte Abwesenheiten, die [from,to] berühren
+// (Runde 12). Mit Art-Namen für Meldungen und Vorschau.
+async function findOverlaps(supabase, tenantId, empId, from, to, excludeId = null) {
+  const { data, error } = await supabase.from("ABSENCE")
+    .select("ID, ABSENCE_TYPE_ID, DATE_FROM, DATE_TO, HALF_DAY, STATUS")
+    .eq("TENANT_ID", tenantId).eq("EMPLOYEE_ID", empId).in("STATUS", ["REQUESTED", "APPROVED"])
+    .lte("DATE_FROM", to).gte("DATE_TO", from);
+  if (error) throw { status: 500, message: error.message };
+  const rows = (data || []).filter(o => o.ID !== excludeId && o.DATE_FROM <= to && o.DATE_TO >= from);
+  const typeIds = [...new Set(rows.map(o => o.ABSENCE_TYPE_ID))];
+  const { data: types } = typeIds.length
+    ? await supabase.from("ABSENCE_TYPE").select("ID, NAME").eq("TENANT_ID", tenantId).in("ID", typeIds)
+    : { data: [] };
+  const name = Object.fromEntries((types || []).map(t => [t.ID, t.NAME]));
+  return rows.map(o => ({ ID: o.ID, DATE_FROM: o.DATE_FROM, DATE_TO: o.DATE_TO, HALF_DAY: o.HALF_DAY, STATUS: o.STATUS, TYPE_NAME: name[o.ABSENCE_TYPE_ID] ?? null }));
+}
+
+// Überschneidung ist für den eigenen Antrag eine Sperre: die Tage gingen
+// sonst doppelt vom Resturlaub ab, und im Kalender stünde nur einer der
+// beiden Einträge. Wer Abwesenheiten verwaltet, darf trotzdem — etwa für
+// eine Krankmeldung mitten im Urlaub.
+function overlapConflict(overlaps) {
+  const list = overlaps.map(o => `${o.TYPE_NAME ?? "Abwesenheit"} ${fmtRangeDe(o)} (${o.STATUS === "APPROVED" ? "genehmigt" : "beantragt"})`).join(", ");
+  return { status: 409, message: `Überschneidet sich mit ${list}. Bitte den bestehenden Eintrag ändern oder zurückziehen.`, overlaps };
+}
+
 // ── E-Mail-Benachrichtigungen (fire-and-forget, nie blockierend) ──────────────
 
 function fmtRangeDe(a) {
@@ -565,6 +591,13 @@ module.exports = (supabase) => {
     if (b.date_to < b.date_from) return res.status(400).json({ error: "Bis-Datum liegt vor Von-Datum" });
     const half = !!b.half_day && b.date_from === b.date_to;
 
+    if (!req.hasPermission("absence.manage")) {
+      try {
+        const ov = await findOverlaps(supabase, req.tenantId, empId, b.date_from, b.date_to);
+        if (ov.length) { const c = overlapConflict(ov); return res.status(409).json({ error: c.message, overlaps: c.overlaps }); }
+      } catch (e) { return res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
+    }
+
     const { data: type } = await supabase.from("ABSENCE_TYPE")
       .select("REQUIRES_APPROVAL").eq("ID", Number(b.absence_type_id)).eq("TENANT_ID", req.tenantId).maybeSingle();
     const requiresApproval = type ? type.REQUIRES_APPROVAL !== false : true;
@@ -615,6 +648,13 @@ module.exports = (supabase) => {
     const dt = upd.DATE_TO   ?? row.DATE_TO;
     if (dt < df) return res.status(400).json({ error: "Bis-Datum liegt vor Von-Datum" });
     if ((upd.HALF_DAY ?? row.HALF_DAY) && df !== dt) upd.HALF_DAY = false;
+
+    if (!canManage && (upd.DATE_FROM !== undefined || upd.DATE_TO !== undefined)) {
+      try {
+        const ov = await findOverlaps(supabase, req.tenantId, row.EMPLOYEE_ID, df, dt, id);
+        if (ov.length) { const c = overlapConflict(ov); return res.status(409).json({ error: c.message, overlaps: c.overlaps }); }
+      } catch (e) { return res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
+    }
 
     const { error } = await supabase.from("ABSENCE").update(upd).eq("ID", id).eq("TENANT_ID", req.tenantId);
     if (error) return res.status(500).json({ error: error.message });
@@ -876,17 +916,7 @@ module.exports = (supabase) => {
       const days = Object.values(byYear).reduce((s, n) => s + n, 0);
 
       // Ueberschneidungen mit eigenen offenen oder genehmigten Abwesenheiten
-      const { data: others, error: oErr } = await supabase.from("ABSENCE")
-        .select("ID, ABSENCE_TYPE_ID, DATE_FROM, DATE_TO, HALF_DAY, STATUS")
-        .eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", empId).in("STATUS", ["REQUESTED", "APPROVED"])
-        .lte("DATE_FROM", to).gte("DATE_TO", from);
-      if (oErr) throw oErr;
-      const clash = (others || []).filter(o => o.ID !== excludeId && o.DATE_FROM <= to && o.DATE_TO >= from);
-      const typeIds = [...new Set(clash.map(o => o.ABSENCE_TYPE_ID))];
-      const { data: clashTypes } = typeIds.length
-        ? await supabase.from("ABSENCE_TYPE").select("ID, NAME").eq("TENANT_ID", req.tenantId).in("ID", typeIds)
-        : { data: [] };
-      const typeName = Object.fromEntries((clashTypes || []).map(t => [t.ID, t.NAME]));
+      const overlaps = await findOverlaps(supabase, req.tenantId, empId, from, to, excludeId);
 
       // Resturlaub nur fuer Arten, die ihn mindern — und fremde nur mit absence.view
       let balance = null;
@@ -905,7 +935,9 @@ module.exports = (supabase) => {
         reduces_vacation: !!type?.REDUCES_VACATION,
         requires_approval: type ? type.REQUIRES_APPROVAL !== false : null,
         balance,
-        overlaps: clash.map(o => ({ ID: o.ID, DATE_FROM: o.DATE_FROM, DATE_TO: o.DATE_TO, HALF_DAY: o.HALF_DAY, STATUS: o.STATUS, TYPE_NAME: typeName[o.ABSENCE_TYPE_ID] ?? null })),
+        overlaps,
+        // Speichern lehnt der Server dann ab (Runde 12) — außer für die Verwaltung.
+        overlap_blocks: overlaps.length > 0 && !req.hasPermission("absence.manage"),
       } });
     } catch (e) {
       res.status(e?.status || 500).json({ error: e?.message || String(e) });
