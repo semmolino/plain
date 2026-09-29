@@ -120,6 +120,8 @@ export const fetchArbzgAudit = (params: {
 
 export const downloadArbzgAuditCsv = (params: {
   employee_id?: number; date_from?: string; date_to?: string
+  /** Dieselben Filter wie die Liste — vorher enthielt die Datei alle Ereignisarten. */
+  event_type?: string; severity?: string
 } = {}) => {
   const qs = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) if (v != null && v !== '') qs.append(k, String(v))

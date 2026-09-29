@@ -20,6 +20,7 @@ const DashboardPage   = lazy(() => import('@/pages/DashboardPage').then(m => ({ 
 const AdressenPage    = lazy(() => import('@/pages/AdressenPage').then(m => ({ default: m.AdressenPage })))
 const AddressDetailPage = lazy(() => import('@/pages/adressen/AddressDetailPage').then(m => ({ default: m.AddressDetailPage })))
 const MitarbeiterPage = lazy(() => import('@/pages/MitarbeiterPage').then(m => ({ default: m.MitarbeiterPage })))
+const MitarbeiterDetailPage = lazy(() => import('@/pages/mitarbeiter/MitarbeiterDetailPage').then(m => ({ default: m.MitarbeiterDetailPage })))
 const AdminPage       = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })))
 const ProjektePage    = lazy(() => import('@/pages/ProjektePage').then(m => ({ default: m.ProjektePage })))
 const RechnungenPage  = lazy(() => import('@/pages/RechnungenPage').then(m => ({ default: m.RechnungenPage })))
@@ -84,6 +85,7 @@ function AppRoutes() {
           <Route path="/rechnungen"  element={<ProtectedRoute anyOf={['invoices.view','dunning.view','security_retention.view']}><Suspense fallback={<PageLoader />}><RechnungenPage /></Suspense></ProtectedRoute>} />
           <Route path="/admin"       element={<ProtectedRoute anyOf={['settings.basedata.view','settings.basedata.edit','settings.defaults.edit','settings.notifications.edit','settings.monthly_close.edit','settings.company.view','settings.company.edit','settings.numbers.edit','settings.text_templates.edit','settings.dunning_config.edit','settings.work_time.edit','settings.cost_rate.edit','roles.view']}><Suspense fallback={<PageLoader />}><AdminPage /></Suspense></ProtectedRoute>} />
           <Route path="/mitarbeiter" element={<ProtectedRoute anyOf={['employees.view','absence.view','absence.request']}><Suspense fallback={<PageLoader />}><MitarbeiterPage /></Suspense></ProtectedRoute>} />
+          <Route path="/mitarbeiter/:id" element={<ProtectedRoute anyOf={['employees.view']}><Suspense fallback={<PageLoader />}><MitarbeiterDetailPage /></Suspense></ProtectedRoute>} />
           <Route path="/angebote"   element={<ProtectedRoute anyOf={['offers.view']}><Suspense fallback={<PageLoader />}><AngebotePage /></Suspense></ProtectedRoute>} />
           <Route path="/nachtraege"     element={<ProtectedRoute anyOf={['nachtraege.view']}><Suspense fallback={<PageLoader />}><NachtraegePage /></Suspense></ProtectedRoute>} />
           <Route path="/nachtraege/:id" element={<ProtectedRoute anyOf={['nachtraege.view']}><Suspense fallback={<PageLoader />}><NachtragDetailPage /></Suspense></ProtectedRoute>} />

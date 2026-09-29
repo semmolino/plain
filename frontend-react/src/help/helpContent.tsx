@@ -1142,6 +1142,38 @@ export const HELP = {
       </>
     ),
   },
+  'mitarbeiter.status': {
+    title: 'Status (Aktiv/Inaktiv)',
+    body: (
+      <>
+        <strong>Inaktiv</strong> ist der Weg für Ausgeschiedene: keine
+        Anmeldung mehr, laufende Sitzungen enden, und der Mitarbeiter zählt
+        nicht mehr gegen die Mitarbeiter-Grenze des Tarifs. Gebuchte Stunden,
+        Belege und Auswertungen vergangener Jahre bleiben vollständig.
+        <br /><br />
+        Löschen geht nur, solange nichts am Mitarbeiter hängt — hat er schon
+        gebucht oder ist Zuständiger an einem Beleg, ist „inaktiv" richtig.
+        Das eigene Konto und den letzten Administrator lässt plan&simple nicht
+        deaktivieren.
+      </>
+    ),
+  },
+  'mitarbeiter.dashboard_rolle': {
+    title: 'Dashboard-Rolle',
+    body: (
+      <>
+        Legt fest, mit welcher Ansicht die Übersicht nach der Anmeldung
+        startet (Geschäftsleitung, Controller, Projektleiter, Mitarbeiter).
+        „Standard" heißt: wer die Ansicht wechseln darf, wählt selbst, alle
+        anderen sehen die Mitarbeiter-Ansicht.
+        <br /><br />
+        Benachrichtigungen, die sich an eine Rolle richten (etwa die
+        Erinnerung an die Leistungsstände), gehen nach dieser Angabe.{' '}
+        <strong>Rechte vergibt sie keine</strong> — die kommen allein aus dem
+        Reiter „Rollen".
+      </>
+    ),
+  },
   'mitarbeiter.saldo': {
     title: 'Gleitzeitsaldo',
     body: (

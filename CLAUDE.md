@@ -381,6 +381,18 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   einzigen Kontakt der Adresse) — über `useContactPreset`, nie beim Laden
   eines gespeicherten Stands; `GET /stammdaten/contacts/by-address` liefert
   dafür `IS_PRIMARY` und stellt ihn nach vorn.
+- **Mitarbeiter als Arbeitsbereich** (`/mitarbeiter/:id?tab=stammdaten|arbeitszeit|kostensatz|zeitkonto|abwesenheit|projekte|rollen|zugang`,
+  `pages/mitarbeiter/MitarbeiterDetailPage.tsx`, UI-Pilot Runde 10): Kopf mit Kontakt, Kostensatz
+  (nur `employees.salary.view` + Tarif) und Saldo (nur `employees.bookings.view_all`), Reiter je Recht.
+  Einen Bearbeiten-Dialog gibt es nicht mehr; Liste, Rollen-Abzeichen und Neuanlage führen hin
+  (`mitarbeiterHref`). Einen Einzelabruf gibt es am Server nicht — die Seite liest aus der Liste
+  (`['employees']`). `PATCH /mitarbeiter/:id` ist ein **Teil-Update**: Stammdaten und die
+  Direktbearbeitung der Liste schicken nur geänderte Felder. Datierte Verläufe (Arbeitszeitmodell,
+  Kostensatz) laufen über eine Tabelle (`EmployeeHistory.tsx`); je Tag gibt es höchstens einen
+  Eintrag (409). Das Zeitkonto ändert eine Buchung nur mit `projects.bookings.edit/delete`, nie eine
+  abgerechnete, und zieht `QUANTITY_EXT` nur mit, solange es `QUANTITY_INT` entsprach.
+  Stundencontrolling zeigt Auswertung und Einzelansicht nur mit `employees.bookings.view_all`; wer
+  nur `employees.month_close.edit` hat, sieht den Monatsabschluss.
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
@@ -640,6 +652,7 @@ Windows): `owner-console/README.md`.
   - Die E-Mail eines **fremden** Kontos ändert nur, wer `employees.password.set` hat (sonst Übernahme über „Passwort vergessen"); danach enden dessen Sitzungen. `PATCH /mitarbeiter/:id` ist ein Teil-Update.
   - „Nicht mehr vergeben, als man selbst hat" (`keysBeyondCaller`): Passwort setzen und Rollen zuweisen nur für Konten und Rollen, deren Rechte der Aufrufer selbst hat. Passwort setzen beendet Sitzungen. Der Import prüft dieselben Rechte je Inhalt (Kostensatz, Rolle, E-Mail beim Zusammenführen) und die Platzgrenze (`authorizeEmployeeCommit`).
   - Das eigene Konto und der letzte Administrator lassen sich weder löschen noch deaktivieren; inaktive Admins zählen nicht. Die Löschprüfung kennt Angebote, Rechnungen, Abschläge, Mahnungen, Nachträge und Abwesenheiten und schluckt keine Fehler mehr (`safeReferences`).
+  - Arbeitszeitmodell zuordnen nur mit einem Modell des eigenen Büros, gültigem Datum und für einen eigenen Mitarbeiter; Neuanlage prüft den Vorgesetzten wie das Ändern und legt leere Angaben als `null` ab; das eigene Passwort lässt sich nicht löschen (Selbstaussperrung); Urlaubsansprüche je Jahr (`PUT /abwesenheit/entitlements/bulk`) nehmen keine leeren oder ungültigen Tage mehr als 0 und melden Teilfehler statt Erfolg.
   - Profilfoto nur aus einem `AVATAR`-Bild; ArbZG-Audit/Export/Grenzen nur eigene oder mit Recht; Stundensätze der Team-Zuordnung nur mit `projects.hourly_rates.view`; Kosten im Stundencontrolling nur mit `employees.salary.view`; fremde Salden nur mit `employees.bookings.view_all`; Kostensatzrechner-Gehaltsdaten nur mit den Gehaltsrechten.
 
 **Offen (Stand 2026-09-29):**

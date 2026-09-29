@@ -1,129 +1,40 @@
-import { useState, useMemo, useRef, useEffect, useCallback, Fragment } from 'react'
+import { useState, useMemo, useRef, useEffect, Fragment } from 'react'
 import { ListLoading } from '@/components/ui/Skeleton'
-import { SortTh } from '@/components/ui/SortTh'
-import { todayIso, nextPersonnelNumber } from '@/utils/vorbelegung'
-import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Tabs }        from '@/components/ui/Tabs'
-import { Modal }       from '@/components/ui/Modal'
-import { Message }     from '@/components/ui/Message'
-import { FormField }   from '@/components/ui/FormField'
-import { HelpHint }    from '@/components/ui/HelpHint'
+import { Tabs } from '@/components/ui/Tabs'
+import { HelpHint } from '@/components/ui/HelpHint'
 import type { HelpId } from '@/help/helpContent'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { useCtrlS }    from '@/hooks/useCtrlS'
-import { useToast }    from '@/store/toastStore'
-import { Pencil, Trash2, Download, AlertTriangle , ChevronLeft, ChevronRight, KeyRound } from 'lucide-react'
-import { fetchRoles, fetchEmployeeRoleMap, setEmployeeRoles, type UserRole, type EmployeeRoleMapping } from '@/api/rbac'
+import { useToast } from '@/store/toastStore'
+import { useConfirm } from '@/hooks/useConfirm'
+import { Download, AlertTriangle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, ArrowRight, Circle, CircleCheck } from 'lucide-react'
 import { useFilterTabs, usePermission } from '@/store/permissionsStore'
 import { useLicenseFilterTabs, useFeature } from '@/store/licenseStore'
-import { Can } from '@/components/ui/Can'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { MyAbsencesPanel, ClarificationThread } from '@/components/mitarbeiter/MyAbsencesPanel'
-import { InlineSelect, type InlineOption } from '@/components/ui/InlineEdit'
-import { LimitBanner } from '@/components/ui/LimitBanner'
-import {
-  fetchEmployeeList, fetchEmployeeGenders, createEmployee, updateEmployee, deleteEmployee,
-  fetchEmployeeWorkModels, createEmployeeWorkModel, updateEmployeeWorkModel, deleteEmployeeWorkModel,
-  fetchEmployeeCpRates, createEmployeeCpRate, updateEmployeeCpRate, deleteEmployeeCpRate,
-  fetchMonthBalance, fetchRunningBalance,
-  fetchMonthCloseStatus, closeMonth, reopenMonth, fetchMonthCloseOverview, setEmployeePassword, sendEmployeeInvite, fetchEmployeeAccess,
-  fetchEmployeeReportList, fetchEmployeeProjects, fetchEmployeeAvatar,
-  type Employee, type CreateEmployeePayload, type UpdateEmployeePayload,
-  type EmployeeWorkModel, type EmployeeCpRate, type MonthBalance, type RunningMonth,
-  type MonthCloseOverviewEmployee, type DayBooking, type EmployeeReportRow, type EmployeeProject,
-} from '@/api/mitarbeiter'
-import { fetchDepartments, fetchWorkingTimeModels, type StammdatenItem, type WorkingTimeModel } from '@/api/stammdaten'
+import { fetchEmployeeList, closeMonth, reopenMonth, fetchMonthCloseOverview, fetchEmployeeReportList, type Employee, type MonthCloseOverviewEmployee, type EmployeeReportRow } from '@/api/mitarbeiter'
 import { RecentList } from '@/components/recents/RecentList'
 import { useTrackFilterRecent } from '@/hooks/useTrackFilterRecent'
 import { fetchArbzgAudit, downloadArbzgAuditCsv, type AuditEntry, type ArbzgSeverity } from '@/api/arbzg'
-import { updateBuchung, deleteBuchung } from '@/api/projekte'
-import {
-  fetchAbsenceTypes, fetchAbsences, fetchVacationBalance, fetchEntitlements, putEntitlement,
-  fetchAllEntitlements, putEntitlementsBulk,
-  createAbsence, decideAbsence, clarifyAbsence, cancelAbsence, deleteAbsence,
-  type Absence, type AbsenceStatus,
-} from '@/api/abwesenheit'
-import { fmtEur, NO_VALUE } from '@/utils/money'
+import { fetchAbsences, fetchAllEntitlements, putEntitlementsBulk, decideAbsence, type Absence, type AbsenceStatus } from '@/api/abwesenheit'
+import { fmtEur } from '@/utils/money'
+import { fmtH, fmtBalance, fmtDateShort, localIso, todayLocal } from '@/pages/mitarbeiter/mitarbeiterFormat'
+import { SegmentNav } from '@/pages/mitarbeiter/SegmentNav'
+import { EmployeeTimeAccount } from '@/pages/mitarbeiter/EmployeeTimeAccount'
+import { ClarifyModal } from '@/pages/mitarbeiter/EmployeeAbsenceSection'
+import { MitarbeiterListe } from '@/pages/mitarbeiter/MitarbeiterListe'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PAGE_SIZE = 25
 const TABS: { id: string; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'list',          label: 'Mitarbeiter',           permissions: ['employees.view'] },
   { id: 'zeitwirtschaft', label: 'Stundencontrolling',   permissions: ['employees.bookings.view_all','employees.month_close.edit'] },
   { id: 'abwesenheiten', label: 'Abwesenheiten',         permissions: ['absence.view','absence.request'] },
   { id: 'arbzg',         label: 'Arbeitszeit (Details)', permissions: ['employees.bookings.view_all'], feature: 'arbzg.compliance' },
 ]
-const WEEKDAY_SHORT = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa']
 const MONTH_NAMES   = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember']
-
-type SortKey = 'ABBR' | 'FIRST_NAME' | 'LAST_NAME' | 'PERSONNEL_NUMBER' | 'MAIL'
-type EmpSection = 'stammdaten' | 'kostensatz' | 'arbeitszeit' | 'zeitkonto' | 'abwesenheit' | 'projekte' | 'rolle' | 'zugang'
-
-function fmtH(n: number) {
-  return n.toFixed(2).replace('.', ',') + ' h'
-}
-function fmtBalance(n: number) {
-  const s = Math.abs(n).toFixed(2).replace('.', ',') + ' h'
-  return n >= 0 ? `+${s}` : `−${s}`
-}
-
-function emptyCreateForm(personnelNumber = '', entryDate = ''): CreateEmployeePayload {
-  return { abbr: '', title: '', first_name: '', last_name: '', email: '', phone: '', mobile: '', personnel_number: personnelNumber, gender_id: '', department_id: null, entry_date: entryDate, birth_date: '', notes: '', supervisor_id: null }
-}
-
-// Inline-Status-Optionen (Liste). Aktiv=1, Inaktiv=2.
-const EMP_STATUS_OPTS: InlineOption[] = [
-  { value: '1', label: 'Aktiv' },
-  { value: '2', label: 'Inaktiv' },
-]
-
-// Baut aus einer Mitarbeiter-Zeile das vollständige Update-Payload (das Backend
-// erwartet die Pflichtfelder) und überschreibt die inline geänderten Felder.
-function employeeRowToPayload(r: Employee, override: Partial<UpdateEmployeePayload>): UpdateEmployeePayload {
-  return {
-    abbr:       r.ABBR,
-    title:            r.TITLE ?? '',
-    first_name:       r.FIRST_NAME,
-    last_name:        r.LAST_NAME,
-    mail:             r.MAIL ?? '',
-    phone:            r.PHONE ?? '',
-    mobile:           r.MOBILE ?? '',
-    personnel_number: r.PERSONNEL_NUMBER ?? '',
-    birth_date:       r.BIRTH_DATE ?? '',
-    notes:            r.NOTES ?? '',
-    supervisor_id:    r.SUPERVISOR_ID ?? null,
-    gender_id:        r.GENDER_ID ?? 0,
-    department_id:    r.DEPARTMENT_ID ?? null,
-    entry_date:       r.ENTRY_DATE ?? '',
-    exit_date:        r.EXIT_DATE ?? '',
-    active:           r.ACTIVE ?? 1,
-    dashboard_role:   r.DASHBOARD_ROLE ?? null,
-    ...override,
-  }
-}
-
-// ID des aktuell gueltigen Eintrags (juengstes VALID_FROM <= heute) aus einer
-// datierten Historie (Kostensatz / Arbeitszeitmodell).
-function latestValidId<T extends { ID: number; VALID_FROM: string }>(items: T[], today: string): number | null {
-  const valid = items.filter(i => i.VALID_FROM <= today)
-  if (!valid.length) return null
-  return valid.reduce((a, b) => (a.VALID_FROM >= b.VALID_FROM ? a : b)).ID
-}
-
-function HistBadge({ kind }: { kind: 'current' | 'planned' }) {
-  const style = kind === 'current'
-    ? { background: 'var(--success-bg)', color: 'var(--success-strong)' }
-    : { background: 'var(--info-bg)', color: 'var(--info)' }
-  return (
-    <span style={{ ...style, fontSize: 10, fontWeight: 600, padding: '1px 6px', borderRadius: 8, marginLeft: 6 }}>
-      {kind === 'current' ? 'aktuell' : 'geplant'}
-    </span>
-  )
-}
 
 // CSV-Export (clientseitig): deutsches Excel-Format (Semikolon, UTF-8-BOM).
 function csvEscape(v: string | number): string {
@@ -140,1015 +51,9 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
   URL.revokeObjectURL(url)
 }
 
-// ── SegmentNav ────────────────────────────────────────────────────────────────
-// Einheitlicher Umschalter (Segment-Control) fuer Unter-Navigation/Sektionen.
-
-function SegmentNav<T extends string>({ items, active, onChange, style }: {
-  items:    { id: T; label: string }[]
-  active:   T
-  onChange: (id: T) => void
-  style?:   React.CSSProperties
-}) {
-  return (
-    <div className="seg-nav" style={style}>
-      {items.map(it => (
-        <button
-          key={it.id}
-          type="button"
-          className={`seg-nav-btn${active === it.id ? ' active' : ''}`}
-          onClick={() => onChange(it.id)}
-        >
-          {it.label}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 // ── FilterChip ────────────────────────────────────────────────────────────────
 
-// ── Rolle-Sektion (innerhalb der Mitarbeiter-Akte) ───────────────────────────
-
-function RoleSection({ employeeId, roles, mapping }: {
-  employeeId: number
-  roles:   UserRole[]
-  mapping: EmployeeRoleMapping[]
-}) {
-  const qc = useQueryClient()
-  const toast = useToast()
-  const currentIds = mapping.filter(m => m.EMPLOYEE_ID === employeeId).map(m => m.ROLE_ID)
-  const [selected, setSelected] = useState<Set<number>>(new Set(currentIds))
-
-  const saveMut = useMutation({
-    mutationFn: () => setEmployeeRoles(employeeId, Array.from(selected)),
-    onSuccess: () => {
-      toast.success('Rollen aktualisiert')
-      void qc.invalidateQueries({ queryKey: ['employee-role-map'] })
-      void qc.invalidateQueries({ queryKey: ['user-roles'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  return (
-    <div>
-      <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-        Mehrere Rollen sind möglich — der Mitarbeiter erhält die Vereinigungsmenge der Berechtigungen.
-      </p>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto' }}>
-        {roles.map(r => {
-          const on = selected.has(r.ID)
-          return (
-            <label key={r.ID} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-              border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer',
-              background: on ? 'var(--info-bg)' : 'transparent',
-            }}>
-              <input type="checkbox" checked={on} onChange={() => setSelected(prev => {
-                const next = new Set(prev)
-                if (next.has(r.ID)) next.delete(r.ID); else next.add(r.ID)
-                return next
-              })} />
-              <span style={{ width: 12, height: 12, borderRadius: '50%', background: r.COLOR || 'var(--text-3)' }} />
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{r.ABBR}</div>
-                {r.NAME && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{r.NAME}</div>}
-              </div>
-              {r.IS_SYSTEM && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>SYSTEM</span>}
-            </label>
-          )
-        })}
-        {!roles.length && <p className="empty-note">Noch keine Rollen definiert.</p>}
-      </div>
-      <DialogFooter>
-        <button className="btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
-          {saveMut.isPending ? 'Speichert …' : 'Rollen speichern'}
-        </button>
-      </DialogFooter>
-    </div>
-  )
-}
-
-// ── Projekte-Sektion (innerhalb der Mitarbeiter-Akte) ────────────────────────
-
-function EmployeeProjectsSection({ employeeId }: { employeeId: number }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ['emp-projects', employeeId],
-    queryFn:  () => fetchEmployeeProjects(employeeId),
-  })
-  const rows: EmployeeProject[] = data?.data ?? []
-
-  if (isLoading) return <p className="empty-note">Laden …</p>
-  if (!rows.length) return <p className="empty-note">Dieser Mitarbeiter ist keinem Projekt zugeordnet.</p>
-
-  return (
-    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-      <thead>
-        <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-          <th scope="col" style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Projekt</th>
-          <th scope="col" style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Status</th>
-          <th scope="col" style={{ textAlign: 'left',  padding: '3px 8px 4px 0' }}>Rolle</th>
-          <th scope="col" style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Stundensatz</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map(r => (
-          <tr key={r.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
-            <td style={{ padding: '4px 8px 4px 0' }}>
-              <strong>{r.PROJECT_NUMBER || '—'}</strong>
-              {r.PROJECT_NAME ? <span style={{ color: 'var(--text-3)' }}> · {r.PROJECT_NAME}</span> : null}
-            </td>
-            <td style={{ padding: '4px 8px 4px 0' }}>{r.STATUS_NAME || '—'}</td>
-            <td style={{ padding: '4px 8px 4px 0' }}>{r.ROLE_ABBR || '—'}</td>
-            <td style={{ padding: '4px 0 4px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-              {r.HOURLY_RATE != null ? `${Number(r.HOURLY_RATE).toFixed(2)} €/h` : '—'}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-// ── Abwesenheits-Sektion (innerhalb der Mitarbeiter-Akte) ────────────────────
-
-function fmtDateShort(d: string) {
-  return new Date(`${d}T00:00:00`).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-}
-
-function AbsenceStatusBadge({ status }: { status: AbsenceStatus }) {
-  const map: Record<AbsenceStatus, { label: string; bg: string; color: string }> = {
-    REQUESTED: { label: 'Beantragt',  bg: 'var(--warning-bg)', color: 'var(--warning-strong)' },
-    APPROVED:  { label: 'Genehmigt',  bg: 'var(--success-bg)', color: 'var(--success-strong)' },
-    REJECTED:  { label: 'Abgelehnt',  bg: 'var(--danger-bg)', color: 'var(--danger-strong)' },
-    CANCELLED: { label: 'Storniert',  bg: 'var(--surface-2)', color: 'var(--text-3)' },
-  }
-  const s = map[status]
-  return <span style={{ background: s.bg, color: s.color, fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10 }}>{s.label}</span>
-}
-
-// Rückfrage-Modal (Genehmiger) — Antrag bleibt offen, Antragsteller wird benachrichtigt.
-function ClarifyModal({ absenceId, onClose, onDone }: { absenceId: number; onClose: () => void; onDone: () => void }) {
-  const toast = useToast()
-  const [note, setNote] = useState('')
-  const mut = useMutation({
-    mutationFn: () => clarifyAbsence(absenceId, note.trim()),
-    onSuccess: () => { toast.success('Rückfrage gesendet'); onDone() },
-    onError: (e: Error) => toast.error(e.message),
-  })
-  return (
-    <Modal open onClose={onClose} title="Rückfrage zum Antrag">
-      <div className="master-form">
-        <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 8px' }}>
-          Der Antrag bleibt offen. Der Antragsteller wird benachrichtigt und kann seinen Antrag anpassen.
-        </p>
-        <div className="form-group">
-          <label>Rückfrage / Notiz</label>
-          <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
-            placeholder="Was soll geklärt werden?" style={{ width: '100%', resize: 'vertical' }} />
-        </div>
-        <DialogFooter>
-          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn-primary" disabled={!note.trim() || mut.isPending} onClick={() => mut.mutate()}>
-            {mut.isPending ? 'Sendet …' : 'Rückfrage senden'}
-          </button>
-        </DialogFooter>
-      </div>
-    </Modal>
-  )
-}
-
-function EmployeeAbsenceSection({ employeeId }: { employeeId: number }) {
-  const qc = useQueryClient()
-  const toast = useToast()
-  const canManage  = usePermission('absence.manage')
-  const canApprove = usePermission('absence.approve')
-  const year = new Date().getFullYear()
-
-  const { data: typesRes }            = useQuery({ queryKey: ['absence-types'],                queryFn: fetchAbsenceTypes })
-  const { data: absRes, isLoading }   = useQuery({ queryKey: ['absences', employeeId],         queryFn: () => fetchAbsences({ employee_id: employeeId }) })
-  const { data: balRes }              = useQuery({ queryKey: ['vacation-balance', employeeId, year], queryFn: () => fetchVacationBalance(employeeId, year) })
-  const { data: entRes }              = useQuery({ queryKey: ['entitlements', employeeId, year],     queryFn: () => fetchEntitlements(employeeId, year), enabled: canManage })
-
-  const types     = (typesRes?.data ?? []).filter(t => t.ACTIVE)
-  const absences  = absRes?.data ?? []
-  const bal       = balRes?.data
-  const entThisYear = (entRes?.data ?? []).find(e => e.YEAR === year)
-
-  const [editEnt, setEditEnt] = useState(false)
-  const [entDays,  setEntDays]  = useState('')
-  const [entCarry, setEntCarry] = useState('')
-  function openEntEditor() {
-    setEntDays(entThisYear ? String(entThisYear.DAYS_ENTITLED) : (bal ? String(bal.entitled) : '0'))
-    setEntCarry(entThisYear?.CARRYOVER_OVERRIDE != null ? String(entThisYear.CARRYOVER_OVERRIDE) : '')
-    setEditEnt(true)
-  }
-  const entMut = useMutation({
-    mutationFn: () => putEntitlement({
-      employee_id: employeeId, year,
-      days_entitled: Number(entDays.replace(',', '.')) || 0,
-      carryover_override: entCarry.trim() === '' ? null : Number(entCarry.replace(',', '.')),
-    }),
-    onSuccess: () => {
-      toast.success('Urlaubsanspruch gespeichert'); setEditEnt(false)
-      void qc.invalidateQueries({ queryKey: ['entitlements', employeeId] })
-      void qc.invalidateQueries({ queryKey: ['vacation-balance', employeeId] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const [showForm, setShowForm] = useState(false)
-  const [fType, setFType] = useState('')
-  const [fFrom, setFFrom] = useState('')
-  const [fTo,   setFTo]   = useState('')
-  const [fHalf, setFHalf] = useState(false)
-  const [fNote, setFNote] = useState('')
-  const [clarifyId, setClarifyId] = useState<number | null>(null)
-
-  const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ['absences', employeeId] })
-    void qc.invalidateQueries({ queryKey: ['vacation-balance', employeeId] })
-  }
-
-  const createMut = useMutation({
-    mutationFn: () => createAbsence({
-      employee_id: employeeId, absence_type_id: Number(fType),
-      date_from: fFrom, date_to: fTo || fFrom, half_day: fHalf && (!fTo || fTo === fFrom), note: fNote,
-    }),
-    onSuccess: () => { toast.success('Abwesenheit erfasst'); setShowForm(false); setFType(''); setFFrom(''); setFTo(''); setFHalf(false); setFNote(''); invalidate() },
-    onError: (e: Error) => toast.error(e.message),
-  })
-  const decideMut = useMutation({
-    mutationFn: (v: { id: number; decision: 'APPROVED' | 'REJECTED' }) => decideAbsence(v.id, v.decision),
-    onSuccess: () => { toast.success('Entscheidung gespeichert'); invalidate() },
-    onError: (e: Error) => toast.error(e.message),
-  })
-  const cancelMut = useMutation({ mutationFn: (id: number) => cancelAbsence(id), onSuccess: () => { toast.success('Storniert'); invalidate() }, onError: (e: Error) => toast.error(e.message) })
-  const deleteMut = useMutation({ mutationFn: (id: number) => deleteAbsence(id), onSuccess: () => { toast.success('Gelöscht'); invalidate() }, onError: (e: Error) => toast.error(e.message) })
-
-  const singleDay = !!fFrom && (!fTo || fTo === fFrom)
-  const stat = (label: string, value: string, color?: string) => (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>{label}</div>
-      <div style={{ fontWeight: 700, fontSize: 16, color: color ?? 'inherit' }}>{value}</div>
-    </div>
-  )
-
-  return (
-    <div>
-      {/* Urlaubssaldo */}
-      <div style={{ display: 'flex', gap: 18, background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-        {stat('Anspruch', bal ? `${bal.entitled} T` : '…')}
-        {stat('Übertrag', bal ? `${bal.carryover} T` : '…')}
-        {stat('Genommen', bal ? `${bal.taken} T` : '…')}
-        {bal && !!bal.forfeited && bal.forfeited > 0 && stat('Verfallen', `${bal.forfeited} T`, 'var(--danger)')}
-        {stat('Resturlaub', bal ? `${bal.remaining} T` : '…', bal && bal.remaining < 0 ? 'var(--danger)' : 'var(--success)')}
-        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-3)', textAlign: 'right' }}>
-          Urlaub {year} ({bal?.carryoverExpires ? `Übertrag verfällt ${bal.carryoverExpiryLabel ?? '31.03.'}` : 'Übertrag automatisch'})
-          {bal && !!bal.atRisk && bal.atRisk > 0 && (
-            <span style={{ display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end', color: 'var(--warning)', marginTop: 2 }}>
-              <AlertTriangle size={12} strokeWidth={2} /> {bal.atRisk} T Übertrag verfallen am {bal.carryoverExpiryLabel ?? '31.03.'}
-            </span>
-          )}
-        </span>
-      </div>
-
-      {canManage && !editEnt && (
-        <button type="button" className="btn-small" style={{ marginBottom: 14 }} onClick={openEntEditor}>
-          Urlaubsanspruch {year} bearbeiten
-        </button>
-      )}
-      {canManage && editEnt && (
-        <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12, marginBottom: 14 }}>
-          <div className="form-row">
-            <div className="form-group">
-              <label>Anspruch {year} (Tage)</label>
-              <input type="number" step="0.5" min="0" value={entDays} onChange={e => setEntDays(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Übertrag manuell (optional)</label>
-              <input type="number" step="0.5" value={entCarry} onChange={e => setEntCarry(e.target.value)} placeholder="automatisch" />
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" className="btn-small btn-save" disabled={entMut.isPending} onClick={() => entMut.mutate()}>
-              {entMut.isPending ? 'Speichert …' : 'Speichern'}
-            </button>
-            <button type="button" className="btn-small" onClick={() => setEditEnt(false)}>Abbrechen</button>
-          </div>
-          <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>
-            Übertrag leer lassen = automatisch aus dem Resturlaub des Vorjahres.
-          </p>
-        </div>
-      )}
-
-      {canManage && (
-        <div style={{ marginBottom: 12 }}>
-          {!showForm
-            ? <button type="button" className="btn-small btn-save" onClick={() => setShowForm(true)}>+ Abwesenheit erfassen</button>
-            : (
-              <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Art</label>
-                    <select value={fType} onChange={e => setFType(e.target.value)}>
-                      <option value="">Bitte wählen …</option>
-                      {types.map(t => <option key={t.ID} value={t.ID}>{t.NAME}</option>)}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label>Von</label>
-                    <input type="date" value={fFrom} onChange={e => setFFrom(e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label>Bis</label>
-                    <input type="date" value={fTo} onChange={e => setFTo(e.target.value)} />
-                  </div>
-                </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: singleDay ? 'var(--text-2)' : 'var(--text-4)', margin: '4px 0 8px' }}>
-                  <input type="checkbox" checked={fHalf} disabled={!singleDay} onChange={e => setFHalf(e.target.checked)} />
-                  Halber Tag (nur bei eintägiger Abwesenheit)
-                </label>
-                <div className="form-group">
-                  <label>Notiz</label>
-                  <input type="text" value={fNote} onChange={e => setFNote(e.target.value)} placeholder="optional" />
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button type="button" className="btn-small btn-save" disabled={!fType || !fFrom || createMut.isPending}
-                    onClick={() => createMut.mutate()}>{createMut.isPending ? 'Speichert …' : 'Speichern'}</button>
-                  <button type="button" className="btn-small" onClick={() => setShowForm(false)}>Abbrechen</button>
-                </div>
-              </div>
-            )}
-        </div>
-      )}
-
-      {isLoading && <ListLoading columns={6} />}
-      {!isLoading && absences.length === 0 && <p className="empty-note">Noch keine Abwesenheiten erfasst.</p>}
-
-      {absences.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-              <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Zeitraum</th>
-              <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Art</th>
-              <th scope="col" style={{ textAlign: 'right', padding: '3px 8px 4px 0' }}>Tage</th>
-              <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Status</th>
-              <th scope="col"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {absences.map((a: Absence) => (
-              <tr key={a.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
-                <td style={{ padding: '5px 8px 5px 0', whiteSpace: 'nowrap' }}>
-                  {fmtDateShort(a.DATE_FROM)}{a.DATE_TO !== a.DATE_FROM ? `–${fmtDateShort(a.DATE_TO)}` : ''}
-                  {a.HALF_DAY && <span style={{ color: 'var(--text-3)' }}> (½)</span>}
-                </td>
-                <td style={{ padding: '5px 8px 5px 0' }}>
-                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: a.TYPE_COLOR || 'var(--text-4)', marginRight: 6 }} />
-                  {a.TYPE_NAME || '—'}
-                </td>
-                <td style={{ padding: '5px 8px 5px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{a.DAYS}</td>
-                <td style={{ padding: '5px 8px 5px 0' }}>
-                  <AbsenceStatusBadge status={a.STATUS} />
-                  <ClarificationThread a={a} />
-                </td>
-                <td style={{ padding: '5px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                  {canApprove && a.STATUS === 'REQUESTED' && (
-                    <>
-                      <button type="button" className="btn-small btn-save" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
-                        disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'APPROVED' })}>Genehmigen</button>
-                      <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
-                        disabled={decideMut.isPending} onClick={() => decideMut.mutate({ id: a.ID, decision: 'REJECTED' })}>Ablehnen</button>
-                      <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
-                        onClick={() => setClarifyId(a.ID)}>Rückfrage</button>
-                    </>
-                  )}
-                  {canManage && a.STATUS === 'APPROVED' && (
-                    <button type="button" className="btn-small" style={{ padding: '1px 8px', fontSize: 11, marginRight: 4 }}
-                      disabled={cancelMut.isPending} onClick={() => cancelMut.mutate(a.ID)}>Stornieren</button>
-                  )}
-                  {canManage && (
-                    <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }}
-                      disabled={deleteMut.isPending} onClick={() => deleteMut.mutate(a.ID)}>×</button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {clarifyId != null && (
-        <ClarifyModal absenceId={clarifyId} onClose={() => setClarifyId(null)}
-          onDone={() => { setClarifyId(null); invalidate() }} />
-      )}
-    </div>
-  )
-}
-
-// ── Employee Edit Modal ───────────────────────────────────────────────────────
-
-function EmployeeEditModal({ employee, onClose, genders, departments, workModels, roles, mapping, alleMitarbeiter, initialSection = 'stammdaten' }: {
-  employee:    Employee
-  onClose:     () => void
-  genders:     Array<{ ID: number; GENDER: string }>
-  departments: StammdatenItem[]
-  workModels:  WorkingTimeModel[]
-  roles:       UserRole[]
-  mapping:     EmployeeRoleMapping[]
-  /** Für die Vorgesetzten-Auswahl — der Verweis zeigt auf einen Mitarbeiter. */
-  alleMitarbeiter: Employee[]
-  initialSection?: EmpSection
-}) {
-  const qc = useQueryClient()
-  const canAssignRoles = usePermission('employees.role.assign')
-  // Kostensätze hängen an der Lizenz-Capability "employees.salary" (Tarife
-  // Pro/Full/Enterprise). Fehlt sie, antwortet /cp-rates mit 402 — und der
-  // Reiter zeigte dann "Noch kein Verlauf erfasst". Das ist schlicht falsch:
-  // die Sätze sind gespeichert, nur nicht einsehbar. Genau daran ist bei der
-  // wiko-Übernahme eine Stunde Fehlersuche draufgegangen.
-  const hatGehaltFeature = useFeature('employees.salary')
-  // Der Mitarbeiter selbst steht nicht zur Wahl — niemand ist sein eigener
-  // Vorgesetzter. Eine Kette A→B→A verhindert das nicht; das wäre erst mit
-  // einer Prüfung über die ganze Kette zu haben und ist hier bewusst offen.
-  const vorgesetzteAuswahl = alleMitarbeiter
-    .filter(m => m.ID !== employee.ID)
-    .sort((a, b) => (a.ABBR || '').localeCompare(b.ABBR || '', 'de'))
-  const canViewBookings = usePermission('employees.bookings.view_all')
-  const canViewAbsence = usePermission('absence.view')
-  const [section,  setSection]  = useState<EmpSection>(initialSection)
-  const [editForm, setEditForm] = useState<UpdateEmployeePayload>({
-    abbr:       employee.ABBR ?? '',
-    title:            employee.TITLE ?? '',
-    first_name:       employee.FIRST_NAME ?? '',
-    last_name:        employee.LAST_NAME ?? '',
-    mail:             employee.MAIL ?? '',
-    phone:            employee.PHONE ?? '',
-    mobile:           employee.MOBILE ?? '',
-    personnel_number: employee.PERSONNEL_NUMBER ?? '',
-    birth_date:       employee.BIRTH_DATE ?? '',
-    notes:            employee.NOTES ?? '',
-    supervisor_id:    employee.SUPERVISOR_ID ?? null,
-    gender_id:        employee.GENDER_ID ?? 0,
-    department_id:    employee.DEPARTMENT_ID ?? null,
-    entry_date:       employee.ENTRY_DATE ?? '',
-    exit_date:        employee.EXIT_DATE ?? '',
-    active:           employee.ACTIVE ?? 1,
-    dashboard_role:   employee.DASHBOARD_ROLE ?? null,
-  })
-  const [editMsg, setEditMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const editFormRef = useRef<HTMLFormElement>(null)
-
-  // CP rate history state
-  const [newCpRate,       setNewCpRate]       = useState('')
-  const [newCpValidFrom,  setNewCpValidFrom]  = useState('')
-  const [editingCpId,     setEditingCpId]     = useState<number | null>(null)
-  const [editCpForm,      setEditCpForm]      = useState({ cost_rate: '', valid_from: '' })
-  const [cpMsg,           setCpMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-
-  // Work model history state
-  const [newWmModelId,    setNewWmModelId]    = useState('')
-  const [newWmValidFrom,  setNewWmValidFrom]  = useState('')
-  const [editingWmId,     setEditingWmId]     = useState<number | null>(null)
-  const [editWmForm,      setEditWmForm]      = useState({ model_id: '', valid_from: '' })
-  const [wmMsg,           setWmMsg]           = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-
-  // Zugangsverwaltung: Einladung senden bzw. Passwort loeschen.
-  const [pwMsg,      setPwMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [pwSaving,   setPwSaving]   = useState(false)
-  const { data: access, refetch: refetchAccess } = useQuery({
-    queryKey: ['employee-access', employee.ID],
-    queryFn:  () => fetchEmployeeAccess(employee.ID),
-    enabled:  section === 'zugang',
-  })
-
-  // Ohne Capability gar nicht erst fragen: sonst feuert bei jedem Öffnen
-  // eines Mitarbeiters ein 402 samt Upgrade-Meldung.
-  const { data: cpRatesRes }    = useQuery({ queryKey: ['emp-cp-rates',    employee.ID], queryFn: () => fetchEmployeeCpRates(employee.ID), enabled: hatGehaltFeature })
-  const { data: workModelsRes } = useQuery({ queryKey: ['emp-work-models', employee.ID], queryFn: () => fetchEmployeeWorkModels(employee.ID) })
-  const cpRates:   EmployeeCpRate[]    = cpRatesRes?.data   ?? []
-  const empWmList: EmployeeWorkModel[] = workModelsRes?.data ?? []
-
-  // Laufender Saldo fuer den Akten-Kopf (gleicher Query-Key wie das Zeitkonto
-  // -> nach einer Buchungsaenderung aktualisiert sich der Kopf automatisch).
-  const { data: runRes } = useQuery({
-    queryKey: ['emp-balance-running', employee.ID],
-    queryFn:  () => fetchRunningBalance(employee.ID),
-    enabled:  canViewBookings,
-  })
-  const runningBalance = runRes?.data?.totalBalance ?? null
-
-  const { data: avatarRes } = useQuery({
-    queryKey: ['emp-avatar', employee.ID],
-    queryFn:  () => fetchEmployeeAvatar(employee.ID),
-  })
-  const avatarUri = avatarRes?.data?.data_uri ?? null
-
-  // Aktuell gueltiger Kostensatz/Modell = Eintrag mit dem juengsten VALID_FROM <= heute.
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const currentCpId = useMemo(() => latestValidId(cpRates,   todayStr), [cpRates,   todayStr])
-  const currentWmId = useMemo(() => latestValidId(empWmList, todayStr), [empWmList, todayStr])
-  const currentCpRate = useMemo(() => {
-    const cur = cpRates.find(r => r.ID === currentCpId)
-    return cur ? cur.COST_RATE : null
-  }, [cpRates, currentCpId])
-
-  const [saving, setSaving]   = useState(false)
-  const [cpSaving, setCpSaving] = useState(false)
-  const [wmSaving, setWmSaving] = useState(false)
-
-  async function submitEdit(e: React.FormEvent) {
-    e.preventDefault()
-    setEditMsg(null)
-    if (!editForm.abbr || !editForm.first_name || !editForm.last_name || !editForm.gender_id) {
-      setEditMsg({ text: 'Pflichtfelder ausfüllen', type: 'error' }); return
-    }
-    setSaving(true)
-    try {
-      await updateEmployee(employee.ID, editForm)
-      void qc.invalidateQueries({ queryKey: ['employees'] })
-      setEditMsg({ text: 'Gespeichert ✅', type: 'success' })
-      setTimeout(() => onClose(), 700)
-    } catch (e: unknown) {
-      setEditMsg({ text: (e as Error).message, type: 'error' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const setE = (k: keyof UpdateEmployeePayload) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setEditForm(f => ({ ...f, [k]: k === 'gender_id' || k === 'active' ? Number(e.target.value) : e.target.value }))
-
-  useCtrlS(() => editFormRef.current?.requestSubmit(), section === 'stammdaten')
-
-  async function addCpRate() {
-    setCpMsg(null)
-    if (!newCpRate || !newCpValidFrom) { setCpMsg({ text: 'Kostensatz und Datum erforderlich', type: 'error' }); return }
-    setCpSaving(true)
-    try {
-      await createEmployeeCpRate(employee.ID, { cost_rate: parseFloat(newCpRate), valid_from: newCpValidFrom })
-      void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
-      setNewCpRate(''); setNewCpValidFrom('')
-    } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
-    finally { setCpSaving(false) }
-  }
-
-  async function saveCpRate(id: number) {
-    setCpSaving(true)
-    try {
-      await updateEmployeeCpRate(employee.ID, id, { cost_rate: parseFloat(editCpForm.cost_rate), valid_from: editCpForm.valid_from })
-      void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
-      setEditingCpId(null)
-    } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
-    finally { setCpSaving(false) }
-  }
-
-  async function deleteCpRate(id: number) {
-    try {
-      await deleteEmployeeCpRate(employee.ID, id)
-      void qc.invalidateQueries({ queryKey: ['emp-cp-rates', employee.ID] })
-    } catch (e: unknown) { setCpMsg({ text: (e as Error).message, type: 'error' }) }
-  }
-
-  async function addWorkModel() {
-    setWmMsg(null)
-    if (!newWmModelId || !newWmValidFrom) { setWmMsg({ text: 'Modell und Datum erforderlich', type: 'error' }); return }
-    setWmSaving(true)
-    try {
-      await createEmployeeWorkModel(employee.ID, { model_id: Number(newWmModelId), valid_from: newWmValidFrom })
-      void qc.invalidateQueries({ queryKey: ['emp-work-models', employee.ID] })
-      setNewWmModelId(''); setNewWmValidFrom('')
-    } catch (e: unknown) { setWmMsg({ text: (e as Error).message, type: 'error' }) }
-    finally { setWmSaving(false) }
-  }
-
-  async function saveWorkModel(id: number) {
-    setWmSaving(true)
-    try {
-      await updateEmployeeWorkModel(employee.ID, id, { model_id: Number(editWmForm.model_id), valid_from: editWmForm.valid_from })
-      void qc.invalidateQueries({ queryKey: ['emp-work-models', employee.ID] })
-      setEditingWmId(null)
-    } catch (e: unknown) { setWmMsg({ text: (e as Error).message, type: 'error' }) }
-    finally { setWmSaving(false) }
-  }
-
-  async function deleteWorkModel(id: number) {
-    try {
-      await deleteEmployeeWorkModel(employee.ID, id)
-      void qc.invalidateQueries({ queryKey: ['emp-work-models', employee.ID] })
-    } catch (e: unknown) { setWmMsg({ text: (e as Error).message, type: 'error' }) }
-  }
-
-  const sectionItems: { id: EmpSection; label: string }[] = [
-    { id: 'stammdaten',  label: 'Stammdaten' },
-    { id: 'kostensatz',  label: 'Kostensatz' },
-    { id: 'arbeitszeit', label: 'Arbeitszeit' },
-    ...(canViewBookings ? [{ id: 'zeitkonto' as EmpSection, label: 'Zeitkonto' }] : []),
-    ...(canViewAbsence  ? [{ id: 'abwesenheit' as EmpSection, label: 'Abwesenheit' }] : []),
-    { id: 'projekte',    label: 'Projekte' },
-    ...(canAssignRoles  ? [{ id: 'rolle' as EmpSection, label: 'Rolle & Rechte' }] : []),
-    { id: 'zugang',      label: 'Zugang' },
-  ]
-
-  const seed = employee.ABBR || employee.LAST_NAME || 'x'
-  const avatarHue = [...seed].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) % 360, 0)
-  const avatarBg = `hsl(${avatarHue}, 50%, 45%)`
-  const initials = `${employee.FIRST_NAME?.[0] ?? ''}${employee.LAST_NAME?.[0] ?? ''}`.toUpperCase() || '?'
-  const balColor = (n: number) => n > 0 ? 'var(--success)' : n < 0 ? 'var(--danger)' : 'var(--text-3)'
-
-  return (
-    <>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
-        padding: '0 0 14px', marginBottom: 14, borderBottom: '1px solid var(--border)',
-      }}>
-        <div style={{
-          width: 44, height: 44, borderRadius: '50%', flexShrink: 0, overflow: 'hidden',
-          background: avatarBg, color: '#fff', fontWeight: 700, fontSize: 15,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          {avatarUri
-            ? <img src={avatarUri} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            : initials}
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>{employee.FIRST_NAME} {employee.LAST_NAME}</span>
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{employee.ABBR}</span>
-            <span style={{
-              fontSize: 11, padding: '1px 7px', borderRadius: 10, fontWeight: 500,
-              background: employee.ACTIVE === 2 ? 'var(--danger-bg)' : 'var(--success-bg)',
-              color:      employee.ACTIVE === 2 ? 'var(--danger-strong)' : 'var(--success-strong)',
-            }}>{employee.ACTIVE === 2 ? 'Inaktiv' : 'Aktiv'}</span>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-            {employee.DEPARTMENT_NAME || '—'} · {employee.CURRENT_MODEL_NAME || 'kein Modell'}
-            {employee.ENTRY_DATE && ` · seit ${new Date(employee.ENTRY_DATE).toLocaleDateString('de-DE')}`}
-            {employee.EXIT_DATE && ` · bis ${new Date(employee.EXIT_DATE).toLocaleDateString('de-DE')}`}
-          </div>
-        </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 18, textAlign: 'right' }}>
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Kostensatz</div>
-            <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
-              {!hatGehaltFeature
-                ? <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--text-3)' }}>nicht im Tarif</span>
-                : currentCpRate != null ? `${currentCpRate.toFixed(2)} €/h` : NO_VALUE}
-            </div>
-          </div>
-          {canViewBookings && (
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Saldo (laufend)</div>
-              <div style={{ fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums',
-                            color: runningBalance != null ? balColor(runningBalance) : 'var(--text-4)' }}>
-                {runningBalance != null ? fmtBalance(runningBalance) : '…'}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <SegmentNav items={sectionItems} active={section} onChange={setSection} />
-
-      {section === 'stammdaten' && (
-        <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
-          <FormField label="Kürzel*"      id="eku" value={editForm.abbr}         onChange={setE('abbr')} required />
-          <FormField label="Titel"        id="eti" value={editForm.title ?? ''}         onChange={setE('title')} />
-          <div className="form-row">
-            <FormField label="Vorname*"   id="efn" value={editForm.first_name}          onChange={setE('first_name')} required />
-            <FormField label="Nachname*"  id="eln" value={editForm.last_name}           onChange={setE('last_name')} required />
-          </div>
-          <FormField label="E-Mail"       id="eem" value={editForm.mail ?? ''}          onChange={setE('mail')} type="email" />
-          <div className="form-row">
-            <FormField label="Telefon"    id="eph" value={editForm.phone ?? ''}         onChange={setE('phone')} />
-            <FormField label="Mobil"      id="emo" value={editForm.mobile ?? ''}        onChange={setE('mobile')} />
-          </div>
-          <FormField label="Personalnr."  id="epn" value={editForm.personnel_number ?? ''} onChange={setE('personnel_number')} />
-          <div className="form-group">
-            <label htmlFor="ege">Geschlecht*</label>
-            <select id="ege" value={String(editForm.gender_id)} onChange={setE('gender_id')} required>
-              <option value="">Bitte wählen …</option>
-              {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="edept">Abteilung</label>
-            <select id="edept" value={editForm.department_id ?? ''} onChange={e => setEditForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}>
-              <option value="">— keine —</option>
-              {departments.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
-            </select>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="eentry">Eintrittsdatum</label>
-              <input id="eentry" type="date" value={editForm.entry_date ?? ''} onChange={setE('entry_date')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="eexit">Austrittsdatum</label>
-              <input id="eexit" type="date" value={editForm.exit_date ?? ''} onChange={setE('exit_date')} />
-            </div>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="ebirth">Geburtstag</label>
-              <input id="ebirth" type="date" value={editForm.birth_date ?? ''} onChange={setE('birth_date')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="esup" style={{ display: 'inline-flex', alignItems: 'center' }}>
-                Vorgesetzter
-                <HelpHint id="mitarbeiter.vorgesetzter" />
-              </label>
-              {/* Auswahl statt Freitext: der Verweis muss auf einen echten
-                  Mitarbeiter zeigen. Der Mitarbeiter selbst steht nicht in der
-                  Liste — niemand ist sein eigener Vorgesetzter. */}
-              <select id="esup" value={editForm.supervisor_id ?? ''}
-                onChange={e => setEditForm(f => ({ ...f, supervisor_id: e.target.value ? Number(e.target.value) : null }))}>
-                <option value="">— keiner —</option>
-                {vorgesetzteAuswahl.map(m => <option key={m.ID} value={m.ID}>{m.ABBR} · {m.FIRST_NAME} {m.LAST_NAME}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="form-group">
-            <label htmlFor="enotes">Notiz</label>
-            <textarea id="enotes" rows={3} value={editForm.notes ?? ''}
-              onChange={e => setEditForm(f => ({ ...f, notes: e.target.value }))} />
-          </div>
-          <div className="form-group">
-            <label htmlFor="edashrole">Dashboard-Rolle</label>
-            <select id="edashrole" value={editForm.dashboard_role ?? ''} onChange={e => setEditForm(f => ({ ...f, dashboard_role: e.target.value || null }))}>
-              <option value="">— Standard (Nutzer wählt selbst) —</option>
-              <option value="geschaeftsleitung">Geschäftsleitung</option>
-              <option value="controller">Controller / Buchhaltung</option>
-              <option value="bereichsleiter">Projektleiter</option>
-              <option value="mitarbeiter">Mitarbeiter</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="eact">Status</label>
-            <select id="eact" value={String(editForm.active ?? 1)} onChange={setE('active')}>
-              <option value="1">Aktiv</option>
-              <option value="2">Inaktiv</option>
-            </select>
-          </div>
-          <Message text={editMsg?.text ?? null} type={editMsg?.type} />
-          <DialogFooter>
-            <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
-            <button className="btn-primary" type="submit" disabled={saving}>
-              {saving ? 'Speichert …' : 'Speichern'}
-            </button>
-          </DialogFooter>
-        </form>
-      )}
-
-      {section === 'kostensatz' && !hatGehaltFeature && (
-        <Message
-          type="info"
-          text={'Kostensätze sind in deinem Tarif nicht enthalten. Bereits erfasste oder importierte Sätze bleiben gespeichert — sichtbar und bearbeitbar werden sie mit einem Tarif, der „Gehalt & Kostensätze" umfasst.'}
-        />
-      )}
-
-      {section === 'kostensatz' && hatGehaltFeature && (
-        <div>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
-            Gilt ab dem angegebenen Datum. Der aktuell gültige Satz ist der mit dem neuesten Datum.
-          </p>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-                <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
-                <th scope="col" style={{ textAlign: 'right', padding: '3px 0 4px 8px' }}>Kostensatz (€/h)</th>
-                <th scope="col"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {cpRates.map(r => (
-                <tr key={r.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
-                  {editingCpId === r.ID ? (
-                    <>
-                      <td style={{ padding: '3px 8px 3px 0' }}>
-                        <input type="date" className="tbl-input" value={editCpForm.valid_from} onChange={e => setEditCpForm(f => ({ ...f, valid_from: e.target.value }))} />
-                      </td>
-                      <td style={{ padding: '3px 0 3px 8px', textAlign: 'right' }}>
-                        <input type="number" step="0.01" min="0" className="tbl-input num" style={{ width: 80 }} value={editCpForm.cost_rate} onChange={e => setEditCpForm(f => ({ ...f, cost_rate: e.target.value }))} />
-                      </td>
-                      <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={cpSaving} onClick={() => saveCpRate(r.ID)}>✓</button>
-                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingCpId(null)}>✗</button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td style={{ padding: '3px 8px 3px 0' }}>
-                        {r.VALID_FROM}
-                        {r.ID === currentCpId ? <HistBadge kind="current" /> : r.VALID_FROM > todayStr ? <HistBadge kind="planned" /> : null}
-                      </td>
-                      <td style={{ padding: '3px 0 3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                        {Number(r.COST_RATE).toFixed(2)} €/h
-                      </td>
-                      <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => { setEditingCpId(r.ID); setEditCpForm({ cost_rate: String(r.COST_RATE), valid_from: r.VALID_FROM }) }}>✎</button>
-                        <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => deleteCpRate(r.ID)}>×</button>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-              {!cpRates.length && (
-                <tr><td colSpan={3} style={{ color: 'var(--text-3)', fontSize: 12, padding: '4px 0' }}>Noch kein Verlauf erfasst.</td></tr>
-              )}
-            </tbody>
-          </table>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12 }}>Gültig ab</label>
-              <input type="date" value={newCpValidFrom} onChange={e => setNewCpValidFrom(e.target.value)} />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12 }}>Kostensatz (€/h)</label>
-              <input type="number" step="0.01" min="0" value={newCpRate} onChange={e => setNewCpRate(e.target.value)} placeholder="z. B. 85.00" />
-            </div>
-            <button type="button" className="btn-small btn-save" disabled={!newCpRate || !newCpValidFrom || cpSaving} onClick={addCpRate}>
-              Eintrag hinzufügen
-            </button>
-          </div>
-          <Message text={cpMsg?.text ?? null} type={cpMsg?.type} />
-        </div>
-      )}
-
-      {section === 'arbeitszeit' && (
-        <div>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 10 }}>
-            Das Modell mit dem neuesten Datum vor dem jeweiligen Tag bestimmt die Soll-Arbeitszeit.
-          </p>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, marginBottom: 12 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)', fontSize: 12 }}>
-                <th scope="col" style={{ textAlign: 'left', padding: '3px 8px 4px 0' }}>Gültig ab</th>
-                <th scope="col" style={{ textAlign: 'left', padding: '3px 0 4px 8px' }}>Modell</th>
-                <th scope="col"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {empWmList.map(wm => (
-                <tr key={wm.ID} style={{ borderBottom: '1px solid var(--border-3)' }}>
-                  {editingWmId === wm.ID ? (
-                    <>
-                      <td style={{ padding: '3px 8px 3px 0' }}>
-                        <input type="date" className="tbl-input" value={editWmForm.valid_from} onChange={e => setEditWmForm(f => ({ ...f, valid_from: e.target.value }))} />
-                      </td>
-                      <td style={{ padding: '3px 0 3px 8px' }}>
-                        <select className="tbl-input" value={editWmForm.model_id} onChange={e => setEditWmForm(f => ({ ...f, model_id: e.target.value }))}>
-                          <option value="">Bitte wählen …</option>
-                          {workModels.map(m => <option key={m.ID} value={m.ID}>{m.NAME}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                        <button type="button" className="btn-small btn-save" style={{ padding: '1px 6px', fontSize: 11 }} disabled={wmSaving} onClick={() => saveWorkModel(wm.ID)}>✓</button>
-                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginLeft: 2 }} onClick={() => setEditingWmId(null)}>✗</button>
-                      </td>
-                    </>
-                  ) : (
-                    <>
-                      <td style={{ padding: '3px 8px 3px 0' }}>
-                        {wm.VALID_FROM}
-                        {wm.ID === currentWmId ? <HistBadge kind="current" /> : wm.VALID_FROM > todayStr ? <HistBadge kind="planned" /> : null}
-                      </td>
-                      <td style={{ padding: '3px 0 3px 8px' }}>{wm.model?.NAME ?? `Modell ${wm.MODEL_ID}`}</td>
-                      <td style={{ padding: '3px 0', whiteSpace: 'nowrap', textAlign: 'right' }}>
-                        <button type="button" className="btn-small" style={{ padding: '1px 6px', fontSize: 11, marginRight: 2 }} onClick={() => { setEditingWmId(wm.ID); setEditWmForm({ model_id: String(wm.MODEL_ID), valid_from: wm.VALID_FROM }) }}>✎</button>
-                        <button type="button" className="btn-small btn-danger" style={{ padding: '1px 6px', fontSize: 11 }} onClick={() => deleteWorkModel(wm.ID)}>×</button>
-                      </td>
-                    </>
-                  )}
-                </tr>
-              ))}
-              {!empWmList.length && (
-                <tr><td colSpan={3} style={{ color: 'var(--text-3)', fontSize: 12, padding: '4px 0' }}>Kein Modell zugewiesen.</td></tr>
-              )}
-            </tbody>
-          </table>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12 }}>Gültig ab</label>
-              <input type="date" value={newWmValidFrom} onChange={e => setNewWmValidFrom(e.target.value)} />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label style={{ fontSize: 12 }}>Modell</label>
-              <select value={newWmModelId} onChange={e => setNewWmModelId(e.target.value)}>
-                <option value="">Bitte wählen …</option>
-                {workModels.map(m => <option key={m.ID} value={m.ID}>{m.NAME}</option>)}
-              </select>
-            </div>
-            <button type="button" className="btn-small btn-save" disabled={!newWmModelId || !newWmValidFrom || wmSaving} onClick={addWorkModel}>
-              Zuweisung hinzufügen
-            </button>
-          </div>
-          <Message text={wmMsg?.text ?? null} type={wmMsg?.type} />
-        </div>
-      )}
-
-      {section === 'zeitkonto' && canViewBookings && (
-        <EmployeeTimeAccount empId={employee.ID} />
-      )}
-
-      {section === 'abwesenheit' && canViewAbsence && (
-        <EmployeeAbsenceSection employeeId={employee.ID} />
-      )}
-
-      {section === 'projekte' && (
-        <EmployeeProjectsSection employeeId={employee.ID} />
-      )}
-
-      {section === 'rolle' && canAssignRoles && (
-        <RoleSection employeeId={employee.ID} roles={roles} mapping={mapping} />
-      )}
-
-      {section === 'zugang' && (
-        <div>
-          <p style={{ fontSize: 12, color: 'var(--text-3)', marginBottom: 12 }}>
-            Das Passwort wählt der Mitarbeiter selbst. Sie schicken ihm dafür eine Einladung mit einem
-            einmaligen Link — ein von Ihnen vergebenes Passwort gibt es bewusst nicht.
-            Solange kein Passwort gesetzt ist, ist keine Anmeldung möglich.
-          </p>
-
-          {/* Der Zustand gehoert sichtbar hierher: ob ein Passwort gesetzt ist,
-              liess sich sonst nur durch einen Anmeldeversuch herausfinden. */}
-          <div className="zugang-status">
-            <span className={access?.can_login ? 'zugang-status-ok' : 'zugang-status-offen'}>
-              {access == null
-                ? 'Status wird geladen …'
-                : access.can_login
-                  ? 'Anmeldung möglich — Passwort ist gesetzt.'
-                  : !access.has_mail
-                    ? 'Keine Anmeldung möglich: keine E-Mail-Adresse hinterlegt.'
-                    : !access.active
-                      ? 'Keine Anmeldung möglich: Mitarbeiter ist inaktiv.'
-                      : 'Keine Anmeldung möglich: es wurde noch kein Passwort gesetzt.'}
-            </span>
-          </div>
-
-          {!employee.MAIL && (
-            <Message
-              type="error"
-              text={'Für diesen Mitarbeiter ist keine E-Mail-Adresse hinterlegt. Bitte zuerst unter „Stammdaten" nachtragen.'}
-            />
-          )}
-
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-            <button
-              type="button"
-              className="btn-small btn-save"
-              disabled={pwSaving || !employee.MAIL}
-              onClick={async () => {
-                setPwMsg(null)
-                setPwSaving(true)
-                try {
-                  const r = await sendEmployeeInvite(employee.ID)
-                  setPwMsg({ text: `Einladung an ${r.mail} gesendet.`, type: 'success' })
-                } catch (e: unknown) {
-                  setPwMsg({ text: (e as Error).message, type: 'error' })
-                } finally { setPwSaving(false) }
-              }}
-            >
-              {pwSaving ? 'Sendet …' : 'Einladung senden'}
-            </button>
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-              Der Link ist 7 Tage gültig und entwertet vorherige Einladungen.
-            </span>
-          </div>
-
-          {/* Zugang sperren: setzt das Passwort zurueck. Danach kommt der
-              Mitarbeiter nur ueber eine neue Einladung wieder herein. */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 10 }}>
-            <button
-              type="button"
-              className="btn-small btn-danger"
-              disabled={pwSaving}
-              onClick={async () => {
-                setPwMsg(null)
-                setPwSaving(true)
-                try {
-                  await setEmployeePassword(employee.ID, null)
-                  setPwMsg({ text: 'Passwort gelöscht — Anmeldung erst nach neuer Einladung möglich.', type: 'success' })
-                  void refetchAccess()
-                } catch (e: unknown) {
-                  setPwMsg({ text: (e as Error).message, type: 'error' })
-                } finally { setPwSaving(false) }
-              }}
-            >
-              Passwort löschen
-            </button>
-            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
-              Sperrt den Zugang sofort, ohne den Mitarbeiter zu löschen.
-            </span>
-          </div>
-
-          <Message text={pwMsg?.text ?? null} type={pwMsg?.type} />
-        </div>
-      )}
-    </>
-  )
-}
 
 // ── Employee List Report ───────────────────────────────────────────────────────
 
@@ -1272,7 +177,12 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
     if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(field); setSortDir('asc') }
   }
-  function si(field: string) { return sortField === field ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '' }
+  function si(field: string) {
+    if (sortField !== field) return null
+    return sortDir === 'asc'
+      ? <ChevronUp size={12} strokeWidth={2.25} aria-label="aufsteigend" style={{ marginLeft: 3, verticalAlign: -1 }} />
+      : <ChevronDown size={12} strokeWidth={2.25} aria-label="absteigend" style={{ marginLeft: 3, verticalAlign: -1 }} />
+  }
 
   const balanceColor = (n: number) => n > 0 ? 'var(--success)' : n < 0 ? 'var(--danger)' : 'var(--text-3)'
 
@@ -1318,7 +228,7 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
         ? [...base, r.YEAR, r.MONTH, num(r.REQUIRED), num(r.ACTUAL), num(r.BALANCE), cost, prod]
         : [...base, num(r.REQUIRED), num(r.ACTUAL), num(r.BALANCE), r.RUNNING_BALANCE != null ? num(r.RUNNING_BALANCE) : '', cost, prod])
     }
-    const stamp = mode === 'period' ? `${dateFrom}_bis_${dateTo}` : mode === 'as_of' ? asOfDate : new Date().toISOString().slice(0, 10)
+    const stamp = mode === 'period' ? `${dateFrom}_bis_${dateTo}` : mode === 'as_of' ? asOfDate : todayLocal()
     downloadCsv(`mitarbeiter-auswertung_${stamp}.csv`, rows)
   }
 
@@ -1572,416 +482,6 @@ function EmployeeListReport({ employees }: { employees: Employee[] }) {
   )
 }
 
-// ── Employee Time Account (Monat/Verlauf, wiederverwendbar) ─────────────────────
-
-function EmployeeTimeAccount({ empId }: { empId: number }) {
-  const qc = useQueryClient()
-  const toast = useToast()
-  const [year,     setYear]     = useState(new Date().getFullYear())
-  const [month,    setMonth]    = useState(new Date().getMonth() + 1)
-  const [viewMode, setViewMode] = useState<'month' | 'running'>('month')
-  const [closeLoading, setCloseLoading] = useState(false)
-  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set())
-  const [editBooking, setEditBooking] = useState<DayBooking | null>(null)
-  const [editSiblings, setEditSiblings] = useState<DayBooking[]>([])
-  const [editStart,   setEditStart]   = useState('')
-  const [editFinish,  setEditFinish]  = useState('')
-  const [editQty,     setEditQty]     = useState('')
-  const [editDesc,    setEditDesc]    = useState('')
-
-  function openEditBooking(b: DayBooking, sameDay: DayBooking[]) {
-    setEditBooking(b)
-    setEditSiblings(sameDay.filter(x => x.id !== b.id))
-    setEditStart(b.time_start ?? '')
-    setEditFinish(b.time_finish ?? '')
-    setEditQty(String(b.hours ?? 0))
-    setEditDesc(b.description ?? '')
-  }
-
-  // Erkennt Überschneidung mit anderen Buchungen desselben Tages.
-  // Liefert die Liste der überlappenden Geschwister (leer = kein Konflikt).
-  function detectOverlaps(start: string, finish: string): DayBooking[] {
-    const s = start.slice(0, 5), f = finish.slice(0, 5)
-    if (!s || !f) return []
-    const [sh, sm] = s.split(':').map(Number)
-    const [fh, fm] = f.split(':').map(Number)
-    const a1 = sh * 60 + sm, a2 = fh * 60 + fm
-    if (a2 <= a1) return []
-    return editSiblings.filter(x => {
-      if (!x.time_start || !x.time_finish) return false
-      const [bsh, bsm] = x.time_start.slice(0, 5).split(':').map(Number)
-      const [bfh, bfm] = x.time_finish.slice(0, 5).split(':').map(Number)
-      const b1 = bsh * 60 + bsm, b2 = bfh * 60 + bfm
-      // Klassische Intervall-Überschneidung: a1 < b2 && b1 < a2
-      return a1 < b2 && b1 < a2
-    })
-  }
-
-  const patchBookingMut = useMutation({
-    mutationFn: async () => {
-      if (!editBooking) return
-      // PATCH-Semantik: nur die wirklich geänderten Felder schicken. BOOKING_DATE,
-      // COST_RATE etc. bleiben so unverändert in der DB. Ohne diesen Trimm
-      // setzte das Backend BOOKING_DATE auf NULL → Buchung war aus der
-      // Monatsübersicht verschwunden.
-      const qty = Number(editQty.replace(',', '.')) || 0
-      await updateBuchung(editBooking.id, {
-        TIME_START:   editStart  ? `${editStart}:00`  : '',
-        TIME_FINISH:  editFinish ? `${editFinish}:00` : '',
-        QUANTITY_INT: qty,
-        QUANTITY_EXT: qty,
-        POSTING_DESCRIPTION: editDesc,
-      })
-    },
-    onSuccess: () => {
-      toast.success('Buchung aktualisiert')
-      setEditBooking(null)
-      void qc.invalidateQueries({ queryKey: ['emp-balance-month'] })
-      void qc.invalidateQueries({ queryKey: ['emp-balance-running'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const deleteBookingMut = useMutation({
-    mutationFn: (id: number) => deleteBuchung(id),
-    onSuccess: () => {
-      toast.success('Buchung gelöscht')
-      setEditBooking(null)
-      void qc.invalidateQueries({ queryKey: ['emp-balance-month'] })
-      void qc.invalidateQueries({ queryKey: ['emp-balance-running'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  function toggleDay(date: string) {
-    setExpandedDays(prev => {
-      const s = new Set(prev)
-      s.has(date) ? s.delete(date) : s.add(date)
-      return s
-    })
-  }
-
-  function prevMonth() {
-    if (month === 1) { setMonth(12); setYear(y => y - 1) }
-    else             setMonth(m => m - 1)
-  }
-  function nextMonth() {
-    if (month === 12) { setMonth(1); setYear(y => y + 1) }
-    else               setMonth(m => m + 1)
-  }
-
-  const { data: monthRes, isLoading: loadingMonth } = useQuery({
-    queryKey: ['emp-balance-month', empId, year, month],
-    queryFn:  () => fetchMonthBalance(empId, year, month),
-    enabled:  viewMode === 'month',
-  })
-  const { data: runningRes, isLoading: loadingRunning } = useQuery({
-    queryKey: ['emp-balance-running', empId],
-    queryFn:  () => fetchRunningBalance(empId),
-    enabled:  viewMode === 'running',
-  })
-  const { data: closeStatusRes, refetch: refetchClose } = useQuery({
-    queryKey: ['month-close-status', empId, year, month],
-    queryFn:  () => fetchMonthCloseStatus(empId, year, month),
-  })
-
-  const monthData: MonthBalance | undefined = monthRes?.data
-  const runningData = runningRes?.data
-  const isClosed = closeStatusRes?.data != null
-
-  const balanceColor = (n: number) => n > 0 ? 'var(--success)' : n < 0 ? 'var(--danger)' : 'var(--text-3)'
-
-  async function toggleMonthClose() {
-    setCloseLoading(true)
-    try {
-      if (isClosed) {
-        await reopenMonth(empId, year, month)
-      } else {
-        await closeMonth(empId, year, month)
-      }
-      await refetchClose()
-      void qc.invalidateQueries({ queryKey: ['month-close-overview'] })
-    } catch (e: unknown) {
-      toast.error((e as Error).message)
-    } finally {
-      setCloseLoading(false)
-    }
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 20 }}>
-        {viewMode === 'month' && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <button type="button" className="btn-small" onClick={prevMonth}>◀</button>
-            <span style={{ fontWeight: 600, minWidth: 110, textAlign: 'center', fontSize: 14 }}>
-              {MONTH_NAMES[month - 1]} {year}
-            </span>
-            <button type="button" className="btn-small" onClick={nextMonth}>▶</button>
-          </div>
-        )}
-        <SegmentNav
-          items={[{ id: 'month', label: 'Monat' }, { id: 'running', label: 'Verlauf' }]}
-          active={viewMode}
-          onChange={setViewMode}
-          style={{ marginBottom: 0 }}
-        />
-      </div>
-
-      {viewMode === 'month' && (
-        <>
-          {loadingMonth && <p className="empty-note">Laden …</p>}
-          {monthData && (
-            <>
-              <div style={{ display: 'flex', gap: 16, background: 'var(--surface-3)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 16px', marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>Soll</div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtH(monthData.required)}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>Ist</div>
-                  <div style={{ fontWeight: 700, fontSize: 16 }}>{fmtH(monthData.actual)}</div>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: 'var(--text-3)', marginBottom: 2 }}>Saldo</div>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: balanceColor(monthData.balance) }}>{fmtBalance(monthData.balance)}</div>
-                </div>
-                <div style={{ marginLeft: 'auto' }}>
-                  <button
-                    type="button"
-                    className={`btn-small${isClosed ? '' : ' btn-save'}`}
-                    style={{ whiteSpace: 'nowrap' }}
-                    disabled={closeLoading}
-                    onClick={toggleMonthClose}
-                  >
-                    {closeLoading ? '…' : isClosed ? '✓ Abgeschlossen – Öffnen' : 'Monat abschließen'}
-                  </button>
-                </div>
-              </div>
-
-              {!monthData.days.length && (
-                <p className="empty-note">Kein Arbeitszeitmodell für diesen Zeitraum zugewiesen.</p>
-              )}
-              {monthData.days.length > 0 && (
-                <table className="master-table" style={{ fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      <th scope="col" style={{ width: 18 }}></th>
-                      <th scope="col" style={{ width: 90 }}>Datum</th>
-                      <th scope="col" style={{ width: 28 }}>Tag</th>
-                      <th scope="col" style={{ textAlign: 'right', width: 64 }}>Soll</th>
-                      <th scope="col" style={{ textAlign: 'right', width: 64 }}>Ist</th>
-                      <th scope="col" style={{ textAlign: 'right', width: 80 }}>Saldo</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {monthData.days.map(d => {
-                      const isWeekend  = d.weekday === 0 || d.weekday === 6
-                      const isExpanded = expandedDays.has(d.date)
-                      const hasBookings = d.bookings && d.bookings.length > 0
-                      const rowStyle: React.CSSProperties = {
-                        background: isWeekend ? 'var(--surface-2)' : undefined,
-                        color:      isWeekend ? 'var(--text-4)' : undefined,
-                      }
-                      return (
-                        <>
-                          <tr key={d.date} style={rowStyle}>
-                            <td style={{ padding: '2px 0', textAlign: 'center' }}>
-                              {hasBookings && (
-                                <button
-                                  type="button"
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--text-3)', padding: 0 }}
-                                  onClick={() => toggleDay(d.date)}
-                                  title={isExpanded ? 'Buchungen ausblenden' : 'Buchungen anzeigen'}
-                                >
-                                  {isExpanded ? '▼' : '▶'}
-                                </button>
-                              )}
-                            </td>
-                            <td style={{ fontVariantNumeric: 'tabular-nums' }}>
-                              {d.isHoliday && <span title="Feiertag" style={{ marginRight: 4 }}>🏖</span>}
-                              {d.date}
-                            </td>
-                            <td style={{ color: 'var(--text-3)' }}>{WEEKDAY_SHORT[d.weekday]}</td>
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {d.required > 0 ? fmtH(d.required) : <span style={{ color: 'var(--text-3)' }}>—</span>}
-                            </td>
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                              {d.actual > 0 ? fmtH(d.actual) : <span style={{ color: 'var(--text-3)' }}>—</span>}
-                              {d.absence && (
-                                <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--accent2)' }} title={`${d.absence.name} — als Soll gutgeschrieben`}>
-                                  {d.absence.name}{d.absence.fraction === 0.5 ? ' ½' : ''}
-                                </div>
-                              )}
-                            </td>
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: d.required > 0 ? balanceColor(d.balance) : 'var(--border)', fontWeight: d.required > 0 ? 600 : 400 }}>
-                              {d.required > 0 ? fmtBalance(d.balance) : '—'}
-                            </td>
-                          </tr>
-                          {isExpanded && (d.bookings as DayBooking[]).map(b => (
-                            <tr key={`bk-${b.id}`} style={{ background: 'var(--info-bg)', cursor: 'pointer' }}
-                                title="Klicken zum Bearbeiten"
-                                onClick={() => openEditBooking(b, d.bookings as DayBooking[])}>
-                              <td></td>
-                              <td colSpan={2} style={{ color: 'var(--info)', fontSize: 11, paddingLeft: 12 }}>
-                                {b.time_start && b.time_finish && (
-                                  <span style={{ color: 'var(--text-3)', marginRight: 6 }}>
-                                    {b.time_start.slice(0, 5)}–{b.time_finish.slice(0, 5)}
-                                  </span>
-                                )}
-                                {b.project}{b.structure ? ` / ${b.structure}` : ''}
-                              </td>
-                              <td colSpan={2} style={{ color: 'var(--text-2)', fontSize: 11 }}>{b.description}</td>
-                              <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontSize: 11, color: 'var(--text-2)' }}>
-                                {fmtH(b.hours)}
-                              </td>
-                            </tr>
-                          ))}
-                        </>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {viewMode === 'running' && (
-        <>
-          {loadingRunning && <p className="empty-note">Laden …</p>}
-          {runningData && runningData.months.length === 0 && (
-            <p className="empty-note">Kein Arbeitszeitmodell hinterlegt oder noch keine Buchungen.</p>
-          )}
-          {runningData && runningData.months.length > 0 && (
-            <>
-              <div style={{ marginBottom: 10, fontWeight: 600, fontSize: 14 }}>
-                Gesamtsaldo: <span style={{ color: balanceColor(runningData.totalBalance) }}>{fmtBalance(runningData.totalBalance)}</span>
-              </div>
-              <table className="master-table" style={{ fontSize: 12 }}>
-                <thead>
-                  <tr>
-                    <th scope="col">Monat</th>
-                    <th scope="col" style={{ textAlign: 'right' }}>Soll</th>
-                    <th scope="col" style={{ textAlign: 'right' }}>Ist</th>
-                    <th scope="col" style={{ textAlign: 'right' }}>Saldo</th>
-                    <th scope="col" style={{ textAlign: 'right' }}>Laufender Saldo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runningData.months.map((rm: RunningMonth) => (
-                    <tr key={`${rm.year}-${rm.month}`}>
-                      <td>{MONTH_NAMES[rm.month - 1]} {rm.year}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtH(rm.required)}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{fmtH(rm.actual)}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: balanceColor(rm.balance) }}>{fmtBalance(rm.balance)}</td>
-                      <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: balanceColor(rm.cumulative) }}>{fmtBalance(rm.cumulative)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </>
-      )}
-
-      <Modal open={editBooking !== null} onClose={() => setEditBooking(null)}
-        title={`Buchung bearbeiten`}>
-        {editBooking && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <p style={{ fontSize: 12, color: 'var(--text-3)', margin: 0 }}>
-              {editBooking.project}{editBooking.structure ? ` / ${editBooking.structure}` : ''}
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label>Zeit Start</label>
-                <input type="time" value={editStart.slice(0, 5)}
-                  onChange={e => {
-                    const v = e.target.value
-                    setEditStart(v)
-                    const f = editFinish.slice(0, 5)
-                    if (v && f) {
-                      const [sh, sm] = v.split(':').map(Number)
-                      const [fh, fm] = f.split(':').map(Number)
-                      const min = Math.max(0, (fh * 60 + fm) - (sh * 60 + sm))
-                      setEditQty((Math.round(min / 60 * 100) / 100).toString().replace('.', ','))
-                    }
-                  }} />
-              </div>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label>Zeit Ende</label>
-                <input type="time" value={editFinish.slice(0, 5)}
-                  onChange={e => {
-                    const v = e.target.value
-                    setEditFinish(v)
-                    const s = editStart.slice(0, 5)
-                    if (s && v) {
-                      const [sh, sm] = s.split(':').map(Number)
-                      const [fh, fm] = v.split(':').map(Number)
-                      const min = Math.max(0, (fh * 60 + fm) - (sh * 60 + sm))
-                      setEditQty((Math.round(min / 60 * 100) / 100).toString().replace('.', ','))
-                    }
-                  }} />
-              </div>
-              <div className="form-group" style={{ flex: 1 }}>
-                <label>Stunden</label>
-                <input type="number" step="0.25" min={0} value={editQty}
-                  onChange={e => setEditQty(e.target.value)} />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Beschreibung</label>
-              <input type="text" value={editDesc}
-                onChange={e => setEditDesc(e.target.value)} />
-            </div>
-            {(() => {
-              const overlaps = detectOverlaps(editStart, editFinish)
-              if (overlaps.length === 0) {
-                return (
-                  <p style={{ fontSize: 11, color: 'var(--warning-strong)', background: 'rgba(245,158,11,0.08)',
-                              padding: '6px 10px', borderRadius: 6, margin: 0 }}>
-                    ⚠ Änderungen wirken sich auf das Zeitkonto, Projektkosten und ggf. das ArbZG-Audit aus.
-                  </p>
-                )
-              }
-              return (
-                <p style={{ fontSize: 12, color: 'var(--danger-strong)', background: 'rgba(220,38,38,0.08)',
-                            padding: '8px 12px', borderRadius: 6, margin: 0,
-                            border: '1px solid rgba(220,38,38,0.25)' }}>
-                  <strong>Zeitliche Überschneidung</strong> mit {overlaps.length === 1 ? '1 Buchung' : `${overlaps.length} Buchungen`} desselben Tages:
-                  <span style={{ display: 'block', marginTop: 4, fontSize: 11 }}>
-                    {overlaps.map(o => (
-                      <span key={o.id} style={{ display: 'block' }}>
-                        {o.time_start?.slice(0, 5)}–{o.time_finish?.slice(0, 5)} · {o.project}
-                        {o.structure ? ` / ${o.structure}` : ''}
-                      </span>
-                    ))}
-                  </span>
-                </p>
-              )
-            })()}
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 4 }}>
-              <button className="btn-small btn-danger" disabled={deleteBookingMut.isPending}
-                onClick={() => deleteBookingMut.mutate(editBooking.id)}>
-                {deleteBookingMut.isPending ? '…' : 'Löschen'}
-              </button>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn-small" onClick={() => setEditBooking(null)}>Abbrechen</button>
-                <button className="btn-small btn-save"
-                  disabled={patchBookingMut.isPending || detectOverlaps(editStart, editFinish).length > 0}
-                  title={detectOverlaps(editStart, editFinish).length > 0 ? 'Zeitliche Überschneidung beheben' : ''}
-                  onClick={() => patchBookingMut.mutate()}>
-                  {patchBookingMut.isPending ? 'Speichert…' : 'Speichern'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </Modal>
-    </div>
-  )
-}
 
 // ── Zeitwirtschaft Tab (Auswertung · Einzel-Mitarbeiter · Monatsabschluss) ─────
 
@@ -2163,9 +663,9 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
         return (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
-              <button type="button" className="btn-small" onClick={prevMonth}>◀</button>
-              <span style={{ fontWeight: 600, minWidth: 120, textAlign: 'center' }}>{MONTH_NAMES[month - 1]} {year}</span>
-              <button type="button" className="btn-small" onClick={nextMonth}>▶</button>
+              <button type="button" className="btn-secondary btn-small ent-year-btn" onClick={prevMonth} aria-label="Vormonat"><ChevronLeft size={15} strokeWidth={2} aria-hidden="true" /></button>
+              <span className="ta-month" aria-live="polite">{MONTH_NAMES[month - 1]} {year}</span>
+              <button type="button" className="btn-secondary btn-small ent-year-btn" onClick={nextMonth} aria-label="Folgemonat"><ChevronRight size={15} strokeWidth={2} aria-hidden="true" /></button>
             </div>
             <div className="table-scroll">
               <table className="master-table" style={{ fontSize: 11 }}>
@@ -2174,7 +674,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                     <th scope="col" style={{ textAlign: 'left', whiteSpace: 'nowrap' }}>Mitarbeiter</th>
                     {dayList.map(day => {
                       const we = [0, 6].includes(new Date(year, month - 1, day).getDay())
-                      return <th scope="col" key={day} style={{ textAlign: 'center', padding: '2px 3px', color: we ? 'var(--border)' : 'var(--text-3)', fontWeight: 500 }}>{day}</th>
+                      return <th scope="col" key={day} style={{ textAlign: 'center', padding: '2px 3px', color: 'var(--text-3)', background: we ? 'var(--surface-2)' : undefined, fontWeight: 500 }}>{day}</th>
                     })}
                   </tr>
                 </thead>
@@ -2189,11 +689,14 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
                           const we = [0, 6].includes(new Date(year, month - 1, day).getDay())
                           return (
                             <td key={day}
-                              title={cell ? `${cell.name}${cell.status === 'REQUESTED' ? ' (beantragt)' : ''}${cell.half ? ' ½' : ''}` : ''}
+                              title={cell ? `${cell.name}${cell.status === 'REQUESTED' ? ' (beantragt)' : ''}${cell.half ? ' (halber Tag)' : ''}` : ''}
                               style={{ textAlign: 'center', padding: 0, height: 22, borderLeft: '1px solid var(--border-3)',
-                                background: cell ? cell.color : (we ? 'var(--surface-2)' : undefined),
-                                opacity: cell && cell.status === 'REQUESTED' ? 0.45 : 1 }}>
-                              {cell && cell.status === 'REQUESTED' ? <span style={{ color: '#fff', fontSize: 9 }}>?</span> : ''}
+                                // Beantragt: nur umrandet statt blass gefüllt — vorher stand
+                                // dort ein weißes „?" in 9px auf der Farbe, in hellen
+                                // Abwesenheitsfarben unlesbar.
+                                background: cell && cell.status !== 'REQUESTED' ? cell.color : (we ? 'var(--surface-2)' : undefined),
+                                boxShadow: cell && cell.status === 'REQUESTED' ? `inset 0 0 0 2px ${cell.color}` : undefined }}>
+                              {cell && cell.status === 'REQUESTED' ? <span style={{ color: 'var(--text-2)', fontSize: 11, fontWeight: 700 }} aria-hidden="true">?</span> : ''}
                             </td>
                           )
                         })}
@@ -2205,7 +708,7 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
               </table>
             </div>
             <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
-              Farbe = Abwesenheitsart · blass mit „?" = beantragt (offen) · voll = genehmigt
+              Farbe = Abwesenheitsart · umrandet mit „?" = beantragt (offen) · gefüllt = genehmigt
             </p>
           </>
         )
@@ -2224,39 +727,62 @@ function AbwesenheitenTab({ employees }: { employees: Employee[] }) {
 }
 
 // ── Urlaubsansprüche (Bulk-Editor je Jahr) ────────────────────────────────────
+// Runde 10: Eingaben liegen über dem geladenen Stand. Vorher setzte jedes
+// Nachladen der Mitarbeiterliste (Fensterwechsel genügte) alle Felder
+// zurück, ein leeres Feld ging als 0 Tage an den Server — für jeden
+// Mitarbeiter ohne Eintrag entstand so ein Anspruch von 0 —, und „27,5"
+// ließ das Zahlenfeld gar nicht erst zu.
+const parseDays = (v: string): number | null => {
+  const t = v.trim()
+  if (!t) return null
+  const n = Number(t.replace(',', '.'))
+  return Number.isFinite(n) ? n : NaN
+}
+const daysText = (n: number | null | undefined) => (n == null ? '' : String(n).replace('.', ','))
+
 function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
   const qc = useQueryClient()
   const toast = useToast()
+  const [confirm, confirmDialog] = useConfirm()
   const [year, setYear] = useState(new Date().getFullYear())
-  const [days,  setDays]  = useState<Record<number, string>>({})
-  const [carry, setCarry] = useState<Record<number, string>>({})
+  const [edits, setEdits] = useState<Record<number, { days?: string; carry?: string }>>({})
   const [bulkVal, setBulkVal] = useState('')
+  const [tried, setTried] = useState(false)
 
   const { data: entRes, isLoading } = useQuery({ queryKey: ['entitlements-all', year], queryFn: () => fetchAllEntitlements(year) })
 
   const active = useMemo(
     () => employees.filter(e => e.ACTIVE !== 2).sort((a, b) => (a.ABBR || '').localeCompare(b.ABBR || '')),
     [employees])
-
-  useEffect(() => {
+  const saved = useMemo(() => {
     const byEmp = new Map((entRes?.data ?? []).map(e => [e.EMPLOYEE_ID, e]))
-    const d: Record<number, string> = {}, c: Record<number, string> = {}
+    const out: Record<number, { days: string; carry: string }> = {}
     for (const e of active) {
       const ent = byEmp.get(e.ID)
-      d[e.ID] = ent ? String(ent.DAYS_ENTITLED) : ''
-      c[e.ID] = ent && ent.CARRYOVER_OVERRIDE != null ? String(ent.CARRYOVER_OVERRIDE) : ''
+      out[e.ID] = { days: daysText(ent?.DAYS_ENTITLED), carry: daysText(ent?.CARRYOVER_OVERRIDE) }
     }
-    setDays(d); setCarry(c)
+    return out
   }, [entRes, active])
+  const val = (id: number) => ({ ...saved[id], ...edits[id] })
+  const changedIds = active.map(e => e.ID).filter(id => {
+    const v = val(id)
+    return v.days !== saved[id]?.days || v.carry !== saved[id]?.carry
+  })
+  const invalidIds = changedIds.filter(id => {
+    const d = parseDays(val(id).days), c = parseDays(val(id).carry)
+    return d == null || Number.isNaN(d) || d < 0 || d > 366 || Number.isNaN(c as number)
+  })
+  const dirty = changedIds.length > 0
 
   const saveMut = useMutation({
-    mutationFn: () => putEntitlementsBulk(year, active.map(e => ({
-      employee_id: e.ID,
-      days_entitled: Number((days[e.ID] || '0').replace(',', '.')) || 0,
-      carryover_override: carry[e.ID]?.trim() ? Number(carry[e.ID].replace(',', '.')) : null,
+    mutationFn: () => putEntitlementsBulk(year, changedIds.map(id => ({
+      employee_id: id,
+      days_entitled: parseDays(val(id).days) ?? 0,
+      carryover_override: parseDays(val(id).carry),
     }))),
     onSuccess: (r) => {
-      toast.success(`${r.count} Urlaubsansprüche gespeichert`)
+      toast.success(`${r.count} ${r.count === 1 ? 'Urlaubsanspruch' : 'Urlaubsansprüche'} gespeichert`)
+      setEdits({}); setTried(false)
       void qc.invalidateQueries({ queryKey: ['entitlements-all'] })
       void qc.invalidateQueries({ queryKey: ['entitlements'] })
       void qc.invalidateQueries({ queryKey: ['vacation-balance'] })
@@ -2265,67 +791,99 @@ function EntitlementsBulkEditor({ employees }: { employees: Employee[] }) {
     onError: (e: Error) => toast.error(e.message),
   })
 
+  function save() {
+    setTried(true)
+    if (invalidIds.length) {
+      toast.error('Bitte bei den markierten Mitarbeitern einen Anspruch zwischen 0 und 366 Tagen angeben.')
+      return
+    }
+    saveMut.mutate()
+  }
+
+  async function changeYear(delta: number) {
+    if (dirty && !(await confirm({
+      title: 'Änderungen verwerfen?',
+      message: `Die Ansprüche für ${year} sind noch nicht gespeichert (${changedIds.length} ${changedIds.length === 1 ? 'Mitarbeiter' : 'Mitarbeiter'}).`,
+      confirmLabel: 'Verwerfen',
+    }))) return
+    setEdits({}); setTried(false); setYear(y => y + delta)
+  }
+
   function applyBulk() {
     const v = bulkVal.trim()
     if (v === '') return
-    setDays(prev => { const n = { ...prev }; for (const e of active) n[e.ID] = v; return n })
+    setEdits(prev => { const n = { ...prev }; for (const e of active) n[e.ID] = { ...n[e.ID], days: v }; return n })
   }
+  const setField = (id: number, k: 'days' | 'carry', v: string) => setEdits(p => ({ ...p, [id]: { ...p[id], [k]: v } }))
 
   return (
-    <div style={{ maxWidth: 640 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <button type="button" className="btn-small" onClick={() => setYear(y => y - 1)}>◀</button>
-        <span style={{ fontWeight: 600, minWidth: 60, textAlign: 'center' }}>{year}</span>
-        <button type="button" className="btn-small" onClick={() => setYear(y => y + 1)}>▶</button>
-        <span style={{ marginLeft: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <input type="number" step="0.5" min="0" className="tbl-input" style={{ width: 80 }}
+    <div className="ent-editor">
+      <div className="ent-toolbar">
+        <button type="button" className="btn-secondary btn-small ent-year-btn" onClick={() => void changeYear(-1)} aria-label="Vorjahr">
+          <ChevronLeft size={15} strokeWidth={2} aria-hidden="true" />
+        </button>
+        <span className="ent-year" aria-live="polite">{year}</span>
+        <button type="button" className="btn-secondary btn-small ent-year-btn" onClick={() => void changeYear(1)} aria-label="Folgejahr">
+          <ChevronRight size={15} strokeWidth={2} aria-hidden="true" />
+        </button>
+        <span className="ent-bulk">
+          <label className="sr-only" htmlFor="ent-bulk">Tage für alle</label>
+          <input id="ent-bulk" type="text" inputMode="decimal" className="tbl-input ent-input"
             placeholder="Tage" value={bulkVal} onChange={e => setBulkVal(e.target.value)} />
-          <button type="button" className="btn-small" onClick={applyBulk}>Allen zuweisen</button>
+          <button type="button" className="btn-secondary btn-small" onClick={applyBulk} disabled={!bulkVal.trim()}>Allen zuweisen</button>
         </span>
       </div>
-      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '0 0 10px' }}>
+      <p className="ent-hint">
         Jahres-Urlaubsanspruch je Mitarbeiter für {year}. „Übertrag manuell" überschreibt den automatischen
-        Übertrag aus dem Vorjahr (leer = automatisch).
+        Übertrag aus dem Vorjahr (leer = automatisch). Gespeichert werden nur geänderte Zeilen.
       </p>
 
-      {isLoading && <ListLoading columns={6} />}
+      {isLoading && <ListLoading columns={3} />}
       {!isLoading && active.length === 0 && (
         <p className="empty-note">Keine aktiven Mitarbeiter. (Der Editor benötigt das Recht „Mitarbeiter ansehen".)</p>
       )}
 
-      {active.length > 0 && (
+      {!isLoading && active.length > 0 && (
         <>
           <div className="table-scroll">
             <table className="master-table">
               <thead><tr>
-                <th scope="col" style={{ textAlign: 'left' }}>Mitarbeiter</th>
+                <th scope="col">Mitarbeiter</th>
                 <th scope="col" className="num">Anspruch (Tage)</th>
                 <th scope="col" className="num">Übertrag manuell</th>
               </tr></thead>
               <tbody>
-                {active.map(e => (
-                  <tr key={e.ID}>
-                    <td><strong>{e.ABBR}</strong> {e.FIRST_NAME} {e.LAST_NAME}</td>
-                    <td className="num">
-                      <input type="number" step="0.5" min="0" className="tbl-input" style={{ width: 90 }}
-                        value={days[e.ID] ?? ''} onChange={ev => setDays(p => ({ ...p, [e.ID]: ev.target.value }))} />
-                    </td>
-                    <td className="num">
-                      <input type="number" step="0.5" className="tbl-input" style={{ width: 90 }}
-                        placeholder="auto" value={carry[e.ID] ?? ''} onChange={ev => setCarry(p => ({ ...p, [e.ID]: ev.target.value }))} />
-                    </td>
-                  </tr>
-                ))}
+                {active.map(e => {
+                  const v = val(e.ID)
+                  const bad = tried && invalidIds.includes(e.ID)
+                  return (
+                    <tr key={e.ID}>
+                      <td><strong>{e.ABBR}</strong> {e.FIRST_NAME} {e.LAST_NAME}</td>
+                      <td className="num">
+                        <input type="text" inputMode="decimal" className="tbl-input ent-input" aria-label={`Anspruch ${e.ABBR}`}
+                          placeholder="—" aria-invalid={bad || undefined}
+                          value={v.days} onChange={ev => setField(e.ID, 'days', ev.target.value)} />
+                      </td>
+                      <td className="num">
+                        <input type="text" inputMode="decimal" className="tbl-input ent-input" aria-label={`Übertrag ${e.ABBR}`}
+                          placeholder="auto" value={v.carry} onChange={ev => setField(e.ID, 'carry', ev.target.value)} />
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
-          <div style={{ marginTop: 12 }}>
-            <button type="button" className="btn-primary btn-small" disabled={saveMut.isPending} onClick={() => saveMut.mutate()}>
+          <div className="ent-actions">
+            {dirty && <span className="ent-status">{changedIds.length} {changedIds.length === 1 ? 'Zeile' : 'Zeilen'} geändert</span>}
+            {dirty && <button type="button" className="btn-secondary btn-small" onClick={() => { setEdits({}); setTried(false) }} disabled={saveMut.isPending}>Verwerfen</button>}
+            <button type="button" className="btn-primary btn-small" disabled={saveMut.isPending || !dirty} onClick={save}>
               {saveMut.isPending ? 'Speichert …' : `Ansprüche ${year} speichern`}
             </button>
           </div>
         </>
       )}
+      {confirmDialog}
     </div>
   )
 }
@@ -2395,7 +953,7 @@ function MitarbeiterPicker({ employees, selectedId, onSelect, onGoToList, placeh
           {onGoToList && (
             <button type="button" className="project-ac-tolist"
               onMouseDown={ev => { ev.preventDefault(); setOpen(false); onGoToList() }}>
-              Zur Mitarbeiterliste →
+              Zur Mitarbeiterliste <ArrowRight size={13} strokeWidth={2} aria-hidden="true" style={{ verticalAlign: -2 }} />
             </button>
           )}
         </div>
@@ -2409,24 +967,28 @@ type ZwSub = 'list' | 'single' | 'close'
 function ZeitwirtschaftTab({ employees, onGoToList }: { employees: Employee[]; onGoToList?: () => void }) {
   const canCloseMonths = usePermission('employees.month_close.edit')
   const hasMonthClose  = useFeature('employees.month_close')
+  const canViewAll     = usePermission('employees.bookings.view_all')
   const showClose      = canCloseMonths && hasMonthClose
 
-  const [subTab, setSubTab] = useState<ZwSub>('list')
-  const [empId,  setEmpId]  = useState<number | null>(null)
-
+  // Auswertung und Einzelansicht lesen fremde Stunden. Wer nur Monate
+  // abschließen darf, sah vorher als Erstes eine Auswertung, die mit
+  // „Fehlende Berechtigung" endete (Runde 10).
   const items: { id: ZwSub; label: string }[] = [
-    { id: 'list',   label: 'Auswertung' },
-    { id: 'single', label: 'Einzelne/r Mitarbeiter' },
-    ...(showClose      ? [{ id: 'close'   as ZwSub, label: 'Monatsabschluss' }] : []),
+    ...(canViewAll ? [{ id: 'list' as ZwSub, label: 'Auswertung' }, { id: 'single' as ZwSub, label: 'Einzelne/r Mitarbeiter' }] : []),
+    ...(showClose  ? [{ id: 'close' as ZwSub, label: 'Monatsabschluss' }] : []),
   ]
+  const [picked, setSubTab] = useState<ZwSub | null>(null)
+  const subTab: ZwSub = picked && items.some(i => i.id === picked) ? picked : (items[0]?.id ?? 'list')
+  const [empId,  setEmpId]  = useState<number | null>(null)
 
   return (
     <div>
       <SegmentNav items={items} active={subTab} onChange={setSubTab} />
 
-      {subTab === 'list' && <EmployeeListReport employees={employees} />}
+      {!items.length && <p className="empty-note">Für das Stundencontrolling fehlt das Recht „Alle Buchungen sehen" — oder der Monatsabschluss ist im Tarif nicht enthalten.</p>}
+      {subTab === 'list' && canViewAll && <EmployeeListReport employees={employees} />}
 
-      {subTab === 'single' && (
+      {subTab === 'single' && canViewAll && (
         <div style={{ maxWidth: 760 }}>
           <div style={{ marginBottom: 20 }}>
             <label style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>Mitarbeiter</label>
@@ -2564,12 +1126,12 @@ function MonthsOverviewTab() {
                       <button
                         type="button"
                         className="btn-small"
-                        style={{ fontSize: 10, padding: '0 6px' }}
+                        style={{ fontSize: 11, padding: '0 6px' }}
                         disabled={busy}
                         title={`${open} offene Einträge für ${MONTH_NAMES[m.month - 1]} ${m.year} abschließen`}
                         onClick={() => askCloseColumn(m.year, m.month)}
                       >
-                        alle ✓
+                        alle abschließen
                       </button>
                     )}
                   </div>
@@ -2592,13 +1154,13 @@ function MonthsOverviewTab() {
                     title={m.closed
                       ? `Abgeschlossen am ${new Date(m.closed_at!).toLocaleDateString('de-DE')} – klicken zum Öffnen`
                       : 'Offen – klicken zum Abschließen'}
-                    style={{
-                      background: 'none', border: 'none', cursor: busy ? 'default' : 'pointer', fontSize: 16,
-                      color: m.closed ? 'var(--success)' : 'var(--border)', lineHeight: 1,
-                    }}
+                    className={`mc-cell${m.closed ? ' mc-cell--closed' : ''}`}
+                    aria-label={`${emp.ABBR} ${MONTH_NAMES[m.month - 1]} ${m.year}: ${m.closed ? 'abgeschlossen' : 'offen'}`}
                     onClick={() => toggle(emp, m.year, m.month, m.closed)}
                   >
-                    {m.closed ? '✓' : '○'}
+                    {m.closed
+                      ? <CircleCheck size={18} strokeWidth={2} aria-hidden="true" />
+                      : <Circle size={18} strokeWidth={1.75} aria-hidden="true" />}
                   </button>
                 </td>
               ))}
@@ -2607,8 +1169,10 @@ function MonthsOverviewTab() {
         </tbody>
       </table>
       </div>
-      <p style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 8 }}>
-        ✓ Abgeschlossen &nbsp;·&nbsp; ○ Offen &nbsp;·&nbsp; Einzelne Zelle klicken zum Umschalten &nbsp;·&nbsp; „alle ✓" schließt eine ganze Monatsspalte ab
+      <p className="mc-legend">
+        <span><CircleCheck size={13} strokeWidth={2} aria-hidden="true" className="mc-legend-closed" /> abgeschlossen</span>
+        <span><Circle size={13} strokeWidth={1.75} aria-hidden="true" /> offen</span>
+        <span>Eine Zelle umschalten per Klick · „alle abschließen" schließt eine ganze Monatsspalte ab</span>
       </p>
 
       <ConfirmModal
@@ -2616,6 +1180,7 @@ function MonthsOverviewTab() {
         title={confirm?.title ?? ''}
         message={confirm?.message ?? ''}
         confirmLabel="Abschließen"
+        confirmClass="btn-primary"
         onConfirm={() => { const c = confirm; setConfirm(null); void c?.run() }}
         onCancel={() => setConfirm(null)}
       />
@@ -2666,9 +1231,9 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
   const [empId,    setEmpId]    = useState<number | ''>('')
   const [dateFrom, setDateFrom] = useState<string>(() => {
     const d = new Date(); d.setDate(d.getDate() - 30)
-    return d.toISOString().slice(0, 10)
+    return localIso(d)
   })
-  const [dateTo,   setDateTo]   = useState<string>(() => new Date().toISOString().slice(0, 10))
+  const [dateTo,   setDateTo]   = useState<string>(todayLocal)
   const [evtType,  setEvtType]  = useState<string>('')
   const [sev,      setSev]      = useState<'' | ArbzgSeverity>('')
 
@@ -2740,6 +1305,8 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
         employee_id: empId === '' ? undefined : Number(empId),
         date_from:   dateFrom || undefined,
         date_to:     dateTo   || undefined,
+        event_type:  evtType  || undefined,
+        severity:    sev      || undefined,
       })
     } catch (e) {
       toast.error((e as Error).message)
@@ -2783,10 +1350,8 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
       </div>
 
       {warning && (
-        <p style={{ fontSize: 12, color: 'var(--warning-strong)', background: 'rgba(245,158,11,0.08)',
-                    border: '1px solid rgba(245,158,11,0.25)', borderRadius: 6,
-                    padding: '8px 12px', marginBottom: 12 }}>
-          ⚠ {warning}
+        <p className="ta-note" style={{ marginBottom: 12 }}>
+          <AlertTriangle size={13} strokeWidth={2} aria-hidden="true" />{warning}
         </p>
       )}
 
@@ -2844,245 +1409,18 @@ function ArbzgAuditTab({ employees }: { employees: Employee[] }) {
   )
 }
 
-// ── Rolle pro Mitarbeiter (Badge + Edit-Modal) ───────────────────────────────
-
-function EmployeeRoleBadge({ employeeId, roles, mapping, onClick }: {
-  employeeId: number
-  roles:    UserRole[]
-  mapping:  EmployeeRoleMapping[]
-  onClick:  () => void
-}) {
-  const assignedIds = mapping.filter(m => m.EMPLOYEE_ID === employeeId).map(m => m.ROLE_ID)
-  const assigned    = roles.filter(r => assignedIds.includes(r.ID))
-
-  if (assigned.length === 0) {
-    return (
-      <button onClick={onClick} style={{
-        background: 'transparent', border: '1px dashed var(--border)', borderRadius: 12, padding: '2px 8px',
-        fontSize: 11, color: 'var(--text-3)', cursor: 'pointer',
-      }}>+ Rolle</button>
-    )
-  }
-
-  return (
-    <button onClick={onClick} style={{
-      background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
-      display: 'inline-flex', gap: 4, flexWrap: 'wrap',
-    }}>
-      {assigned.map(r => (
-        <span key={r.ID} style={{
-          background: r.COLOR || 'var(--text-3)', color: '#fff',
-          fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-        }}>
-          {r.ABBR}
-        </span>
-      ))}
-    </button>
-  )
-}
-
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export function MitarbeiterPage() {
-  const qc = useQueryClient()
-  const ML = 'plain:filt:mitarb-list'
   const [searchParams, setSearchParams] = useSearchParams()
-  const [tab,       setTab]      = useState(() => searchParams.get('tab') || 'list')
-  const [search,    setSearch]   = useState('')
-  const [activeAbt,    setActiveAbt]    = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:dept`,   [])))
-  // Default: nur aktive Mitarbeiter (greift nur bei frischem Storage; eine
-  // bewusst gespeicherte Auswahl – auch die leere „alle" – bleibt erhalten).
-  const [activeStatus, setActiveStatus] = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:status`, ['Aktiv'])))
-  const [activeModel,  setActiveModel]  = useState<Set<string>>(() => new Set(lsGet<string[]>(`${ML}:model`, [])))
-  const [sortKey,   setSortKey]  = useState<SortKey>(() => lsGet<SortKey>(`${ML}:sortKey`, 'ABBR'))
-  const [sortDir,   setSortDir]  = useState<'asc' | 'desc'>(() => lsGet<'asc'|'desc'>(`${ML}:sortDir`, 'asc'))
-  const [page,      setPage]     = useState(1)
-  const [editRow,   setEditRow]  = useState<Employee | null>(null)
-  const [editInitialSection, setEditInitialSection] = useState<EmpSection>('stammdaten')
-  const [showCreate, setShowCreate] = useState(false)
-  const [form,      setForm]     = useState<CreateEmployeePayload>(emptyCreateForm)
-  const [createWmModelId,    setCreateWmModelId]    = useState('')
-  const [createWmValidFrom,  setCreateWmValidFrom]  = useState('')
-  const [createCpRate,       setCreateCpRate]       = useState('')
-  const [createCpValidFrom,  setCreateCpValidFrom]  = useState('')
-  const [createMsg,    setCreateMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [creating,     setCreating]     = useState(false)
-  const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-  const toast = useToast()
-  const createFormRef = useRef<HTMLFormElement>(null)
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'list')
 
-  // Diese Queries brauchen employees.view. Nutzer, die nur eigene Abwesenheiten
-  // beantragen (absence.request), erreichen die Seite ebenfalls — fuer sie
-  // gaten wir ab, sonst loesen die 403 den globalen Fehler-Toast aus.
+  // Die Liste braucht employees.view. Nutzer, die nur eigene Abwesenheiten
+  // beantragen (absence.request), erreichen die Seite ebenfalls — für sie
+  // gaten wir ab, sonst lösen die 403 den globalen Fehler-Toast aus.
   const canViewEmployees = usePermission('employees.view')
-  const { data: listData,   isLoading } = useQuery({ queryKey: ['employees'],           queryFn: fetchEmployeeList,      enabled: canViewEmployees })
-  const { data: genData }               = useQuery({ queryKey: ['emp-genders'],         queryFn: fetchEmployeeGenders,   enabled: canViewEmployees })
-  // Der Kostensatz ist sensibel: dasselbe Recht wie am /cp-rates-Endpunkt.
-  // Ohne es liefert das Backend die Spalte gar nicht erst mit.
-  const canViewSalary = usePermission('employees.salary.view')
-  const { data: deptData }              = useQuery({ queryKey: ['departments'],         queryFn: fetchDepartments,       enabled: canViewEmployees })
-  const { data: wtmData }               = useQuery({ queryKey: ['working-time-models'], queryFn: fetchWorkingTimeModels, enabled: canViewEmployees })
-  const { data: rolesData }             = useQuery({ queryKey: ['user-roles'],          queryFn: fetchRoles,             enabled: canViewEmployees })
-  const { data: empRoleData }           = useQuery({ queryKey: ['employee-role-map'],   queryFn: fetchEmployeeRoleMap,   enabled: canViewEmployees })
-
-  // Aktueller Monats-/Laufsaldo je Mitarbeiter fuer die Listenspalte „Saldo".
-  // Nur laden, wenn der Nutzer fremde Buchungen sehen darf.
-  const canViewBookings = usePermission('employees.bookings.view_all')
-  const { data: balData } = useQuery({
-    queryKey: ['emp-report-list', { mode: 'now' }],
-    queryFn:  () => fetchEmployeeReportList({ mode: 'now' }),
-    enabled:  canViewBookings,
-  })
-
-  const employees  = listData?.data  ?? []
-  const userRoles  = rolesData?.data ?? []
-  const empRoleMap = empRoleData?.data ?? []
-  const genders    = genData?.data   ?? []
-  const departments = deptData?.data ?? []
-  const workModels = wtmData?.data   ?? []
-
-  // Vorbelegter Zustand für „Neuer Mitarbeiter": nächste Personalnummer und
-  // Eintritt heute. Bewusst beim Öffnen des Dialogs berechnet, damit der
-  // Vorschlag den aktuell geladenen Bestand berücksichtigt.
-  const newEmployeeForm = useCallback(
-    () => emptyCreateForm(nextPersonnelNumber(employees.map(e => e.PERSONNEL_NUMBER)), todayIso()),
-    [employees],
-  )
-
-  // ── Inline-Edit (Abteilung / Status direkt in der Liste) ──
-  const canEditEmp = usePermission('employees.edit')
-  const deptOpts: InlineOption[] = useMemo(
-    () => departments.map(d => ({ value: String(d.ID), label: d.ABBR })),
-    [departments],
-  )
-  const empInlineMut = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: UpdateEmployeePayload }) => updateEmployee(id, body),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['employees'] }),
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  const balByEmp = useMemo(() => {
-    const m = new Map<number, EmployeeReportRow>()
-    for (const row of balData?.data ?? []) m.set(row.EMPLOYEE_ID, row)
-    return m
-  }, [balData])
-
-  // Derive filter option lists from data
-  const filterOptions = useMemo(() => {
-    const abt    = [...new Set(employees.map(e => e.DEPARTMENT_NAME).filter(Boolean))].sort()
-    const status = ['Aktiv', 'Inaktiv']
-    const model  = [...new Set(employees.map(e => e.CURRENT_MODEL_NAME).filter(Boolean))].sort()
-    return { abt, status, model }
-  }, [employees])
-
-  useEffect(() => { lsPut(`${ML}:dept`,    [...activeAbt])    }, [activeAbt])
-  useEffect(() => { lsPut(`${ML}:status`,  [...activeStatus]) }, [activeStatus])
-  useEffect(() => { lsPut(`${ML}:model`,   [...activeModel])  }, [activeModel])
-  useEffect(() => { lsPut(`${ML}:sortKey`, sortKey)           }, [sortKey])
-  useEffect(() => { lsPut(`${ML}:sortDir`, sortDir)           }, [sortDir])
-
-  const processed = useMemo(() => {
-    let rows = employees
-    const q = search.trim().toLowerCase()
-    if (q) {
-      rows = rows.filter(r =>
-        [r.ABBR, r.FIRST_NAME, r.LAST_NAME, r.MAIL, r.MOBILE, r.PERSONNEL_NUMBER, r.DEPARTMENT_NAME]
-          .map(v => String(v ?? '')).join(' ').toLowerCase().includes(q)
-      )
-    }
-    if (activeAbt.size > 0)    rows = rows.filter(r => activeAbt.has(r.DEPARTMENT_NAME))
-    if (activeStatus.size > 0) rows = rows.filter(r => {
-      const label = (r.ACTIVE === 2) ? 'Inaktiv' : 'Aktiv'
-      return activeStatus.has(label)
-    })
-    if (activeModel.size > 0)  rows = rows.filter(r => activeModel.has(r.CURRENT_MODEL_NAME))
-    rows = [...rows].sort((a, b) => {
-      const av = String(a[sortKey] ?? '')
-      const bv = String(b[sortKey] ?? '')
-      return sortDir === 'asc'
-        ? av.localeCompare(bv, 'de', { sensitivity: 'base', numeric: true })
-        : bv.localeCompare(av, 'de', { sensitivity: 'base', numeric: true })
-    })
-    return rows
-  }, [employees, search, sortKey, sortDir, activeAbt, activeStatus, activeModel])
-
-  const totalPages = Math.max(1, Math.ceil(processed.length / PAGE_SIZE))
-  const safePage   = Math.min(page, totalPages)
-  const pageRows   = processed.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE)
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortKey(key); setSortDir('asc') }
-    setPage(1)
-  }
-
-  function handleDelete(row: Employee) {
-    setConfirmState({
-      title: 'Mitarbeiter löschen',
-      message: `${row.ABBR}: ${row.FIRST_NAME} ${row.LAST_NAME} wirklich löschen?`,
-      onConfirm: async () => {
-        try {
-          await deleteEmployee(row.ID)
-          void qc.invalidateQueries({ queryKey: ['employees'] })
-        } catch (e: unknown) { toast.error((e as Error).message) }
-      },
-    })
-  }
-
-  async function submitCreate(e: React.FormEvent) {
-    e.preventDefault()
-    setCreateMsg(null)
-    if (!form.abbr || !form.first_name || !form.last_name || !form.gender_id) {
-      setCreateMsg({ text: 'Kürzel, Vorname, Nachname und Geschlecht sind Pflichtfelder', type: 'error' }); return
-    }
-    if (!createWmModelId || !createWmValidFrom) {
-      setCreateMsg({ text: 'Arbeitszeitmodell und Gültig-ab-Datum sind Pflichtfelder', type: 'error' }); return
-    }
-    if (!createCpRate || !createCpValidFrom) {
-      setCreateMsg({ text: 'Kostensatz und Gültig-ab-Datum sind Pflichtfelder', type: 'error' }); return
-    }
-    setCreating(true)
-    try {
-      const res = await createEmployee(form)
-      const empId = res.data.ID
-      await createEmployeeWorkModel(empId, { model_id: Number(createWmModelId), valid_from: createWmValidFrom })
-      await createEmployeeCpRate(empId, { cost_rate: parseFloat(createCpRate), valid_from: createCpValidFrom })
-      void qc.invalidateQueries({ queryKey: ['employees'] })
-      void qc.invalidateQueries({ queryKey: ['license-usage'] })
-      // Der Versand der Einladung darf das Anlegen nicht als Fehler erscheinen
-      // lassen — das Konto existiert. Nur der Hinweistext unterscheidet sich.
-      if (res.invite?.sent) {
-        toast.success(`Mitarbeiter angelegt – Einladung an ${form.email} gesendet`)
-      } else {
-        toast.success('Mitarbeiter angelegt')
-        // Der Dialog schliesst gleich — der Hinweis muss ihn ueberleben,
-        // deshalb als Toast und nicht als Meldung im Formular.
-        toast.error(
-          `Einladung nicht versendet: ${res.invite?.reason ?? 'unbekannter Grund'} `
-          + 'Anmeldung erst nach dem Festlegen eines Passworts möglich — '
-          + 'Einladung in der Mitarbeiterakte erneut senden.'
-        )
-      }
-      setForm(newEmployeeForm())
-      setCreateWmModelId(''); setCreateWmValidFrom('')
-      setCreateCpRate(''); setCreateCpValidFrom('')
-      setShowCreate(false)
-    } catch (e: unknown) {
-      setCreateMsg({ text: (e as Error).message, type: 'error' })
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  useCtrlS(() => createFormRef.current?.requestSubmit(), showCreate)
-
-  const setF = (k: keyof CreateEmployeePayload) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm(f => ({ ...f, [k]: e.target.value }))
-
-  const sortProps = { sortKey, dir: sortDir, onSort: toggleSort }
-
-  // Die FilterBar zeigt die Anzahl selbst an; ein separates Flag braucht es
-  // seit der Umstellung nicht mehr.
+  const { data: listData, isLoading } = useQuery({ queryKey: ['employees'], queryFn: fetchEmployeeList, enabled: canViewEmployees })
+  const employees = listData?.data ?? []
 
   const visibleTabs = useLicenseFilterTabs(useFilterTabs(TABS))
   // Aktuellen Tab an verfügbare Tabs + ?tab=-Deeplink angleichen.
@@ -3094,7 +1432,7 @@ export function MitarbeiterPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleTabs.map(t => t.id).join(','), searchParams])
   function changeTab(t: string) {
-    setTab(t); setCreateMsg(null)
+    setTab(t)
     const p = new URLSearchParams(searchParams)
     if (t === 'list') p.delete('tab'); else p.set('tab', t)
     setSearchParams(p, { replace: true })
@@ -3106,168 +1444,7 @@ export function MitarbeiterPage() {
       <Tabs tabs={visibleTabs} active={tab} onChange={changeTab} />
 
       <div className="master-section">
-        {tab === 'list' && (
-          <>
-            <LimitBanner capability="limits.employees" />
-            <div className="list-toolbar">
-              <input type="search"
-                className="list-search"
-                placeholder="Suchen …"
-                value={search}
-                onChange={e => { setSearch(e.target.value); setPage(1) }}
-              />
-              <span className="list-info">
-                {processed.length} Mitarbeiter · Seite {safePage}/{totalPages}
-              </span>
-              <Can permission="employees.create">
-                <button
-                  className="btn-primary btn-small"
-                  style={{ marginLeft: 'auto' }}
-                  onClick={() => {
-                    setForm(newEmployeeForm())
-                    setCreateWmModelId(''); setCreateWmValidFrom('')
-                    setCreateCpRate(''); setCreateCpValidFrom('')
-                    setCreateMsg(null)
-                    setShowCreate(true)
-                  }}
-                >
-                  + Neuer Mitarbeiter
-                </button>
-              </Can>
-            </div>
-
-            <FilterBar
-              activeCount={activeAbt.size + activeStatus.size + activeModel.size}
-              onReset={() => { setActiveAbt(new Set()); setActiveStatus(new Set()); setActiveModel(new Set()); setSearch('') }}
-            >
-              <FilterChip label="Abteilung" options={filterOptions.abt}    active={activeAbt}    onChange={v => { setActiveAbt(v);    setPage(1) }} />
-              <FilterChip label="Status"    options={filterOptions.status}  active={activeStatus}  onChange={v => { setActiveStatus(v); setPage(1) }} />
-              <FilterChip label="Modell"    options={filterOptions.model}   active={activeModel}   onChange={v => { setActiveModel(v);  setPage(1) }} />
-            </FilterBar>
-
-            {isLoading && <ListLoading columns={6} />}
-            {!isLoading && (
-              <>
-                <div className="table-scroll">
-                <table className="master-table">
-                  <thead>
-                    <tr>
-                      <SortTh label="Kürzel"      column="ABBR"       {...sortProps} />
-                      <SortTh label="Vorname"     column="FIRST_NAME"       {...sortProps} />
-                      <SortTh label="Nachname"    column="LAST_NAME"        {...sortProps} />
-                      <SortTh label="Personalnr." column="PERSONNEL_NUMBER" {...sortProps} />
-                      <SortTh label="E-Mail"      column="MAIL"             {...sortProps} />
-                      <th scope="col">Abteilung</th>
-                      <th scope="col">Modell</th>
-                      {canViewSalary && (
-                        <th scope="col" className="num">Kostensatz<HelpHint id="mitarbeiter.kostensatz_liste" align="right" /></th>
-                      )}
-                      {canViewBookings && (
-                        <th scope="col" className="num">Saldo<HelpHint id="mitarbeiter.saldo" align="right" /></th>
-                      )}
-                      <th scope="col">Status</th>
-                      <th scope="col">Rolle</th>
-                      <th scope="col">Dashboard-Rolle</th>
-                      <th scope="col"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pageRows.map(r => (
-                      <tr key={r.ID} className="clickable-row" onClick={() => { setEditInitialSection('stammdaten'); setEditRow(r) }}>
-                        <td>{r.ABBR}</td>
-                        <td>{r.FIRST_NAME}</td>
-                        <td>{r.LAST_NAME}</td>
-                        <td className="cell-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {r.PERSONNEL_NUMBER || <span style={{ color: 'var(--text-3)' }}>—</span>}
-                        </td>
-                        <td>{r.MAIL}</td>
-                        <td onClick={e => e.stopPropagation()}>
-                          <InlineSelect
-                            value={r.DEPARTMENT_ID} options={deptOpts} placeholder="—"
-                            readOnly={!canEditEmp} ariaLabel="Abteilung" fallbackLabel={r.DEPARTMENT_NAME || undefined}
-                            onChange={v => empInlineMut.mutate({ id: r.ID, body: employeeRowToPayload(r, { department_id: v ? Number(v) : null }) })}
-                          />
-                        </td>
-                        <td>{r.CURRENT_MODEL_NAME || <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
-                        {canViewSalary && (
-                          <td className="num" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                            {r.CURRENT_COST_RATE != null
-                              ? <span title={r.CURRENT_COST_RATE_FROM ? `gültig ab ${r.CURRENT_COST_RATE_FROM}` : undefined}>
-                                  {fmtEur(Number(r.CURRENT_COST_RATE))}/h
-                                </span>
-                              : <span style={{ color: 'var(--text-3)' }}>{NO_VALUE}</span>}
-                          </td>
-                        )}
-                        {canViewBookings && (() => {
-                          const bal = balByEmp.get(r.ID)
-                          const run = bal?.RUNNING_BALANCE ?? 0
-                          return (
-                            <td className="num" style={{ fontVariantNumeric: 'tabular-nums' }}
-                                title={bal ? `Monatssaldo (akt. Monat): ${fmtBalance(bal.BALANCE)}` : undefined}>
-                              {bal
-                                ? <span style={{ color: run > 0 ? 'var(--success)' : run < 0 ? 'var(--danger)' : 'var(--text-3)', fontWeight: 600 }}>{fmtBalance(run)}</span>
-                                : <span style={{ color: 'var(--text-3)' }}>—</span>}
-                            </td>
-                          )
-                        })()}
-                        <td onClick={e => e.stopPropagation()}>
-                          <InlineSelect
-                            value={r.ACTIVE ?? 1} options={EMP_STATUS_OPTS} allowEmpty={false}
-                            readOnly={!canEditEmp} ariaLabel="Status"
-                            tone={r.ACTIVE === 2 ? { bg: 'var(--danger-bg)', color: 'var(--danger-strong)' } : { bg: 'var(--success-bg)', color: 'var(--success-strong)' }}
-                            onChange={v => empInlineMut.mutate({ id: r.ID, body: employeeRowToPayload(r, { active: Number(v) }) })}
-                          />
-                        </td>
-                        <td onClick={e => e.stopPropagation()}>
-                          <Can permission="employees.role.assign" fallback={
-                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => {}} />
-                          }>
-                            <EmployeeRoleBadge employeeId={r.ID} roles={userRoles} mapping={empRoleMap} onClick={() => { setEditInitialSection('rolle'); setEditRow(r) }} />
-                          </Can>
-                        </td>
-                        <td style={{ color: r.DASHBOARD_ROLE ? 'var(--text-2)' : 'var(--border)', fontSize: 12 }}>
-                          {{ geschaeftsleitung: 'Geschäftsleitung', controller: 'Controller', bereichsleiter: 'Projektleiter', mitarbeiter: 'Mitarbeiter' }[r.DASHBOARD_ROLE ?? ''] ?? '—'}
-                        </td>
-                        <td className="doc-actions" onClick={e => e.stopPropagation()}>
-                          <Can permission="employees.edit">
-                            <button className="row-action-btn" onClick={() => { setEditInitialSection('stammdaten'); setEditRow(r) }} title="Bearbeiten">
-                              <Pencil size={14} strokeWidth={2} />
-                            </button>
-                          </Can>
-                          <Can permission="employees.delete">
-                            <button className="row-action-btn row-action-btn--danger" onClick={() => handleDelete(r)} title="Löschen">
-                              <Trash2 size={14} strokeWidth={2} />
-                            </button>
-                          </Can>
-                        </td>
-                      </tr>
-                    ))}
-                    {!pageRows.length && <tr><td colSpan={canViewBookings ? 10 : 9} className="empty-note">Keine Einträge</td></tr>}
-                  </tbody>
-                  <tfoot>
-                    <tr style={{ fontWeight: 600, borderTop: '2px solid var(--border)' }}>
-                      <td colSpan={canViewBookings ? 10 : 9} style={{ fontSize: 13, color: 'var(--text-3)', paddingTop: 6 }}>
-                        {processed.length !== employees.length ? `${processed.length} / ${employees.length} Einträge` : `${employees.length} Einträge`}
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-                </div>
-                {totalPages > 1 && (
-                  <div className="pagination">
-                    <button className="btn-sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1}>
-                      <ChevronLeft size={14} strokeWidth={2} />Zurück
-                    </button>
-                    <span className="pagination-info">Seite {safePage} / {totalPages}</span>
-                    <button className="btn-sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}>
-                      Weiter<ChevronRight size={14} strokeWidth={2} />
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
+        {tab === 'list' && <MitarbeiterListe employees={employees} isLoading={isLoading} />}
 
         {tab === 'zeitwirtschaft' && (
           <ZeitwirtschaftTab employees={employees} onGoToList={() => changeTab('list')} />
@@ -3281,120 +1458,6 @@ export function MitarbeiterPage() {
           <ArbzgAuditTab employees={employees} />
         )}
       </div>
-
-      <Modal open={editRow !== null} onClose={() => setEditRow(null)} title={`${editRow?.ABBR ?? ''} – ${editRow?.FIRST_NAME ?? ''} ${editRow?.LAST_NAME ?? ''}`}>
-        {editRow && (
-          <EmployeeEditModal
-            employee={editRow}
-            onClose={() => setEditRow(null)}
-            genders={genders}
-            departments={departments}
-            workModels={workModels}
-            roles={userRoles}
-            mapping={empRoleMap}
-            alleMitarbeiter={employees}
-            initialSection={editInitialSection}
-          />
-        )}
-      </Modal>
-
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neuer Mitarbeiter">
-        <form ref={createFormRef} onSubmit={submitCreate} className="master-form">
-          <FormField label="Kürzel*"     id="mku" value={form.abbr}          onChange={setF('abbr')} required />
-          <FormField label="Titel"       id="mti" value={form.title ?? ''}          onChange={setF('title')} />
-          <div className="form-row">
-            <FormField label="Vorname*"  id="mfn" value={form.first_name}          onChange={setF('first_name')} required />
-            <FormField label="Nachname*" id="mln" value={form.last_name}           onChange={setF('last_name')} required />
-          </div>
-          <FormField label="E-Mail"      id="mem" value={form.email ?? ''}          onChange={setF('email')} type="email" />
-          <div className="form-row">
-            <FormField label="Telefon"   id="mph" value={form.phone ?? ''}          onChange={setF('phone')} />
-            <FormField label="Mobil"     id="mmo" value={form.mobile ?? ''}         onChange={setF('mobile')} />
-          </div>
-          <FormField label="Personalnr." id="mpn" value={form.personnel_number ?? ''} onChange={setF('personnel_number')} />
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="mentry">Eintrittsdatum</label>
-              <input id="mentry" type="date" value={form.entry_date ?? ''} onChange={setF('entry_date')} />
-            </div>
-            <div className="form-group">
-              <label htmlFor="mbirth">Geburtstag</label>
-              <input id="mbirth" type="date" value={form.birth_date ?? ''} onChange={setF('birth_date')} />
-            </div>
-          </div>
-          <div className="mitarbeiter-zugang-hinweis">
-            <KeyRound size={14} strokeWidth={2} />
-            <span>
-              Kein Passwort nötig: Nach dem Anlegen erhält der Mitarbeiter eine E-Mail mit einem
-              einmaligen Link und legt sein Passwort selbst fest. Ohne E-Mail-Adresse ist noch keine
-              Anmeldung möglich — die Einladung lässt sich später über den Mitarbeiter nachholen.
-            </span>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="mge">Geschlecht*</label>
-              <select id="mge" value={String(form.gender_id)} onChange={setF('gender_id')} required>
-                <option value="">Bitte wählen …</option>
-                {genders.map(g => <option key={g.ID} value={g.ID}>{g.GENDER}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="mdept">Abteilung</label>
-              <select id="mdept" value={form.department_id ?? ''}
-                onChange={e => setForm(f => ({ ...f, department_id: e.target.value ? Number(e.target.value) : null }))}>
-                <option value="">—</option>
-                {departments.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <hr style={{ margin: '12px 0', borderColor: 'var(--border)' }} />
-          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Arbeitszeitmodell*</p>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="mwm">Modell*</label>
-              <select id="mwm" value={createWmModelId} onChange={e => setCreateWmModelId(e.target.value)} required>
-                <option value="">Bitte wählen …</option>
-                {workModels.map(m => <option key={m.ID} value={m.ID}>{m.NAME}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="mwmvf">Gültig ab*</label>
-              <input id="mwmvf" type="date" value={createWmValidFrom} onChange={e => setCreateWmValidFrom(e.target.value)} required />
-            </div>
-          </div>
-
-          <hr style={{ margin: '12px 0', borderColor: 'var(--border)' }} />
-          <p style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-2)', marginBottom: 8 }}>Kostensatz*</p>
-          <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="mcr">Kostensatz (€/h)*</label>
-              <input id="mcr" type="number" step="0.01" min="0" value={createCpRate} onChange={e => setCreateCpRate(e.target.value)} placeholder="z. B. 85.00" required />
-            </div>
-            <div className="form-group">
-              <label htmlFor="mcrvf">Gültig ab*</label>
-              <input id="mcrvf" type="date" value={createCpValidFrom} onChange={e => setCreateCpValidFrom(e.target.value)} required />
-            </div>
-          </div>
-
-          <Message text={createMsg?.text ?? null} type={createMsg?.type} />
-          <DialogFooter>
-            <button type="button" className="btn-secondary" onClick={() => setShowCreate(false)}>Abbrechen</button>
-            <button className="btn-primary" type="submit" disabled={creating}>
-              {creating ? 'Speichert …' : 'Speichern'}
-            </button>
-          </DialogFooter>
-        </form>
-      </Modal>
-
-      <ConfirmModal
-        open={confirmState !== null}
-        title={confirmState?.title ?? ''}
-        message={confirmState?.message ?? ''}
-        confirmLabel="Löschen"
-        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
-        onCancel={() => setConfirmState(null)}
-      />
     </div>
   )
 }
