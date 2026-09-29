@@ -24,8 +24,8 @@ import { mockPilot, mockEinstellungen, TIMER_DRAFTS } from './fixtures/pilotData
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9, vorher11: 10, vorher12: 11 }
-const since = (round: number) => (RANK[PHASE] ?? 12) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9, vorher11: 10, vorher12: 11, vorher13: 12 }
+const since = (round: number) => (RANK[PHASE] ?? 13) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -1166,4 +1166,20 @@ test('Einstellungen – Abwesenheitsart bearbeiten', async ({ page }, info) => {
   else await page.getByRole('row', { name: /Urlaub/ }).getByRole('button', { name: /bearbeiten/i }).first().click()
   await page.getByRole('dialog').waitFor()
   await shoot(page, info.project.name, 'einst-abwesenheitsart')
+})
+
+// ── Runde 13: Status je Büro, Reporting ──────────────────────────────────────
+
+test('Einstellungen – Projektstatus', async ({ page }, info) => {
+  test.skip(!since(13), 'Projektstatus pflegt ein Büro erst seit Runde 13')
+  await openSettings(page, info.project.name, 'stammdaten', 'projektstatus')
+  await page.getByText('Pausiert').first().waitFor()
+  await shoot(page, info.project.name, 'einst-projektstatus')
+})
+
+test('Einstellungen – Angebotsstatus', async ({ page }, info) => {
+  test.skip(!since(13), 'Angebotsstatus pflegt ein Büro erst seit Runde 13')
+  await openSettings(page, info.project.name, 'stammdaten', 'angebotsstatus')
+  await page.getByText('Abgebrochen').first().waitFor()
+  await shoot(page, info.project.name, 'einst-angebotsstatus')
 })
