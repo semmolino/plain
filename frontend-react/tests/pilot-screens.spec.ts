@@ -1,6 +1,6 @@
 import { test, type Page } from '@playwright/test'
 import { hideDevtools } from './fixtures/demoData'
-import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
+import { mockPilot, mockEinstellungen, TIMER_DRAFTS } from './fixtures/pilotData'
 
 /**
  * Vorher/Nachher-Bilder fuer den UI-Pilot (Branch ui-sm).
@@ -19,13 +19,13 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 // vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
 // vorher6 = nach Runde 5, vorher7 = nach Runde 6, vorher8 = nach Runde 7,
 // vorher9 = nach Runde 8, vorher10 = nach Runde 9, vorher11 = nach Runde 10,
-// nachher = aktueller Stand.
+// vorher12 = nach Runde 11, nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9, vorher11: 10 }
-const since = (round: number) => (RANK[PHASE] ?? 11) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9, vorher11: 10, vorher12: 11 }
+const since = (round: number) => (RANK[PHASE] ?? 12) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -1097,4 +1097,65 @@ test('Stundencontrolling – Monatsabschluss', async ({ page }, info) => {
   await openControlling(page, 'close')
   await page.getByText('Braun-Hofmeister').first().waitFor()
   await shoot(page, info.project.name, 'sc-abschluss')
+})
+
+// ── Runde 12: Einstellungen ──────────────────────────────────────────────────
+
+async function openSettings(page: Page, device: string, tab: string, sub?: string) {
+  await prepare(page, device)
+  await mockEinstellungen(page)
+  await open(page, `/admin?tab=${tab}${sub && since(12) ? `&sub=${sub}` : ''}`)
+}
+
+test('Einstellungen – Vorbelegungen', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'vorbelegungen')
+  await page.getByText('Gültigkeitsdauer', { exact: false }).first().waitFor()
+  await shoot(page, info.project.name, 'einst-vorbelegungen')
+})
+
+test('Einstellungen – Vorbelegungen geändert', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'vorbelegungen')
+  // Vorher hing die Beschriftung nicht am Feld
+  const f = since(12) ? page.getByLabel('Skonto (%)') : page.locator('input[placeholder="z. B. 2"]')
+  await f.fill(since(12) ? '2,5' : '2.5')
+  await page.getByLabel(/Zahlungsziel/).first().fill('21')
+  await shoot(page, info.project.name, 'einst-vorbelegungen-geaendert')
+})
+
+test('Einstellungen – Abteilungen', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'abteilungen')
+  await page.getByText('Hochbau').first().waitFor()
+  await shoot(page, info.project.name, 'einst-abteilungen')
+})
+
+test('Einstellungen – Projektrollen', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'rollen')
+  await page.getByText('Projektleitung').first().waitFor()
+  await page.getByText('Projektleitung').first().scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'einst-rollen')
+})
+
+test('Einstellungen – Rolle bearbeiten', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'rollen')
+  if (since(12)) {
+    await page.getByRole('button', { name: 'Rolle PL bearbeiten' }).click()
+    await page.getByRole('dialog').waitFor()
+  } else {
+    await page.getByRole('row', { name: /Projektleitung/ }).getByRole('button', { name: '✎' }).click()
+  }
+  await shoot(page, info.project.name, 'einst-rolle-bearbeiten')
+})
+
+test('Einstellungen – Abwesenheitsarten', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'abwesenheitsarten')
+  await page.getByText('Fortbildung').first().waitFor()
+  await page.getByText('Fortbildung').first().scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'einst-abwesenheitsarten')
+})
+
+test('Einstellungen – Abwesenheitsart bearbeiten', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'abwesenheitsarten')
+  await page.getByRole('row', { name: /Urlaub/ }).getByRole('button', { name: /bearbeiten/i }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'einst-abwesenheitsart')
 })
