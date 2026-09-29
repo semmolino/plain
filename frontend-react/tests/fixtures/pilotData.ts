@@ -205,7 +205,7 @@ export const OFFER_DETAIL = {
   EMPLOYEE_ID: 1, PROBABILITY: 78, OFFER_STATUS_ID: 2, COMPANY_ID: 1, ADDRESS_ID: 1, CONTACT_ID: 1, TENANT_ID: 1,
   OFFER_DATE: '2025-07-01', VALID_UNTIL: '2025-09-01', PROJECT_ID: null,
   // Angebotsdaten (Runde 9): Empfänger und Texte wie im PDF
-  ADDRESS_NAME: 'Stadt Musterstadt – Hochbauamt', CREATED_AT: '2025-06-24T09:12:00Z',
+  ADDRESS_NAME: 'Stadt Ravensburg', CREATED_AT: '2025-06-24T09:12:00Z',
   OFFER_TEXT_1: 'Sehr geehrte Damen und Herren,\nvielen Dank für Ihre Anfrage. Gerne bieten wir Ihnen die folgenden Leistungen an:',
   OFFER_TEXT_2: 'Das Angebot gilt bis zum genannten Datum. Die Abrechnung erfolgt nach HOAI 2021.\nMit freundlichen Grüßen',
   ...offerSur.fields, SURCHARGES_TOTAL: offerSur.total,
