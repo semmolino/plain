@@ -151,10 +151,10 @@ export interface CreateOfferPayload {
   employee_id:      string | number
   address_id:       string | number
   contact_id:       string | number
-  probability?:     string | number
-  offer_text_1?:    string
-  offer_text_2?:    string
-  offer_date?:      string
+  probability?:     string | number | null
+  offer_text_1?:    string | null
+  offer_text_2?:    string | null
+  offer_date?:      string | null
   valid_until?:     string | null
   offer_structure?: OfferStructureDraftRow[]
 }

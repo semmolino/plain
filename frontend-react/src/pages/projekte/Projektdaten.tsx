@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useConfirm } from '@/hooks/useConfirm'
 import { useRegisterDirty } from '@/hooks/useDirtyGuard'
+import { presetNote, useContactPreset } from '@/hooks/useContactPreset'
 import { usePermission } from '@/store/permissionsStore'
 import {
   fetchProjectListFull, fetchProject, updateProject, cascadeProjectInternal,
@@ -131,6 +132,10 @@ function ProjektdatenFormular({ project }: { project: Project }) {
     enabled:  form.addressId != null,
   })
   const contacts = form.addressId != null ? contactData?.data ?? [] : []
+  // Kontakt nach der Adresswahl vorbelegen (Runde 9)
+  const applyContact = useCallback((id: number) => setEdits(e => ({ ...e, contactId: id })), [])
+  const contactPreset = useContactPreset(form.addressId, form.addressId != null ? contactData?.data : [], applyContact)
+  const contactNote = presetNote(contactPreset.preset, form.contactId)
 
   // Herkunft: GET /projekte/:id liefert die ganze Zeile (select *), der Typ
   // kennt nur die Spalten der Liste.
@@ -324,20 +329,24 @@ function ProjektdatenFormular({ project }: { project: Project }) {
             label="Adresse"
             htmlId="pd-address"
             value={form.addrText}
-            onChange={text => text ? set('addrText', text) : patch({ addrText: '', addressId: null, contactId: null })}
-            onSelect={(id, label) => patch({ addressId: Number(id), addrText: label, contactId: null })}
+            onChange={text => { if (text) set('addrText', text); else { patch({ addrText: '', addressId: null, contactId: null }); contactPreset.arm(null) } }}
+            onSelect={(id, label) => { patch({ addressId: Number(id), addrText: label, contactId: null }); contactPreset.arm(Number(id)) }}
             search={searchAddresses}
             placeholder="Adresse suchen …"
           />
           <div className="form-group">
             <label htmlFor="pd-contact">Ansprechpartner</label>
             <select id="pd-contact" value={form.contactId ?? ''} disabled={form.addressId == null}
+              aria-describedby={contactNote ? 'pd-contact-hint' : undefined}
               onChange={e => set('contactId', e.target.value ? Number(e.target.value) : null)}>
               <option value="">{form.addressId == null ? 'Erst eine Adresse wählen' : '— kein Ansprechpartner —'}</option>
               {contacts.map(c => (
-                <option key={c.ID} value={c.ID}>{`${c.FIRST_NAME ?? ''} ${c.LAST_NAME ?? ''}`.trim()}</option>
+                <option key={c.ID} value={c.ID}>
+                  {`${c.FIRST_NAME ?? ''} ${c.LAST_NAME ?? ''}`.trim()}{Number(c.IS_PRIMARY) === 1 ? ' (Hauptansprechpartner)' : ''}
+                </option>
               ))}
             </select>
+            {contactNote && <p id="pd-contact-hint" className="form-field-hint">{contactNote}</p>}
           </div>
         </FormSection>
       </fieldset>

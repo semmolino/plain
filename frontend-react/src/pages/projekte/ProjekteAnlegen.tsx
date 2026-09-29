@@ -13,6 +13,7 @@ import { fetchCompanies } from '@/api/rechnungen'
 import { searchAddressesApi, fetchContactsByAddress } from '@/api/stammdaten'
 import { fetchBookingTypes, BOOKING_KIND_LABEL, type BookingType } from '@/api/bookingTypes'
 import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { presetNote, useContactPreset } from '@/hooks/useContactPreset'
 import { presetId } from '@/utils/vorbelegung'
 import { useFeature } from '@/store/licenseStore'
 
@@ -76,6 +77,9 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   const roles     = roleData?.data    ?? []
   const contacts  = contactData?.data ?? []
   const companies = companyData?.data ?? []
+  // Kontakt nach der Adresswahl vorbelegen (Runde 9)
+  const applyContact = useCallback((id: number) => setBasic(f => ({ ...f, contact_id: String(id) })), [])
+  const contactPreset = useContactPreset(addressId, addressId ? contactData?.data : [], applyContact)
   // Nur globale Buchungsarten lassen sich vor der Anlage projektbezogen bepreisen.
   const bookingTypes = (bookingTypeData?.data ?? []).filter((t: BookingType) => t.SCOPE === 'global')
 
@@ -280,12 +284,13 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
           </div>
           <Autocomplete label="Rechnungsadresse*" htmlId="prj-addr"
             value={addrText}
-            onChange={t => { setAddrText(t); if (!t) { setB('address_id')(''); setB('contact_id')('') } }}
-            onSelect={(id, lbl) => { setAddrText(lbl); setB('address_id')(String(id)); setB('contact_id')('') }}
+            onChange={t => { setAddrText(t); if (!t) { setB('address_id')(''); setB('contact_id')(''); contactPreset.arm(null) } }}
+            onSelect={(id, lbl) => { setAddrText(lbl); setB('address_id')(String(id)); setB('contact_id')(''); contactPreset.arm(Number(id)) }}
             search={searchAddresses} placeholder="Name eingeben …" />
           <div className="form-group">
-            <label>Rechnungskontakt*</label>
+            <label htmlFor="prj-contact">Rechnungskontakt*</label>
             <select
+              id="prj-contact"
               value={basic.contact_id}
               onChange={e => setB('contact_id')(e.target.value)}
               disabled={!basic.address_id}
@@ -293,10 +298,13 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
               <option value="">{basic.address_id ? 'Bitte wählen …' : 'Erst Adresse wählen'}</option>
               {contacts.map(c => (
                 <option key={c.ID} value={c.ID}>
-                  {`${c.FIRST_NAME ?? ''} ${c.LAST_NAME ?? ''}`.trim()}
+                  {`${c.FIRST_NAME ?? ''} ${c.LAST_NAME ?? ''}`.trim()}{Number(c.IS_PRIMARY) === 1 ? ' (Hauptansprechpartner)' : ''}
                 </option>
               ))}
             </select>
+            {presetNote(contactPreset.preset, basic.contact_id) && (
+              <p className="form-field-hint">{presetNote(contactPreset.preset, basic.contact_id)}</p>
+            )}
           </div>
         </div>
       )}

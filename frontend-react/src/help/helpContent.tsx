@@ -1653,6 +1653,17 @@ export const HELP = {
       </>
     ),
   },
+  // ── UI-Pilot Runde 9: Angebotsdaten ─────────────────────────────────────
+  'offers.probability': {
+    title: 'Wahrscheinlichkeit',
+    body: (
+      <>
+        Deine Einschätzung, wie sicher der Auftrag kommt — von 0 bis 100 %. Sie steht in der
+        Angebotsliste und im Kopf des Angebots und lässt sich dort sortieren. In Umsätze, Kennzahlen
+        oder das PDF geht sie nicht ein. Leer lassen heißt „keine Einschätzung".
+      </>
+    ),
+  },
   'projects.internal': {
     title: 'Internes Projekt',
     body: (

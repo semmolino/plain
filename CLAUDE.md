@@ -320,6 +320,14 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   anderen Seiten bauen `angebotHref(id, tab)`, alte `state: { offerId }`-
   Einstiege werden umgeschrieben. „Als beauftragt markieren" laeuft in Liste
   und Kopf ueber denselben `BeauftragtDialog`.
+  Reiter „Angebotsdaten" (`Angebotsdaten.tsx`, lesbar mit `offers.view`,
+  änderbar mit `offers.edit`) und „Neues Angebot" (`AngebotAnlegenDialog.tsx`)
+  teilen die Felder aus `OfferFields.tsx` samt `missingOfferFields`/
+  `offerPayload`. Die Person im Büro heißt dort „Zuständig" (im PDF
+  „Ansprechpartner"), die beim Kunden „Kontakt". Der Server prüft beim Anlegen
+  und Ändern, dass die Adresse dem Mandanten und der Kontakt genau dieser
+  Adresse gehört (`assertOwnAddress`/`assertContactOfAddress`,
+  `services/adressen.js`); Pflichtfelder dürfen sich ändern, aber nicht leeren.
 - **Kalkulationen (HOAI-Assistent)** (`pages/projekte/HonorarWizard.tsx`, Liste
   `HonorarTab.tsx`, im Angebot `angebote/AngeboteHoai.tsx`): im Muster der
   Rechnungsassistenten — sprechende Schritte, ActionBar (im Dialog am unteren
@@ -364,7 +372,11 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   `tests/dependencyCheck.columns.test.js` gegen das Schema gehalten.
   Rechnungen führen die Adresse als `INVOICE_ADDRESS_ID`, Abschläge als
   `ADVANCE_INVOICE_ADDRESS_ID` — nicht `ADDRESS_ID`. Je Adresse gibt es einen
-  Hauptansprechpartner (`ensureSinglePrimary`).
+  Hauptansprechpartner (`ensureSinglePrimary`). Wer in Projekt, Angebot oder
+  Vertrag eine Adresse **wählt**, bekommt ihn als Kontakt vorbelegt (sonst den
+  einzigen Kontakt der Adresse) — über `useContactPreset`, nie beim Laden
+  eines gespeicherten Stands; `GET /stammdaten/contacts/by-address` liefert
+  dafür `IS_PRIMARY` und stellt ihn nach vorn.
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
@@ -805,7 +817,7 @@ den man die Regel hätte schreiben können.
 These rules apply to every feature. Playwright smoke tests in `frontend-react/tests/` enforce them automatically in CI.
 
 **Layout**
-- No horizontal scroll at any viewport width (test: `document.body.scrollWidth ≤ viewport.width + 2`)
+- No horizontal scroll at any viewport width (test: `document.documentElement.scrollWidth ≤ viewport.width + 2` — **nicht** nur `body`: ein absolut positioniertes Kind am Seitenrand, etwa ein `.sr-only` im Tabellenkopf, verbreitert die Seite, ohne dass `body.scrollWidth` es zeigt. So waren Angebots- und Projektliste am Handy 1111 px breit, samt jedem Dialog darüber. Am Handy ist deshalb `.master-table` selbst der Bezug für solche Kinder.)
 - Bottom nav (`.bottom-nav`) must always be visible and reachable — never obscured by modals or sticky headers
 - Page content must not be hidden behind the fixed bottom nav — keep `padding-bottom` ≥ 64px on all page roots
 - Sticky table headers (`position: sticky`) are **desktop only** — disabled via `@media (max-width: 1023px)` in globals.css to prevent layout issues on small viewports

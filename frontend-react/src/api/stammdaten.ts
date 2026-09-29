@@ -151,8 +151,11 @@ export const searchContactsApi = (addressId: number, q: string) =>
     `/stammdaten/contacts/search?address_id=${addressId}&q=${encodeURIComponent(q)}`
   )
 
+/** Kontakte einer Adresse, der Hauptansprechpartner zuerst (IS_PRIMARY = 1). */
+export interface AddressContactOption { ID: number; FIRST_NAME: string; LAST_NAME: string; IS_PRIMARY?: number }
+
 export const fetchContactsByAddress = (addressId: number) =>
-  apiClient.get<{ data: Array<{ ID: number; FIRST_NAME: string; LAST_NAME: string }> }>(
+  apiClient.get<{ data: AddressContactOption[] }>(
     `/stammdaten/contacts/by-address?address_id=${addressId}`
   )
 

@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Tabs }                 from '@/components/ui/Tabs'
 import { PageHeader }           from '@/components/ui/PageHeader'
 import { AngeboteListe }        from '@/pages/angebote/AngeboteListe'
-import { AngeboteStammdaten }   from '@/pages/angebote/AngeboteStammdaten'
+import { Angebotsdaten }        from '@/pages/angebote/Angebotsdaten'
 import { AngeboteStruktur }     from '@/pages/angebote/AngeboteStruktur'
 import { AngeboteHoai }         from '@/pages/angebote/AngeboteHoai'
 import { AngebotHeader }        from '@/pages/angebote/AngebotHeader'
@@ -16,12 +16,13 @@ import { useLicenseFilterTabs } from '@/store/licenseStore'
 import { DirtyGuardProvider }   from '@/components/ui/DirtyGuard'
 import { useGuardedAction }     from '@/hooks/useDirtyGuard'
 
-// Reiter des Arbeitsbereichs. Rechte wie bisher: die Struktur und die
-// Angebotsdaten brauchten schon als Modul-Reiter bzw. Dialog offers.edit.
+// Reiter des Arbeitsbereichs. Die Struktur braucht wie bisher offers.edit;
+// die Angebotsdaten sind seit Runde 9 mit offers.view lesbar (wie die
+// Projektdaten mit projects.view), geändert wird weiter mit offers.edit.
 const WORKSPACE_TABS: { id: AngebotTab; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'struktur',      label: 'Struktur',       permissions: ['offers.edit'] },
   { id: 'kalkulationen', label: 'Kalkulationen',  permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
-  { id: 'daten',         label: 'Angebotsdaten',  permissions: ['offers.edit'] },
+  { id: 'daten',         label: 'Angebotsdaten',  permissions: ['offers.view'] },
 ]
 
 /**
@@ -100,7 +101,7 @@ function AngeboteSeite() {
       <div className="master-tab-content">
         {view.tab === 'struktur'      && <AngeboteStruktur initialOfferId={oid} />}
         {view.tab === 'kalkulationen' && <AngeboteHoai initialOfferId={oid} />}
-        {view.tab === 'daten'         && <AngeboteStammdaten key={oid} initialOfferId={oid} hideActions />}
+        {view.tab === 'daten'         && <Angebotsdaten offerId={oid} />}
       </div>
     </div>
   )
