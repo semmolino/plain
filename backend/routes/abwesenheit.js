@@ -221,6 +221,75 @@ function computeVacationBreakdown(opts) {
   return { breakdown, current };
 }
 
+// Urlaubssaldo eines Mitarbeiters fuer ein Jahr (Route /vacation-balance und
+// Vorschau). `pending`: offen beantragte Urlaubstage in diesem Jahr — sie
+// mindern den Saldo erst mit der Genehmigung, gehoeren aber in jede Planung.
+// `excludeId`: der gerade bearbeitete Antrag zaehlt nicht doppelt.
+async function vacationBalanceFor(supabase, tenantId, empId, year, { excludeId = null } = {}) {
+  const fail = (e) => { throw { status: 500, message: e.message }; };
+  const { data: vacTypes, error: tErr } = await supabase.from("ABSENCE_TYPE")
+    .select("ID").eq("TENANT_ID", tenantId).eq("REDUCES_VACATION", true);
+  if (tErr) fail(tErr);
+  const vacTypeIds = (vacTypes || []).map(t => t.ID);
+
+  const { data: entitlements, error: eErr } = await supabase.from("VACATION_ENTITLEMENT")
+    .select("*").eq("TENANT_ID", tenantId).eq("EMPLOYEE_ID", empId);
+  if (eErr) fail(eErr);
+  const { data: rows, error: aErr } = vacTypeIds.length
+    ? await supabase.from("ABSENCE").select("ID, DATE_FROM, DATE_TO, HALF_DAY, STATUS")
+        .eq("TENANT_ID", tenantId).eq("EMPLOYEE_ID", empId).in("STATUS", ["APPROVED", "REQUESTED"]).in("ABSENCE_TYPE_ID", vacTypeIds)
+    : { data: [] };
+  if (aErr) fail(aErr);
+  const all = (rows || []).filter(a => a.ID == null || a.ID !== excludeId);
+  const absences = all.filter(a => a.STATUS === "APPROVED");
+  const requested = all.filter(a => a.STATUS === "REQUESTED");
+
+  // Feiertage im relevanten Zeitraum (fruehester Antrag bis Jahresende) einmalig laden.
+  let holidays = null;
+  if (all.length) {
+    let spanFrom = `${year}-01-01`, spanTo = `${year}-12-31`;
+    for (const a of all) {
+      if (a.DATE_FROM < spanFrom) spanFrom = a.DATE_FROM;
+      if (a.DATE_TO   > spanTo)   spanTo   = a.DATE_TO;
+    }
+    const cs = await getEmployeeCountryState(supabase, tenantId, empId);
+    holidays = await loadHolidaySet(supabase, cs.countryCode, cs.stateCode, spanFrom, spanTo);
+  }
+
+  const settings = await getAbsenceSettings(supabase, tenantId);
+  const expires    = settings.carryoverExpires;
+  const expiryDate = settings.carryoverExpiryDate; // 'MM-DD'
+
+  let assignments = null;
+  try { assignments = (await buildAssignmentResolver(supabase, tenantId, [empId]))(empId); }
+  catch (e) { fail(e); }
+
+  const { takenByYear, takenBeforeByYear, takenAfterByYear } =
+    takenVacationByYear(absences, { holidays, assignments, expires, expiryDate });
+  const entByYear = {};
+  for (const e of entitlements || []) entByYear[e.YEAR] = e;
+
+  const knownYears = [...new Set([...Object.keys(entByYear), ...Object.keys(takenByYear)].map(Number))];
+  const minYear = knownYears.length ? Math.min(Math.min(...knownYears), year) : year;
+
+  const { breakdown, current: cur } = computeVacationBreakdown({
+    entByYear, takenByYear, takenBeforeByYear, takenAfterByYear,
+    minYear, year, expires, expiryDate, todayStr: localToday(),
+  });
+  const pending = takenVacationByYear(requested, { holidays, assignments }).takenByYear[year] || 0;
+
+  const [mm, dd] = expiryDate.split("-");
+  return {
+    year: cur.year, entitled: cur.entitled, carryover: cur.carryover,
+    taken: cur.taken, forfeited: cur.forfeited, atRisk: cur.atRisk, remaining: cur.remaining,
+    pending,
+    carryoverExpires: expires,
+    carryoverExpiryDate: expiryDate,
+    carryoverExpiryLabel: `${dd}.${mm}.`,
+    breakdown,
+  };
+}
+
 // ── E-Mail-Benachrichtigungen (fire-and-forget, nie blockierend) ──────────────
 
 function fmtRangeDe(a) {
@@ -624,12 +693,23 @@ module.exports = (supabase) => {
   });
 
   // POST /:id/cancel — stornieren (Owner oder Verwalter)
+  // Runde 11: Selbst storniert man nur, was noch nicht begonnen hat. Vorher
+  // liess sich ein genommener Urlaub hinterher stornieren — die Tage kamen
+  // auf den Resturlaub zurueck, und das Zeitkonto rechnete die Soll-Zeit
+  // wieder als Minusstunden. Verwalter (absence.manage) duerfen weiterhin
+  // alles, etwa wenn jemand aus dem Urlaub zurueckgeholt wird.
   router.post("/:id/cancel", async (req, res) => {
     const id = Number(req.params.id);
-    const { data: row } = await supabase.from("ABSENCE").select("EMPLOYEE_ID").eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+    const { data: row, error: rowErr } = await supabase.from("ABSENCE").select("EMPLOYEE_ID, STATUS, DATE_FROM").eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+    if (rowErr) return res.status(500).json({ error: rowErr.message });
     if (!row) return res.status(404).json({ error: "Nicht gefunden" });
-    if (row.EMPLOYEE_ID !== req.employeeId && !req.hasPermission("absence.manage"))
+    const manage = req.hasPermission("absence.manage");
+    if (row.EMPLOYEE_ID !== req.employeeId && !manage)
       return res.status(403).json({ error: "Keine Berechtigung" });
+    if (!["APPROVED", "REQUESTED"].includes(row.STATUS))
+      return res.status(409).json({ error: "Diese Abwesenheit ist schon abgelehnt oder storniert." });
+    if (!manage && row.STATUS === "APPROVED" && String(row.DATE_FROM).slice(0, 10) <= localToday())
+      return res.status(409).json({ error: "Eine begonnene Abwesenheit storniert, wer Abwesenheiten verwaltet." });
     const { error } = await supabase.from("ABSENCE").update({ STATUS: "CANCELLED" }).eq("ID", id).eq("TENANT_ID", req.tenantId);
     if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true });
@@ -752,60 +832,84 @@ module.exports = (supabase) => {
     const year  = req.query.year ? Number(req.query.year) : new Date().getFullYear();
     if (empId !== req.employeeId && !req.hasPermission("absence.view"))
       return res.status(403).json({ error: "Fehlende Berechtigung: absence.view" });
+    try { res.json({ data: await vacationBalanceFor(supabase, req.tenantId, empId, year) }); }
+    catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
+  });
 
-    const { data: vacTypes } = await supabase.from("ABSENCE_TYPE")
-      .select("ID").eq("TENANT_ID", req.tenantId).eq("REDUCES_VACATION", true);
-    const vacTypeIds = (vacTypes || []).map(t => t.ID);
+  // GET /preview — was ein Antrag kostet, bevor er gestellt wird (Runde 11).
+  // Vorher sah man die Tage erst in der Liste — und dass ein Urlaub sich mit
+  // einem schon genehmigten ueberschneidet (und doppelt vom Resturlaub
+  // abgeht), gar nicht. Gezaehlt wird wie beim Speichern: Arbeitszeitmodell,
+  // Feiertage, je Kalenderjahr.
+  router.get("/preview", async (req, res) => {
+    const q = req.query || {};
+    const empId = q.employee_id ? Number(q.employee_id) : req.employeeId;
+    const own = empId === req.employeeId;
+    if (!own && !req.hasPermission("absence.view") && !req.hasPermission("absence.manage"))
+      return res.status(403).json({ error: "Fehlende Berechtigung: absence.view" });
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    const from = String(q.date_from || ""), to = String(q.date_to || q.date_from || "");
+    if (!iso.test(from) || !iso.test(to)) return res.status(400).json({ error: "Von- und Bis-Datum im Format JJJJ-MM-TT angeben" });
+    if (to < from) return res.status(400).json({ error: "Bis-Datum liegt vor Von-Datum" });
+    if ((new Date(`${to}T00:00:00`) - new Date(`${from}T00:00:00`)) / 86400000 > 366)
+      return res.status(400).json({ error: "Eine Abwesenheit darf höchstens ein Jahr dauern" });
+    const half = String(q.half_day) === "true" && from === to;
+    const excludeId = q.exclude_id ? Number(q.exclude_id) : null;
 
-    const { data: entitlements } = await supabase.from("VACATION_ENTITLEMENT")
-      .select("*").eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", empId);
-    const { data: absences } = vacTypeIds.length
-      ? await supabase.from("ABSENCE").select("DATE_FROM, DATE_TO, HALF_DAY")
-          .eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", empId).eq("STATUS", "APPROVED").in("ABSENCE_TYPE_ID", vacTypeIds)
-      : { data: [] };
+    try {
+      const { data: emp, error: empErr } = await supabase.from("EMPLOYEE")
+        .select("ID").eq("ID", empId).eq("TENANT_ID", req.tenantId).maybeSingle();
+      if (empErr) throw empErr;
+      if (!emp) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
 
-    // Feiertage im relevanten Zeitraum (fruehester Antrag bis Jahresende) einmalig laden.
-    let holidays = null;
-    if ((absences || []).length) {
-      let spanFrom = `${year}-01-01`, spanTo = `${year}-12-31`;
-      for (const a of absences) {
-        if (a.DATE_FROM < spanFrom) spanFrom = a.DATE_FROM;
-        if (a.DATE_TO   > spanTo)   spanTo   = a.DATE_TO;
+      let type = null;
+      if (q.absence_type_id) {
+        const { data, error } = await supabase.from("ABSENCE_TYPE")
+          .select("ID, REDUCES_VACATION, REQUIRES_APPROVAL").eq("ID", Number(q.absence_type_id)).eq("TENANT_ID", req.tenantId).maybeSingle();
+        if (error) throw error;
+        type = data;
       }
-      const cs = await getEmployeeCountryState(supabase, req.tenantId, empId);
-      holidays = await loadHolidaySet(supabase, cs.countryCode, cs.stateCode, spanFrom, spanTo);
+
+      const holidaysFor    = await buildHolidayResolver(supabase, req.tenantId, [empId], from, to);
+      const assignmentsFor = await buildAssignmentResolver(supabase, req.tenantId, [empId]);
+      const byYear = workdaysByYear(from, to, half, holidaysFor(empId), assignmentsFor(empId));
+      const days = Object.values(byYear).reduce((s, n) => s + n, 0);
+
+      // Ueberschneidungen mit eigenen offenen oder genehmigten Abwesenheiten
+      const { data: others, error: oErr } = await supabase.from("ABSENCE")
+        .select("ID, ABSENCE_TYPE_ID, DATE_FROM, DATE_TO, HALF_DAY, STATUS")
+        .eq("TENANT_ID", req.tenantId).eq("EMPLOYEE_ID", empId).in("STATUS", ["REQUESTED", "APPROVED"])
+        .lte("DATE_FROM", to).gte("DATE_TO", from);
+      if (oErr) throw oErr;
+      const clash = (others || []).filter(o => o.ID !== excludeId && o.DATE_FROM <= to && o.DATE_TO >= from);
+      const typeIds = [...new Set(clash.map(o => o.ABSENCE_TYPE_ID))];
+      const { data: clashTypes } = typeIds.length
+        ? await supabase.from("ABSENCE_TYPE").select("ID, NAME").eq("TENANT_ID", req.tenantId).in("ID", typeIds)
+        : { data: [] };
+      const typeName = Object.fromEntries((clashTypes || []).map(t => [t.ID, t.NAME]));
+
+      // Resturlaub nur fuer Arten, die ihn mindern — und fremde nur mit absence.view
+      let balance = null;
+      if (type && type.REDUCES_VACATION && (own || req.hasPermission("absence.view"))) {
+        balance = [];
+        for (const y of Object.keys(byYear).map(Number).sort()) {
+          const b = await vacationBalanceFor(supabase, req.tenantId, empId, y, { excludeId });
+          const r2 = (n) => Math.round(n * 100) / 100;
+          balance.push({ year: y, remaining: b.remaining, pending: b.pending, days: byYear[y], after: r2(b.remaining - b.pending - byYear[y]) });
+        }
+      }
+
+      res.json({ data: {
+        days,
+        by_year: Object.entries(byYear).map(([y, d]) => ({ year: Number(y), days: d })),
+        reduces_vacation: !!type?.REDUCES_VACATION,
+        requires_approval: type ? type.REQUIRES_APPROVAL !== false : null,
+        balance,
+        overlaps: clash.map(o => ({ ID: o.ID, DATE_FROM: o.DATE_FROM, DATE_TO: o.DATE_TO, HALF_DAY: o.HALF_DAY, STATUS: o.STATUS, TYPE_NAME: typeName[o.ABSENCE_TYPE_ID] ?? null })),
+      } });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
     }
-
-    const settings = await getAbsenceSettings(supabase, req.tenantId);
-    const expires    = settings.carryoverExpires;
-    const expiryDate = settings.carryoverExpiryDate; // 'MM-DD'
-
-    let assignments = null;
-    try { assignments = (await buildAssignmentResolver(supabase, req.tenantId, [empId]))(empId); }
-    catch (e) { return res.status(500).json({ error: e.message }); }
-
-    const { takenByYear, takenBeforeByYear, takenAfterByYear } =
-      takenVacationByYear(absences || [], { holidays, assignments, expires, expiryDate });
-    const entByYear = {};
-    for (const e of entitlements || []) entByYear[e.YEAR] = e;
-
-    const knownYears = [...new Set([...Object.keys(entByYear), ...Object.keys(takenByYear)].map(Number))];
-    const minYear = knownYears.length ? Math.min(Math.min(...knownYears), year) : year;
-
-    const { breakdown, current: cur } = computeVacationBreakdown({
-      entByYear, takenByYear, takenBeforeByYear, takenAfterByYear,
-      minYear, year, expires, expiryDate, todayStr: localToday(),
-    });
-
-    const [mm, dd] = expiryDate.split("-");
-    res.json({ data: {
-      year: cur.year, entitled: cur.entitled, carryover: cur.carryover,
-      taken: cur.taken, forfeited: cur.forfeited, atRisk: cur.atRisk, remaining: cur.remaining,
-      carryoverExpires: expires,
-      carryoverExpiryDate: expiryDate,
-      carryoverExpiryLabel: `${dd}.${mm}.`,
-      breakdown,
-    } });
   });
 
   // ── Settings (Verfallsfrist) ────────────────────────────────────────────────

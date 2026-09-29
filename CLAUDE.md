@@ -393,6 +393,17 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   abgerechnete, und zieht `QUANTITY_EXT` nur mit, solange es `QUANTITY_INT` entsprach.
   Stundencontrolling zeigt Auswertung und Einzelansicht nur mit `employees.bookings.view_all`; wer
   nur `employees.month_close.edit` hat, sieht den Monatsabschluss.
+- **Abwesenheiten und Stundencontrolling** (Modul Mitarbeiter, UI-Pilot Runde 11):
+  Unterreiter in der URL — `?tab=abwesenheiten&sub=inbox|calendar|my|entitlements`
+  (`pages/mitarbeiter/AbwesenheitenTab.tsx`, Benachrichtigungen verlinken mit `&absence=…`) und
+  `?tab=zeitwirtschaft&sub=single&emp=…` (`Stundencontrolling.tsx`). Beantragen, Bearbeiten und
+  Erfassen laufen durch **einen** Dialog (`AbsenceDialog.tsx`); was ein Antrag kostet, rechnet
+  `GET /abwesenheit/preview` am Server wie das Speichern (Modell, Feiertage, je Jahr, Resturlaub
+  danach samt offener Anträge, Überschneidungen mit eigenen Einträgen) — nie im Browser nachbauen.
+  Genehmigen, Ablehnen (mit Begründung → `DECISION_NOTE`) und Rückfrage über `AbsenceDecision.tsx`;
+  Status, Zeitraum, Tage und Verlauf über `absenceUi.tsx`. Den Resturlaub liefert
+  `vacationBalanceFor` in `routes/abwesenheit.js` (auch `pending` = offen beantragt). Die Seite hat
+  einen DirtyGuard: offene Urlaubsansprüche fragen beim Wechsel von Reiter oder Unterreiter.
 - **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
   Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
   (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
@@ -660,6 +671,7 @@ Windows): `owner-console/README.md`.
   - Kostensatz-Übernahme (`importCostRates`, `services/costRateCalc.js`): je Mitarbeiter und Tag ein Satz; „Buchungen neu rechnen" nur für Stundenbuchungen bis zum nächsten Satz, nie in abgeschlossenen Monaten, Projektkosten werden nachgerechnet; bewusst `update` statt `upsert` (der INSERT-Teil scheitert an Pflichtspalten).
   - Import-Rücknahme prüft alle Blocker **vor** der ersten Änderung, schluckt keine Fehler und steht nach einem Abbruch auf `rollback_partial` — ein erneuter Versuch setzt fort (`rollback`, `services/importService.js`).
   - Der Einladungslink verlässt den Server nicht mehr: ohne Mailversand kam er in der Antwort der Neuanlage und von „Einladung senden" zurück.
+  - Eine eigene genehmigte Abwesenheit storniert man selbst nur, solange sie nicht begonnen hat (`POST /abwesenheit/:id/cancel`, sonst 409; mit `absence.manage` immer). Vorher ließ sich genommener Urlaub hinterher stornieren — die Tage kamen auf den Resturlaub zurück. Abgelehnte und stornierte Einträge lassen sich nicht erneut stornieren.
 
 **Offen (Stand 2026-09-29):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht

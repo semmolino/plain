@@ -1529,6 +1529,10 @@ input::placeholder { color: var(--text-4); }
   white-space: nowrap;
 }
 .master-table td { padding: 8px; border-bottom: 1px solid var(--border-4); vertical-align: middle; }
+/* Zeilenköpfe (th scope="row"/"rowgroup") sehen aus wie Zellen. Die
+   Kopfregel oben machte sie fett, mit Doppelrand — und klebend am oberen Rand. */
+.master-table tbody th { position: static; font-weight: 400; color: var(--text); border-bottom: 1px solid var(--border-4); background: transparent; }
+.master-table tbody tr:nth-child(even) th { background: var(--dim-2); }
 /* Kennungen und Datumsangaben duerfen nicht umbrechen: „RE-2025-0046" wurde
    in der Rechnungsliste sonst dreizeilig und „2025-08-01" zweizeilig, was
    die Zeilenhoehe verdreifacht hat. */
@@ -4808,6 +4812,121 @@ fieldset:disabled .ws-check { cursor: default; }
 .ent-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
 .ent-status { font-size: 13px; color: var(--text-2); margin-right: auto; }
 @media (pointer: coarse) { .ent-year-btn, .ent-actions button, .ent-bulk button { min-height: 44px; min-width: 44px; } }
+/* Abwesenheiten (Runde 11) — Postfach, Kalender, Meine Anträge, Antragsdialog.
+   Vorher Inline-Stile in drei Dateien; ein Resturlaub im Plus stand grün. */
+.abs-status {
+  display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-pill);
+  font-size: 11px; font-weight: 700; white-space: nowrap; background: var(--surface-2); color: var(--text-3);
+}
+.abs-status--requested { background: var(--warning-bg); color: var(--warning-strong); }
+.abs-status--approved  { background: var(--success-bg); color: var(--success-strong); }
+.abs-status--rejected  { background: var(--danger-bg); color: var(--danger-strong); }
+.abs-type { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.abs-type-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.abs-neg { color: var(--kpi-critical); }
+.abs-thread { list-style: none; margin: var(--space-1) 0 0; padding: 0 0 0 var(--space-2); border-left: 2px solid var(--border); display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.abs-thread-who { font-weight: 700; color: var(--text-2); }
+.abs-thread-who--approver { color: var(--warning-strong); }
+.abs-thread-text { color: var(--text-2); white-space: pre-line; }
+.abs-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin: var(--space-3) 0; }
+.abs-h { margin: 0 auto 0 0; font-size: 15px; font-weight: 700; }
+.abs-head-action { display: inline-flex; align-items: center; gap: 6px; }
+.abs-h3 { margin: var(--space-5) 0 var(--space-2); font-size: 13px; font-weight: 700; color: var(--text-2); }
+.abs-tiles { margin-bottom: var(--space-3); }
+.abs-at-risk { margin-bottom: var(--space-3); }
+.abs-mine { max-width: 880px; }
+.abs-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.abs-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.abs-card--focus, .abs-row--focus td { background: var(--accent-tint); }
+.abs-card--focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.abs-card-top { display: flex; align-items: flex-start; gap: var(--space-2); }
+.abs-card-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.abs-card-range { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.abs-card-sub { font-size: 13px; color: var(--text-2); }
+.abs-card-actions, .abs-actions { display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center; }
+.abs-actions .btn-primary, .abs-card-actions .btn-primary, .abs-head .btn-primary, .abs-reply-actions .btn-primary { width: auto; margin-top: 0; }
+.abs-actions-cell { width: 1%; white-space: nowrap; text-align: right; }
+.abs-actions-cell .abs-actions { justify-content: flex-end; flex-wrap: nowrap; }
+.abs-note { margin: 0; font-size: 13px; color: var(--text-2); white-space: pre-line; }
+.abs-note-cell { font-size: 12px; color: var(--text-2); white-space: pre-line; min-width: 180px; }
+.abs-table td { vertical-align: top; }
+.abs-overlap { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 11px; font-weight: 600; color: var(--warning-strong); white-space: normal; }
+.abs-own { font-size: 12px; color: var(--text-3); white-space: normal; }
+.abs-reply { display: flex; flex-direction: column; gap: var(--space-1); }
+.abs-reply label { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.abs-reply textarea { width: 100%; resize: vertical; }
+.abs-reply-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+/* Antragsdialog und Entscheidung */
+.abs-dialog { display: flex; flex-direction: column; gap: var(--space-2); }
+.abs-dialog textarea { width: 100%; resize: vertical; }
+.abs-dialog [aria-invalid="true"] { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.abs-field-hint { margin: 0; font-size: 12px; color: var(--text-3); }
+.abs-check { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--text-2); min-height: 32px; }
+.abs-check--off { color: var(--text-4); }
+.abs-error { margin: 0; font-size: 13px; color: var(--danger-strong); background: var(--danger-bg); padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm); }
+.abs-preview { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3); border-radius: var(--radius-md); background: var(--surface-2); font-size: 13px; }
+.abs-preview--idle { color: var(--text-3); }
+.abs-preview p { margin: 0; }
+.abs-preview-main strong { font-size: 15px; }
+.abs-preview-line { color: var(--text-2); }
+.abs-preview-sub { color: var(--text-3); }
+.abs-preview-warn, .abs-preview-note { display: flex; align-items: flex-start; gap: 6px; }
+.abs-preview-warn { color: var(--warning-strong); font-weight: 600; }
+.abs-preview-note { color: var(--text-3); }
+.abs-preview-warn svg, .abs-preview-note svg { flex: 0 0 auto; margin-top: 2px; }
+.abs-decision-summary { margin: 0; font-size: 13px; color: var(--text-2); }
+/* Teamkalender: Kürzel-Spalte bleibt beim Querscrollen stehen, heute ist markiert.
+   --abs-c ist die gespeicherte Farbe der Abwesenheitsart. */
+.abs-cal-scroll { max-width: 100%; }
+.abs-cal { border-collapse: separate; border-spacing: 0; font-size: 11px; min-width: 100%; }
+.abs-cal th, .abs-cal td { border-bottom: 1px solid var(--border-3); }
+.abs-cal-name {
+  position: sticky; left: 0; z-index: 1; background: var(--surface); text-align: left; padding: 0 var(--space-2);
+  font-size: 12px; font-weight: 700; white-space: nowrap; border-right: 1px solid var(--border);
+}
+.abs-cal-day { min-width: 26px; padding: 4px 2px; text-align: center; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.abs-cal-wd { display: block; font-size: 10px; font-weight: 500; color: var(--text-3); }
+.abs-cal-cell {
+  --abs-c: var(--text-4);
+  height: 28px; padding: 0; text-align: center; border-left: 1px solid var(--border-3); font-weight: 700; color: var(--text-2);
+}
+.abs-cal-we { background: var(--surface-2); }
+.abs-cal-today { box-shadow: inset 2px 0 0 var(--accent), inset -2px 0 0 var(--accent); }
+.abs-cal-day.abs-cal-today { color: var(--accent); }
+.abs-cal-ok { background: var(--abs-c); }
+.abs-cal-req { box-shadow: inset 0 0 0 2px var(--abs-c); }
+.abs-cal-ok.abs-cal-half { background: linear-gradient(to top right, var(--abs-c) 50%, transparent 50%); }
+.abs-cal-req.abs-cal-half { background: linear-gradient(to top right, var(--surface-3) 50%, transparent 50%); }
+.abs-cal-legend { margin-top: var(--space-3); }
+.abs-cal-key { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; border-radius: 3px; font-size: 10px; font-weight: 700; color: var(--text-2); }
+.abs-cal-key--ok { background: var(--text-4); }
+.abs-cal-key--req { box-shadow: inset 0 0 0 2px var(--text-4); }
+.abs-cal-key--half { background: linear-gradient(to top right, var(--text-4) 50%, transparent 50%); box-shadow: inset 0 0 0 1px var(--border); }
+@media (pointer: coarse) {
+  .abs-card-actions button, .abs-actions button, .abs-reply-actions button, .abs-head button { min-height: 44px; }
+  .abs-actions .row-action-btn { min-width: 44px; }
+}
+/* Stundencontrolling (Runde 11) — Auswertung, Einzelansicht, Monatsabschluss */
+.sc-single { max-width: 880px; }
+.sc-picker { max-width: 360px; margin-bottom: var(--space-4); }
+.sc-export { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; }
+.sc-table td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sc-group { vertical-align: top; text-align: left; font-weight: 400; padding-top: var(--space-2); }
+.sc-group-sub { display: block; font-size: 12px; }
+.sc-group-sum td { font-size: 12px; font-weight: 600; background: var(--surface-3); }
+.sc-figs { margin: var(--space-2) 0 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-2); }
+.sc-figs div { display: flex; flex-direction: column; min-width: 0; }
+.sc-figs dt { font-size: 11px; font-weight: 600; color: var(--text-3); }
+.sc-figs dd { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sc-close-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.sc-close-head .btn-primary { margin-left: auto; width: auto; margin-top: 0; }
+.sc-close-table { font-size: 13px; }
+.sc-close-month { text-align: center; white-space: nowrap; vertical-align: top; }
+.sc-close-month > span { display: block; margin-bottom: var(--space-1); }
+.sc-close-col { font-size: 11px; }
+.sc-close-name { text-align: left; font-weight: 400; white-space: nowrap; }
+.sc-close-cell { text-align: center; padding: 2px var(--space-2); }
+@media (pointer: coarse) { .sc-close-col, .sc-export { min-height: 44px; } }
 @media (pointer: coarse) {
   .ma-hist-editing .ma-hist-actions button, .ma-access-actions button, .ma-hist-add button { min-height: 44px; }
 }

@@ -217,3 +217,164 @@ describe("PUT /abwesenheit/entitlements/bulk", () => {
     expect(r.status).toBe(403);
   });
 });
+
+// ── /preview (Runde 11) ──────────────────────────────────────────────────────
+describe("GET /abwesenheit/preview", () => {
+  function tables() {
+    return {
+      TENANT_SETTINGS: [],
+      EMPLOYEE: [
+        { ID: 5, TENANT_ID: TENANT, ABBR: "TK" },
+        { ID: 6, TENANT_ID: 2, ABBR: "XX" },
+      ],
+      ABSENCE_TYPE: [
+        { ID: 1, TENANT_ID: TENANT, NAME: "Urlaub", REDUCES_VACATION: true, REQUIRES_APPROVAL: true },
+        { ID: 2, TENANT_ID: TENANT, NAME: "Krank", REDUCES_VACATION: false, REQUIRES_APPROVAL: false },
+      ],
+      VACATION_ENTITLEMENT: [{ ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null }],
+      ABSENCE: [
+        // genehmigt: Mo 2.3.–Fr 6.3. (5 Tage), offen: Mo 7.9.–Mi 9.9. (3 Tage)
+        { ID: 10, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-03-02", DATE_TO: "2026-03-06", HALF_DAY: false, STATUS: "APPROVED" },
+        { ID: 11, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-09-07", DATE_TO: "2026-09-09", HALF_DAY: false, STATUS: "REQUESTED" },
+        { ID: 12, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-10-01", DATE_TO: "2026-10-02", HALF_DAY: false, STATUS: "CANCELLED" },
+      ],
+      EMPLOYEE_WORK_MODEL: [],
+      PUBLIC_HOLIDAY: [],
+    };
+  }
+  const self = { tenantId: TENANT, employeeId: 5, permissions: ["absence.request"] };
+
+  it("zählt die Tage und rechnet den Resturlaub danach mit offenen Anträgen", async () => {
+    const sb = makeFakeSupabase(tables());
+    // Mo 21.9.–Fr 25.9. = 5 Tage; Rest 30 − 5 = 25, offen 3 → danach 17
+    const r = await request(sb, self, "GET", "/abwesenheit/preview?absence_type_id=1&date_from=2026-09-21&date_to=2026-09-25");
+    expect(r.status).toBe(200);
+    expect(r.body.data.days).toBe(5);
+    expect(r.body.data.reduces_vacation).toBe(true);
+    expect(r.body.data.requires_approval).toBe(true);
+    expect(r.body.data.balance).toEqual([{ year: 2026, remaining: 25, pending: 3, days: 5, after: 17 }]);
+    expect(r.body.data.overlaps).toEqual([]);
+  });
+
+  it("meldet Überschneidungen mit eigenen offenen oder genehmigten Abwesenheiten, nicht mit stornierten", async () => {
+    const sb = makeFakeSupabase(tables());
+    const r = await request(sb, self, "GET", "/abwesenheit/preview?absence_type_id=1&date_from=2026-09-08&date_to=2026-10-02");
+    expect(r.status).toBe(200);
+    expect(r.body.data.overlaps.map(o => o.ID)).toEqual([11]);
+    expect(r.body.data.overlaps[0].TYPE_NAME).toBe("Urlaub");
+  });
+
+  it("beim Bearbeiten zählt der eigene Antrag weder als offen noch als Überschneidung", async () => {
+    const sb = makeFakeSupabase(tables());
+    const r = await request(sb, self, "GET", "/abwesenheit/preview?absence_type_id=1&date_from=2026-09-07&date_to=2026-09-10&exclude_id=11");
+    expect(r.body.data.overlaps).toEqual([]);
+    expect(r.body.data.balance[0]).toMatchObject({ remaining: 25, pending: 0, days: 4, after: 21 });
+  });
+
+  it("über den Jahreswechsel je Jahr getrennt", async () => {
+    const sb = makeFakeSupabase(tables());
+    // Mo 28.12.2026–Fr 1.1.2027: 4 Tage 2026, 1 Tag 2027
+    const r = await request(sb, self, "GET", "/abwesenheit/preview?absence_type_id=1&date_from=2026-12-28&date_to=2027-01-01");
+    expect(r.body.data.days).toBe(5);
+    expect(r.body.data.by_year).toEqual([{ year: 2026, days: 4 }, { year: 2027, days: 1 }]);
+    expect(r.body.data.balance.map(b => b.year)).toEqual([2026, 2027]);
+  });
+
+  it("Arten ohne Urlaubsabzug: Tage ja, Saldo nein", async () => {
+    const sb = makeFakeSupabase(tables());
+    const r = await request(sb, self, "GET", "/abwesenheit/preview?absence_type_id=2&date_from=2026-09-21&date_to=2026-09-21");
+    expect(r.body.data.days).toBe(1);
+    expect(r.body.data.balance).toBeNull();
+    expect(r.body.data.requires_approval).toBe(false);
+  });
+
+  it("fremder Mitarbeiter nur mit absence.view oder absence.manage — mit manage ohne view ohne Saldo", async () => {
+    const q = "/abwesenheit/preview?employee_id=5&absence_type_id=1&date_from=2026-09-21&date_to=2026-09-25";
+    const none = await request(makeFakeSupabase(tables()), { tenantId: TENANT, employeeId: 9, permissions: ["absence.request"] }, "GET", q);
+    expect(none.status).toBe(403);
+    const manage = await request(makeFakeSupabase(tables()), { tenantId: TENANT, employeeId: 9, permissions: ["absence.manage"] }, "GET", q);
+    expect(manage.status).toBe(200);
+    expect(manage.body.data.days).toBe(5);
+    expect(manage.body.data.balance).toBeNull();
+    const view = await request(makeFakeSupabase(tables()), { tenantId: TENANT, employeeId: 9, permissions: ["absence.view"] }, "GET", q);
+    expect(view.body.data.balance[0].remaining).toBe(25);
+  });
+
+  it("Mitarbeiter eines anderen Mandanten: 404", async () => {
+    const r = await request(makeFakeSupabase(tables()), { tenantId: TENANT, employeeId: 9, permissions: ["absence.view"] },
+      "GET", "/abwesenheit/preview?employee_id=6&absence_type_id=1&date_from=2026-09-21&date_to=2026-09-25");
+    expect(r.status).toBe(404);
+  });
+
+  it("prüft Datumsangaben", async () => {
+    const sb = makeFakeSupabase(tables());
+    expect((await request(sb, self, "GET", "/abwesenheit/preview?date_from=21.09.2026")).status).toBe(400);
+    expect((await request(sb, self, "GET", "/abwesenheit/preview?date_from=2026-09-25&date_to=2026-09-21")).status).toBe(400);
+    expect((await request(sb, self, "GET", "/abwesenheit/preview?date_from=2026-01-01&date_to=2027-06-01")).status).toBe(400);
+  });
+});
+
+describe("GET /abwesenheit/vacation-balance — offen beantragt", () => {
+  it("weist offene Anträge als pending aus, ohne den Resturlaub zu mindern", async () => {
+    const sb = makeFakeSupabase({
+      TENANT_SETTINGS: [],
+      ABSENCE_TYPE: [{ ID: 1, TENANT_ID: TENANT, NAME: "Urlaub", REDUCES_VACATION: true }],
+      VACATION_ENTITLEMENT: [{ ID: 1, TENANT_ID: TENANT, EMPLOYEE_ID: 5, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null }],
+      ABSENCE: [
+        { ID: 10, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-03-02", DATE_TO: "2026-03-06", HALF_DAY: false, STATUS: "APPROVED" },
+        { ID: 11, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: "2026-09-07", DATE_TO: "2026-09-09", HALF_DAY: false, STATUS: "REQUESTED" },
+      ],
+      EMPLOYEE_WORK_MODEL: [],
+      PUBLIC_HOLIDAY: [],
+    });
+    const r = await request(sb, { tenantId: TENANT, employeeId: 5, permissions: [] }, "GET", "/abwesenheit/vacation-balance?year=2026");
+    expect(r.body.data).toMatchObject({ taken: 5, remaining: 25, pending: 3 });
+  });
+});
+
+// ── /:id/cancel (Runde 11) ───────────────────────────────────────────────────
+describe("POST /abwesenheit/:id/cancel", () => {
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const shift = (days) => { const d = new Date(); d.setDate(d.getDate() + days); return iso(d); };
+  function tables(status, from, to) {
+    return { ABSENCE: [{ ID: 30, TENANT_ID: TENANT, EMPLOYEE_ID: 5, ABSENCE_TYPE_ID: 1, DATE_FROM: from, DATE_TO: to, HALF_DAY: false, STATUS: status }] };
+  }
+  const own = { tenantId: TENANT, employeeId: 5, permissions: ["absence.request"] };
+
+  it("eigene genehmigte Abwesenheit in der Zukunft: storniert", async () => {
+    const sb = makeFakeSupabase(tables("APPROVED", shift(10), shift(14)));
+    const r = await request(sb, own, "POST", "/abwesenheit/30/cancel");
+    expect(r.status).toBe(200);
+    expect(sb._tables.ABSENCE[0].STATUS).toBe("CANCELLED");
+  });
+
+  it("eigene, schon begonnene oder vergangene Abwesenheit: 409, nichts geändert", async () => {
+    for (const [from, to] of [[shift(0), shift(3)], [shift(-20), shift(-15)]]) {
+      const sb = makeFakeSupabase(tables("APPROVED", from, to));
+      const r = await request(sb, own, "POST", "/abwesenheit/30/cancel");
+      expect(r.status).toBe(409);
+      expect(sb._tables.ABSENCE[0].STATUS).toBe("APPROVED");
+    }
+  });
+
+  it("mit absence.manage auch rückwirkend", async () => {
+    const sb = makeFakeSupabase(tables("APPROVED", shift(-20), shift(-15)));
+    const r = await request(sb, { tenantId: TENANT, employeeId: 1, permissions: ["absence.manage"] }, "POST", "/abwesenheit/30/cancel");
+    expect(r.status).toBe(200);
+    expect(sb._tables.ABSENCE[0].STATUS).toBe("CANCELLED");
+  });
+
+  it("abgelehnt oder storniert: 409", async () => {
+    for (const st of ["REJECTED", "CANCELLED"]) {
+      const sb = makeFakeSupabase(tables(st, shift(10), shift(14)));
+      const r = await request(sb, own, "POST", "/abwesenheit/30/cancel");
+      expect(r.status).toBe(409);
+    }
+  });
+
+  it("fremde ohne absence.manage: 403", async () => {
+    const sb = makeFakeSupabase(tables("APPROVED", shift(10), shift(14)));
+    const r = await request(sb, { tenantId: TENANT, employeeId: 9, permissions: ["absence.request", "absence.view"] }, "POST", "/abwesenheit/30/cancel");
+    expect(r.status).toBe(403);
+  });
+});
