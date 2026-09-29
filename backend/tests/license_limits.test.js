@@ -37,6 +37,7 @@ describe("Mengenlimit — enforceLimit-Guard", () => {
     select() { return this; },
     eq() { return this; },
     neq() { return this; },
+    or() { return this; },   // ACTIVE NULL zaehlt mit (Runde 10)
     // letztes Kettenglied liefert das Ergebnis -> wir lösen über then auf
     then(resolve) { resolve({ count, error: null }); },
   });

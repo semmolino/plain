@@ -484,14 +484,29 @@ module.exports = (supabase) => {
     const decision = String(req.body?.decision || "").toUpperCase();
     if (!["APPROVED", "REJECTED"].includes(decision))
       return res.status(400).json({ error: "decision muss APPROVED oder REJECTED sein" });
+    // Vorher liess sich jeder Antrag entscheiden — auch ein zurueckgezogener
+    // oder schon abgelehnter —, der eigene ohne Weiteres, und ein fehlender
+    // meldete Erfolg (Runde 10).
+    const { data: cur, error: curErr } = await supabase.from("ABSENCE")
+      .select("ID, EMPLOYEE_ID, STATUS").eq("ID", id).eq("TENANT_ID", req.tenantId).maybeSingle();
+    if (curErr) return res.status(500).json({ error: curErr.message });
+    if (!cur) return res.status(404).json({ error: "Antrag nicht gefunden" });
+    if (cur.STATUS !== "REQUESTED") return res.status(409).json({ error: "Dieser Antrag ist nicht mehr offen." });
+    // Den eigenen Antrag entscheidet jemand anderes — ausser, wer Abwesenheiten
+    // verwaltet (im kleinen Büro gibt es sonst niemanden).
+    const own = Number(cur.EMPLOYEE_ID) === Number(req.employeeId);
+    if (own && !(typeof req.hasPermission === "function" && req.hasPermission("absence.manage"))) {
+      return res.status(403).json({ error: "Den eigenen Antrag entscheidet jemand anderes." });
+    }
     const { data: row, error } = await supabase.from("ABSENCE").update({
       STATUS:        decision,
       DECIDED_BY:    req.employeeId,
       DECIDED_AT:    new Date().toISOString(),
       DECISION_NOTE: req.body?.note || null,
-    }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").maybeSingle();
+    }).eq("ID", id).eq("TENANT_ID", req.tenantId).eq("STATUS", "REQUESTED").select("*").maybeSingle();
     if (error) return res.status(500).json({ error: error.message });
-    if (row) notifyAbsenceDecision(supabase, req.tenantId, row, decision).catch(() => {});
+    if (!row) return res.status(409).json({ error: "Dieser Antrag ist nicht mehr offen." });
+    notifyAbsenceDecision(supabase, req.tenantId, row, decision).catch(() => {});
     res.json({ success: true });
   });
 

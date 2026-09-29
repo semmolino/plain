@@ -10,6 +10,11 @@ module.exports = (supabase) => {
   // Phase 3: alle Kostensatz-Routen erfordern settings.cost_rate.edit
   // (GET-Routen muessen auch gehen, weil sie Werte fuer das Eingabeformular liefern)
   router.use(requirePermission('settings.cost_rate.edit'));
+  // Gehaltsdaten (Jahresgehalt, errechneter Satz) lesen bzw. Saetze schreiben
+  // braucht zusaetzlich die Gehaltsrechte — vorher reichte die Einstellung
+  // allein, am Recht „Kostensatz sehen/bearbeiten" vorbei (Runde 10).
+  const SALARY_VIEW = requirePermission('employees.salary.view');
+  const SALARY_EDIT = requirePermission('employees.salary.edit');
 
   // GET  /kostensatz/overhead?year=
   router.get('/overhead', async (req, res) => {
@@ -41,7 +46,7 @@ module.exports = (supabase) => {
   });
 
   // GET  /kostensatz/params/:employeeId?year=
-  router.get('/params/:employeeId', async (req, res) => {
+  router.get('/params/:employeeId', SALARY_VIEW, async (req, res) => {
     const empId = parseInt(req.params.employeeId);
     const year  = parseInt(req.query.year) || new Date().getFullYear();
     try {
@@ -51,7 +56,7 @@ module.exports = (supabase) => {
   });
 
   // POST /kostensatz/params/:employeeId  { year, ...params }
-  router.post('/params/:employeeId', async (req, res) => {
+  router.post('/params/:employeeId', SALARY_EDIT, async (req, res) => {
     const empId = parseInt(req.params.employeeId);
     const { year, ...params } = req.body;
     if (!year) return res.status(400).json({ error: 'year required' });
@@ -62,7 +67,7 @@ module.exports = (supabase) => {
   });
 
   // POST /kostensatz/params-bulk  { year, params: [{employee_id, ...}] }
-  router.post('/params-bulk', async (req, res) => {
+  router.post('/params-bulk', SALARY_EDIT, async (req, res) => {
     const { year, params } = req.body;
     if (!year || !Array.isArray(params)) return res.status(400).json({ error: 'year and params[] required' });
     try {
@@ -72,7 +77,7 @@ module.exports = (supabase) => {
   });
 
   // POST /kostensatz/calculate  { year, employee_ids[]?, profit_markup_pct? }
-  router.post('/calculate', async (req, res) => {
+  router.post('/calculate', SALARY_VIEW, async (req, res) => {
     const { year, employee_ids, profit_markup_pct } = req.body;
     if (!year) return res.status(400).json({ error: 'year required' });
     try {
@@ -86,7 +91,7 @@ module.exports = (supabase) => {
   });
 
   // POST /kostensatz/import  { rates: [{employee_id, rate}], valid_from, recalc_bookings? }
-  router.post('/import', async (req, res) => {
+  router.post('/import', SALARY_EDIT, async (req, res) => {
     const { rates, valid_from, recalc_bookings } = req.body;
     if (!valid_from || !Array.isArray(rates) || !rates.length)
       return res.status(400).json({ error: 'valid_from and rates[] required' });

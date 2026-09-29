@@ -95,7 +95,7 @@ async function listAudit(req, res, supabase) {
 
 // ── Audit-Export (CSV) ──────────────────────────────────────────────────────
 async function exportAudit(req, res, supabase) {
-  const { date_from, date_to, employee_id } = req.query;
+  const { date_from, date_to, employee_id, event_type, severity } = req.query;
   try {
     let q = supabase
       .from('ARBZG_AUDIT')
@@ -106,6 +106,10 @@ async function exportAudit(req, res, supabase) {
     if (employee_id) q = q.eq('EMPLOYEE_ID', Number(employee_id));
     if (date_from)   q = q.gte('BOOKING_DATE', date_from);
     if (date_to)     q = q.lte('BOOKING_DATE', date_to);
+    // Dieselben Filter wie die Liste — vorher enthielt die Datei mehr als die
+    // Ansicht, aus der man sie exportierte.
+    if (event_type)  q = q.eq('EVENT_TYPE', event_type);
+    if (severity)    q = q.eq('SEVERITY', severity);
     const { data, error } = await q;
     if (error) throw { status: 500, message: error.message };
 
@@ -114,6 +118,7 @@ async function exportAudit(req, res, supabase) {
     const { data: emps } = await supabase
       .from('EMPLOYEE')
       .select('ID, ABBR, FIRST_NAME, LAST_NAME')
+      .eq('TENANT_ID', req.tenantId)
       .in('ID', empIds);
     const empMap = Object.fromEntries((emps || []).map(e => [e.ID, e]));
 

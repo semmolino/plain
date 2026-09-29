@@ -5,6 +5,11 @@ const { requirePermission } = require("../middleware/permissions");
 module.exports = (supabase) => {
   const router = express.Router();
 
+  // Stundensaetze nur mit dem Recht darauf (Runde 10) — vorher lieferten alle
+  // drei Lese-Endpunkte sie ohne jedes Recht aus.
+  const withRate = (req) => typeof req.hasPermission === "function" && req.hasPermission("projects.hourly_rates.view");
+  const stripRate = (req, row) => (withRate(req) || !row ? row : { ...row, HOURLY_RATE: null });
+
   // Wer das Projektteam aendert, aendert das Projekt -> projects.edit.
   //
   // HOURLY_RATE ist davon getrennt: der Stundensatz fliesst in Kostenrechnung und
@@ -53,7 +58,7 @@ module.exports = (supabase) => {
       ROLE_ID:         row.ROLE_ID         ?? null,
       ROLE_ABBR: row.ROLE_ABBR ?? null,
       ROLE_NAME:  row.ROLE_NAME  ?? null,
-      HOURLY_RATE:         row.HOURLY_RATE         ?? null,
+      HOURLY_RATE:         withRate(req) ? (row.HOURLY_RATE ?? null) : null,
     });
   });
 
@@ -88,7 +93,7 @@ module.exports = (supabase) => {
       EMPLOYEE_LAST_NAME:  empMap[r.EMPLOYEE_ID]?.LAST_NAME  ?? null,
     }));
 
-    res.json({ data: enriched });
+    res.json({ data: enriched.map(r => stripRate(req, r)) });
   });
 
   // GET /employee/:employeeId — list all projects an employee is assigned to
@@ -127,7 +132,7 @@ module.exports = (supabase) => {
         HOURLY_RATE:         r.HOURLY_RATE ?? null,
       }));
 
-    res.json({ data: enriched });
+    res.json({ data: enriched.map(r => stripRate(req, r)) });
   });
 
   // POST /project/:projectId — add employee to project

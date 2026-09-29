@@ -634,9 +634,18 @@ Windows): `owner-console/README.md`.
 - **Registrierung neuer Mandanten braucht zwei Tore** (`services/signupApproval.js`, Migration 0135): E-Mail-Bestätigung des Anmelders, dann Freigabe in der Owner-Konsole (Tab „Registrierungen"). Bis dahin ist die Anmeldung gesperrt — geprüft **nach** der Passwortprüfung, damit der Zustand eines Mandanten nichts über ihn verrät. Ablehnen löscht den Antrag, aber **nur** im Zustand pending. Der Spaltenstandard von `SIGNUP_STATE` ist `active`: Import, Demo-Daten und manuelles SQL sollen weiterhin benutzbare Mandanten erzeugen.
 - Serverfehler tragen nach außen eine allgemeine Meldung plus Fehlerkennung (`middleware/errorSanitizer.js`); das Original steht im Protokoll. Fachfehler mit `status < 500` bleiben unberührt. Ein 500er, dessen Meldung der Nutzer braucht, kennzeichnet sich mit `userFacing: true`.
 
-**Offen (Stand 2026-09-04):**
+- **Mitarbeiter-Modul (UI-Pilot Runde 10, `tests/mitarbeiter.security.test.js`):**
+  - Rechte laden ist **fail-closed**: ein Ladefehler ist eine 503, nicht „alle Rechte". Nur eine fehlende RBAC-Migration bleibt unrestricted (`middleware/permissions.js`, `LOAD_FAILED`).
+  - Der Gehalts-Guard vergleicht den Pfad wie Express 5 (klein, ohne abschließenden Schrägstrich) und hängt zusätzlich an den Routen — `/5/cp-rates/` lief vorher vorbei.
+  - Die E-Mail eines **fremden** Kontos ändert nur, wer `employees.password.set` hat (sonst Übernahme über „Passwort vergessen"); danach enden dessen Sitzungen. `PATCH /mitarbeiter/:id` ist ein Teil-Update.
+  - „Nicht mehr vergeben, als man selbst hat" (`keysBeyondCaller`): Passwort setzen und Rollen zuweisen nur für Konten und Rollen, deren Rechte der Aufrufer selbst hat. Passwort setzen beendet Sitzungen. Der Import prüft dieselben Rechte je Inhalt (Kostensatz, Rolle, E-Mail beim Zusammenführen) und die Platzgrenze (`authorizeEmployeeCommit`).
+  - Das eigene Konto und der letzte Administrator lassen sich weder löschen noch deaktivieren; inaktive Admins zählen nicht. Die Löschprüfung kennt Angebote, Rechnungen, Abschläge, Mahnungen, Nachträge und Abwesenheiten und schluckt keine Fehler mehr (`safeReferences`).
+  - Profilfoto nur aus einem `AVATAR`-Bild; ArbZG-Audit/Export/Grenzen nur eigene oder mit Recht; Stundensätze der Team-Zuordnung nur mit `projects.hourly_rates.view`; Kosten im Stundencontrolling nur mit `employees.salary.view`; fremde Salden nur mit `employees.bookings.view_all`; Kostensatzrechner-Gehaltsdaten nur mit den Gehaltsrechten.
+
+**Offen (Stand 2026-09-29):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht
 - CSP bewusst abgeschaltet (SPA-Bundles, PDF) — erhöht die Wirkung jeder Datei-Auslieferungslücke (N2)
+- Aus dem Mitarbeiter-Audit (Runde 10) noch offen: Kostensatz-Import mit „Buchungen neu rechnen" rechnet auch Pauschal-/Pausenbuchungen, abgeschlossene Monate und spätere Sätze um (`costRateCalc.js`); Import-Rücknahme nicht atomar (`importService.js`); Urlaubssaldo zählt Mo–Fr statt Arbeitszeitmodell und Jahreswechsel im Startjahr (`abwesenheit.js`); ohne SMTP geht der Einladungslink an den Anleger zurück
 
 ---
 

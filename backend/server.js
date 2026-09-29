@@ -162,9 +162,9 @@ const { startNachtragFristenChecker }        = require("./services/nachtragFrist
 const pushService = require("./services/push");
 
 // RBAC: permissionsMiddleware laeuft global nach authMiddleware und legt
-// req.permissions + req.hasPermission ab. Soft-fail wenn Migration 0062 fehlt
-// (req._permissionsUnrestricted = true) -- damit bleiben alle Routen ohne
-// Migration voll nutzbar.
+// req.permissions + req.hasPermission ab. Soft-fail NUR wenn Migration 0062
+// fehlt (req._permissionsUnrestricted = true); jeder andere Ladefehler ist
+// seit Runde 10 eine 503 statt „alle Rechte".
 // Lizenz (L2): licenseMiddleware legt req.license + req.hasFeature ab. Soft-Fail
 // wenn Migration 0070 fehlt / keine TENANT_LICENSE-Zeile -> unrestricted.
 // L2 = nur Bereitstellung + Frontend-Soft-Gating; KEIN hartes Enforcement (das ist L3).
