@@ -28,6 +28,13 @@ describe('resolveProjektView', () => {
     expect(r.canonical).toBeNull()
   })
 
+  // Runde 8: Projektdaten als Reiter statt Dialog in der Liste
+  it('?tab=daten ist ein Reiter des Arbeitsbereichs', () => {
+    const r = resolveProjektView(p('projectId=12&tab=daten'), null, null)
+    expect(r.view).toEqual({ view: 'workspace', projectId: 12, tab: 'daten' })
+    expect(r.canonical).toBeNull()
+  })
+
   // Vorher landete ?projectId=12 ohne Tab auf der Liste.
   it('Projekt ohne Tab: Struktur, URL wird ergaenzt', () => {
     const r = resolveProjektView(p('projectId=12'), null, null)

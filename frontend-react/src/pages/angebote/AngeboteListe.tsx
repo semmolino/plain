@@ -24,8 +24,7 @@ import {
   type OfferListItem, type UpdateOfferPayload,
 } from '@/api/angebote'
 import { BeauftragtDialog } from './BeauftragtDialog'
-import { AngeboteAnlegen } from './AngeboteAnlegen'
-import { Modal }          from '@/components/ui/Modal'
+import { AngebotAnlegenDialog } from './AngebotAnlegenDialog'
 import { money } from '@/utils/money'
 
 const PAGE_SIZE = 25
@@ -358,16 +357,13 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
     <BeauftragtDialog offer={beauftragtRow} onClose={() => setBeauftragtRow(null)}
       onDone={m => { setBeauftragtRow(null); setMsg({ text: m, type: 'success' }) }} />
 
-    <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neues Angebot anlegen" className="modal-wide">
-      <AngeboteAnlegen onOfferCreated={id => { setShowCreate(false); onOfferCreated?.(id) }} />
-    </Modal>
+    <AngebotAnlegenDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={id => onOfferCreated?.(id)} />
 
     <ConfirmModal
       open={confirmState !== null}
       title={confirmState?.title ?? ''}
       message={confirmState?.message ?? ''}
       confirmLabel={confirmState?.confirmLabel ?? 'Bestätigen'}
-      confirmClass="danger"
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />

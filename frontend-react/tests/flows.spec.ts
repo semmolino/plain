@@ -112,9 +112,12 @@ test.describe('Layout — all main pages', () => {
   })
 
   for (const route of MAIN_ROUTES) {
+    // documentElement statt nur body: ein absolut positioniertes Kind (z. B.
+    // .sr-only im Tabellenkopf) verbreitert die Seite, ohne dass body es merkt —
+    // so blieb die 1111 px breite Angebotsliste am Handy lange unentdeckt.
     test(`${route.label}: no horizontal overflow`, async ({ page, viewport }) => {
       await gotoPage(page, route.path)
-      const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
+      const scrollWidth = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth))
       expect(scrollWidth).toBeLessThanOrEqual((viewport?.width ?? 390) + 2)
     })
 
@@ -282,7 +285,7 @@ test.describe('Mobile layout (390 × 844)', () => {
 
   test('no horizontal overflow on dashboard', async ({ page }) => {
     await gotoPage(page, '/')
-    const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
+    const scrollWidth = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth))
     expect(scrollWidth).toBeLessThanOrEqual(392)
   })
 
@@ -303,13 +306,13 @@ test.describe('Mobile layout (390 × 844)', () => {
 
   test('no horizontal overflow on Rechnungen', async ({ page }) => {
     await gotoPage(page, '/rechnungen')
-    const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
+    const scrollWidth = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth))
     expect(scrollWidth).toBeLessThanOrEqual(392)
   })
 
   test('no horizontal overflow on Projekte', async ({ page }) => {
     await gotoPage(page, '/projekte')
-    const scrollWidth = await page.evaluate(() => document.body.scrollWidth)
+    const scrollWidth = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth))
     expect(scrollWidth).toBeLessThanOrEqual(392)
   })
 

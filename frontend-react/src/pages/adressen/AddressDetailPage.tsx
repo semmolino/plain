@@ -1,394 +1,466 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
-import { angebotHref } from '@/pages/angebote/angebotUrlState'
-import { DialogFooter } from '@/components/ui/DialogFooter'
-import { useNavigate, useParams } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  ArrowLeft, Pencil, Trash2, Plus, Download, Star,
-  Mail, Phone, Globe, FolderOpen, FileSignature, Receipt, Banknote,
+  Pencil, Trash2, Plus, Download, Star, Mail, Phone, Globe,
+  FolderOpen, FileSignature, Receipt, Banknote, FileText, FilePlus2,
 } from 'lucide-react'
-import { Can } from '@/components/ui/Can'
-import { Modal } from '@/components/ui/Modal'
-import { ConfirmModal } from '@/components/ui/ConfirmModal'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { Tabs } from '@/components/ui/Tabs'
+import { RowMenu } from '@/components/ui/RowMenu'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { Message } from '@/components/ui/Message'
+import { DirtyGuardProvider } from '@/components/ui/DirtyGuard'
+import { useGuardedAction, useRegisterDirty } from '@/hooks/useDirtyGuard'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useCtrlS } from '@/hooks/useCtrlS'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
+import { usePermission } from '@/store/permissionsStore'
 import { useToast } from '@/store/toastStore'
-import { AddrForm, ContactForm, emptyContact, addressToPayload, contactToPayload } from '@/pages/adressen/addressForms'
+import { trackRecent } from '@/api/recents'
+import { angebotHref } from '@/pages/angebote/angebotUrlState'
+import { addressToPayload } from '@/pages/adressen/addressForms'
+import { AddressFields, missingAddressFields, type AddressField } from '@/pages/adressen/AddressFields'
+import { ContactDialog, type ContactDialogState } from '@/pages/adressen/ContactDialog'
 import { downloadText, contactVCard } from '@/utils/exportData'
 import {
-  fetchAddressDetail, fetchCountries, fetchSalutations, fetchGenders, searchAddressesApi,
-  updateAddress, deleteAddress, createContact, updateContact, deleteContact,
+  fetchAddressDetail, fetchCountries, updateAddress, deleteAddress, deleteContact,
   addressTypeLabel,
-  type Contact, type AddressPayload, type ContactPayload,
+  type Address, type AddressDetail, type AddressPayload, type Contact,
 } from '@/api/stammdaten'
 
-// ── Kleine Bausteine ────────────────────────────────────────────────────────
+/**
+ * Adresse als Arbeitsbereich (UI-Pilot Runde 8) — im Muster von Projekt und
+ * Angebot: Kopf mit dem, was man am häufigsten sucht (Anschrift, Telefon,
+ * E-Mail), darunter Reiter, deren Stand in der URL steht
+ * (/adressen/:id?tab=kontakte|daten|verwendung).
+ *
+ * Vorher: eine Leseansicht, bearbeitet wurde im Dialog — ohne Rückfrage beim
+ * Schließen, ohne Hinweis, welche Pflichtangabe fehlte. „Verknüpfungen"
+ * zeigte nackte Nummern; Rechnungen und Abschläge waren dort wegen eines
+ * Serverfehlers immer leer. Am Handy lief die Kontakttabelle aus dem Bild.
+ */
 
-function InfoRow({ label, children }: { label: string; children: ReactNode }) {
-  if (children == null || children === '') return null
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 8, padding: '4px 0', fontSize: 14 }}>
-      <span style={{ color: 'var(--text-3)' }}>{label}</span>
-      <span style={{ whiteSpace: 'pre-line' }}>{children}</span>
-    </div>
-  )
-}
+type AdrTab = 'kontakte' | 'daten' | 'verwendung'
+const TABS: AdrTab[] = ['kontakte', 'daten', 'verwendung']
 
-function Card({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
-  return (
-    <section style={{
-      background: 'var(--surface, #fff)', border: '1px solid var(--border, var(--border))',
-      borderRadius: 8, padding: 16, marginBottom: 16,
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>{title}</h2>
-        {action && <div style={{ marginLeft: 'auto' }}>{action}</div>}
-      </div>
-      {children}
-    </section>
-  )
-}
+const FMT_DATE = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+const fmtDate = (d?: string | null) => (d ? FMT_DATE.format(new Date(d)) : null)
 
-function LinkList<T>({ items, icon, label, render, onClick }: {
-  items: T[]; icon: ReactNode; label: string; render: (t: T) => string; onClick: (t: T) => void
-}) {
-  if (!items.length) return null
-  return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: 'var(--text-3)', marginBottom: 4 }}>
-        {icon}{label} ({items.length})
-      </div>
-      <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {items.map((t, i) => (
-          <li key={i}>
-            <button className="link-cell" onClick={() => onClick(t)}>{render(t) || '—'}</button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-// ── Seite ───────────────────────────────────────────────────────────────────
+const webHref = (w: string) => (/^https?:\/\//i.test(w) ? w : `https://${w}`)
 
 export function AddressDetailPage() {
+  return (
+    <DirtyGuardProvider>
+      <AddressDetailInner />
+    </DirtyGuardProvider>
+  )
+}
+
+function AddressDetailInner() {
   const { id: idParam } = useParams<{ id: string }>()
   const id = Number(idParam)
   const navigate = useNavigate()
-  const qc = useQueryClient()
-  const toast = useToast()
+  const guarded = useGuardedAction()
+  const [params, setParams] = useSearchParams()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['address-detail', id],
     queryFn: () => fetchAddressDetail(id),
     enabled: Number.isFinite(id) && id > 0,
   })
-  const { data: countriesData }  = useQuery({ queryKey: ['countries'],  queryFn: fetchCountries })
-  const { data: salData }        = useQuery({ queryKey: ['salutations'], queryFn: fetchSalutations })
-  const { data: genData }        = useQuery({ queryKey: ['genders-std'], queryFn: fetchGenders })
+  const detail = data?.data
+  const address = detail?.address
 
-  const detail    = data?.data
-  const address   = detail?.address
-  const countries = countriesData?.data ?? []
-  const salutations = salData?.data ?? []
-  const genders     = genData?.data ?? []
+  // Zuletzt verwendet — vorher nur beim Öffnen des Bearbeiten-Dialogs der Liste
+  useEffect(() => {
+    if (address) void trackRecent('address', address.ID, address.ADDRESS_NAME_1 ?? `#${address.ID}`).catch(() => {})
+  }, [address?.ID]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Adresse bearbeiten ──
-  const [editOpen, setEditOpen] = useState(false)
-  const [editForm, setEditForm] = useState<AddressPayload>(() => ({ address_name_1: '', country_id: '' }))
-  const [editMsg,  setEditMsg]  = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const editFormRef = useRef<HTMLFormElement>(null)
+  const visible = detail?.visible ?? {}
+  const showContacts = visible.contacts !== false
+  const tabs = useMemo(() => {
+    const usedCount = detail ? countLinks(detail) : 0
+    return [
+      ...(showContacts ? [{ id: 'kontakte', label: `Kontakte (${detail?.contacts.length ?? 0})` }] : []),
+      { id: 'daten', label: 'Adressdaten' },
+      { id: 'verwendung', label: `Verwendet in (${usedCount})` },
+    ]
+  }, [detail, showContacts])
 
-  function openEdit() {
-    if (!address) return
-    setEditForm(addressToPayload(address))
-    setEditMsg(null)
-    setEditOpen(true)
-  }
+  const raw = params.get('tab') as AdrTab | null
+  const tab: AdrTab = raw && TABS.includes(raw) && (raw !== 'kontakte' || showContacts) ? raw : (showContacts ? 'kontakte' : 'daten')
+  const setTab = (t: string) => guarded(() => setParams(t === 'kontakte' ? {} : { tab: t }))
 
-  const updateAddrMut = useMutation({
-    mutationFn: ({ addrId, body }: { addrId: number; body: AddressPayload }) => updateAddress(addrId, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['address-detail', id] })
-      void qc.invalidateQueries({ queryKey: ['addresses'] })
-      setEditMsg({ text: 'Gespeichert ✅', type: 'success' })
-      setTimeout(() => setEditOpen(false), 700)
-    },
-    onError: (e: Error) => setEditMsg({ text: e.message, type: 'error' }),
-  })
-
-  function submitEdit(e: React.FormEvent) {
-    e.preventDefault()
-    setEditMsg(null)
-    if (!editForm.address_name_1 || !editForm.country_id) {
-      setEditMsg({ text: 'Name und Land sind Pflichtfelder', type: 'error' }); return
-    }
-    updateAddrMut.mutate({ addrId: id, body: editForm })
-  }
-
-  const setEK = useCallback((k: keyof AddressPayload) => (v: string) => setEditForm(f => ({ ...f, [k]: v })), [])
-
-  const deleteAddrMut = useMutation({
-    mutationFn: () => deleteAddress(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['addresses'] })
-      toast.success('Adresse gelöscht')
-      navigate('/adressen')
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  // ── Kontakte anlegen/bearbeiten ──
-  const [conCreateOpen, setConCreateOpen] = useState(false)
-  const [conForm,       setConForm]       = useState<ContactPayload>(emptyContact)
-  const [conAddrText,   setConAddrText]   = useState('')
-  const [conMsg,        setConMsg]        = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [editContact,   setEditContact]   = useState<Contact | null>(null)
-  const [conEditForm,   setConEditForm]   = useState<ContactPayload>(emptyContact)
-  const [conEditAddrText, setConEditAddrText] = useState('')
-  const [conEditMsg,    setConEditMsg]    = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-  const conCreateRef = useRef<HTMLFormElement>(null)
-  const conEditRef   = useRef<HTMLFormElement>(null)
-
-  const searchAddresses = useCallback(async (q: string) => {
-    const res = await searchAddressesApi(q)
-    return res.data.map(a => ({ id: a.ID, label: a.ADDRESS_NAME_1 }))
-  }, [])
-
-  function invalidateContacts() {
-    void qc.invalidateQueries({ queryKey: ['address-detail', id] })
-    void qc.invalidateQueries({ queryKey: ['contacts'] })
-  }
-
-  const createConMut = useMutation({
-    mutationFn: createContact,
-    onSuccess: () => { invalidateContacts(); setConMsg({ text: 'Kontakt gespeichert ✅', type: 'success' }); setConForm({ ...emptyContact(), address_id: id }); setConAddrText(address?.ADDRESS_NAME_1 ?? '') },
-    onError: (e: Error) => setConMsg({ text: e.message, type: 'error' }),
-  })
-  const updateConMut = useMutation({
-    mutationFn: ({ conId, body }: { conId: number; body: ContactPayload }) => updateContact(conId, body),
-    onSuccess: () => { invalidateContacts(); setConEditMsg({ text: 'Gespeichert ✅', type: 'success' }); setTimeout(() => setEditContact(null), 700) },
-    onError: (e: Error) => setConEditMsg({ text: e.message, type: 'error' }),
-  })
-  const deleteConMut = useMutation({
-    mutationFn: (conId: number) => deleteContact(conId),
-    onSuccess: () => invalidateContacts(),
-    onError: (e: Error) => toast.error(e.message),
-  })
-
-  function openConCreate() {
-    setConForm({ ...emptyContact(), address_id: id })
-    setConAddrText(address?.ADDRESS_NAME_1 ?? '')
-    setConMsg(null)
-    setConCreateOpen(true)
-  }
-  function submitConCreate(e: React.FormEvent) {
-    e.preventDefault()
-    setConMsg(null)
-    if (!conForm.first_name || !conForm.last_name || !conForm.salutation_id || !conForm.gender_id || !conForm.address_id) {
-      setConMsg({ text: 'Bitte alle Pflichtfelder ausfüllen', type: 'error' }); return
-    }
-    createConMut.mutate(conForm)
-  }
-  function openConEdit(c: Contact) {
-    setConEditForm(contactToPayload(c))
-    setConEditAddrText(c.ADDRESS ?? address?.ADDRESS_NAME_1 ?? '')
-    setConEditMsg(null)
-    setEditContact(c)
-  }
-  function submitConEdit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!editContact) return
-    setConEditMsg(null)
-    updateConMut.mutate({ conId: editContact.ID, body: conEditForm })
-  }
-  function handleDeleteContact(c: Contact) {
-    setConfirmState({
-      title: 'Kontakt löschen',
-      message: `${c.FIRST_NAME} ${c.LAST_NAME} wirklich löschen?`,
-      onConfirm: () => deleteConMut.mutate(c.ID),
-    })
-  }
-
-  const setCK  = useCallback((k: keyof ContactPayload) => (v: string) => setConForm(f => ({ ...f, [k]: v })), [])
-  const setCEK = useCallback((k: keyof ContactPayload) => (v: string) => setConEditForm(f => ({ ...f, [k]: v })), [])
-  const setCPrimary  = useCallback((v: boolean) => setConForm(f => ({ ...f, is_primary: v })), [])
-  const setCEPrimary = useCallback((v: boolean) => setConEditForm(f => ({ ...f, is_primary: v })), [])
-
-  useCtrlS(() => editFormRef.current?.requestSubmit(),  editOpen)
-  useCtrlS(() => conCreateRef.current?.requestSubmit(), conCreateOpen)
-  useCtrlS(() => conEditRef.current?.requestSubmit(),   editContact !== null)
-
-  const contacts = detail?.contacts ?? []
-  const sortedContacts = useMemo(
-    () => [...contacts].sort((a, b) => (Number(b.IS_PRIMARY) - Number(a.IS_PRIMARY)) || `${a.LAST_NAME}`.localeCompare(`${b.LAST_NAME}`, 'de')),
-    [contacts],
-  )
-
-  if (isLoading) return <div className="master-page"><p className="empty-note">Laden …</p></div>
-  if (isError || !address) return (
+  if (isLoading) return <div className="master-page"><p className="empty-note">Lädt …</p></div>
+  if (isError || !address || !detail) return (
     <div className="master-page">
-      <button className="link-cell" onClick={() => navigate('/adressen')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ArrowLeft size={14} /> Zurück</button>
-      <p className="empty-note">Adresse nicht gefunden.</p>
+      <PageHeader title="Adresse nicht gefunden" back={{ label: 'Adressen', onClick: () => navigate('/adressen') }} />
+      <p className="empty-note">Diese Adresse gibt es nicht (mehr), oder sie ließ sich nicht laden.</p>
     </div>
   )
 
-  const typeLabel = addressTypeLabel(address.ADDRESS_TYPE)
-
   return (
     <div className="master-page">
-      <div style={{ marginBottom: 8 }}>
-        <button className="link-cell" onClick={() => navigate('/adressen')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <ArrowLeft size={14} /> Adressen
-        </button>
+      <AddressHeader address={address} onBack={() => guarded(() => navigate('/adressen'))} contacts={detail.contacts} />
+      <Tabs tabs={tabs} active={tab} onChange={setTab} />
+      <div className="master-tab-content">
+        {tab === 'kontakte'   && <KontakteTab address={address} contacts={detail.contacts} />}
+        {tab === 'daten'      && <DatenTab key={address.ID} address={address} />}
+        {tab === 'verwendung' && <VerwendungTab detail={detail} />}
       </div>
-      <div className="master-page-header" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <h1 className="master-page-title" style={{ margin: 0 }}>{address.ADDRESS_NAME_1}</h1>
-        {typeLabel && (
-          <span style={{ fontSize: 12, fontWeight: 600, padding: '2px 10px', borderRadius: 999, background: 'var(--surface-2)', color: 'var(--text-3)' }}>
-            {typeLabel}
-          </span>
-        )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <Can permission="addresses.edit">
-            <button className="btn-primary btn-small" onClick={openEdit} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <Pencil size={13} strokeWidth={2} /> Bearbeiten
-            </button>
-          </Can>
-          <Can permission="addresses.delete">
-            <button className="row-action-btn row-action-btn--danger"
-              title="Adresse löschen"
-              onClick={() => setConfirmState({
-                title: 'Adresse löschen',
-                message: `„${address.ADDRESS_NAME_1}" wirklich löschen?`,
-                onConfirm: () => deleteAddrMut.mutate(),
-              })}>
-              <Trash2 size={14} strokeWidth={2} />
-            </button>
-          </Can>
-        </div>
-      </div>
+    </div>
+  )
+}
 
-      <Card title="Stammdaten">
-        <InfoRow label="Name 2">{address.ADDRESS_NAME_2}</InfoRow>
-        <InfoRow label="Straße">{address.STREET}</InfoRow>
-        <InfoRow label="Postfach">{address.POST_OFFICE_BOX}</InfoRow>
-        <InfoRow label="PLZ / Ort">{[address.POST_CODE, address.CITY].filter(Boolean).join(' ')}</InfoRow>
-        <InfoRow label="Land">{address.COUNTRY}</InfoRow>
-        <InfoRow label="Telefon">{address.PHONE && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Phone size={13} /><a href={`tel:${address.PHONE}`}>{address.PHONE}</a></span>}</InfoRow>
-        <InfoRow label="E-Mail">{address.EMAIL && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Mail size={13} /><a href={`mailto:${address.EMAIL}`}>{address.EMAIL}</a></span>}</InfoRow>
-        <InfoRow label="Website">{address.WEBSITE && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><Globe size={13} /><a href={address.WEBSITE.startsWith('http') ? address.WEBSITE : `https://${address.WEBSITE}`} target="_blank" rel="noreferrer">{address.WEBSITE}</a></span>}</InfoRow>
-        <InfoRow label="Kundennr.">{address.CUSTOMER_NUMBER}</InfoRow>
-        <InfoRow label="USt-IdNr.">{address.TAX_ID}</InfoRow>
-        <InfoRow label="Steuernummer">{address.TAX_NUMBER}</InfoRow>
-        <InfoRow label="Käuferreferenz">{address.BUYER_REFERENCE}</InfoRow>
-        <InfoRow label="Peppol-Endpoint">{address.PEPPOL_ENDPOINT_ID && `${address.PEPPOL_ENDPOINT_ID}${address.PEPPOL_SCHEME_ID ? ` (${address.PEPPOL_SCHEME_ID})` : ''}`}</InfoRow>
-        <InfoRow label="Notizen">{address.NOTES}</InfoRow>
-      </Card>
+function countLinks(d: AddressDetail) {
+  return d.projects.length + d.offers.length + (d.contracts?.length ?? 0) + d.invoices.length + d.partials.length + (d.nachtraege?.length ?? 0)
+}
 
-      <Card
-        title={`Kontakte (${contacts.length})`}
-        action={
-          <Can permission="addresses.contacts.create">
-            <button className="btn-small" onClick={openConCreate} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              <Plus size={14} strokeWidth={2.25} /> Kontakt
-            </button>
-          </Can>
+// ── Kopf ────────────────────────────────────────────────────────────────────
+
+function AddressHeader({ address, contacts, onBack }: { address: Address; contacts: Contact[]; onBack: () => void }) {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+  const toast = useToast()
+  const canDelete = usePermission('addresses.delete')
+  const [confirm, confirmDialog] = useConfirm()
+  const typeLabel = addressTypeLabel(address.ADDRESS_TYPE)
+  const street = [address.STREET, address.POST_OFFICE_BOX && `Postfach ${address.POST_OFFICE_BOX}`].filter(Boolean).join(', ')
+  const place = [address.POST_CODE, address.CITY].filter(Boolean).join(' ')
+
+  async function remove() {
+    const ok = await confirm({
+      title: 'Adresse löschen?',
+      message: `„${address.ADDRESS_NAME_1}" wird gelöscht. Wird sie noch verwendet (Kontakte, Projekte, Rechnungen …), lehnt plan&simple das ab und sagt, wo.`,
+      confirmLabel: 'Löschen',
+    })
+    if (!ok) return
+    try {
+      await deleteAddress(address.ID)
+      void qc.invalidateQueries({ queryKey: ['addresses'] })
+      toast.success(`${address.ADDRESS_NAME_1} gelöscht.`)
+      navigate('/adressen')
+    } catch (e) {
+      toast.error((e as Error)?.message || 'Löschen fehlgeschlagen')
+    }
+  }
+
+  function exportVCards() {
+    const cards = contacts.map(c => contactVCard({ ...c, ADDRESS: address.ADDRESS_NAME_1 })).join('\r\n')
+    downloadText(`${address.ADDRESS_NAME_1}.vcf`.replace(/[^\wÄÖÜäöüß.-]+/g, '_'), cards, 'text/vcard')
+  }
+
+  return (
+    <>
+      <PageHeader
+        className="ad-header"
+        back={{ label: 'Adressen', onClick: onBack }}
+        eyebrow={<>
+          {address.CUSTOMER_NUMBER && <span>Kd.-Nr. {address.CUSTOMER_NUMBER}</span>}
+          {typeLabel && <span className="status-pill">{typeLabel}</span>}
+        </>}
+        title={address.ADDRESS_NAME_1}
+        meta={<>
+          {address.ADDRESS_NAME_2 && <span>{address.ADDRESS_NAME_2}</span>}
+          {(street || place) && <span>{[street, place, address.COUNTRY && address.COUNTRY !== 'Deutschland' ? address.COUNTRY : null].filter(Boolean).join(' · ')}</span>}
+          {address.PHONE && <a className="ad-meta-link" href={`tel:${address.PHONE}`}><Phone size={13} strokeWidth={1.75} aria-hidden="true" />{address.PHONE}</a>}
+          {address.EMAIL && <a className="ad-meta-link" href={`mailto:${address.EMAIL}`}><Mail size={13} strokeWidth={1.75} aria-hidden="true" />{address.EMAIL}</a>}
+          {address.WEBSITE && <a className="ad-meta-link" href={webHref(address.WEBSITE)} target="_blank" rel="noreferrer"><Globe size={13} strokeWidth={1.75} aria-hidden="true" />{address.WEBSITE}</a>}
+        </>}
+        actions={
+          <RowMenu label="Weitere Aktionen zur Adresse" triggerClassName="btn-secondary pw-more-btn">
+            {contacts.length > 0 && (
+              <button type="button" role="menuitem" className="row-menu-item" onClick={exportVCards}>
+                <Download size={13} strokeWidth={1.75} style={{ marginRight: 8 }} aria-hidden="true" />Alle Kontakte als vCard
+              </button>
+            )}
+            {canDelete && (
+              <button type="button" role="menuitem" className="row-menu-item danger" onClick={() => void remove()}>
+                <Trash2 size={13} strokeWidth={1.75} style={{ marginRight: 8 }} aria-hidden="true" />Adresse löschen
+              </button>
+            )}
+          </RowMenu>
         }
-      >
-        {contacts.length === 0 ? (
-          <p className="empty-note" style={{ margin: 0 }}>Noch keine Kontakte zu dieser Adresse.</p>
-        ) : (
-          <table className="master-table">
+      />
+      {confirmDialog}
+    </>
+  )
+}
+
+// ── Reiter Kontakte ─────────────────────────────────────────────────────────
+
+function KontakteTab({ address, contacts }: { address: Address; contacts: Contact[] }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const narrow = useIsNarrow()
+  const canCreate = usePermission('addresses.contacts.create')
+  const canEdit   = usePermission('addresses.contacts.edit')
+  const canDelete = usePermission('addresses.contacts.delete')
+  const [dialog, setDialog] = useState<ContactDialogState>(null)
+  const [confirm, confirmDialog] = useConfirm()
+
+  const sorted = useMemo(
+    () => [...contacts].sort((a, b) => (Number(b.IS_PRIMARY) - Number(a.IS_PRIMARY)) || `${a.LAST_NAME}`.localeCompare(`${b.LAST_NAME}`, 'de')),
+    [contacts],
+  )
+  const fullName = (c: Contact) => `${c.TITLE ? `${c.TITLE} ` : ''}${c.FIRST_NAME} ${c.LAST_NAME}`.trim()
+  const vcard = (c: Contact) => downloadText(`${c.FIRST_NAME}_${c.LAST_NAME}.vcf`.replace(/\s+/g, '_'), contactVCard({ ...c, ADDRESS: address.ADDRESS_NAME_1 }), 'text/vcard')
+
+  async function remove(c: Contact) {
+    const ok = await confirm({ title: 'Kontakt löschen?', message: `${fullName(c)} wird gelöscht.`, confirmLabel: 'Löschen' })
+    if (!ok) return
+    try {
+      await deleteContact(c.ID)
+      void qc.invalidateQueries({ queryKey: ['address-detail', address.ID] })
+      void qc.invalidateQueries({ queryKey: ['contacts'] })
+      void qc.invalidateQueries({ queryKey: ['contacts-by-address'] })
+      toast.success(`${fullName(c)} gelöscht.`)
+    } catch (e) {
+      toast.error((e as Error)?.message || 'Löschen fehlgeschlagen')
+    }
+  }
+
+  const openNew = () => setDialog({ mode: 'new', addressId: address.ID, addressName: address.ADDRESS_NAME_1 })
+  const actions = (c: Contact) => (
+    <>
+      <button type="button" className="row-action-btn" onClick={() => vcard(c)} title="Als vCard speichern" aria-label={`${fullName(c)} als vCard speichern`}>
+        <Download size={14} strokeWidth={2} aria-hidden="true" />
+      </button>
+      {canEdit && (
+        <button type="button" className="row-action-btn" onClick={() => setDialog({ mode: 'edit', contact: { ...c, ADDRESS: address.ADDRESS_NAME_1 } })}
+          title="Bearbeiten" aria-label={`${fullName(c)} bearbeiten`}>
+          <Pencil size={14} strokeWidth={2} aria-hidden="true" />
+        </button>
+      )}
+      {canDelete && (
+        <button type="button" className="row-action-btn row-action-btn--danger" onClick={() => void remove(c)}
+          title="Löschen" aria-label={`${fullName(c)} löschen`}>
+          <Trash2 size={14} strokeWidth={2} aria-hidden="true" />
+        </button>
+      )}
+    </>
+  )
+  const primary = (c: Contact) => !!c.IS_PRIMARY && (
+    <span className="ad-primary"><Star size={12} strokeWidth={2} fill="currentColor" aria-hidden="true" />Hauptansprechpartner</span>
+  )
+  const phones = (c: Contact) => [c.MOBILE, c.PHONE].filter((p): p is string => !!p)
+
+  return (
+    <div>
+      {canCreate && contacts.length > 0 && (
+        <div className="ad-toolbar">
+          <button type="button" className="btn-primary btn-small" onClick={openNew}>
+            <Plus size={14} strokeWidth={2.25} aria-hidden="true" /> Kontakt hinzufügen
+          </button>
+        </div>
+      )}
+
+      {contacts.length === 0 ? (
+        <div className="empty-block">
+          <p className="empty-note">Zu dieser Adresse gibt es noch keine Kontakte.</p>
+          <p className="empty-block-why">Ansprechpartner stehen auf Angeboten und Rechnungen als Empfänger und lassen sich in Projekten und Verträgen auswählen.</p>
+          {canCreate && (
+            <button type="button" className="btn-primary" onClick={openNew}>
+              <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Kontakt hinzufügen
+            </button>
+          )}
+        </div>
+      ) : narrow ? (
+        <ul className="ad-cards" aria-label="Kontakte">
+          {sorted.map(c => (
+            <li key={c.ID} className="ad-card">
+              <div className="ad-card-top">
+                <div className="ad-card-main">
+                  <span className="ad-card-name">{fullName(c)}</span>
+                  {primary(c)}
+                  {(c.POSITION || c.DEPARTMENT) && <span className="ad-card-sub">{[c.POSITION, c.DEPARTMENT].filter(Boolean).join(' · ')}</span>}
+                </div>
+                <div className="ad-card-actions">{actions(c)}</div>
+              </div>
+              <div className="ad-card-links">
+                {c.EMAIL && <a href={`mailto:${c.EMAIL}`}><Mail size={14} strokeWidth={1.75} aria-hidden="true" />{c.EMAIL}</a>}
+                {phones(c).map(p => <a key={p} href={`tel:${p}`}><Phone size={14} strokeWidth={1.75} aria-hidden="true" />{p}</a>)}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="list-section ad-list">
+          <table className="master-table ad-table">
             <thead>
-              <tr><th scope="col">Name</th><th scope="col">Funktion</th><th scope="col">E-Mail</th><th scope="col">Telefon</th><th scope="col"></th></tr>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">E-Mail</th>
+                <th scope="col">Telefon</th>
+                <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>
+              </tr>
             </thead>
             <tbody>
-              {sortedContacts.map(c => (
+              {sorted.map(c => (
                 <tr key={c.ID}>
                   <td>
-                    {!!c.IS_PRIMARY && <Star size={12} strokeWidth={2} fill="currentColor" style={{ color: 'var(--warning)', marginRight: 4, verticalAlign: 'middle' }} aria-label="Hauptansprechpartner" />}
-                    {c.TITLE ? `${c.TITLE} ` : ''}{c.FIRST_NAME} {c.LAST_NAME}
+                    <div className="ad-name">{fullName(c)}{primary(c)}</div>
+                    {(c.POSITION || c.DEPARTMENT) && <div className="ad-sub">{[c.POSITION, c.DEPARTMENT].filter(Boolean).join(' · ')}</div>}
+                    {c.NOTES && <div className="ad-sub ad-notes">{c.NOTES}</div>}
                   </td>
-                  <td>{c.POSITION ?? '—'}{c.DEPARTMENT ? ` · ${c.DEPARTMENT}` : ''}</td>
                   <td>{c.EMAIL ? <a href={`mailto:${c.EMAIL}`}>{c.EMAIL}</a> : '—'}</td>
-                  <td>{c.MOBILE || c.PHONE || '—'}</td>
-                  <td className="doc-actions">
-                    <button className="row-action-btn" title="Als vCard exportieren"
-                      onClick={() => downloadText(`${c.FIRST_NAME}_${c.LAST_NAME}.vcf`.replace(/\s+/g, '_'), contactVCard(c), 'text/vcard')}>
-                      <Download size={14} strokeWidth={2} />
-                    </button>
-                    <Can permission="addresses.contacts.edit">
-                      <button className="row-action-btn" onClick={() => openConEdit(c)} title="Bearbeiten"><Pencil size={14} strokeWidth={2} /></button>
-                    </Can>
-                    <Can permission="addresses.contacts.delete">
-                      <button className="row-action-btn row-action-btn--danger" onClick={() => handleDeleteContact(c)} title="Löschen"><Trash2 size={14} strokeWidth={2} /></button>
-                    </Can>
-                  </td>
+                  <td>{phones(c).length ? phones(c).map(p => <div key={p}><a href={`tel:${p}`}>{p}</a></div>) : '—'}</td>
+                  <td className="doc-actions">{actions(c)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </Card>
-
-      {(detail!.projects.length + detail!.offers.length + detail!.invoices.length + detail!.partials.length) > 0 && (
-        <Card title="Verknüpfungen">
-          <LinkList items={detail!.projects} icon={<FolderOpen size={14} />} label="Projekte"
-            render={p => p.ABBR || p.NAME || `#${p.ID}`} onClick={p => navigate('/projekte', { state: { projectId: p.ID } })} />
-          <LinkList items={detail!.offers} icon={<FileSignature size={14} />} label="Angebote"
-            render={o => o.ABBR || `#${o.ID}`} onClick={o => navigate(angebotHref(o.ID))} />
-          <LinkList items={detail!.invoices} icon={<Receipt size={14} />} label="Rechnungen"
-            render={i => i.INVOICE_NUMBER || `#${i.ID}`} onClick={() => navigate('/rechnungen')} />
-          <LinkList items={detail!.partials} icon={<Banknote size={14} />} label="Abschläge"
-            render={p => p.ADVANCE_INVOICE_NUMBER || `#${p.ID}`} onClick={() => navigate('/rechnungen')} />
-        </Card>
+        </div>
       )}
+      <ContactDialog state={dialog} onClose={() => setDialog(null)} />
+      {confirmDialog}
+    </div>
+  )
+}
 
-      {/* Adresse bearbeiten */}
-      <Modal open={editOpen} onClose={() => setEditOpen(false)} title="Adresse bearbeiten">
-        <form ref={editFormRef} onSubmit={submitEdit} className="master-form">
-          <AddrForm vals={editForm} setK={setEK} msg={editMsg} countries={countries} />
-          <DialogFooter>
-            <button type="button" className="btn-secondary" onClick={() => setEditOpen(false)}>Abbrechen</button>
-            <button className="btn-primary" type="submit" disabled={updateAddrMut.isPending}>{updateAddrMut.isPending ? 'Speichert …' : 'Speichern'}</button>
-          </DialogFooter>
-        </form>
-      </Modal>
+// ── Reiter Adressdaten ──────────────────────────────────────────────────────
 
-      {/* Kontakt anlegen */}
-      <Modal open={conCreateOpen} onClose={() => setConCreateOpen(false)} title="Neuer Kontakt">
-        <form ref={conCreateRef} onSubmit={submitConCreate} className="master-form">
-          <ContactForm vals={conForm} setK={setCK} onPrimaryChange={setCPrimary} addrTxt={conAddrText} setAddrTxt={setConAddrText}
-            msg={conMsg} salutations={salutations} genders={genders} searchAddresses={searchAddresses} />
-          <DialogFooter>
-            <button type="button" className="btn-secondary" onClick={() => setConCreateOpen(false)}>Schließen</button>
-            <button className="btn-primary" type="submit" disabled={createConMut.isPending}>{createConMut.isPending ? 'Speichert …' : 'Speichern'}</button>
-          </DialogFooter>
-        </form>
-      </Modal>
+const FIELDS: AddressField[] = [
+  'address_name_1', 'address_name_2', 'address_type', 'street', 'post_office_box', 'post_code', 'city', 'country_id',
+  'phone', 'email', 'website', 'customer_number', 'tax_id', 'tax_number',
+  'buyer_reference', 'peppol_endpoint_id', 'peppol_scheme_id', 'notes',
+]
 
-      {/* Kontakt bearbeiten */}
-      <Modal open={editContact !== null} onClose={() => setEditContact(null)} title="Kontakt bearbeiten">
-        <form ref={conEditRef} onSubmit={submitConEdit} className="master-form">
-          <ContactForm vals={conEditForm} setK={setCEK} onPrimaryChange={setCEPrimary} addrTxt={conEditAddrText} setAddrTxt={setConEditAddrText}
-            msg={conEditMsg} isEdit salutations={salutations} genders={genders} searchAddresses={searchAddresses} />
-          <DialogFooter>
-            <button type="button" className="btn-secondary" onClick={() => setEditContact(null)}>Abbrechen</button>
-            <button className="btn-primary" type="submit" disabled={updateConMut.isPending}>{updateConMut.isPending ? 'Speichert …' : 'Speichern'}</button>
-          </DialogFooter>
-        </form>
-      </Modal>
+function DatenTab({ address }: { address: Address }) {
+  const qc = useQueryClient()
+  const canEdit = usePermission('addresses.edit')
+  const [confirm, confirmDialog] = useConfirm()
+  const { data: countriesData } = useQuery({ queryKey: ['countries'], queryFn: fetchCountries })
+  const [edits, setEdits] = useState<Partial<AddressPayload>>({})
+  const [invalid, setInvalid] = useState<string[]>([])
+  const [pending, setPending] = useState(false)
+  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
-      <ConfirmModal
-        open={confirmState !== null}
-        title={confirmState?.title ?? ''}
-        message={confirmState?.message ?? ''}
-        confirmLabel="Löschen"
-        confirmClass="danger"
-        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
-        onCancel={() => setConfirmState(null)}
-      />
+  const saved = useMemo(() => addressToPayload(address), [address])
+  const form: AddressPayload = { ...saved, ...edits }
+  const changed = FIELDS.filter(k => String(form[k] ?? '') !== String(saved[k] ?? '')).length
+  const dirty = changed > 0
+
+  const set = (k: AddressField, v: string) => { setEdits(e => ({ ...e, [k]: v })); setMsg(null) }
+
+  async function save() {
+    const missing = missingAddressFields(form)
+    setInvalid(missing)
+    if (missing.length) {
+      const text = `Bitte noch angeben: ${missing.join(', ')}.`
+      setMsg({ type: 'error', text })
+      throw new Error(text)
+    }
+    setPending(true)
+    setMsg(null)
+    try {
+      await updateAddress(address.ID, form)
+      await qc.invalidateQueries({ queryKey: ['address-detail', address.ID] })
+      void qc.invalidateQueries({ queryKey: ['addresses'] })
+      void qc.invalidateQueries({ queryKey: ['contacts'] })
+      setEdits({})
+      setMsg({ type: 'success', text: 'Adresse gespeichert. Neue Angebote und Rechnungen übernehmen die Anschrift; gestellte Belege bleiben, wie sie sind.' })
+    } catch (e) {
+      setMsg({ type: 'error', text: (e as Error)?.message || 'Speichern fehlgeschlagen' })
+      throw e
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function discard() {
+    const ok = await confirm({
+      title: 'Änderungen verwerfen?',
+      message: `${changed === 1 ? '1 Änderung geht' : `${changed} Änderungen gehen`} verloren. Die Adresse bleibt, wie sie gespeichert ist.`,
+      confirmLabel: 'Verwerfen',
+    })
+    if (ok) { setEdits({}); setMsg(null); setInvalid([]) }
+  }
+
+  useRegisterDirty('adresse', { dirty, label: 'Adressdaten', count: changed, save })
+  useCtrlS(() => { if (dirty && !pending) void save().catch(() => {}) }, canEdit)
+
+  const status = pending ? 'Speichert …' : dirty ? `${changed} ${changed === 1 ? 'Feld' : 'Felder'} geändert` : 'Keine Änderungen'
+
+  return (
+    <div className="ws-form">
+      {!canEdit && <p className="ws-form-readonly">Nur Lesen — zum Ändern fehlt das Recht „Adressen bearbeiten".</p>}
+      <fieldset className="ws-form-fields" disabled={!canEdit || pending}>
+        <legend className="sr-only">Adressdaten</legend>
+        <AddressFields vals={form} set={set} countries={countriesData?.data ?? []} prefix="ad" invalid={invalid} />
+      </fieldset>
+      <Message type={msg?.type ?? 'info'} text={msg?.text ?? null} />
+      {canEdit && (
+        <ActionBar
+          dirty={dirty}
+          quiet={!dirty && !pending}
+          status={status}
+          secondary={dirty ? <button type="button" className="btn-secondary" onClick={() => void discard()} disabled={pending}>Verwerfen</button> : undefined}
+        >
+          <button type="button" className="btn-primary" onClick={() => void save().catch(() => {})} disabled={!dirty || pending}>
+            {pending ? 'Speichert …' : 'Speichern'}
+          </button>
+        </ActionBar>
+      )}
+      {confirmDialog}
+    </div>
+  )
+}
+
+// ── Reiter Verwendet in ─────────────────────────────────────────────────────
+
+function VerwendungTab({ detail }: { detail: AddressDetail }) {
+  const v = detail.visible ?? {}
+  const groups: { key: string; title: string; icon: typeof FolderOpen; items: { id: number; to: string; state?: unknown; label: string; sub?: string | null }[] }[] = [
+    { key: 'projects', title: 'Projekte (Auftraggeber)', icon: FolderOpen,
+      items: detail.projects.map(p => ({ id: p.ID, to: `/projekte?projectId=${p.ID}&tab=struktur`, label: p.ABBR || `#${p.ID}`, sub: p.NAME })) },
+    { key: 'contracts', title: 'Verträge (Rechnungsempfänger)', icon: FileText,
+      items: (detail.contracts ?? []).map(c => ({ id: c.ID, to: c.PROJECT_ID ? `/projekte?projectId=${c.PROJECT_ID}&tab=vertraege` : '/projekte', label: c.ABBR || `#${c.ID}`, sub: c.NAME })) },
+    { key: 'offers', title: 'Angebote', icon: FileSignature,
+      items: detail.offers.map(o => ({ id: o.ID, to: angebotHref(o.ID), label: o.ABBR || `#${o.ID}`, sub: o.NAME ?? null })) },
+    { key: 'nachtraege', title: 'Nachträge', icon: FilePlus2,
+      items: (detail.nachtraege ?? []).map(n => ({ id: n.ID, to: `/nachtraege/${n.ID}`, label: n.ABBR || `#${n.ID}`, sub: n.NAME })) },
+    { key: 'invoices', title: 'Rechnungen', icon: Receipt,
+      items: detail.invoices.map(i => ({ id: i.ID, to: '/rechnungen', state: { projectSearch: i.INVOICE_NUMBER ?? '' }, label: i.INVOICE_NUMBER || 'Entwurf', sub: fmtDate(i.INVOICE_DATE) })) },
+    { key: 'partials', title: 'Abschlagsrechnungen', icon: Banknote,
+      items: detail.partials.map(p => ({ id: p.ID, to: '/rechnungen', state: { projectSearch: p.ADVANCE_INVOICE_NUMBER ?? '' }, label: p.ADVANCE_INVOICE_NUMBER || 'Entwurf', sub: fmtDate(p.ADVANCE_INVOICE_DATE) })) },
+  ]
+  const shown = groups.filter(g => g.items.length > 0)
+  const hidden = groups.filter(g => v[g.key as keyof typeof v] === false).map(g => g.title.replace(/ \(.*\)$/, ''))
+
+  return (
+    <div className="ad-usage">
+      {shown.length === 0 ? (
+        <div className="empty-block">
+          <p className="empty-note">Diese Adresse wird noch nirgends verwendet.</p>
+          <p className="empty-block-why">Sobald sie Auftraggeber eines Projekts, Empfänger eines Angebots oder einer Rechnung ist, steht das hier. Eine verwendete Adresse lässt sich nicht löschen.</p>
+        </div>
+      ) : (
+        <div className="ad-usage-groups">
+          {shown.map(g => {
+            const Icon = g.icon
+            return (
+              <section key={g.key} className="ad-usage-group" aria-labelledby={`adu-${g.key}`}>
+                <h3 id={`adu-${g.key}`} className="ad-usage-title"><Icon size={15} strokeWidth={1.75} aria-hidden="true" />{g.title} <span className="ad-usage-count">{g.items.length}</span></h3>
+                <ul className="ad-usage-list">
+                  {g.items.map(it => (
+                    <li key={it.id}>
+                      <Link to={it.to} state={it.state} className="ad-usage-link">
+                        <span className="ad-usage-label">{it.label}</span>
+                        {it.sub && <span className="ad-usage-sub">{it.sub}</span>}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )
+          })}
+        </div>
+      )}
+      {hidden.length > 0 && (
+        <p className="ws-form-readonly">Ohne Recht zum Ansehen nicht aufgeführt: {hidden.join(', ')}.</p>
+      )}
     </div>
   )
 }

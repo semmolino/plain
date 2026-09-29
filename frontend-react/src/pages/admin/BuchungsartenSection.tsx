@@ -143,7 +143,6 @@ export function BuchungsartenSection() {
         title="Buchungsart löschen"
         message={`Buchungsart „${confirmState?.label ?? ''}" löschen? Bereits erfasste Buchungen bleiben unverändert erhalten.`}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { if (confirmState) delMut.mutate(confirmState.id); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />

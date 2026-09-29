@@ -230,7 +230,6 @@ export function AngebotHeader({ offerId, onBack, onSwitch, onEditData, onDeleted
         title={confirm?.title ?? ''}
         message={confirm?.message ?? ''}
         confirmLabel={confirm?.label ?? 'Bestätigen'}
-        confirmClass="danger"
         onConfirm={() => { confirm?.run(); setConfirm(null) }}
         onCancel={() => setConfirm(null)}
       />

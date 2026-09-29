@@ -341,7 +341,6 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
               ? `Position „${posLabel(confirmDel.node)}" samt ${confirmDel.branch - 1} Unterposition${confirmDel.branch === 2 ? '' : 'en'} löschen?`
               : `Position „${posLabel(confirmDel.node)}" löschen?`}
           confirmLabel="Löschen"
-          confirmClass="danger"
           onConfirm={() => {
             if (confirmDel.kind === 'nachtrag') delNachtragMut.mutate()
             else delNodeMut.mutate(confirmDel.node.ID)

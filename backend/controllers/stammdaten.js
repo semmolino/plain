@@ -5,6 +5,7 @@ const objectStorage = require("../services/objectStorage");
 const svc  = require("../services/stammdaten");
 const misch = require("../services/mischhonorar");
 const { suchwert } = require("../services/pgrestFilter");
+const adressen = require("../services/adressen");
 
 // Reichert FEE_CALCULATION_MASTER-Rows um Merkmale des Leistungsbilds an:
 //   BASE_TYPE            Bemessungsgrundlage (Migration 0054)
@@ -847,34 +848,36 @@ async function writeWithOptionalCols(runWrite, row, optionalKeys) {
   return res;
 }
 
-async function postAddress(req, res, supabase) {
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
-  if (!address_name_1 || typeof address_name_1 !== "string") return res.status(400).json({ error: "address_name_1 is required" });
-
-  const parsedCountryId = typeof country_id === "number" ? country_id : parseInt(country_id, 10);
-  if (!parsedCountryId || Number.isNaN(parsedCountryId)) return res.status(400).json({ error: "country_id is required" });
-
-  const insertRow = {
-    ADDRESS_NAME_1: address_name_1.trim(),
-    ADDRESS_NAME_2: (address_name_2 || "").trim() || null,
-    STREET: (street || "").trim() || null,
-    POST_CODE: (post_code || "").trim() || null,
-    CITY: (city || "").trim() || null,
-    POST_OFFICE_BOX: (post_office_box || "").trim() || null,
-    COUNTRY_ID: parsedCountryId,
-    CUSTOMER_NUMBER: (customer_number || "").trim() || null,
-    "TAX-ID": (tax_id || "").trim() || null,
-    BUYER_REFERENCE: (buyer_reference || "").trim() || null,
-    TENANT_ID: req.tenantId ?? null,
-    ...buildAddrOptionalCols(req.body),
+/** Grundspalten einer Adresse aus dem Body — gekuerzt, leer = null. */
+function addressBaseCols(body) {
+  const { trimOrNull } = adressen;
+  const { address_name_2, street, post_code, city, post_office_box, customer_number, tax_id, buyer_reference } = body || {};
+  return {
+    ...adressen.addressRequired(body),
+    ADDRESS_NAME_2: trimOrNull(address_name_2),
+    STREET: trimOrNull(street),
+    POST_CODE: trimOrNull(post_code),
+    CITY: trimOrNull(city),
+    POST_OFFICE_BOX: trimOrNull(post_office_box),
+    CUSTOMER_NUMBER: trimOrNull(customer_number),
+    "TAX-ID": trimOrNull(tax_id),
+    BUYER_REFERENCE: trimOrNull(buyer_reference),
   };
+}
 
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("ADDRESS").insert([row]),
-    insertRow, ADDR_OPTIONAL_DB_COLS,
-  );
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+const fail = (res, e) => res.status(e?.status || 500).json({ error: e?.message || String(e) });
+
+async function postAddress(req, res, supabase) {
+  try {
+    const insertRow = { ...addressBaseCols(req.body), TENANT_ID: req.tenantId ?? null, ...buildAddrOptionalCols(req.body) };
+    // Die neue ID geht zurueck — die Oberflaeche oeffnet danach die Adresse.
+    const { data, error } = await writeWithOptionalCols(
+      (row) => supabase.from("ADDRESS").insert([row]).select("ID, ADDRESS_NAME_1").single(),
+      insertRow, ADDR_OPTIONAL_DB_COLS,
+    );
+    if (error) throw error;
+    res.json({ data });
+  } catch (e) { fail(res, e); }
 }
 
 // ---------------------------------------------------------------------------
@@ -892,20 +895,11 @@ async function postRollen(req, res, supabase) {
     ACTIVE:     1,
   };
 
-  let data, error, usedTable;
-  ({ data, error } = await supabase.from("ROLE").insert([insertRow]));
-  usedTable = "ROLE";
-
-  if (error) {
-    const msg = String(error.message || "");
-    if (msg.toLowerCase().includes("does not exist") || msg.toLowerCase().includes("relation") || msg.toLowerCase().includes("not found")) {
-      ({ data, error } = await supabase.from("ADDRESS").insert([insertRow]));
-      usedTable = "ADDRESS";
-    }
-  }
-
+  // Frueher fiel ein fehlgeschlagener Insert hier auf die Tabelle ADDRESS
+  // zurueck — eine Rolle landete dann als Adresse im Adressbuch.
+  const { data, error } = await supabase.from("ROLE").insert([insertRow]);
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data, table: usedTable });
+  res.json({ data, table: "ROLE" });
 }
 
 // ---------------------------------------------------------------------------
@@ -970,23 +964,19 @@ async function listAddresses(req, res, supabase) {
 // PATCH /api/stammdaten/addresses/:id
 // ---------------------------------------------------------------------------
 async function patchAddress(req, res, supabase) {
-  const id = req.params.id;
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
-  if (!address_name_1 || !country_id) return res.status(400).json({ error: "ADDRESS_NAME_1 und COUNTRY_ID sind erforderlich" });
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  let update;
+  try { update = { ...addressBaseCols(req.body), ...buildAddrOptionalCols(req.body) }; }
+  catch (e) { return fail(res, e); }
 
-  const update = {
-    ADDRESS_NAME_1: address_name_1, ADDRESS_NAME_2: address_name_2 || null,
-    STREET: street || null, POST_CODE: post_code || null, CITY: city || null,
-    POST_OFFICE_BOX: post_office_box || null, COUNTRY_ID: parseInt(country_id, 10),
-    CUSTOMER_NUMBER: customer_number || null, "TAX-ID": tax_id || null, BUYER_REFERENCE: buyer_reference || null,
-    ...buildAddrOptionalCols(req.body),
-  };
-
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("ADDRESS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single(),
+  const { data: rows, error } = await writeWithOptionalCols(
+    (row) => supabase.from("ADDRESS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*"),
     update, ADDR_OPTIONAL_DB_COLS,
   );
   if (error) return res.status(500).json({ error: error.message });
+  const data = rows?.[0];
+  if (!data) return res.status(404).json({ error: "Adresse nicht gefunden" });
 
   let countryName = "";
   const { data: cData } = await supabase.from("COUNTRY").select("NAME, ABBR").eq("ID", data.COUNTRY_ID).maybeSingle();
@@ -1023,15 +1013,19 @@ async function getAddressDetail(req, res, supabase) {
   const contactBase = "ID, TITLE, FIRST_NAME, LAST_NAME, EMAIL, MOBILE, SALUTATION_ID, GENDER_ID, ADDRESS_ID";
   const contactFull = contactBase + ", POSITION, DEPARTMENT, PHONE, IS_PRIMARY, NOTES";
 
-  const [contactsRes, projects, offers, invoices, partials, salutations, genders] = await Promise.all([
-    selectWithFallback(
+  // Kontakte nur mit Kontakt-Recht, Belege nur mit dem Recht ihres Moduls —
+  // vorher gab die Detailseite alles an jeden mit addresses.view.
+  const can = (key) => !!req._permissionsUnrestricted || !!req.permissions?.has?.(key);
+  const canContacts = can("addresses.contacts.view");
+  let links;
+  try { links = await adressen.addressLinks(supabase, { tenantId, addressId: id, can }); }
+  catch (e) { return res.status(500).json({ error: e?.message || String(e) }); }
+
+  const [contactsRes, salutations, genders] = await Promise.all([
+    canContacts ? selectWithFallback(
       (cols) => supabase.from("CONTACTS").select(cols).eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id).order("LAST_NAME", { ascending: true }),
       contactFull, contactBase,
-    ),
-    safe(supabase.from("PROJECT").select("ID, ABBR, NAME").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
-    safe(supabase.from("OFFER").select("ID, ABBR").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
-    safe(supabase.from("INVOICE").select("ID, INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
-    safe(supabase.from("ADVANCE_INVOICE").select("ID, ADVANCE_INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    ) : Promise.resolve({ data: [] }),
     safe(supabase.from("SALUTATION").select("ID, SALUTATION").limit(5000)),
     safe(supabase.from("GENDER").select("ID, GENDER").limit(5000)),
   ]);
@@ -1049,7 +1043,13 @@ async function getAddressDetail(req, res, supabase) {
     data: {
       address: { ...addr, TAX_ID: addr["TAX-ID"] ?? null, COUNTRY: countryName },
       contacts,
-      projects, offers, invoices, partials,
+      ...links,
+      // Was der Aufrufer sehen darf — die Oberflaeche blendet den Rest aus,
+      // statt „keine Verknuepfungen" zu behaupten.
+      visible: Object.fromEntries([
+        ["contacts", canContacts],
+        ...Object.entries(adressen.LINK_PERMISSIONS).map(([k, perm]) => [k, can(perm)]),
+      ]),
     },
   });
 }
@@ -1077,15 +1077,19 @@ async function getContactsByAddress(req, res, supabase) {
   const addressId = parseInt((req.query.address_id || "").toString(), 10);
   if (!addressId) return res.json({ data: [] });
 
+  // IS_PRIMARY: Projekt, Angebot und Vertrag belegen damit den Kontakt vor
+  // (UI-Pilot Runde 9) — der Hauptansprechpartner steht deshalb vorn.
   const { data, error } = await supabase
     .from("CONTACTS")
-    .select("ID, FIRST_NAME, LAST_NAME")
+    .select("ID, FIRST_NAME, LAST_NAME, IS_PRIMARY")
     .eq("TENANT_ID", req.tenantId)
     .eq("ADDRESS_ID", addressId)
     .order("LAST_NAME", { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data: data || [] });
+  const rows = (data || []).map(c => ({ ...c, IS_PRIMARY: Number(c.IS_PRIMARY) === 1 ? 1 : 0 }));
+  rows.sort((a, b) => b.IS_PRIMARY - a.IS_PRIMARY);
+  res.json({ data: rows });
 }
 
 // ---------------------------------------------------------------------------
@@ -1119,7 +1123,7 @@ async function listContacts(req, res, supabase) {
   const [{ data: salutations, error: sErr }, { data: genders, error: gErr }, { data: addresses, error: aErr }] = await Promise.all([
     supabase.from("SALUTATION").select("ID, SALUTATION").limit(5000),
     supabase.from("GENDER").select("ID, GENDER").limit(5000),
-    supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").limit(5000),
+    supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", req.tenantId).limit(5000),
   ]);
   if (sErr) return res.status(500).json({ error: sErr.message });
   if (gErr) return res.status(500).json({ error: gErr.message });
@@ -1136,26 +1140,35 @@ async function listContacts(req, res, supabase) {
 // PATCH /api/stammdaten/contacts/:id
 // ---------------------------------------------------------------------------
 async function patchContact(req, res, supabase) {
-  const id = req.params.id;
-  const { title, first_name, last_name, email, mobile, salutation_id, gender_id, address_id } = req.body || {};
-  if (!first_name || !last_name || !salutation_id || !gender_id || !address_id) return res.status(400).json({ error: "Vorname, Nachname, Anrede, Geschlecht und Adresse sind erforderlich" });
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { trimOrNull } = adressen;
+  let updateRow;
+  try {
+    updateRow = {
+      ...adressen.contactRequired(req.body),
+      TITLE: trimOrNull(req.body?.title), EMAIL: trimOrNull(req.body?.email), MOBILE: trimOrNull(req.body?.mobile),
+      ...buildContactOptionalCols(req.body),
+    };
+    await adressen.assertOwnAddress(supabase, { tenantId: req.tenantId, addressId: updateRow.ADDRESS_ID });
+  } catch (e) { return fail(res, e); }
 
-  const updateRow = {
-    TITLE: title || null, FIRST_NAME: first_name, LAST_NAME: last_name,
-    EMAIL: email || null, MOBILE: mobile || null,
-    SALUTATION_ID: parseInt(salutation_id, 10), GENDER_ID: parseInt(gender_id, 10), ADDRESS_ID: parseInt(address_id, 10),
-    ...buildContactOptionalCols(req.body),
-  };
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("CONTACTS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single(),
+  const { data: rows, error } = await writeWithOptionalCols(
+    (row) => supabase.from("CONTACTS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*"),
     updateRow, CONTACT_OPTIONAL_DB_COLS,
   );
   if (error) return res.status(500).json({ error: error.message });
+  const data = rows?.[0];
+  if (!data) return res.status(404).json({ error: "Kontakt nicht gefunden" });
+  if (updateRow.IS_PRIMARY === 1) {
+    try { await adressen.ensureSinglePrimary(supabase, { tenantId: req.tenantId, addressId: data.ADDRESS_ID, contactId: id }); }
+    catch (e) { return fail(res, e); }
+  }
 
   const [{ data: s }, { data: g }, { data: a }] = await Promise.all([
     supabase.from("SALUTATION").select("SALUTATION").eq("ID", data.SALUTATION_ID).maybeSingle(),
     supabase.from("GENDER").select("GENDER").eq("ID", data.GENDER_ID).maybeSingle(),
-    supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("ID", data.ADDRESS_ID).maybeSingle(),
+    supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("ID", data.ADDRESS_ID).eq("TENANT_ID", req.tenantId).maybeSingle(),
   ]);
 
   res.json({ data: { ...data, NAME: `${data.FIRST_NAME || ""} ${data.LAST_NAME || ""}`.trim(), SALUTATION: s?.SALUTATION || "", GENDER: g?.GENDER || "", ADDRESS: a?.ADDRESS_NAME_1 || "" } });
@@ -1245,32 +1258,25 @@ async function searchPaymentMeans(req, res, supabase) {
 // POST /api/stammdaten/contacts
 // ---------------------------------------------------------------------------
 async function postContact(req, res, supabase) {
-  const { title, first_name, last_name, email, mobile, salutation_id, gender_id, address_id } = req.body || {};
-
-  if (!first_name || typeof first_name !== "string" || !first_name.trim()) return res.status(400).json({ error: "first_name is required" });
-  if (!last_name || typeof last_name !== "string" || !last_name.trim()) return res.status(400).json({ error: "last_name is required" });
-
-  const parsedSalutationId = typeof salutation_id === "number" ? salutation_id : parseInt(salutation_id, 10);
-  const parsedGenderId = typeof gender_id === "number" ? gender_id : parseInt(gender_id, 10);
-  const parsedAddressId = typeof address_id === "number" ? address_id : parseInt(address_id, 10);
-
-  if (!parsedSalutationId || Number.isNaN(parsedSalutationId)) return res.status(400).json({ error: "salutation_id is required" });
-  if (!parsedGenderId || Number.isNaN(parsedGenderId)) return res.status(400).json({ error: "gender_id is required" });
-  if (!parsedAddressId || Number.isNaN(parsedAddressId)) return res.status(400).json({ error: "address_id is required" });
-
-  const insertRow = {
-    TITLE: (title || "").trim() || null, FIRST_NAME: first_name.trim(), LAST_NAME: last_name.trim(),
-    EMAIL: (email || "").trim() || null, MOBILE: (mobile || "").trim() || null,
-    SALUTATION_ID: parsedSalutationId, GENDER_ID: parsedGenderId, ADDRESS_ID: parsedAddressId,
-    TENANT_ID: req.tenantId ?? null,
-    ...buildContactOptionalCols(req.body),
-  };
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("CONTACTS").insert([row]),
-    insertRow, CONTACT_OPTIONAL_DB_COLS,
-  );
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  const { trimOrNull } = adressen;
+  try {
+    const insertRow = {
+      ...adressen.contactRequired(req.body),
+      TITLE: trimOrNull(req.body?.title), EMAIL: trimOrNull(req.body?.email), MOBILE: trimOrNull(req.body?.mobile),
+      TENANT_ID: req.tenantId ?? null,
+      ...buildContactOptionalCols(req.body),
+    };
+    await adressen.assertOwnAddress(supabase, { tenantId: req.tenantId, addressId: insertRow.ADDRESS_ID });
+    const { data, error } = await writeWithOptionalCols(
+      (row) => supabase.from("CONTACTS").insert([row]).select("ID, ADDRESS_ID").single(),
+      insertRow, CONTACT_OPTIONAL_DB_COLS,
+    );
+    if (error) throw error;
+    if (insertRow.IS_PRIMARY === 1 && data?.ID) {
+      await adressen.ensureSinglePrimary(supabase, { tenantId: req.tenantId, addressId: insertRow.ADDRESS_ID, contactId: data.ID });
+    }
+    res.json({ data });
+  } catch (e) { fail(res, e); }
 }
 
 // ── Stammdaten list + delete ─────────────────────────────────────────────────

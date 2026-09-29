@@ -17,13 +17,14 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
 
 // vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
 // vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
-// vorher6 = nach Runde 5, vorher7 = nach Runde 6, nachher = aktueller Stand.
+// vorher6 = nach Runde 5, vorher7 = nach Runde 6, vorher8 = nach Runde 7,
+// vorher9 = nach Runde 8, nachher = aktueller Stand.
 // since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
 // Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
 // zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
-const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6 }
-const since = (round: number) => (RANK[PHASE] ?? 7) >= round
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8 }
+const since = (round: number) => (RANK[PHASE] ?? 9) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -742,4 +743,189 @@ test('Adresssuche – Treffer mit Tastatur', async ({ page }, info) => {
   await page.locator('.autocomplete-item').first().waitFor()
   await box.press('ArrowDown'); await box.press('ArrowDown')
   await shoot(page, info.project.name, 'adresssuche')
+})
+
+// ── Runde 8: Projektdaten, Kalkulation am Handy, Adressen und Kontakte ──────
+
+test('Projektdaten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) {
+    await open(page, '/projekte?projectId=1&tab=daten')
+    await page.locator('#pd-name').waitFor()
+  } else {
+    // Vorher: Dialog in der Projektliste
+    await open(page, '/projekte')
+    await page.getByRole('button', { name: 'Bearbeiten', exact: true }).first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await shoot(page, info.project.name, 'projektdaten')
+})
+
+/** Bestehende Kalkulation 71 (mit Besonderer Leistung und Zuschlag) bis Schritt `upto`. */
+async function kalkBestand(page: Page, upto: 3 | 4 | 5) {
+  await open(page, '/projekte?projectId=1&tab=honorar')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).first().click()
+  // Im Projekt steht der Assistent auf der Seite, im Angebot im Dialog
+  const wizard = page.locator('.hw-root')
+  await wizard.waitFor()
+  await page.waitForLoadState('networkidle')
+  for (let s = 2; s < upto; s++) {
+    // exakt: „Weitere Aktionen" (Handy) beginnt auch mit „Weiter"
+    await wizard.getByRole('button', { name: 'Weiter', exact: true }).click()
+    await page.waitForLoadState('networkidle')
+  }
+  return wizard
+}
+
+for (const [upto, name] of [[3, 'leistungsphasen'], [4, 'bl'], [5, 'zuschlaege']] as const) {
+  test(`Kalkulation am Handy – ${name}`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'Handy')
+    await prepare(page, info.project.name)
+    await kalkBestand(page, upto)
+    await shoot(page, info.project.name, `kalk-handy-${name}`)
+  })
+}
+
+test('Kalkulation am Handy – Blatt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !since(8), 'Blatt gibt es erst mit Runde 8')
+  await prepare(page, info.project.name)
+  await kalkBestand(page, 5)
+  await page.getByRole('list', { name: 'Zuschläge und Nachlässe' }).getByRole('button').first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'kalk-handy-blatt')
+})
+
+test('Kalkulation am Handy – Blatt im Angebot', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !since(8), 'Blatt gibt es erst mit Runde 8')
+  await prepare(page, info.project.name)
+  await open(page, '/angebote?offerId=1&tab=kalkulationen')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).click()
+  const wizard = page.locator('.hw-root')
+  await wizard.waitFor()
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click()
+  await page.getByRole('list', { name: 'Leistungsphasen' }).getByRole('button').nth(4).click()
+  await page.getByRole('dialog', { name: /LPH 5/ }).waitFor()
+  await shoot(page, info.project.name, 'kalk-handy-blatt-angebot')
+})
+
+// Adressen und Kontakte
+test('Adressen – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'adressen-liste')
+})
+
+test('Adresse – Seite', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen/2')
+  await page.getByRole('heading', { level: 1, name: /Wohnbau Süd/ }).waitFor()
+  await shoot(page, info.project.name, 'adresse')
+})
+
+test('Adresse – bearbeiten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) {
+    await open(page, '/adressen/2?tab=daten')
+    await page.getByLabel('Name 1*').waitFor()
+  } else {
+    await open(page, '/adressen/2')
+    // Der Kopf-Knopf — die Stifte der Kontaktzeilen heissen auch „Bearbeiten"
+    await page.getByRole('button', { name: 'Bearbeiten', exact: true }).first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await shoot(page, info.project.name, 'adresse-bearbeiten')
+})
+
+test('Adresse – Kontakt anlegen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen/2')
+  await page.getByRole('button', { name: since(8) ? 'Kontakt hinzufügen' : 'Kontakt' }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'kontakt-neu')
+})
+
+test('Adresse – verwendet in', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, since(8) ? '/adressen/2?tab=verwendung' : '/adressen/2')
+  await page.getByText('P-2024-002').first().waitFor()
+  await shoot(page, info.project.name, 'adresse-verwendung')
+})
+
+test('Kontakte – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) await open(page, '/adressen?tab=kontakte')
+  else { await open(page, '/adressen'); await page.getByRole('tab', { name: 'Kontakte' }).click() }
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'kontakte-liste')
+})
+
+// ── Runde 9: Angebotsdaten, Kontakt vorbelegen ──────────────────────────────
+
+const json9 = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+/** Kontakte je Adresse: 1 mit Hauptansprechpartner, 2 mit genau einem. */
+async function mockContacts9(page: Page) {
+  const byAddress: Record<string, unknown[]> = {
+    '1': [
+      { ID: 2, FIRST_NAME: 'Rainer', LAST_NAME: 'Vogt', IS_PRIMARY: 1 },
+      { ID: 1, FIRST_NAME: 'Petra', LAST_NAME: 'Albrecht', IS_PRIMARY: 0 },
+    ],
+    '2': [{ ID: 5, FIRST_NAME: 'Jonas', LAST_NAME: 'Keller', IS_PRIMARY: 0 }],
+  }
+  await page.route(/\/api\/v1\/stammdaten\/contacts\/by-address(\?|$)/, r => {
+    const id = new URL(r.request().url()).searchParams.get('address_id') ?? ''
+    return r.fulfill(json9({ data: byAddress[id] ?? [] }))
+  })
+  await page.route(/\/api\/v1\/stammdaten\/companies(\?|$)/, r => r.fulfill(json9({ data: [{ ID: 1, COMPANY_NAME_1: 'Büro Messina Architekten' }] })))
+}
+
+async function pick9(page: Page, input: string, query: string, name: string) {
+  await page.locator(input).fill(query)
+  // Vorher (Runde 8) lag der Dialog am Handy 1111 px breit — der Treffer war
+  // nicht erreichbar. Das Bild zeigt dann genau diesen Zustand.
+  await page.getByRole('option', { name }).click({ timeout: 5000 }).catch(() => {})
+  await page.waitForTimeout(400)
+}
+
+test('Angebotsdaten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  await open(page, '/angebote?offerId=1&tab=daten')
+  await page.locator('.form-group', { hasText: 'Angebotstitel' }).locator('input').waitFor()
+  await shoot(page, info.project.name, 'angebotsdaten')
+})
+
+test('Angebotsdaten – geändert', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  // Offen: die Stadtwerke als Empfänger — ein Kontakt; danach Titel angepasst
+  await open(page, '/angebote?offerId=1&tab=daten')
+  await page.locator('.form-group', { hasText: 'Angebotstitel' }).locator('input').fill('Neubau Kita Sonnenblume — Leistungsphasen 1–5, Stadtwerke')
+  await pick9(page, since(9) ? '#od-addr' : '#stmd-offer-addr', 'Stadtw', 'Stadtwerke Ravensburg GmbH')
+  await page.locator('.form-group', { hasText: /^Kontakt/ }).locator('select').scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'angebotsdaten-geaendert')
+})
+
+test('Neues Angebot', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  await open(page, '/angebote')
+  await page.getByRole('button', { name: '+ Neues Angebot' }).click()
+  const dlg = page.getByRole('dialog')
+  await dlg.waitFor()
+  await dlg.locator('.form-group', { hasText: 'Angebotstitel' }).locator('input').fill('Umbau Rathaus, Leistungsphasen 1–4')
+  await pick9(page, since(9) ? '#on-addr' : '#offer-addr', 'Musterst', 'Stadt Musterstadt – Hochbauamt')
+  // Der Empfänger ist der Teil, der sich geändert hat — in die Mitte holen
+  await dlg.locator('.form-group', { hasText: /^Kontakt/ }).locator('select').first()
+    .evaluate(el => el.scrollIntoView({ block: 'center' })).catch(() => {})
+  await shoot(page, info.project.name, 'angebot-neu')
+})
+
+test('Vertrag – Rechnungsempfänger gewählt', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  await pick9(page, '#vt-address', 'Stadtw', 'Stadtwerke Ravensburg GmbH')
+  await shoot(page, info.project.name, 'vertrag-kontakt')
 })

@@ -2,6 +2,7 @@
 
 const { contractDefaults } = require('./contractDefaults');
 const { normalizeEffortLines, effortColumns, nodeEffortLines, lineAmount } = require('./effortLines');
+const { assertOwnAddress, assertContactOfAddress } = require('./adressen');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -108,7 +109,9 @@ async function listOffers(supabase, { tenantId }) {
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, ABBR').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
-    contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
+    // CONTACTS — die Tabelle heisst im Plural. Mit „CONTACT" lief die Abfrage
+    // ins Leere, und die Angebotsliste zeigte nie einen Ansprechpartner.
+    contactIds.length ? supabase.from('CONTACTS').select('ID, FIRST_NAME, LAST_NAME').eq('TENANT_ID', tenantId).in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
     projectIds.length ? supabase.from('PROJECT').select('ID, ABBR').in('ID', projectIds) : Promise.resolve({ data: [] }),
   ]);
@@ -198,6 +201,8 @@ async function createOffer(supabase, { tenantId, body }) {
   if (!b.address_id)      throw { status: 400, message: 'Adresse ist erforderlich' };
   if (!b.contact_id)      throw { status: 400, message: 'Kontakt ist erforderlich' };
   if (!b.company_id)      throw { status: 400, message: 'Firma ist erforderlich' };
+  const createProbability = probabilityOrNull(b.probability);
+  await assertRecipient(supabase, { tenantId, addressId: b.address_id, contactId: b.contact_id });
 
   // Resolve offer number via RPC
   const { data: numData, error: numErr } = await supabase.rpc('next_offer_number', {
@@ -221,7 +226,7 @@ async function createOffer(supabase, { tenantId, body }) {
       ABBR:      numData,
       NAME:       String(b.name).trim(),
       EMPLOYEE_ID:     parseInt(String(b.employee_id), 10),
-      PROBABILITY:     b.probability != null && b.probability !== '' ? Number(b.probability) : null,
+      PROBABILITY:     createProbability,
       OFFER_TEXT_1:    b.offer_text_1 ? String(b.offer_text_1) : null,
       OFFER_TEXT_2:    b.offer_text_2 ? String(b.offer_text_2) : null,
       ADDRESS_ID:      parseInt(String(b.address_id), 10),
@@ -302,18 +307,72 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
   }
 }
 
+/** Ganze Zahl > 0 oder null — `parseInt('')` ist NaN und landete als NULL in der Zeile. */
+function positiveId(v) {
+  const n = parseInt(String(v ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Leer heisst „keine Angabe"; sonst 0–100. Vorher ging jede Zahl durch, auch 250. */
+function probabilityOrNull(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    throw { status: 400, message: 'Die Wahrscheinlichkeit liegt zwischen 0 und 100 %.' };
+  }
+  return n;
+}
+
+/**
+ * Empfaenger eines Angebots: die Adresse gehoert dem Mandanten, der Kontakt
+ * zu genau dieser Adresse. Ein Fremdschluessel prueft beides nicht.
+ */
+async function assertRecipient(supabase, { tenantId, addressId, contactId }) {
+  const a = positiveId(addressId);
+  if (!a) throw { status: 400, message: 'Adresse ist erforderlich' };
+  await assertOwnAddress(supabase, { tenantId, addressId: a });
+  const c = positiveId(contactId);
+  if (!c) throw { status: 400, message: 'Kontakt ist erforderlich' };
+  await assertContactOfAddress(supabase, { tenantId, addressId: a, contactId: c });
+}
+
 async function updateOffer(supabase, { tenantId, offerId, body }) {
   const b = body || {};
   const patch = {};
-  if (b.name       !== undefined) patch.NAME       = String(b.name).trim();
-  if (b.employee_id     !== undefined) patch.EMPLOYEE_ID     = parseInt(String(b.employee_id), 10);
-  if (b.probability     !== undefined) patch.PROBABILITY     = b.probability !== '' && b.probability !== null ? Number(b.probability) : null;
+  // Pflichtfelder duerfen sich aendern, aber nicht leeren: vorher wurde ein
+  // leerer Titel gespeichert, ein leerer Kontakt kam als 0 an und endete als
+  // Serverfehler (Fremdschluessel).
+  const required = (key, label) => {
+    const id = positiveId(b[key]);
+    if (!id) throw { status: 400, message: `${label} ist erforderlich` };
+    return id;
+  };
+  if (b.name !== undefined) {
+    const name = String(b.name ?? '').trim();
+    if (!name) throw { status: 400, message: 'Angebotstitel ist erforderlich' };
+    patch.NAME = name;
+  }
+  if (b.employee_id     !== undefined) patch.EMPLOYEE_ID     = required('employee_id', 'Zuständig');
+  if (b.probability     !== undefined) patch.PROBABILITY     = probabilityOrNull(b.probability);
   if (b.offer_text_1    !== undefined) patch.OFFER_TEXT_1    = b.offer_text_1 || null;
   if (b.offer_text_2    !== undefined) patch.OFFER_TEXT_2    = b.offer_text_2 || null;
-  if (b.address_id      !== undefined) patch.ADDRESS_ID      = parseInt(String(b.address_id), 10);
-  if (b.contact_id      !== undefined) patch.CONTACT_ID      = parseInt(String(b.contact_id), 10);
-  if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = parseInt(String(b.offer_status_id), 10);
-  if (b.company_id      !== undefined) patch.COMPANY_ID      = parseInt(String(b.company_id), 10);
+  if (b.address_id      !== undefined) patch.ADDRESS_ID      = required('address_id', 'Adresse');
+  if (b.contact_id      !== undefined) patch.CONTACT_ID      = required('contact_id', 'Kontakt');
+  if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = required('offer_status_id', 'Angebotsstatus');
+  if (b.company_id      !== undefined) patch.COMPANY_ID      = required('company_id', 'Firma');
+  if (patch.ADDRESS_ID !== undefined || patch.CONTACT_ID !== undefined) {
+    // Nur eine Seite geaendert: die andere kommt aus dem gespeicherten Angebot.
+    let { ADDRESS_ID: addressId, CONTACT_ID: contactId } = patch;
+    if (addressId === undefined || contactId === undefined) {
+      const { data: cur, error: curErr } = await supabase.from('OFFER').select('ADDRESS_ID, CONTACT_ID')
+        .eq('ID', offerId).eq('TENANT_ID', tenantId).maybeSingle();
+      if (curErr) throw curErr;
+      if (!cur) throw { status: 404, message: 'Angebot nicht gefunden' };
+      if (addressId === undefined) addressId = cur.ADDRESS_ID;
+      if (contactId === undefined) contactId = cur.CONTACT_ID;
+    }
+    await assertRecipient(supabase, { tenantId, addressId, contactId });
+  }
   if (b.offer_date      !== undefined) patch.OFFER_DATE      = b.offer_date    || null;
   if (b.valid_until     !== undefined) patch.VALID_UNTIL     = b.valid_until   || null;
   if (b.refusal_date    !== undefined) patch.REFUSAL_DATE    = b.refusal_date  || null;
@@ -342,46 +401,51 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
     .eq('ID', offerId)
     .eq('TENANT_ID', tenantId)
     .select('*')
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  // Vorher .single(): ein fremdes oder geloeschtes Angebot endete als 500.
+  if (!data) throw { status: 404, message: 'Angebot nicht gefunden' };
 
   if (hasSurchargeChange) {
-    await recalcOfferRootSurcharges(supabase, { offerId });
+    await recalcOfferRootSurcharges(supabase, { offerId, tenantId });
     const { data: refreshed } = await supabase.from('OFFER').select('*').eq('ID', offerId).eq('TENANT_ID', tenantId).maybeSingle();
     return refreshed || data;
   }
   return data;
 }
 
-async function recalcOfferRootSurcharges(supabase, { offerId }) {
-  const { data: roots } = await supabase
+async function recalcOfferRootSurcharges(supabase, { offerId, tenantId = null }) {
+  // Mandantenfilter, wo der Aufrufer ihn kennt; die Strukturwege
+  // (propagateUpwardsOffer) haben ihn noch nicht und verlassen sich auf RLS.
+  const scoped = (q) => (tenantId != null ? q.eq('TENANT_ID', tenantId) : q);
+  const { data: roots } = await scoped(supabase
     .from('OFFER_STRUCTURE')
     .select('REVENUE')
     .eq('OFFER_ID', offerId)
-    .is('FATHER_ID', null);
+    .is('FATHER_ID', null));
   const basis = (roots || []).reduce((s, r) => s + Number(r.REVENUE || 0), 0);
 
-  const { data: settings } = await supabase
+  const { data: settings } = await scoped(supabase
     .from('OFFER')
     .select('SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
-    .eq('ID', offerId)
+    .eq('ID', offerId))
     .maybeSingle();
   if (!settings) return;
 
   const r2 = (n) => Math.round(n * 100) / 100;
   const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(basis, settings);
 
-  await supabase.from('OFFER').update({
+  await scoped(supabase.from('OFFER').update({
     SURCHARGE_1_EUR:  r2(s1Eur),
     SURCHARGE_2_EUR:  r2(s2Eur),
     SURCHARGE_3_EUR:  r2(s3Eur),
     SURCHARGES_TOTAL: surchargesTotal,
-  }).eq('ID', offerId);
+  }).eq('ID', offerId));
 }
 
 async function deleteOffer(supabase, { tenantId, offerId }) {
   // Delete structure first
-  await supabase.from('OFFER_STRUCTURE').delete().eq('OFFER_ID', offerId);
+  await supabase.from('OFFER_STRUCTURE').delete().eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId);
   const { error } = await supabase
     .from('OFFER')
     .delete()
@@ -725,9 +789,10 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 
   // Load buyer contact
   const { data: contact } = await supabase
-    .from('CONTACT')
+    .from('CONTACTS')   // Plural — mit „CONTACT" fehlte der Ansprechpartner im PDF
     .select('FIRST_NAME, LAST_NAME, EMAIL, MOBILE')
     .eq('ID', offer.CONTACT_ID)
+    .eq('TENANT_ID', tenantId)
     .maybeSingle();
 
   // Load employee (Ansprechpartner)

@@ -103,12 +103,17 @@ export const addressTypeLabel = (id: number | null | undefined): string =>
 // ── Address 360°-Detail ─────────────────────────────────────────────────────
 
 export interface AddressDetail {
-  address:  Address
-  contacts: Contact[]
-  projects: Array<{ ID: number; ABBR: string | null; NAME: string | null }>
-  offers:   Array<{ ID: number; ABBR: string | null }>
-  invoices: Array<{ ID: number; INVOICE_NUMBER: string | null }>
-  partials: Array<{ ID: number; ADVANCE_INVOICE_NUMBER: string | null }>
+  address:    Address
+  contacts:   Contact[]
+  projects:   Array<{ ID: number; ABBR: string | null; NAME: string | null }>
+  offers:     Array<{ ID: number; ABBR: string | null; NAME?: string | null }>
+  /** Verträge mit dieser Adresse als Rechnungsempfänger (Runde 8) */
+  contracts?: Array<{ ID: number; ABBR: string | null; NAME: string | null; PROJECT_ID: number | null }>
+  invoices:   Array<{ ID: number; INVOICE_NUMBER: string | null; INVOICE_DATE?: string | null; PROJECT_ID?: number | null }>
+  partials:   Array<{ ID: number; ADVANCE_INVOICE_NUMBER: string | null; ADVANCE_INVOICE_DATE?: string | null; PROJECT_ID?: number | null }>
+  nachtraege?: Array<{ ID: number; ABBR: string | null; NAME: string | null; PROJECT_ID: number | null }>
+  /** Was der Aufrufer sehen darf (fehlt bei älteren Servern → alles) */
+  visible?:   Partial<Record<'contacts' | 'projects' | 'offers' | 'contracts' | 'invoices' | 'partials' | 'nachtraege', boolean>>
 }
 
 export const fetchAddressDetail = (id: number) =>
@@ -131,7 +136,7 @@ export const searchAddressesApi = (q: string) =>
   )
 
 export const createAddress = (body: AddressPayload) =>
-  apiClient.post<{ data: Address }>('/stammdaten/address', body)
+  apiClient.post<{ data: { ID: number; ADDRESS_NAME_1: string } | null }>('/stammdaten/address', body)
 
 export const updateAddress = (id: number, body: AddressPayload) =>
   apiClient.patch<{ data: Address }>(`/stammdaten/addresses/${id}`, body)
@@ -146,13 +151,16 @@ export const searchContactsApi = (addressId: number, q: string) =>
     `/stammdaten/contacts/search?address_id=${addressId}&q=${encodeURIComponent(q)}`
   )
 
+/** Kontakte einer Adresse, der Hauptansprechpartner zuerst (IS_PRIMARY = 1). */
+export interface AddressContactOption { ID: number; FIRST_NAME: string; LAST_NAME: string; IS_PRIMARY?: number }
+
 export const fetchContactsByAddress = (addressId: number) =>
-  apiClient.get<{ data: Array<{ ID: number; FIRST_NAME: string; LAST_NAME: string }> }>(
+  apiClient.get<{ data: AddressContactOption[] }>(
     `/stammdaten/contacts/by-address?address_id=${addressId}`
   )
 
 export const createContact = (body: ContactPayload) =>
-  apiClient.post<{ data: Contact }>('/stammdaten/contacts', body)
+  apiClient.post<{ data: { ID: number; ADDRESS_ID: number } | null }>('/stammdaten/contacts', body)
 
 export const updateContact = (id: number, body: ContactPayload) =>
   apiClient.patch<{ data: Contact }>(`/stammdaten/contacts/${id}`, body)

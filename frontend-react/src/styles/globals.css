@@ -3080,8 +3080,17 @@ th.doc-actions, td.doc-actions {
   border-color: var(--danger);
   background: var(--danger-bg);
 }
-/* Sticky table headers — desktop only (mobile uses static to avoid overflow issues) */
-@media (max-width: 1023px) { .master-table th { position: static !important; } }
+/* Sticky table headers — desktop only (mobile uses static to avoid overflow issues).
+   Ohne positionierte Zelle wurde am Handy der Rand der Seite zum Bezug fuer
+   absolut positionierte Kinder: ein .sr-only „Aktionen" in der letzten Spalte
+   lag bei x ≈ 1100 und machte die Seite 1111 px breit — Dialoge, Bottom-Nav und
+   Toasts liefen ueber den Bildschirm hinaus (Angebotsliste, Runde 9; vorher je
+   Liste einzeln geflickt, siehe .list-section.ad-list). Die Tabelle selbst ist
+   jetzt der Bezug; sie liegt im Scrollrahmen, der schneidet ab. */
+@media (max-width: 1023px) {
+  .master-table { position: relative; }
+  .master-table th { position: static !important; }
+}
 
 /* Mahnungen stats widget */
 .mahnung-stufe-row        { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; }
@@ -4623,8 +4632,62 @@ th.doc-actions, td.doc-actions {
 .ws-radio-group legend { padding: 0; margin-bottom: var(--space-1); font-weight: 600; }
 .ws-radio-group .ws-check { display: inline-flex; margin: 0 var(--space-5) 0 0; }
 fieldset:disabled .ws-check { cursor: default; }
+/* Nur-Lese-Angaben in einem Abschnitt (Projektdaten → Herkunft) */
+.ws-facts { margin: 0 0 var(--space-3); display: grid; gap: var(--space-3) var(--space-5); grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+.ws-facts dt { font-size: 12px; font-weight: 600; color: var(--text-2); }
+.ws-facts dd { margin: 2px 0 0; font-size: 14px; color: var(--text); }
+.ws-facts-link { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-weight: 600; text-decoration: none; }
+.ws-facts-link:hover { text-decoration: underline; }
 @media (min-width: 900px) { .form-section-body { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .form-section { padding: var(--space-3) var(--space-3) var(--space-1); } }
+
+/* ── Adresse als Arbeitsbereich (Runde 8) ──────────────────────────────────
+   Kopf mit Anschrift/Telefon/E-Mail, Reiter Kontakte · Adressdaten ·
+   Verwendet in. Vorher Karten mit festen 150px-Beschriftungen und eine
+   Kontakttabelle, die am Handy aus dem Bild lief. */
+.ad-header .page-header-meta { row-gap: var(--space-1); }
+.ad-meta-link { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); text-decoration: none; min-height: 32px; }
+.ad-meta-link:hover { text-decoration: underline; }
+.ad-toolbar { display: flex; justify-content: flex-end; margin-bottom: var(--space-3); }
+.ad-name { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); font-weight: 600; }
+.ad-sub { font-size: 12px; color: var(--text-3); }
+.ad-notes { white-space: pre-line; margin-top: 2px; }
+.ad-primary { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; color: var(--warning-strong); }
+.ad-star { color: var(--warning-strong); margin-right: 4px; vertical-align: middle; }
+.ad-table a, .ad-row-link { color: var(--accent); text-decoration: none; }
+.ad-table a:hover, .ad-row-link:hover { text-decoration: underline; }
+.ad-row-link { font-weight: 600; }
+.ad-contacts-link { display: inline-flex; align-items: center; color: var(--text); text-decoration: none; }
+.ad-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.ad-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-1); min-width: 0;
+}
+.ad-card-top { display: flex; align-items: flex-start; gap: var(--space-2); }
+.ad-card-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ad-card-name { font-size: 15px; font-weight: 700; }
+.ad-card-sub { font-size: 13px; color: var(--text-2); }
+.ad-card-links { display: flex; flex-direction: column; }
+.ad-card-links a {
+  display: inline-flex; align-items: center; gap: var(--space-2); min-height: 44px;
+  color: var(--accent); text-decoration: none; font-size: 14px; overflow-wrap: anywhere;
+}
+.ad-card-actions { flex: 0 0 auto; display: flex; gap: var(--space-1); }
+.ad-usage-groups { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.ad-usage-group { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-4); min-width: 0; }
+.ad-usage-title { margin: 0 0 var(--space-2); display: flex; align-items: center; gap: var(--space-2); font-size: 14px; font-weight: 700; }
+.ad-usage-count { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text-3); }
+.ad-usage-list { list-style: none; margin: 0; padding: 0; }
+.ad-usage-list li + li { border-top: 1px solid var(--border-3); }
+.ad-usage-link { display: flex; flex-direction: column; justify-content: center; min-height: 44px; padding: var(--space-1) 0; text-decoration: none; color: inherit; }
+.ad-usage-link:hover .ad-usage-label { text-decoration: underline; }
+.ad-usage-label { font-weight: 600; color: var(--accent); }
+.ad-usage-sub { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ad-usage > .ws-form-readonly { margin-top: var(--space-3); }
+/* Anlegen-Dialog: Abschnitte wie auf der Seite */
+.ad-create-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.ad-create-body .form-section { padding: var(--space-3) var(--space-4) var(--space-1); }
+.ad-more { margin: 0; }
 
 /* ── Umschalter aus Segmenten (aria-pressed) ───────────────────────────────
    „Wie wird beauftragt?", Berechnungsmodus eines Zuschlags. Vorher faerbte
@@ -4899,7 +4962,9 @@ fieldset:disabled .ws-check { cursor: default; }
    Kinder: ein .sr-only-Text in der letzten Spalte lag sonst am
    Dokumentrand (x ≈ 1100) und machte die Seite am Handy 1108 px breit —
    Dialoge und Bottom-Nav liefen dann ueber den Bildschirm hinaus. */
-.sx-root .list-section, .bk-root .list-section { position: relative; }
+/* Adressen und Kontakte (Runde 8): dasselbe — die Zelle selbst kann es nicht
+   sein, am Handy setzt .master-table th { position: static !important }. */
+.sx-root .list-section, .bk-root .list-section, .list-section.ad-list { position: relative; }
 
 /* ── Struktur: eine Spalte „Element", Auf-/Zuklappen ──────────────────────
    Kürzel und Bezeichnung standen in zwei Spalten; zusammen mit „inkl.
@@ -4983,6 +5048,47 @@ fieldset:disabled .ws-check { cursor: default; }
 .sxm-icon-btn { min-width: 44px; padding: 0 10px !important; display: inline-flex; align-items: center; justify-content: center; }
 .modal-card.sxm-sheet .qb-form input, .modal-card.sxm-sheet .qb-form select { font-size: 16px; }
 @media (prefers-reduced-motion: reduce) { .sxm-twisty svg { transition: none; } }
+
+/* ── Kalkulation am Handy: Liste + Blatt je Zeile (Runde 8) ────────────────
+   Leistungsphasen, Besondere Leistungen, Zuschläge. Vorher dieselbe
+   Tabelle wie am Desktop, seitwärts zu schieben. Das Blatt nutzt .sxm-sheet
+   (Struktur am Handy). */
+.km { margin-bottom: var(--space-3); }
+.km-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.km-list li + li { border-top: 1px solid var(--border-3); }
+.km-row {
+  width: 100%; margin: 0; min-height: 56px; padding: var(--space-2) var(--space-3);
+  display: flex; align-items: center; gap: var(--space-3);
+  border: 0; border-radius: 0; background: transparent; box-shadow: none;
+  color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.km-row:hover { background: var(--hover-bg); }
+.km-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.km-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.km-sub { font-size: 12px; color: var(--text-3); }
+.km-value { flex: 0 0 auto; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.km-chev { flex: 0 0 auto; color: var(--text-4); }
+.km-total { margin: var(--space-2) 0 0; padding: 0 var(--space-3); }
+.km-total div { display: flex; justify-content: space-between; gap: var(--space-3); padding: 6px 0; font-size: 13px; }
+.km-total div + div { border-top: 1px solid var(--border-3); }
+.km-total dt { color: var(--text-2); }
+.km-total dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.km-facts { margin: 0 0 var(--space-3); display: grid; gap: var(--space-2); }
+.km-facts div { display: flex; justify-content: space-between; gap: var(--space-3); font-size: 13px; }
+.km-facts dt { color: var(--text-3); }
+.km-facts dd { margin: 0; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.km-result {
+  margin: 0 0 var(--space-3); padding: var(--space-2) var(--space-3);
+  display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3);
+  background: var(--surface-2); border-radius: var(--radius-md); font-size: 14px;
+}
+.km-result strong { font-size: 17px; font-variant-numeric: tabular-nums; }
+.km-group { border: 0; padding: 0; margin: 0 0 var(--space-3); min-width: 0; }
+.km-group legend { padding: 0; margin-bottom: var(--space-1); font-size: 13px; font-weight: 600; color: var(--text-2); }
+.km-check-actions { display: flex; gap: var(--space-2); margin-bottom: var(--space-1); }
+.km-check-actions .btn-small { min-height: 44px; }
+.km-checks .ws-check { min-height: 44px; }
+.km-remove { color: var(--danger-strong); }
 .sxm-sur-row input:not([type="checkbox"]) {
   width: 100%; min-width: 0; padding: 0 12px;
   border: 1px solid var(--border); border-radius: var(--radius-md);

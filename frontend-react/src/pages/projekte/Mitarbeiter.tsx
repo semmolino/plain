@@ -180,7 +180,6 @@ function StundensatzBlock({ projectId }: { projectId: number }) {
         title="Aus dem Projekt entfernen"
         message={removing ? `${empName(removing)} aus dem Projekt entfernen? Bereits erfasste Buchungen bleiben mit ihrem Satz erhalten, neue gibt es ohne Satz.` : ''}
         confirmLabel="Entfernen"
-        confirmClass="danger"
         onConfirm={() => { if (removing) deleteMut.mutate(removing.ID); setRemoving(null) }}
         onCancel={() => setRemoving(null)}
       />
@@ -435,7 +434,6 @@ function BookingPriceBlock({ projectId }: { projectId: number }) {
         title="Buchungsart löschen"
         message={`Buchungsart „${delConfirm?.label ?? ''}" löschen? Sie gilt nur in diesem Projekt; bereits erfasste Buchungen bleiben erhalten.`}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { if (delConfirm) delTypeMut.mutate(delConfirm.id); setDelConfirm(null) }}
         onCancel={() => setDelConfirm(null)}
       />

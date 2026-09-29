@@ -227,7 +227,6 @@ export function HonorarTab({ initialProjectId }: HonorarTabProps) {
         title="Kalkulation löschen"
         message={`Kalkulation „${confirmDelete?.label ?? ''}" endgültig löschen? Zugehörige Leistungsphasen, Zuschläge und Besonderen Leistungen werden mitgelöscht.`}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { if (confirmDelete) deleteMut.mutate(confirmDelete.id); setConfirmDelete(null) }}
         onCancel={() => setConfirmDelete(null)}
       />

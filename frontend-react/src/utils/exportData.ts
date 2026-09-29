@@ -8,8 +8,16 @@
 
 type CsvCell = string | number | null | undefined
 
-function csvEscape(v: CsvCell): string {
-  const s = v == null ? '' : String(v)
+/**
+ * Eine Zelle für CSV. Text, der mit = + - @ (oder Tab/Zeilenumbruch) beginnt,
+ * bekommt ein Hochkomma davor: Excel und LibreOffice führen solche Zellen
+ * sonst als Formel aus — ein Adressname „=HYPERLINK(…)" wäre beim Öffnen
+ * der Exportdatei ein Link ins Netz (CSV-Injection). Zahlen bleiben Zahlen,
+ * auch negative.
+ */
+export function csvEscape(v: CsvCell): string {
+  let s = v == null ? '' : String(v)
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 

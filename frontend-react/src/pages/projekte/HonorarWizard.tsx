@@ -32,136 +32,11 @@ import { RecentList } from '@/components/recents/RecentList'
 import { trackRecent, type RecentEntry } from '@/api/recents'
 import { fmtEur, money } from '@/utils/money'
 import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
-
-const KX_OPTIONS = ['K0', 'K1', 'K2', 'K3', 'K4'] as const
-type KX = typeof KX_OPTIONS[number]
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtN(v: number | null | undefined) {
-  if (v == null) return ''
-  return String(v)
-}
-
-/** Auf 2 Nachkommastellen runden (fmt2). */
-function r2(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
-/** Geldbetrag mit deutschem Komma und 2 Nachkommastellen, ohne €-Zeichen. */
-function fmtMoney2(v: number | null | undefined) {
-  if (v == null) return ''
-  return r2(Number(v)).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-
-/** Prozentwert mit deutschem Komma, ohne Float-Rauschen. */
-function fmtPct(v: number | null | undefined) {
-  if (v == null) return ''
-  return (Math.round(Number(v) * 100) / 100).toLocaleString('de-DE', { maximumFractionDigits: 2 })
-}
-
-function toNum(v: string): number | null {
-  const s = v.trim()
-  if (!s) return null
-  const n = Number(s)
-  return Number.isFinite(n) ? n : null
-}
-
-
-function revenueByKx(row: FeeCalcMaster, kx: KX): number | null {
-  const map: Record<KX, number | null> = {
-    K0: row.REVENUE_K0, K1: row.REVENUE_K1, K2: row.REVENUE_K2,
-    K3: row.REVENUE_K3, K4: row.REVENUE_K4,
-  }
-  return map[kx]
-}
-
-function phaseRevenue(base: number | null, pct: number | null): number | null {
-  if (base == null || pct == null) return null
-  return r2((pct * base) / 100)
-}
-
-/** Compute effective base and amount for each surcharge row, honouring LPH filter + calc mode + BL filter */
-function computeSurchargeEffects(
-  phases: FeePhaseRow[],
-  surcharges: FeeCalcSurcharge[],
-  blItems: FeeCalcBl[] = [],
-  blComputedAmounts: number[] = [],
-): { effectiveBase: number; amount: number }[] {
-  const results: { effectiveBase: number; amount: number }[] = []
-  let runningTotal = 0
-  for (const r of surcharges) {
-    const selectedIds: number[] = r.LPH_FILTER
-      ? (JSON.parse(r.LPH_FILTER) as number[])
-      : phases.map(p => p.ID)
-    const phaseBase = phases
-      .filter(p => selectedIds.includes(p.ID))
-      .reduce((s, p) => s + (p.PHASE_REVENUE ?? 0), 0)
-    let blContrib = 0
-    if (r.BL_FILTER) {
-      try {
-        const selectedBlIds = JSON.parse(r.BL_FILTER) as number[]
-        blContrib = blItems.reduce((s, b, i) => {
-          return (b.ID != null && selectedBlIds.includes(b.ID)) ? s + (blComputedAmounts[i] ?? 0) : s
-        }, 0)
-      } catch { /* ignore parse error */ }
-    }
-    const base = phaseBase + blContrib
-    const effectiveBase = r.CALC_MODE === 'cumulative' ? base + runningTotal : base
-    const amount = ((r.PERCENT ?? 0) / 100) * effectiveBase
-    results.push({ effectiveBase, amount })
-    runningTotal += amount
-  }
-  return results
-}
-
-const BL_AMOUNT_TYPE_LABELS: Record<BlAmountType, string> = {
-  fixed:            'Pauschalbetrag €',
-  pct_lph:          '% auf LPH-Honorar',
-  pct_basis:        '% auf Basis-Honorar (Kx)',
-  pct_grundhonorar: '% auf Grundhonorar (Summe LPH)',
-  pct_gesamthonorar:'% auf Gesamthonorar inkl. Zuschläge',
-  pct_baukosten:    '% auf Baukosten (Kx)',
-}
-
-function constructionCostByKx(row: FeeCalcMaster, kx: KX): number | null {
-  const map: Record<KX, number | null> = {
-    K0: row.CONSTRUCTION_COSTS_K0, K1: row.CONSTRUCTION_COSTS_K1,
-    K2: row.CONSTRUCTION_COSTS_K2, K3: row.CONSTRUCTION_COSTS_K3,
-    K4: row.CONSTRUCTION_COSTS_K4,
-  }
-  return map[kx]
-}
-
-function computeBlItemAmount(
-  bl: FeeCalcBl,
-  phases: FeePhaseRow[],
-  calcMaster: FeeCalcMaster | null,
-  grundhonorar: number,
-  surchargeTotal: number,
-): number {
-  const pct = (Number(bl.PERCENT ?? 0) || 0) / 100
-  switch (bl.AMOUNT_TYPE) {
-    case 'pct_lph': {
-      const phase = phases.find(p => p.ID === bl.LPH_PHASE_ID)
-      return pct * (phase?.PHASE_REVENUE ?? 0)
-    }
-    case 'pct_basis': {
-      if (!calcMaster || !bl.KX_REF) return 0
-      return pct * (revenueByKx(calcMaster, bl.KX_REF as KX) ?? 0)
-    }
-    case 'pct_grundhonorar':
-      return pct * grundhonorar
-    case 'pct_gesamthonorar':
-      return pct * (grundhonorar + surchargeTotal)
-    case 'pct_baukosten': {
-      if (!calcMaster || !bl.KX_REF) return 0
-      return pct * (constructionCostByKx(calcMaster, bl.KX_REF as KX) ?? 0)
-    }
-    default:
-      return Number(bl.AMOUNT) || 0
-  }
-}
+import {
+  KX_OPTIONS, type KX, fmtN, fmtMoney2, fmtPct, toNum, revenueByKx, phaseRevenue,
+  computeSurchargeEffects, BL_AMOUNT_TYPE_LABELS, computeBlItemAmount,
+} from '@/pages/projekte/kalkCalc'
+import { KalkList, PhaseSheet, BlSheet, SurchargeSheet, surchargeScope, blScope } from '@/pages/projekte/KalkMobile'
 
 /** Zeilen in Baumreihenfolge mit Tiefe — fuer eingerueckte Auswahllisten. */
 function inTreeOrder<T>(rows: T[], idOf: (r: T) => number, fatherOf: (r: T) => number | null | undefined) {
@@ -258,6 +133,13 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
   const [surcharges, setSurcharges]             = useState<FeeCalcSurcharge[]>([])
   const [globalSurcharges, setGlobalSurcharges] = useState<FeeSurchargeGlobal[]>([])
   const [expandedSurchargeIdx, setExpandedSurchargeIdx] = useState<number | null>(null)
+  // Handy: offene Zeile als Blatt (Runde 8). idx null = neue Zeile.
+  const [sheet, setSheet] = useState<
+    | { kind: 'lph'; id: number }
+    | { kind: 'bl'; idx: number | null }
+    | { kind: 'sur'; idx: number | null }
+    | null
+  >(null)
 
   // Step 6
   const [fatherId, setFatherId] = useState(initialFatherId != null ? String(initialFatherId) : '')
@@ -1150,6 +1032,18 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       {/* ── Step 3: Leistungsphasen ────────────────────────────────────────────── */}
       {step === 3 && (
         <div className="wizard-step-content">
+          {narrow ? (
+            <KalkList
+              label="Leistungsphasen"
+              items={phases.map(p => ({
+                key: p.ID, title: p.PHASE_LABEL,
+                sub: `${p.KX || 'K0'} · ${p.FEE_PERCENT != null ? `${fmtPct(p.FEE_PERCENT)} %` : 'kein Anteil'}`,
+                value: fmtEur(p.PHASE_REVENUE ?? 0),
+              }))}
+              onOpen={i => setSheet({ kind: 'lph', id: phases[i].ID })}
+              total={[{ label: `Grundhonorar · ${fmtPct(totalPhasePct)} %`, value: fmtEur(totalPhaseRev) }]}
+            />
+          ) : (
           <div className="table-scroll">
             <table className="master-table">
               <thead>
@@ -1205,6 +1099,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </tfoot>
             </table>
           </div>
+          )}
         </div>
       )}
 
@@ -1215,7 +1110,18 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             Zusatzleistungen über die Grundleistungen hinaus (§ 3 Abs. 3 HOAI). Sie stehen einzeln im Gesamthonorar
             und werden eigene Elemente der Struktur.
           </p>
-          {blItems.length > 0 && (
+          {narrow && (
+            <KalkList
+              label="Besondere Leistungen"
+              items={blItems.map((b, i) => ({
+                key: b.ID ?? `neu-${i}`, title: b.ABBR ? `${b.ABBR} · ${b.NAME}` : (b.NAME || `Besondere Leistung ${i + 1}`),
+                sub: blScope(b, phases), value: money(blComputedAmounts[i] ?? 0),
+              }))}
+              onOpen={i => setSheet({ kind: 'bl', idx: i })}
+              total={[{ label: 'Summe Besondere Leistungen', value: money(blTotal) }]}
+            />
+          )}
+          {!narrow && blItems.length > 0 && (
             <div className="table-scroll" style={{ marginBottom: 8 }}>
               <table className="master-table">
                 <thead>
@@ -1322,6 +1228,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
           )}
           <button type="button" className="btn-small hw-add" onClick={() => {
             if (!calcMaster) return
+            if (narrow) { setSheet({ kind: 'bl', idx: null }); return }
             setBlItems(prev => [...prev, {
               FEE_CALC_MASTER_ID: calcMaster.ID,
               ABBR: null, NAME: '', LPH_REF: null, LPH_PHASE_ID: null,
@@ -1381,8 +1288,23 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
             </div>
           )}
 
+          {narrow && (
+            <KalkList
+              label="Zuschläge und Nachlässe"
+              items={surcharges.map((r, i) => ({
+                key: r.ID ?? `neu-${i}`, title: r.ABBR || `Zuschlag ${i + 1}`,
+                sub: `${r.PERCENT != null ? `${fmtPct(r.PERCENT)} %` : 'ohne Prozent'} · ${surchargeScope(r, phases)}`,
+                value: <SurchargeAmount value={surchargeEffects[i]?.amount ?? 0} />,
+              }))}
+              onOpen={i => setSheet({ kind: 'sur', idx: i })}
+              total={[
+                { label: 'Summe Zuschläge / Nachlässe', value: <SurchargeAmount value={totalSurchargeAmt} /> },
+                { label: 'Gesamthonorar', value: money(totalPhaseRev + blTotal + totalSurchargeAmt) },
+              ]}
+            />
+          )}
           {/* Surcharge table */}
-          {surcharges.length > 0 && (
+          {!narrow && surcharges.length > 0 && (
             <div className="table-scroll" style={{ marginBottom: 8 }}>
               <table className="master-table">
                 <thead>
@@ -1527,7 +1449,7 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
               </table>
             </div>
           )}
-          <button type="button" className="btn-small hw-add" onClick={addCustomSurcharge}>
+          <button type="button" className="btn-small hw-add" onClick={() => narrow ? setSheet({ kind: 'sur', idx: null }) : addCustomSurcharge()}>
             <Plus size={14} strokeWidth={2.25} aria-hidden="true" /> Zuschlag / Nachlass hinzufügen
           </button>
         </div>
@@ -1677,6 +1599,41 @@ export function HonorarWizard({ existingId, initialProjectId, offerId, initialFa
       <Message text={msg?.text ?? null} type={msg?.type} />
       {actionBar}
       {confirmDialog}
+
+      {/* Handy: Zeile als Blatt (Runde 8) */}
+      {sheet?.kind === 'lph' && (() => {
+        const ph = phases.find(x => x.ID === sheet.id)
+        return ph ? (
+          <PhaseSheet key={`lph-${ph.ID}`} phase={ph} calcMaster={calcMaster} kxOptions={kxOptionsForBase} singleValue={isSingleValue}
+            onApply={(kx, pct) => { updatePhaseKx(ph.ID, kx); updatePhasePct(ph.ID, pct == null ? '' : String(pct)) }}
+            onClose={() => setSheet(null)} />
+        ) : null
+      })()}
+      {sheet?.kind === 'bl' && calcMaster && (() => {
+        const idx = sheet.idx
+        const item: FeeCalcBl = idx != null && blItems[idx] ? blItems[idx] : {
+          FEE_CALC_MASTER_ID: calcMaster.ID, ABBR: null, NAME: '', LPH_REF: null, LPH_PHASE_ID: null,
+          AMOUNT_TYPE: 'fixed', PERCENT: null, KX_REF: null, AMOUNT: 0, SORT_ORDER: blItems.length,
+        }
+        return (
+          <BlSheet key={`bl-${idx ?? 'neu'}`} item={item} isNew={idx == null} phases={phases} calcMaster={calcMaster}
+            kxOptions={kxOptionsForBase} singleValue={isSingleValue} grundhonorar={totalPhaseRev} surchargeNoBlTotal={surchargeNoBlTotal}
+            onApply={b => setBlItems(prev => idx == null ? [...prev, b] : prev.map((x, i) => i === idx ? b : x))}
+            onRemove={idx != null ? () => setBlItems(prev => prev.filter((_, i) => i !== idx)) : undefined}
+            onClose={() => setSheet(null)} />
+        )
+      })()}
+      {sheet?.kind === 'sur' && calcMaster && (() => {
+        const idx = sheet.idx
+        const row = idx != null && surcharges[idx] ? surcharges[idx] : newSurchargeRow(calcMaster.ID, surcharges.length)
+        return (
+          <SurchargeSheet key={`sur-${idx ?? 'neu'}`} row={row} index={idx ?? surcharges.length} isNew={idx == null}
+            all={surcharges} phases={phases} blItems={blItems} blAmounts={blComputedAmounts}
+            onApply={r => setSurcharges(prev => idx == null ? [...prev, r] : prev.map((x, i) => i === idx ? r : x))}
+            onRemove={idx != null ? () => removeSurcharge(idx) : undefined}
+            onClose={() => setSheet(null)} />
+        )
+      })()}
     </div>
   )
 }

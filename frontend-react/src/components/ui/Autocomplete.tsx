@@ -14,6 +14,8 @@ interface Props {
   search:      (q: string) => Promise<AutocompleteOption[]>
   placeholder?: string
   required?:   boolean
+  /** Pflichtfeld fehlte beim Speichern — markiert das Feld wie die übrigen */
+  invalid?:    boolean
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  * „Sta" über denen zu „Stadt".
  */
 export function Autocomplete({
-  label, htmlId, value, onChange, onSelect, search, placeholder, required,
+  label, htmlId, value, onChange, onSelect, search, placeholder, required, invalid,
 }: Props) {
   const [options, setOptions] = useState<AutocompleteOption[]>([])
   const [open,    setOpen]    = useState(false)
@@ -108,6 +110,7 @@ export function Autocomplete({
         aria-activedescendant={open && active >= 0 ? optionId(active) : undefined}
         value={value}
         required={required}
+        aria-invalid={invalid || undefined}
         placeholder={placeholder}
         onChange={e => handleChange(e.target.value)}
         onKeyDown={onKeyDown}
