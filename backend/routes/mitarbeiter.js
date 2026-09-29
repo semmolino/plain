@@ -2,7 +2,7 @@ const express      = require("express");
 const bcrypt       = require("bcryptjs");
 const balanceSvc   = require("../services/employeeBalance");
 const { findAssetForTenant } = require("../services/assetAccess");
-const { requirePermission, loadPermissions, LOAD_FAILED, keysBeyondCaller } = require("../middleware/permissions");
+const { requirePermission, requireAnyPermission, loadPermissions, LOAD_FAILED, keysBeyondCaller } = require("../middleware/permissions");
 const { enforceLimit, limitReached } = require("../middleware/limits");
 const { revokeSessions } = require("../middleware/sessionGuard");
 
@@ -313,9 +313,33 @@ module.exports = (supabase) => {
 
   // POST /api/mitarbeiter
   router.post("/", requirePermission("employees.create"), enforceLimit(supabase, "limits.employees"), async (req, res) => {
-    const body = req.body;
-    if (!body.abbr || !body.first_name || !body.last_name || !body.gender_id) {
-      return res.status(400).json({ error: "Pflichtfelder fehlen" });
+    // Eingaben wie beim Aendern (Runde 10): getrimmt, leer = null. Vorher
+    // landete eine leere E-Mail als "" in der Datenbank, ein Kuerzel mit
+    // Leerzeichen am Ende galt als neu, und ein Vorgesetzter aus einem
+    // fremden Buero ging durch.
+    const raw = req.body || {};
+    const text = (v) => (v == null ? "" : String(v).trim());
+    const textOrNull = (v) => text(v) || null;
+    const body = {
+      ...raw,
+      abbr: text(raw.abbr), first_name: text(raw.first_name), last_name: text(raw.last_name),
+      title: textOrNull(raw.title), email: textOrNull(raw.email), phone: textOrNull(raw.phone),
+      mobile: textOrNull(raw.mobile), personnel_number: textOrNull(raw.personnel_number),
+    };
+    const genderId = parseInt(String(raw.gender_id ?? ""), 10);
+    if (!body.abbr || !body.first_name || !body.last_name || !(genderId > 0)) {
+      return res.status(400).json({ error: "Bitte Kürzel, Vorname, Nachname und Geschlecht angeben." });
+    }
+    body.gender_id = genderId;
+    for (const k of ["entry_date", "exit_date", "birth_date"]) {
+      if (raw[k] && !isIsoDate(raw[k])) return res.status(400).json({ error: "Bitte ein gültiges Datum angeben." });
+    }
+    if (raw.supervisor_id != null && raw.supervisor_id !== "") {
+      try {
+        if (!(await ownEmployee(supabase, req.tenantId, Number(raw.supervisor_id)))) {
+          return res.status(400).json({ error: "Diesen Vorgesetzten gibt es nicht." });
+        }
+      } catch (e) { return res.status(500).json({ error: e.message }); }
     }
 
     // Uniqueness check within tenant
@@ -345,11 +369,9 @@ module.exports = (supabase) => {
         "PERSONNEL_NUMBER": body.personnel_number,
         "BIRTH_DATE": body.birth_date || null,
         "NOTES": body.notes || null,
-        // Vorgesetzter: ein anderer Mitarbeiter desselben Mandanten. Die
-        // Mandantengrenze haelt hier der Fremdschluessel NICHT — er zeigt nur
-        // auf EMPLOYEE.ID. Dass eine fremde ID nicht durchgeht, sorgt die
-        // RLS-Policy beim spaeteren Lesen; gepruefte Auswahl liefert die
-        // Oberflaeche aus der eigenen Mitarbeiterliste.
+        // Vorgesetzter: ein anderer Mitarbeiter desselben Mandanten. Der
+        // Fremdschluessel zeigt nur auf EMPLOYEE.ID und haelt die
+        // Mandantengrenze nicht — deshalb die Pruefung oben (seit Runde 10).
         "SUPERVISOR_ID": body.supervisor_id != null && body.supervisor_id !== '' ? Number(body.supervisor_id) : null,
         "GENDER_ID": body.gender_id,
         "DEPARTMENT_ID": body.department_id != null && body.department_id !== '' ? Number(body.department_id) : null,
@@ -754,7 +776,11 @@ router.get("/", async (req, res) => {
 
 // ── Month-close overview (must be before /:id routes) ─────────────────────────
 // GET /mitarbeiter/month-close-overview
-router.get("/month-close-overview", requirePermission("employees.bookings.view_all"), async (req, res) => {
+// Wer Monate abschliesst, braucht die Uebersicht — sie nennt nur Kuerzel,
+// Namen und den Abschlussstand, keine Stunden. Vorher war sie an „alle
+// Buchungen sehen" gebunden, und das Recht „Monatsabschluss" allein fuehrte
+// auf einen Reiter mit einer Fehlermeldung.
+router.get("/month-close-overview", requireAnyPermission("employees.bookings.view_all", "employees.month_close.edit"), async (req, res) => {
   const { data: employees, error: empErr } = await supabase
     .from("EMPLOYEE")
     .select("ID, ABBR, FIRST_NAME, LAST_NAME")
@@ -840,36 +866,77 @@ router.get("/:id/work-models", async (req, res) => {
   res.json({ data: assignments.map(a => ({ ...a, model: modelMap.get(a.MODEL_ID) ?? null })) });
 });
 
+// Arbeitszeitmodell-Zuordnungen (Runde 10): vorher ohne jede Pruefung —
+// ein Modell eines fremden Bueros liess sich zuordnen, ein Tippfehler im Datum
+// endete als Serverfehler, und zwei Zuordnungen am selben Tag machten
+// „welches gilt?“ zum Zufall der Sortierung.
+async function workModelInput(supabase, tenantId, body, { partial }) {
+  const out = {};
+  if (!partial || body.model_id !== undefined) {
+    const modelId = Number(body.model_id);
+    if (!(modelId > 0)) return { error: "Bitte ein Arbeitszeitmodell wählen." };
+    const { data: model, error } = await supabase.from("WORKING_TIME_MODEL").select("ID")
+      .eq("ID", modelId).eq("TENANT_ID", tenantId).maybeSingle();
+    if (error) throw error;
+    if (!model) return { error: "Dieses Arbeitszeitmodell gibt es nicht." };
+    out.MODEL_ID = modelId;
+  }
+  if (!partial || body.valid_from !== undefined) {
+    if (!isIsoDate(body.valid_from)) return { error: "Bitte ein gültiges Datum angeben." };
+    out.VALID_FROM = body.valid_from;
+  }
+  if (!Object.keys(out).length) return { error: "Nichts zu ändern." };
+  return { update: out };
+}
+
+/** Gibt es fuer diesen Tag schon einen Eintrag? (ausser dem, der sich gerade aendert) */
+async function sameDayTaken(supabase, table, tenantId, empId, validFrom, exceptId) {
+  const { data, error } = await supabase.from(table).select("ID")
+    .eq("TENANT_ID", tenantId).eq("EMPLOYEE_ID", empId).eq("VALID_FROM", validFrom);
+  if (error) throw error;
+  return (data || []).some(r => r.ID !== exceptId);
+}
+
 router.post("/:id/work-models", requirePermission("employees.edit"), async (req, res) => {
   const empId = Number(req.params.id);
-  const { model_id, valid_from } = req.body;
-  if (!model_id || !valid_from) return res.status(400).json({ error: 'model_id und valid_from sind Pflichtfelder' });
-  const { data, error } = await supabase
-    .from("EMPLOYEE_WORK_MODEL")
-    .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, MODEL_ID: Number(model_id), VALID_FROM: valid_from }])
-    .select("ID, MODEL_ID, VALID_FROM")
-    .single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  try {
+    if (!(await ownEmployee(supabase, req.tenantId, empId))) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+    const input = await workModelInput(supabase, req.tenantId, req.body || {}, { partial: false });
+    if (input.error) return res.status(400).json({ error: input.error });
+    if (await sameDayTaken(supabase, "EMPLOYEE_WORK_MODEL", req.tenantId, empId, input.update.VALID_FROM)) {
+      return res.status(409).json({ error: "Für diesen Tag ist schon ein Modell eingetragen — bitte den Eintrag ändern statt einen zweiten anzulegen." });
+    }
+    const { data, error } = await supabase
+      .from("EMPLOYEE_WORK_MODEL")
+      .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, ...input.update }])
+      .select("ID, MODEL_ID, VALID_FROM")
+      .single();
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch("/:id/work-models/:wid", requirePermission("employees.edit"), async (req, res) => {
   const wid   = Number(req.params.wid);
   const empId = Number(req.params.id);
-  const { model_id, valid_from } = req.body;
-  const update = {};
-  if (model_id)    update.MODEL_ID    = Number(model_id);
-  if (valid_from)  update.VALID_FROM  = valid_from;
-  const { data, error } = await supabase
-    .from("EMPLOYEE_WORK_MODEL")
-    .update(update)
-    .eq("ID", wid)
-    .eq("EMPLOYEE_ID", empId)
-    .eq("TENANT_ID", req.tenantId)
-    .select("ID, MODEL_ID, VALID_FROM")
-    .single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  try {
+    const input = await workModelInput(supabase, req.tenantId, req.body || {}, { partial: true });
+    if (input.error) return res.status(400).json({ error: input.error });
+    if (input.update.VALID_FROM && await sameDayTaken(supabase, "EMPLOYEE_WORK_MODEL", req.tenantId, empId, input.update.VALID_FROM, wid)) {
+      return res.status(409).json({ error: "Für diesen Tag ist schon ein Modell eingetragen." });
+    }
+    const { data, error } = await supabase
+      .from("EMPLOYEE_WORK_MODEL")
+      .update(input.update)
+      .eq("ID", wid)
+      .eq("EMPLOYEE_ID", empId)
+      .eq("TENANT_ID", req.tenantId)
+      .select("ID, MODEL_ID, VALID_FROM")
+      .maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: "Zuordnung nicht gefunden" });
+    res.json({ data });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.delete("/:id/work-models/:wid", requirePermission("employees.edit"), async (req, res) => {
@@ -926,6 +993,9 @@ router.post("/:id/cp-rates", requirePermission("employees.salary.edit"), async (
     return res.status(400).json({ error: "Bitte einen Kostensatz ab 0 €/h und ein gültiges Datum angeben." });
   }
   if (!(await ownEmployee(supabase, req.tenantId, empId))) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+  if (await sameDayTaken(supabase, "EMPLOYEE_COST_RATE", req.tenantId, empId, valid_from)) {
+    return res.status(409).json({ error: "Für diesen Tag ist schon ein Kostensatz eingetragen — bitte den Eintrag ändern statt einen zweiten anzulegen." });
+  }
   const { data, error } = await supabase
     .from("EMPLOYEE_COST_RATE")
     .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, COST_RATE: rate, VALID_FROM: valid_from }])
@@ -950,6 +1020,9 @@ router.patch("/:id/cp-rates/:rid", requirePermission("employees.salary.edit"), a
     update.VALID_FROM = valid_from;
   }
   if (!Object.keys(update).length) return res.status(400).json({ error: "Nichts zu ändern." });
+  if (update.VALID_FROM && await sameDayTaken(supabase, "EMPLOYEE_COST_RATE", req.tenantId, empId, update.VALID_FROM, rid)) {
+    return res.status(409).json({ error: "Für diesen Tag ist schon ein Kostensatz eingetragen." });
+  }
   const { data, error } = await supabase
     .from("EMPLOYEE_COST_RATE")
     .update(update)
@@ -990,6 +1063,12 @@ router.patch("/:id/set-password", requirePermission("employees.password.set"), a
   }
   if (typeof new_password === "string" && new_password.length < 8) {
     return res.status(400).json({ error: "Passwort muss mindestens 8 Zeichen haben." });
+  }
+
+  // Das eigene Passwort loeschen sperrt einen selbst aus — und ist es das des
+  // letzten Administrators, kommt niemand mehr an die Zugaenge.
+  if (id === req.employeeId && new_password === null) {
+    return res.status(409).json({ error: "Das eigene Passwort lässt sich nicht löschen — du würdest dich selbst aussperren." });
   }
 
   // Wer ein fremdes Passwort setzt, kann sich danach als diese Person anmelden.

@@ -624,25 +624,50 @@ module.exports = (supabase) => {
     const b = req.body || {};
     const year = Number(b.year);
     const items = Array.isArray(b.items) ? b.items : [];
-    if (!year || !items.length) return res.status(400).json({ error: "year und items erforderlich" });
+    if (!Number.isInteger(year) || year < 2000 || year > 2100 || !items.length) {
+      return res.status(400).json({ error: "year und items erforderlich" });
+    }
 
-    const { data: existing } = await supabase.from("VACATION_ENTITLEMENT")
+    // Runde 10: vorher wurde ein leeres Feld zu 0 Tagen, eine Eingabe wie
+    // „abc" scheiterte still (die Antwort meldete trotzdem Erfolg), und eine
+    // Mitarbeiter-ID aus einem fremden Buero ging durch.
+    const num = (v) => (v == null || v === "" ? null : Number(String(v).replace(",", ".")));
+    const rows = [];
+    for (const it of items) {
+      const empId = Number(it.employee_id);
+      const days = num(it.days_entitled);
+      const carry = num(it.carryover_override);
+      if (!empId || days == null || !Number.isFinite(days) || days < 0 || days > 366
+          || (carry != null && (!Number.isFinite(carry) || Math.abs(carry) > 366))) {
+        return res.status(400).json({ error: "Bitte je Mitarbeiter einen Anspruch zwischen 0 und 366 Tagen angeben." });
+      }
+      rows.push({ empId, days, carry });
+    }
+
+    const { data: emps, error: empErr } = await supabase.from("EMPLOYEE").select("ID")
+      .eq("TENANT_ID", req.tenantId).in("ID", rows.map(r => r.empId));
+    if (empErr) return res.status(500).json({ error: empErr.message });
+    const known = new Set((emps || []).map(e => e.ID));
+    if (rows.some(r => !known.has(r.empId))) return res.status(404).json({ error: "Mitarbeiter nicht gefunden" });
+
+    const { data: existing, error: exErr } = await supabase.from("VACATION_ENTITLEMENT")
       .select("ID, EMPLOYEE_ID").eq("TENANT_ID", req.tenantId).eq("YEAR", year);
+    if (exErr) return res.status(500).json({ error: exErr.message });
     const idByEmp = new Map((existing || []).map(e => [e.EMPLOYEE_ID, e.ID]));
 
     let count = 0;
-    for (const it of items) {
-      const empId = Number(it.employee_id);
-      if (!empId) continue;
-      const days  = it.days_entitled != null ? Number(it.days_entitled) : 0;
-      const carry = it.carryover_override != null && it.carryover_override !== "" ? Number(it.carryover_override) : null;
+    const failed = [];
+    for (const { empId, days, carry } of rows) {
       const existingId = idByEmp.get(empId);
       const q = existingId
         ? await supabase.from("VACATION_ENTITLEMENT")
             .update({ DAYS_ENTITLED: days, CARRYOVER_OVERRIDE: carry }).eq("ID", existingId).eq("TENANT_ID", req.tenantId)
         : await supabase.from("VACATION_ENTITLEMENT")
             .insert([{ TENANT_ID: req.tenantId, EMPLOYEE_ID: empId, YEAR: year, DAYS_ENTITLED: days, CARRYOVER_OVERRIDE: carry }]);
-      if (!q.error) count++;
+      if (q.error) failed.push(empId); else count++;
+    }
+    if (failed.length) {
+      return res.status(500).json({ error: `${failed.length} von ${rows.length} Ansprüchen nicht gespeichert.`, userFacing: true, count, failed });
     }
     res.json({ success: true, count });
   });

@@ -190,6 +190,16 @@ describe("H5 Passwort setzen", () => {
   });
 });
 
+describe("Eigenes Passwort löschen", () => {
+  test("→ 409, Passwort bleibt, keine Abmeldung", async () => {
+    const sb = makeFakeSupabase(baseData());
+    emp(sb, 1).PASSWORD = "hash";
+    const r = await call(mitarbeiter(sb, 1), "PATCH", "/mitarbeiter/1/set-password", { new_password: null });
+    expect(r.status).toBe(409);
+    expect(emp(sb, 1).PASSWORD).toBe("hash");
+  });
+});
+
 describe("H3 Profilfoto", () => {
   test("ein Rechnungs-PDF als Profilfoto → 400", async () => {
     const sb = makeFakeSupabase(baseData({ ASSET: [{ ID: 70, TENANT_ID: T, COMPANY_ID: 5, ASSET_TYPE: "INVOICE_PDF", MIME_TYPE: "application/pdf", STORAGE_KEY: "k" }] }));
@@ -205,6 +215,99 @@ describe("M10 Kostensatz", () => {
     const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/2/cp-rates", { cost_rate: v, valid_from: "2026-10-01" });
     expect(r.status).toBe(400);
     expect(sb._tables.EMPLOYEE_COST_RATE).toHaveLength(1);
+  });
+});
+
+describe("Datierte Einträge: Kostensatz und Arbeitszeitmodell", () => {
+  const withSalaryEdit = (extra = {}) => baseData({
+    ROLE_PERMISSION: [...baseData().ROLE_PERMISSION, { ROLE_ID: 1, PERMISSION_ID: 17, PERMISSION: { KEY: "employees.salary.edit" } }],
+    PERMISSION: [...baseData().PERMISSION, { ID: 17, KEY: "employees.salary.edit" }],
+    WORKING_TIME_MODEL: [{ ID: 4, TENANT_ID: T, NAME: "Vollzeit" }, { ID: 40, TENANT_ID: F, NAME: "Fremdes Modell" }],
+    EMPLOYEE_WORK_MODEL: [{ ID: 8, TENANT_ID: T, EMPLOYEE_ID: 2, MODEL_ID: 4, VALID_FROM: "2026-01-01" }],
+    ...extra,
+  });
+
+  test("zweiter Kostensatz am selben Tag → 409", async () => {
+    const sb = makeFakeSupabase(withSalaryEdit());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/2/cp-rates", { cost_rate: 60, valid_from: "2026-01-01" });
+    expect(r.status).toBe(409);
+    expect(sb._tables.EMPLOYEE_COST_RATE).toHaveLength(1);
+  });
+
+  test("Modell eines fremden Büros → 400", async () => {
+    const sb = makeFakeSupabase(withSalaryEdit());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/2/work-models", { model_id: 40, valid_from: "2026-10-01" });
+    expect(r.status).toBe(400);
+    expect(sb._tables.EMPLOYEE_WORK_MODEL).toHaveLength(1);
+  });
+
+  test("ungültiges Datum → 400 statt Serverfehler", async () => {
+    const sb = makeFakeSupabase(withSalaryEdit());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/2/work-models", { model_id: 4, valid_from: "01.10.2026" });
+    expect(r.status).toBe(400);
+  });
+
+  test("fremder Mitarbeiter → 404", async () => {
+    const sb = makeFakeSupabase(withSalaryEdit());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/50/work-models", { model_id: 4, valid_from: "2026-10-01" });
+    expect(r.status).toBe(404);
+  });
+
+  test("zweites Modell am selben Tag → 409, auch beim Verschieben", async () => {
+    const sb = makeFakeSupabase(withSalaryEdit({
+      EMPLOYEE_WORK_MODEL: [
+        { ID: 8, TENANT_ID: T, EMPLOYEE_ID: 2, MODEL_ID: 4, VALID_FROM: "2026-01-01" },
+        { ID: 9, TENANT_ID: T, EMPLOYEE_ID: 2, MODEL_ID: 4, VALID_FROM: "2026-07-01" },
+      ],
+    }));
+    expect((await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/2/work-models", { model_id: 4, valid_from: "2026-07-01" })).status).toBe(409);
+    expect((await call(mitarbeiter(sb, 1), "PATCH", "/mitarbeiter/2/work-models/9", { valid_from: "2026-01-01" })).status).toBe(409);
+  });
+
+  test("unbekannte Zuordnung ändern → 404", async () => {
+    const sb = makeFakeSupabase(withSalaryEdit());
+    const r = await call(mitarbeiter(sb, 1), "PATCH", "/mitarbeiter/2/work-models/77", { valid_from: "2026-03-01" });
+    expect(r.status).toBe(404);
+  });
+
+  test("gültige Zuordnung → angelegt", async () => {
+    const sb = makeFakeSupabase(withSalaryEdit());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter/2/work-models", { model_id: 4, valid_from: "2026-10-01" });
+    expect(r.status).toBe(200);
+    expect(sb._tables.EMPLOYEE_WORK_MODEL).toHaveLength(2);
+  });
+});
+
+describe("Neuanlage", () => {
+  const withCreate = () => baseData({
+    ROLE_PERMISSION: [...baseData().ROLE_PERMISSION, { ROLE_ID: 1, PERMISSION_ID: 18, PERMISSION: { KEY: "employees.create" } }],
+    PERMISSION: [...baseData().PERMISSION, { ID: 18, KEY: "employees.create" }],
+    USER_ROLE: [{ ID: 1, TENANT_ID: T, IS_DEFAULT: false }],
+  });
+  const ok = { abbr: " NE ", first_name: "Nina", last_name: "Eck", gender_id: "2", email: "", personnel_number: " " };
+
+  test("Vorgesetzter aus einem fremden Büro → 400, nichts angelegt", async () => {
+    const sb = makeFakeSupabase(withCreate());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter", { ...ok, supervisor_id: 50 });
+    expect(r.status).toBe(400);
+    expect(sb._tables.EMPLOYEE).toHaveLength(4);
+  });
+
+  test("Eingaben getrimmt, leere Angaben als null", async () => {
+    const sb = makeFakeSupabase(withCreate());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter", ok);
+    expect(r.status).toBe(200);
+    const neu = sb._tables.EMPLOYEE.find(e => e.ABBR === "NE");
+    expect(neu).toBeTruthy();
+    expect(neu.MAIL).toBeNull();
+    expect(neu.PERSONNEL_NUMBER).toBeNull();
+    expect(neu.GENDER_ID).toBe(2);
+  });
+
+  test("Kürzel eines anderen trotz Leerzeichen → 409", async () => {
+    const sb = makeFakeSupabase(withCreate());
+    const r = await call(mitarbeiter(sb, 1), "POST", "/mitarbeiter", { ...ok, abbr: "tk " });
+    expect(r.status).toBe(409);
   });
 });
 
@@ -329,6 +432,54 @@ describe("M4 Abwesenheit entscheiden", () => {
     const sb = d();
     expect((await call(abw(sb, 1, ["absence.approve"]), "POST", "/abwesenheit/1/decision", { decision: "APPROVED" })).status).toBe(200);
     expect(sb._tables.ABSENCE.find(x => x.ID === 1).STATUS).toBe("APPROVED");
+  });
+});
+
+describe("Urlaubsansprüche je Jahr (Bulk)", () => {
+  const abw = (sb) => {
+    const a = express();
+    a.use(express.json());
+    a.use((req, _res, next) => {
+      req.tenantId = T; req.employeeId = 1;
+      req.permissions = new Set(["absence.manage"]); req.hasPermission = (k) => req.permissions.has(k);
+      next();
+    });
+    a.use("/abwesenheit", require("../routes/abwesenheit")(sb));
+    return a;
+  };
+  const d = () => makeFakeSupabase({
+    EMPLOYEE: baseData().EMPLOYEE,
+    VACATION_ENTITLEMENT: [{ ID: 1, TENANT_ID: T, EMPLOYEE_ID: 2, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null }],
+  });
+
+  test("leerer Anspruch wird nicht zu 0 Tagen → 400", async () => {
+    const sb = d();
+    const r = await call(abw(sb), "PUT", "/abwesenheit/entitlements/bulk", { year: 2026, items: [{ employee_id: 2, days_entitled: "" }] });
+    expect(r.status).toBe(400);
+    expect(sb._tables.VACATION_ENTITLEMENT[0].DAYS_ENTITLED).toBe(30);
+  });
+
+  test("„abc“ → 400 statt stillem Erfolg", async () => {
+    const sb = d();
+    const r = await call(abw(sb), "PUT", "/abwesenheit/entitlements/bulk", { year: 2026, items: [{ employee_id: 3, days_entitled: "abc" }] });
+    expect(r.status).toBe(400);
+    expect(sb._tables.VACATION_ENTITLEMENT).toHaveLength(1);
+  });
+
+  test("Mitarbeiter eines fremden Büros → 404", async () => {
+    const sb = d();
+    const r = await call(abw(sb), "PUT", "/abwesenheit/entitlements/bulk", { year: 2026, items: [{ employee_id: 50, days_entitled: 28 }] });
+    expect(r.status).toBe(404);
+    expect(sb._tables.VACATION_ENTITLEMENT).toHaveLength(1);
+  });
+
+  test("Komma und Übertrag → gespeichert", async () => {
+    const sb = d();
+    const r = await call(abw(sb), "PUT", "/abwesenheit/entitlements/bulk", { year: 2026, items: [{ employee_id: 2, days_entitled: "27,5", carryover_override: "2" }, { employee_id: 3, days_entitled: 30 }] });
+    expect(r.status).toBe(200);
+    expect(r.body.count).toBe(2);
+    expect(sb._tables.VACATION_ENTITLEMENT.find(e => e.EMPLOYEE_ID === 2)).toMatchObject({ DAYS_ENTITLED: 27.5, CARRYOVER_OVERRIDE: 2 });
+    expect(sb._tables.VACATION_ENTITLEMENT.find(e => e.EMPLOYEE_ID === 3)).toMatchObject({ DAYS_ENTITLED: 30, YEAR: 2026 });
   });
 });
 
