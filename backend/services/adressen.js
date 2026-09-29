@@ -67,6 +67,18 @@ async function assertOwnAddress(supabase, { tenantId, addressId }) {
 }
 
 /**
+ * Gehoert der Kontakt zu genau dieser Adresse (und diesem Mandanten)? Ein
+ * Beleg mit dem Kontakt einer anderen Adresse haette im PDF einen fremden
+ * Namen unter dem Empfaenger.
+ */
+async function assertContactOfAddress(supabase, { tenantId, addressId, contactId }) {
+  const { data, error } = await supabase.from("CONTACTS").select("ID")
+    .eq("ID", contactId).eq("ADDRESS_ID", addressId).eq("TENANT_ID", tenantId).maybeSingle();
+  if (error) throw error;
+  if (!data) throw { status: 400, message: "Dieser Kontakt gehört nicht zur gewählten Adresse." };
+}
+
+/**
  * „Hauptansprechpartner dieser Adresse" heisst genau einer. Vorher liess sich
  * das Kaestchen an beliebig vielen Kontakten derselben Adresse setzen.
  */
@@ -110,6 +122,6 @@ function contactRequired(body) {
 }
 
 module.exports = {
-  LINK_PERMISSIONS, addressLinks, assertOwnAddress, ensureSinglePrimary,
+  LINK_PERMISSIONS, addressLinks, assertOwnAddress, assertContactOfAddress, ensureSinglePrimary,
   addressRequired, contactRequired, trimOrNull,
 };

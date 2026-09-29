@@ -191,3 +191,18 @@ describe("Angebote: Ansprechpartner aus CONTACTS", () => {
     expect(JSON.stringify(rows[0])).toContain("Vogt");
   });
 });
+
+describe("Kontakte je Adresse (Vorbelegung, Runde 9)", () => {
+  test("Hauptansprechpartner steht vorn und ist gekennzeichnet; fremde fehlen", async () => {
+    const db = makeFakeSupabase(base({
+      CONTACTS: [
+        { ID: 8, TENANT_ID: T, ADDRESS_ID: 2, FIRST_NAME: "Anna", LAST_NAME: "Albers", IS_PRIMARY: 0 },
+        { ID: 9, TENANT_ID: T, ADDRESS_ID: 2, FIRST_NAME: "Zoe", LAST_NAME: "Zeller", IS_PRIMARY: 1 },
+        { ID: 10, TENANT_ID: T, ADDRESS_ID: 2, FIRST_NAME: "Ben", LAST_NAME: "Bauer", IS_PRIMARY: null },
+        { ID: 60, TENANT_ID: F, ADDRESS_ID: 2, FIRST_NAME: "Fremd", LAST_NAME: "Fremd", IS_PRIMARY: 1 },
+      ],
+    }));
+    const r = await call(ctrl.getContactsByAddress, db, { query: { address_id: "2" } });
+    expect(r.body.data.map(c => [c.ID, c.IS_PRIMARY])).toEqual([[9, 1], [8, 0], [10, 0]]);
+  });
+});

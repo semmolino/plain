@@ -1077,15 +1077,19 @@ async function getContactsByAddress(req, res, supabase) {
   const addressId = parseInt((req.query.address_id || "").toString(), 10);
   if (!addressId) return res.json({ data: [] });
 
+  // IS_PRIMARY: Projekt, Angebot und Vertrag belegen damit den Kontakt vor
+  // (UI-Pilot Runde 9) — der Hauptansprechpartner steht deshalb vorn.
   const { data, error } = await supabase
     .from("CONTACTS")
-    .select("ID, FIRST_NAME, LAST_NAME")
+    .select("ID, FIRST_NAME, LAST_NAME, IS_PRIMARY")
     .eq("TENANT_ID", req.tenantId)
     .eq("ADDRESS_ID", addressId)
     .order("LAST_NAME", { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data: data || [] });
+  const rows = (data || []).map(c => ({ ...c, IS_PRIMARY: Number(c.IS_PRIMARY) === 1 ? 1 : 0 }));
+  rows.sort((a, b) => b.IS_PRIMARY - a.IS_PRIMARY);
+  res.json({ data: rows });
 }
 
 // ---------------------------------------------------------------------------
