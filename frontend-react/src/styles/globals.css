@@ -1602,6 +1602,9 @@ input::placeholder { color: var(--text-4); }
 .mastery-tip-body { /* bewusst ohne eigene Deklarationen */ }
 
 .form-field-hint  { font-size: 12px; color: var(--text-3); margin: var(--space-1) 0 0; }
+/* Hinweis mit Aktion darin (Angebot: Standardtext übernehmen, Runde 10) */
+.of-std-hint { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+@media (pointer: coarse) { .of-std-hint .link-btn { min-height: 44px; } }
 .form-field-error { font-size: 12px; color: var(--danger); margin: var(--space-1) 0 0; font-weight: 600; }
 
 .sr-only {

@@ -328,6 +328,10 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   und Ändern, dass die Adresse dem Mandanten und der Kontakt genau dieser
   Adresse gehört (`assertOwnAddress`/`assertContactOfAddress`,
   `services/adressen.js`); Pflichtfelder dürfen sich ändern, aber nicht leeren.
+  Kopf- und Fußtext bleiben beim Anlegen leer: das PDF nimmt dann den
+  Standardtext aus `TEXT_TEMPLATE` (`offer_angebot`, Einstellungen →
+  Dokumentvorlagen), das Formular zeigt ihn grau im Feld. Eine zweite
+  Vorlage unter den Vorbelegungen gibt es bewusst nicht.
 - **Kalkulationen (HOAI-Assistent)** (`pages/projekte/HonorarWizard.tsx`, Liste
   `HonorarTab.tsx`, im Angebot `angebote/AngeboteHoai.tsx`): im Muster der
   Rechnungsassistenten — sprechende Schritte, ActionBar (im Dialog am unteren

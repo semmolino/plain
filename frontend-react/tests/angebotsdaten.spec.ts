@@ -142,6 +142,36 @@ test.describe('Angebotsdaten', () => {
   })
 })
 
+test.describe('Standardtext aus den Dokumentvorlagen', () => {
+  // Das PDF nimmt ihn, wenn das Angebot keinen eigenen Text hat — vorher war
+  // davon im Formular nichts zu sehen, ein leeres Feld sah aus wie „kein Text".
+  test('leeres Feld zeigt den Standardtext und übernimmt ihn auf Wunsch', async ({ page }) => {
+    const puts = record(page, 'PUT', /\/angebote\/1(\?|$)/)
+    await mockPilot(page)
+    await mockContacts(page)
+    await page.route(/\/api\/v1\/mahnungen\/text-templates(\?|$)/, r => r.fulfill(json({ data: [
+      { documentType: 'offer_angebot', headerText: 'Sehr geehrte Damen und Herren,\nwir bieten an:', footerText: null },
+      { documentType: 'invoice_rechnung', headerText: 'Rechnungstext', footerText: 'Rechnungsfuß' },
+    ] })))
+    await page.route(/\/api\/v1\/angebote\/1(\?|$)/, r => r.request().method() === 'GET'
+      ? r.fulfill(json({ data: { ...OFFER_DETAIL, OFFER_TEXT_1: null, OFFER_TEXT_2: null } }))
+      : r.fallback())
+    await page.goto(URL_DATEN)
+    const head = page.getByLabel('Kopftext')
+    await expect(head).toHaveValue('')
+    await expect(head).toHaveAttribute('placeholder', 'Sehr geehrte Damen und Herren,\nwir bieten an:')
+    await expect(page.getByText('Leer: im PDF steht der Standardtext (grau im Feld) aus Einstellungen → Dokumentvorlagen.')).toHaveCount(1)
+    // Fußtext: keine Vorlage für Angebote — kein Hinweis, der Rechnungsfuß gilt hier nicht
+    await expect(page.getByLabel('Fußtext')).toHaveAttribute('placeholder', /nach den Positionen/)
+    await page.getByRole('button', { name: 'Zum Anpassen übernehmen' }).click()
+    await expect(head).toHaveValue('Sehr geehrte Damen und Herren,\nwir bieten an:')
+    await expect(page.getByText(/Leer: im PDF steht der Standardtext/)).toHaveCount(0)
+    await bar(page).getByRole('button', { name: 'Speichern' }).click()
+    await expect(page.getByText('Angebotsdaten gespeichert.')).toBeVisible()
+    expect(puts[0].body).toMatchObject({ offer_text_1: 'Sehr geehrte Damen und Herren,\nwir bieten an:', offer_text_2: null })
+  })
+})
+
 test.describe('Neues Angebot', () => {
   async function openDialog(page: Page) {
     await page.goto('/angebote')
