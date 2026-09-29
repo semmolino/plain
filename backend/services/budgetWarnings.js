@@ -34,14 +34,22 @@ async function getSettings(supabase, tenantId) {
     .select('KEY, VALUE')
     .eq('TENANT_ID', tenantId)
     .in('KEY', Object.keys(DEFAULT_SETTINGS));
-  const map = Object.fromEntries((data || []).map(r => [r.KEY, r.VALUE]));
+  // Runde 12: Die Vorbelegungen speicherten „aktiv" als leere Zeile (VALUE
+  // null). Hier galt nur 'true' als aktiv — nach dem ersten Speichern der
+  // Einstellungsseite waren Budget-Warnungen, beide Empfänger und die
+  // Standard-Schwellen still aus, während die Seite „aktiv" zeigte. Eine
+  // leere Zeile ist jetzt „nicht gesetzt", abschalten kann nur 'false'.
+  const map = Object.fromEntries((data || [])
+    .filter(r => r.VALUE != null && String(r.VALUE).trim() !== '')
+    .map(r => [r.KEY, r.VALUE]));
   const merged = { ...DEFAULT_SETTINGS, ...map };
+  const pcts = String(merged.budget_warning_default_pcts || '')
+    .split(/[;,\s]+/).map(s => Number(s.trim().replace(',', '.'))).filter(n => n > 0);
   return {
-    enabled:        merged.budget_warning_enabled === 'true',
-    defaultPcts:    String(merged.budget_warning_default_pcts || '')
-                      .split(',').map(s => Number(s.trim())).filter(n => n > 0),
-    notifyPm:       merged.budget_warning_notify_pm === 'true',
-    notifyBooker:   merged.budget_warning_notify_booker === 'true',
+    enabled:        merged.budget_warning_enabled !== 'false',
+    defaultPcts:    pcts.length ? pcts : [75, 90, 100],
+    notifyPm:       merged.budget_warning_notify_pm !== 'false',
+    notifyBooker:   merged.budget_warning_notify_booker !== 'false',
   };
 }
 

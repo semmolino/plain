@@ -213,8 +213,6 @@ export const updateCompany = (id: number, body: CompanyPayload) =>
 
 // ── Stammdaten (status, typ, rollen) ──────────────────────────────────────────
 
-export const createStatus = (abbr: string) =>
-  apiClient.post<{ data: unknown }>('/stammdaten/status', { abbr })
 
 export const createTyp = (abbr: string) =>
   apiClient.post<{ data: unknown }>('/stammdaten/typ', { abbr })
@@ -248,6 +246,10 @@ export const fetchDefaults = () =>
 
 export const putDefault = (key: string, value: string | null) =>
   apiClient.put<{ ok: boolean }>('/stammdaten/defaults', { key, value })
+
+/** Mehrere Vorbelegungen in einer Anfrage — der Server prüft alle, bevor er schreibt (Runde 12). */
+export const putDefaults = (values: Record<string, string | null>) =>
+  apiClient.put<{ ok: boolean; data: Record<string, string | null> }>('/stammdaten/defaults', { values })
 
 // ── Stammdaten lists + delete ─────────────────────────────────────────────────
 

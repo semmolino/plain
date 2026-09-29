@@ -22,7 +22,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useToast }  from '@/store/toastStore'
 import {
   fetchCountries, fetchCompanies, createDepartment, createTyp, createRolle,
-  createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchPaymentMeans, fetchDefaults, putDefault,
+  createCompany, updateCompany, fetchCurrencies, fetchVatList, fetchPaymentMeans, fetchDefaults, putDefault, putDefaults,
   fetchDepartments, deleteDepartment, updateDepartment,
   fetchTypen, deleteTyp, updateTyp,
   fetchRollen, deleteRolle, updateRolle,
@@ -911,8 +911,10 @@ function TenantBrandingSection() {
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      await putDefault('tenant.theme_default', themeDefault || null)
-      await putDefault('tenant.hero_asset_id', heroAssetId != null ? String(heroAssetId) : null)
+      await putDefaults({
+        'tenant.theme_default': themeDefault || null,
+        'tenant.hero_asset_id': heroAssetId != null ? String(heroAssetId) : null,
+      })
       const slugClean = slug.trim().toLowerCase()
       const slugMod = await import('@/api/tenants')
       await slugMod.saveTenantSlug(slugClean === '' ? null : slugClean)
