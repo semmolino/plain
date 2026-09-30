@@ -302,7 +302,8 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
 
   // ── Berechnung (eine Stelle fuer Anzeige, Speichern, PDF, XML und Buchen) ──
   const totalsInput = {
-    base: dedTotals?.totalNet ?? 0, vatPct: Number(dedTotals?.vatPercent ?? 0),
+    // Steuer nur bei Regelsatz — bei Reverse-Charge/steuerfrei weist die Rechnung keine aus (wie beim Buchen)
+    base: dedTotals?.totalNet ?? 0, vatPct: vatCategory === 'S' ? Number(dedTotals?.vatPercent ?? 0) : 0,
     discounts: showDiscounts, d1Pct, d2Pct,
     skonto: showSkonto, cashDiscPct, cashDiscDays,
     se: false, sePct: '', seBasis: 'BRUTTO' as const,
@@ -682,7 +683,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   const einvoiceFilled = [buyerRef, orderRef, accountingRef, remittance].filter(v => v.trim()).length + (vatCategory !== 'S' ? 1 : 0)
 
   // ── Zusammenfassung ─────────────────────────────────────────────────────────
-  const vatForSummary = Number(dedTotals?.vatPercent ?? phaseTotals?.vatPercent ?? 0)
+  const vatForSummary = vatCategory === 'S' ? Number(dedTotals?.vatPercent ?? phaseTotals?.vatPercent ?? 0) : 0
   const provisional = (net: number): SummaryAmounts => ({
     net, vatPct: vatForSummary, tax: r2(net * vatForSummary / 100), gross: r2(net * (1 + vatForSummary / 100)),
     seAmt: 0, payable: 0, provisional: true,

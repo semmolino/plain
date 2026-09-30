@@ -6273,6 +6273,11 @@ fieldset:disabled .ws-check { cursor: default; }
 }
 .zd-check { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; font-size: 13px; cursor: pointer; }
 .zd-check input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; }
+/* Überzahlung: Bestätigung statt stiller negativer Restforderung (Nebenbefund 4) */
+.zd-check.zd-over {
+  margin: var(--space-2) 0 var(--space-3); padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--warning); border-radius: var(--radius-md); background: var(--warning-bg);
+}
 .zd-rest-body { margin-top: var(--space-2); }
 
 /* ── Rechnungskorrektur (KorrekturDialog, .kd-*) ─────────────────────────── */

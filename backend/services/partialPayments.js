@@ -7,10 +7,11 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
-const { openAmountsFor } = require("./openAmount");
+const { openAmountsFor, effectiveVatPercent } = require("./openAmount");
 const { rebillableByStructure, removeForCancelledDoc } = require("./receivableAdjustments");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
 const { transferReplacedPayments } = require("./reissue");
+const { removePaymentsOfDoc } = require("./paymentRemoval");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -267,7 +268,7 @@ async function writePpsRows(supabase, { partialPaymentId, structureIds, rows }) 
 async function recomputePartialPaymentTotals(supabase, partialPaymentId) {
   const { data: pp, error: ppErr } = await supabase
     .from("ADVANCE_INVOICE")
-    .select("ID, VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
+    .select("ID, VAT_PERCENT, VAT_ID, VAT_CATEGORY, CONTRACT_ID, TENANT_ID")
     .eq("ID", partialPaymentId)
     .maybeSingle();
   if (ppErr || !pp) throw new Error("ADVANCE_INVOICE konnte nicht geladen werden");
@@ -306,7 +307,8 @@ async function recomputePartialPaymentTotals(supabase, partialPaymentId) {
   const amountNet = sums.net;
   const amountExtras = sums.extras;
   const totalNet = round2(amountNet + amountExtras);
-  const taxAmountNet = round2(totalNet * vatPercent / 100);
+  // Steuer nur bei Regelsatz (S) — VAT_PERCENT bleibt der Satz des Vertrags (Nebenbefund 7)
+  const taxAmountNet = round2(totalNet * effectiveVatPercent({ VAT_CATEGORY: pp.VAT_CATEGORY, VAT_PERCENT: vatPercent }) / 100);
   const totalGross = round2(totalNet + taxAmountNet);
 
   const updatePayload = {
@@ -771,7 +773,8 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
     pp.ADVANCE_INVOICE_NUMBER = num;
   }
 
-  const vatPercent = toNum(pp.VAT_PERCENT);
+  // Steuer nur bei Regelsatz (S) — vorher auch bei Reverse-Charge/steuerfrei (Nebenbefund 7)
+  const vatPercent = effectiveVatPercent(pp);
   const totalNet = toNum(pp.TOTAL_AMOUNT_NET);
   const taxAmountNet = round2(totalNet * vatPercent / 100);
   const totalGross = round2(totalNet + taxAmountNet);
@@ -957,52 +960,12 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   // hat die Summen schon gemindert und wuerde sie sonst ein zweites Mal mindern.
   await removeForCancelledDoc(supabase, { tenantId, kind: "ADVANCE_INVOICE", id: parseInt(id, 10) });
 
-  // ── Optional: delete existing payments ──────────────────────────────────
+  // ── Optional: Zahlungen loeschen ─────────────────────────────────────────
+  // Dieselbe Routine wie „Zahlung loeschen" (services/paymentRemoval.js) —
+  // vorher blieb PAYED am Element stehen, wenn die geloeschte Zahlung dort die
+  // einzige war, und die Vaeter wurden nicht nachgezogen (Nebenbefund 3).
   if (deletePayments) {
-    const { data: payments } = await supabase
-      .from("PAYMENT")
-      .select("ID, AMOUNT_PAYED_NET, PROJECT_ID")
-      .eq("ADVANCE_INVOICE_ID", id)
-      .eq("TENANT_ID", tenantId);
-
-    for (const payment of payments || []) {
-      const { data: psRows } = await supabase
-        .from("PAYMENT_STRUCTURE")
-        .select("STRUCTURE_ID, AMOUNT_PAYED_NET")
-        .eq("PAYMENT_ID", payment.ID);
-
-      await supabase.from("PAYMENT_STRUCTURE").delete().eq("PAYMENT_ID", payment.ID);
-      await supabase.from("PAYMENT").delete().eq("ID", payment.ID);
-
-      if (psRows && psRows.length > 0) {
-        await insertProgressSnapshot(supabase, psRows.map(r => ({
-          TENANT_ID:    tenantId ?? null,
-          STRUCTURE_ID: r.STRUCTURE_ID,
-          PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
-        })));
-      }
-    }
-
-    // Re-sum PROJECT.PAYED from remaining payments
-    const { data: remainingPay } = await supabase
-      .from("PAYMENT").select("AMOUNT_PAYED_NET").eq("PROJECT_ID", orig.PROJECT_ID).eq("TENANT_ID", tenantId);
-    const newPayed = round2((remainingPay || []).reduce((s, r) => s + toNum(r.AMOUNT_PAYED_NET), 0));
-    await supabase.from("PROJECT").update({ PAYED: newPayed }).eq("ID", orig.PROJECT_ID);
-
-    // Re-aggregate PROJECT_STRUCTURE.PAYED from remaining PAYMENT_STRUCTURE rows
-    const { data: remainingPS } = await supabase
-      .from("PAYMENT_STRUCTURE").select("STRUCTURE_ID, AMOUNT_PAYED_NET").eq("TENANT_ID", tenantId);
-    const payedByStructure = new Map();
-    for (const r of remainingPS || []) {
-      const sid = String(r.STRUCTURE_ID);
-      payedByStructure.set(sid, round2((payedByStructure.get(sid) ?? 0) + toNum(r.AMOUNT_PAYED_NET)));
-    }
-    if (payedByStructure.size > 0) {
-      const upserts = [...payedByStructure.entries()].map(([sid, payed]) => ({
-        ID: parseInt(sid, 10), TENANT_ID: tenantId, PAYED: payed,
-      }));
-      await supabase.from("PROJECT_STRUCTURE").upsert(upserts);
-    }
+    await removePaymentsOfDoc(supabase, { kind: "ADVANCE_INVOICE", id: parseInt(id, 10), tenantId });
   }
 
   const {

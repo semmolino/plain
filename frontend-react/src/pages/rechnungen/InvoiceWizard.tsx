@@ -292,7 +292,8 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
 
   // ── Berechnung (eine Stelle fuer Anzeige, Speichern, PDF, XML und Buchen) ──
   const totalsInput = {
-    base: proposal?.total_amount_net ?? 0, vatPct: Number(proposal?.vat_percent ?? 0),
+    // Steuer nur bei Regelsatz — bei Reverse-Charge/steuerfrei weist die Rechnung keine aus (wie beim Buchen)
+    base: proposal?.total_amount_net ?? 0, vatPct: vatCategory === 'S' ? Number(proposal?.vat_percent ?? 0) : 0,
     discounts: showDiscounts, d1Pct, d2Pct,
     skonto: showSkonto, cashDiscPct, cashDiscDays,
     se: seEnabled, sePct, seBasis,
@@ -545,7 +546,7 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
   const perfAmt        = perfInput !== '' ? Number(perfInput) : (proposal?.performance_amount ?? 0)
   const selectedTecSum = tecList.filter(t => selected.has(t.ID)).reduce((s, t) => s + (t.HOURLY_RATE_TOTAL ?? 0), 0)
   const liveNet        = perfAmt + selectedTecSum
-  const vatPctNum      = Number(proposal?.vat_percent ?? 0)
+  const vatPctNum      = vatCategory === 'S' ? Number(proposal?.vat_percent ?? 0) : 0
   const summaryAmounts: SummaryAmounts | null =
     step === 2 && proposal ? {
       net: liveNet, vatPct: vatPctNum, tax: liveNet * vatPctNum / 100, gross: liveNet * (1 + vatPctNum / 100),

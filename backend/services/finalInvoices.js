@@ -6,6 +6,7 @@ const { insertProgressSnapshot } = require("./projectProgress");
 const { rebillableByStructure } = require("./receivableAdjustments");
 const { AR_COLS, deductionsFor } = require("./arDeduction");
 const { transferReplacedPayments } = require("./reissue");
+const { effectiveVatPercent } = require("./openAmount");
 const {
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
@@ -52,7 +53,7 @@ async function recomputeTotal(supabase, invoiceId) {
   // VAT_PERCENT hat, aus Vertrag bzw. Tenant-Default ergänzen.
   const { data: inv } = await supabase
     .from("INVOICE")
-    .select("VAT_PERCENT, VAT_ID, CONTRACT_ID, TENANT_ID")
+    .select("VAT_PERCENT, VAT_ID, VAT_CATEGORY, CONTRACT_ID, TENANT_ID")
     .eq("ID", invoiceId)
     .maybeSingle();
   let vatPercent = toNum(inv?.VAT_PERCENT);
@@ -87,7 +88,8 @@ async function recomputeTotal(supabase, invoiceId) {
     } catch (_) { /* soft-fail */ }
   }
 
-  const taxAmountNet = round2((totalNet * vatPercent) / 100);
+  // Steuer nur bei Regelsatz (S) — VAT_PERCENT bleibt der Satz des Vertrags (Nebenbefund 7)
+  const taxAmountNet = round2((totalNet * effectiveVatPercent({ VAT_CATEGORY: inv?.VAT_CATEGORY, VAT_PERCENT: vatPercent })) / 100);
   const totalGross   = round2(totalNet + taxAmountNet);
 
   const updatePayload = {
@@ -561,7 +563,7 @@ async function getFinalInvoice(supabase, { id, tenantId }) {
 async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], force = false }) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
-    .select("ID, COMPANY_ID, PROJECT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID, INVOICE_TYPE, TENANT_ID")
+    .select("ID, COMPANY_ID, PROJECT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, VAT_CATEGORY, STATUS_ID, INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID, INVOICE_TYPE, TENANT_ID")
     .eq("ID", id)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
@@ -670,7 +672,8 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
     }
   }
 
-  const vatPercent = toNum(inv.VAT_PERCENT);
+  // Steuer nur bei Regelsatz (S) — vorher auch bei Reverse-Charge/steuerfrei (Nebenbefund 7)
+  const vatPercent = effectiveVatPercent(inv);
   const totalNet = toNum(inv.TOTAL_AMOUNT_NET);
   const taxAmountNet = round2((totalNet * vatPercent) / 100);
   const totalGross = round2(totalNet + taxAmountNet);

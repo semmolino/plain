@@ -433,7 +433,13 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Posten" und E-Mail-Platzhalter lesen **nur** daraus — vorher rechneten sechs
   Stellen selbst, und nur die Liste kannte Nachlass, Einbehalt und Skonto. Nie
   wieder `TOTAL_AMOUNT_GROSS − Σ PAYMENT` von Hand; select-Listen über
-  `withClaimCols(kind, …)`.
+  `withClaimCols(kind, …)`. Den Nachlass rechnet **nur**
+  `services/documentDiscounts.js` (PDF, XML als BG-20 und offener Betrag — mit dem
+  Vorzeichen des Belegs); `DISCOUNT_1/2` als Beträge schreibt kein Code. Steuer gibt
+  es nur bei Kategorie **S** (`effectiveVatPercent`): `VAT_PERCENT` hält auch bei
+  Reverse-Charge den Satz des Vertrags. Mehr als offen nimmt `POST /payments` nur mit
+  `allow_overpayment` an (sonst 409 `OVERPAYMENT`); Zahlungen löschen — einzeln wie
+  beim Storno — nur über `services/paymentRemoval.js`.
 - **Rest ausbuchen** (`RECEIVABLE_ADJUSTMENT`, Migration `0177`,
   `services/receivableAdjustments.js`, `/payments/adjustments`, Rechte wie die
   Zahlungen): akzeptierte Kürzung ohne Storno (Entgeltminderung nach § 17 UStG,

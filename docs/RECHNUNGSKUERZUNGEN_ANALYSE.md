@@ -192,26 +192,34 @@ das Original als Entwurf kopiert und die Zahlungen auf die neue Rechnung **über
    47.600 € statt 83.300 €. Der Test [einvoice_security_retention.test.js](../backend/tests/einvoice_security_retention.test.js)
    hatte `TOTAL_AMOUNT_NET` = volles Honorar angelegt, also nicht so, wie der echte
    Weg speichert.
-3. **Storno mit „Zahlungen löschen" lässt `PAYED` stehen.** `cancelInvoice` (und das
-   Gegenstück bei Abschlägen) rechnet `PROJECT_STRUCTURE.PAYED` nur für Elemente neu,
-   die **noch** Zahlungen haben. War die gelöschte Zahlung die einzige, bleibt der alte
-   Wert stehen; die Väter werden nicht nachgezogen. Die Variable `affectedSids` ist
-   toter Code.
-4. **Überzahlung ohne Hinweis.** `POST /payments` prüft nur `> 0`, nicht gegen den
-   offenen Betrag; der offene Betrag wird negativ.
+3. **Storno mit „Zahlungen löschen" lässt `PAYED` stehen — behoben.** `cancelInvoice`
+   (und das Gegenstück bei Abschlägen) rechnete `PROJECT_STRUCTURE.PAYED` nur für
+   Elemente neu, die **noch** Zahlungen hatten. War die gelöschte Zahlung die einzige,
+   blieb der alte Wert stehen; die Väter wurden nicht nachgezogen. Jetzt gehen
+   „Zahlung löschen" und der Storno durch eine Routine
+   (`services/paymentRemoval.js`).
+4. **Überzahlung ohne Hinweis — behoben.** `POST /payments` prüfte nur `> 0`, der
+   offene Betrag wurde negativ. Jetzt 409 `OVERPAYMENT`, solange nicht
+   `allow_overpayment` mitkommt; der Zahlungsdialog fragt nach.
 5. **Storno-XML mit positiven Summen — in (c) behoben.** Der Storno wird negativ
    gespeichert, `loadInvoiceData` spiegelte ihn trotzdem noch einmal: das XML forderte
    den stornierten Betrag ein zweites Mal ein, mit negativem Einzelpreis (BR-27, von
    Prüfportalen fatal abgewiesen; der eigene Validator prüft BR-27 nicht).
-6. **Nachlass I/II fehlt im XML — offen.** Das XML liest die Nachlässe aus
+6. **Nachlass I/II fehlt im XML — behoben.** Das XML las die Nachlässe aus
    `INVOICE.DISCOUNT_1/2` (Betrag), die kein Code schreibt; gespeichert werden nur
    Prozente und `TOTAL_DISCOUNTS`. `TOTAL_AMOUNT_NET` ist der Betrag **vor** Nachlass.
-   Folge: das XML nennt keinen Nachlass und fordert den Betrag vor Nachlass, das PDF
-   den danach. Betrifft jede Rechnung mit Nachlass; eigener Schritt.
-7. **Steuer beim Buchen ohne Blick auf die Steuerkategorie — offen.** `bookInvoice`
-   rechnet `TAX_AMOUNT_NET = Netto × VAT_PERCENT`, auch bei §13b/steuerfrei;
-   `recomputeInvoiceTotals` ersetzt 0 % durch den Standardsatz. Unkritisch, solange
-   solche Verträge einen 0-%-Steuersatz tragen — zu prüfen.
+   Folge: das XML nannte keinen Nachlass und forderte den Betrag vor Nachlass, das PDF
+   den danach. Jetzt rechnen PDF, XML und offener Betrag über
+   `services/documentDiscounts.js`: Nachlässe als BG-20 mit Basisbetrag, Steuer auf das
+   Netto nach Nachlass (BR-CO-13). Dabei behoben: im Storno stand der geerbte, positive
+   `TOTAL_DISCOUNTS` gegen ein negatives Netto.
+7. **Steuer ohne Blick auf die Steuerkategorie — behoben.** `bookInvoice` (und
+   Abschlag, Schlussrechnung, die Neuberechnungen) rechnete `TAX_AMOUNT_NET = Netto ×
+   VAT_PERCENT`, auch bei Reverse-Charge/steuerfrei — `VAT_PERCENT` hält dort den Satz
+   des Vertrags. Liste, offener Betrag und Mahnwesen forderten damit Steuer, die die
+   Rechnung nicht ausweist, und eine Zahlung wurde mit 19 % Steuer aufgeteilt. Jetzt
+   Steuer nur bei Kategorie S, auch in der Anzeige der Assistenten und beim Aufteilen
+   einer Zahlung. Der Satz selbst bleibt stehen.
 
 ---
 
@@ -233,6 +241,7 @@ Entschieden am 30.09.2026:
 | (b) Schlussrechnung auf Vereinnahmtes + „aufgegangen" | umgesetzt (Migration 0178, `arDeduction.js`, `refreshDeductions`, XML als Restrechnung). Nebenbefund 2 behoben. |
 | (c) Rechnungskorrektur statt Gutschrift | umgesetzt (Migration 0179, `invoiceCorrection.js`, `KorrekturDialog.tsx`, XML 384 mit BT-25). Dabei behoben: das Storno-XML trug positive Summen und einen negativen Einzelpreis (Nebenbefund 5), der Storno einer Schlussrechnung passte nicht zu ihrem Rest (BR-CO-13). |
 | (d) Storno + Neu mit Zahlungsübertrag | umgesetzt (Migration 0180, `reissue.js`, Storno-Dialog „Stornieren und neu ausstellen"). Der Entwurf kopiert Positionen, Buchungen und bei Schlussrechnungen die Abzugsauswahl und nennt die ersetzte Rechnung (PDF, BT-25). Die Zahlungen wandern **beim Buchen**, nicht beim Anlegen: ein Entwurf ohne Nummer trägt keine Zahlung, und verworfen bleibt alles wie nach einem Storno. |
+| Nebenbefunde 3, 4, 6, 7 | behoben (`paymentRemoval.js`, Überzahlung mit Rückfrage, `documentDiscounts.js`, Steuer nur bei Kategorie S). Damit ist aus Abschnitt 4 nichts mehr offen. |
 
 ---
 

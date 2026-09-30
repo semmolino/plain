@@ -2,6 +2,10 @@ const express = require("express");
 const { insertProgressSnapshot } = require("../services/projectProgress");
 const { requirePermission } = require("../middleware/permissions");
 const adjustments = require("../services/receivableAdjustments");
+const { removePayments } = require("../services/paymentRemoval");
+const { openAmountsFor, withClaimCols, TOL } = require("../services/openAmount");
+
+const eur = (n) => new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(n);
 
 // Payment routes
 // Base path: /api/payments
@@ -53,35 +57,6 @@ module.exports = (supabase) => {
   }
 
   // Re-aggregate PROJECT_STRUCTURE upward from a given node's parent
-  async function propagatePayedUpwards(structureId) {
-    const { data: node } = await supabase
-      .from("PROJECT_STRUCTURE")
-      .select("FATHER_ID")
-      .eq("ID", structureId)
-      .maybeSingle();
-    if (!node || node.FATHER_ID == null) return;
-    const parentId = String(node.FATHER_ID);
-
-    const { data: siblings } = await supabase
-      .from("PROJECT_STRUCTURE")
-      .select("REVENUE, EXTRAS, COSTS, REVENUE_COMPLETION, EXTRAS_COMPLETION, ADVANCE_INVOICED, INVOICED, PAYED")
-      .eq("FATHER_ID", parentId);
-    if (siblings && siblings.length > 0) {
-      const s = (f) => siblings.reduce((acc, c) => acc + Number(c[f] ?? 0), 0);
-      await supabase.from("PROJECT_STRUCTURE").update({
-        REVENUE:                   s("REVENUE"),
-        EXTRAS:                    s("EXTRAS"),
-        COSTS:                     s("COSTS"),
-        REVENUE_COMPLETION:        s("REVENUE_COMPLETION"),
-        EXTRAS_COMPLETION:         s("EXTRAS_COMPLETION"),
-        ADVANCE_INVOICED:          s("ADVANCE_INVOICED"),
-        INVOICED:                  s("INVOICED"),
-        PAYED:                     s("PAYED"),
-      }).eq("ID", parentId);
-    }
-    await propagatePayedUpwards(parentId);
-  }
-
   // GET /api/payments?invoice_id=X  or  ?advance_invoice_id=X
   router.get("/", requirePermission("payments.view"), async (req, res) => {
     try {
@@ -134,7 +109,7 @@ module.exports = (supabase) => {
       if (partialPaymentId) {
         const { data, error } = await supabase
           .from("ADVANCE_INVOICE")
-          .select("ID, PROJECT_ID, CONTRACT_ID, VAT_ID, VAT_PERCENT")
+          .select(withClaimCols("ADVANCE_INVOICE", "ID, PROJECT_ID, CONTRACT_ID, VAT_ID, VAT_PERCENT, VAT_CATEGORY"))
           .eq("ID", partialPaymentId)
           .eq("TENANT_ID", req.tenantId)
           .maybeSingle();
@@ -155,7 +130,7 @@ module.exports = (supabase) => {
       if (invoiceId) {
         const { data, error } = await supabase
           .from("INVOICE")
-          .select("ID, PROJECT_ID, CONTRACT_ID, VAT_ID, VAT_PERCENT")
+          .select(withClaimCols("INVOICE", "ID, PROJECT_ID, CONTRACT_ID, VAT_ID, VAT_PERCENT, VAT_CATEGORY"))
           .eq("ID", invoiceId)
           .eq("TENANT_ID", req.tenantId)
           .maybeSingle();
@@ -176,7 +151,27 @@ module.exports = (supabase) => {
         return res.status(400).json({ error: "Referenz enthält kein PROJECT_ID / CONTRACT_ID." });
       }
 
-      const vatPercent = await resolveVatPercent({ vat_percent: ref?.VAT_PERCENT, vat_id: ref?.VAT_ID });
+      // Ueberzahlung (Nebenbefund 4): vorher nahm der Endpunkt jeden Betrag > 0,
+      // der offene Betrag wurde negativ, ohne dass es jemand merkte. Mehr als
+      // offen geht jetzt nur mit ausdruecklicher Bestaetigung — Doppel- und
+      // Tippfehler fallen so auf, echte Ueberzahlungen bleiben erfassbar.
+      const kind = invoiceId ? "INVOICE" : "ADVANCE_INVOICE";
+      const openInfo = (await openAmountsFor(supabase, { kind, docs: [ref], tenantId: req.tenantId })).get(String(ref.ID));
+      if (openInfo && gross > openInfo.open + TOL && b.allow_overpayment !== true) {
+        const open = Math.max(0, openInfo.open);
+        return res.status(409).json({
+          error: open > TOL
+            ? `Die Zahlung übersteigt den offenen Betrag von ${eur(open)} um ${eur(gross - open)}. Bitte bestätigen, dass die Überzahlung so erfasst werden soll.`
+            : `Der Beleg ist bereits vollständig erledigt. Bitte bestätigen, dass die Zahlung über ${eur(gross)} als Überzahlung erfasst werden soll.`,
+          code: "OVERPAYMENT",
+          open_amount: open,
+        });
+      }
+
+      // Steuer nur bei Regelsatz (S): bei Reverse-Charge/steuerfrei ist die
+      // ganze Zahlung Entgelt — vorher wurden auch dort 19 % herausgerechnet.
+      const category = String(ref?.VAT_CATEGORY ?? "S").trim().toUpperCase() || "S";
+      const vatPercent = category !== "S" ? 0 : await resolveVatPercent({ vat_percent: ref?.VAT_PERCENT, vat_id: ref?.VAT_ID });
 
       const net = round2(gross / (1 + vatPercent / 100));
       const vat = round2(gross - net);
@@ -340,53 +335,10 @@ module.exports = (supabase) => {
       if (pErr) return res.status(500).json({ error: pErr.message });
       if (!payment) return res.status(404).json({ error: "Zahlung nicht gefunden." });
 
-      // 2. Load PAYMENT_STRUCTURE rows before deletion (needed for reversal + propagation)
-      const { data: psRows } = await supabase
-        .from("PAYMENT_STRUCTURE")
-        .select("STRUCTURE_ID, AMOUNT_PAYED_NET")
-        .eq("PAYMENT_ID", id);
-      const structureRows = psRows || [];
-
-      // 3. Delete PAYMENT_STRUCTURE, then PAYMENT
-      await supabase.from("PAYMENT_STRUCTURE").delete().eq("PAYMENT_ID", id);
-      const { error: delErr } = await supabase.from("PAYMENT").delete().eq("ID", id).eq("TENANT_ID", req.tenantId);
-      if (delErr) return res.status(500).json({ error: delErr.message });
-
-      // 4. Re-sum PROJECT.PAYED from remaining payments (accurate re-aggregate, not a delta)
-      const { data: remainingPayments } = await supabase
-        .from("PAYMENT")
-        .select("AMOUNT_PAYED_NET")
-        .eq("PROJECT_ID", payment.PROJECT_ID)
-        .eq("TENANT_ID", req.tenantId);
-      const newProjectPayed = round2(
-        (remainingPayments || []).reduce((s, r) => s + (Number.isFinite(toNum(r.AMOUNT_PAYED_NET)) ? toNum(r.AMOUNT_PAYED_NET) : 0), 0)
-      );
-      await supabase.from("PROJECT").update({ PAYED: newProjectPayed }).eq("ID", payment.PROJECT_ID);
-
-      // 5. Re-sum PROJECT_STRUCTURE.PAYED per affected leaf, then propagate upward
-      const uniqueStructureIds = [...new Set(structureRows.map(r => String(r.STRUCTURE_ID)))];
-      for (const sid of uniqueStructureIds) {
-        const { data: sPayments } = await supabase
-          .from("PAYMENT_STRUCTURE")
-          .select("AMOUNT_PAYED_NET")
-          .eq("STRUCTURE_ID", sid);
-        const newPayed = round2(
-          (sPayments || []).reduce((s, r) => s + (Number.isFinite(toNum(r.AMOUNT_PAYED_NET)) ? toNum(r.AMOUNT_PAYED_NET) : 0), 0)
-        );
-        await supabase.from("PROJECT_STRUCTURE").update({ PAYED: newPayed }).eq("ID", sid);
-        await propagatePayedUpwards(sid);
-      }
-
-      // 6. Insert PROJECT_PROGRESS reversal rows with carry-forward
-      if (structureRows.length > 0) {
-        const reversalRows = structureRows.map(r => ({
-          TENANT_ID:    req.tenantId ?? null,
-          STRUCTURE_ID: r.STRUCTURE_ID,
-          PAYED:        -round2(toNum(r.AMOUNT_PAYED_NET)),
-        }));
-        const { error: prErr } = await insertProgressSnapshot(supabase, reversalRows);
-        if (prErr) console.error("[PAYMENT_DELETE][PROGRESS]", prErr.message);
-      }
+      // 2.–6. Aufteilung und Zahlung loeschen, PAYED an Projekt und Struktur
+      // (samt Vaetern) neu summieren, Snapshot — dieselbe Routine wie beim
+      // Storno mit „Zahlungen loeschen" (services/paymentRemoval.js).
+      await removePayments(supabase, { tenantId: req.tenantId, paymentIds: [payment.ID] });
 
       return res.json({ success: true });
     } catch (e) {

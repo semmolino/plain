@@ -8,6 +8,7 @@ const angeboteSvc = require('./services/angebote');
 const nachtraegeSvc = require('./services/nachtraege');
 const monatsabschlussSvc = require('./services/monatsabschluss');
 const { openAmountsFor, withClaimCols } = require('./services/openAmount');
+const { discountsOf } = require('./services/documentDiscounts');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -768,17 +769,20 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   const d2Pct              = Number(rawDoc.DISCOUNT_2_PERCENT ?? 0);
   const d1Reason           = rawDoc.DISCOUNT_1_REASON ?? null;
   const d2Reason           = rawDoc.DISCOUNT_2_REASON ?? null;
-  const d1Amount           = Math.round(totalAmountNet * d1Pct / 100 * 100) / 100;
-  const d2Amount           = Math.round((totalAmountNet - d1Amount) * d2Pct / 100 * 100) / 100;
-  const totalDiscounts     = Number(rawDoc.TOTAL_DISCOUNTS ?? 0) || Math.round((d1Amount + d2Amount) * 100) / 100;
+  // Nachlass wie im XML und im offenen Betrag (services/documentDiscounts.js) —
+  // mit dem Vorzeichen des Belegs, auch beim Storno.
+  const disc               = discountsOf(rawDoc);
+  const d1Amount           = disc.d1;
+  const d2Amount           = disc.d2;
+  const totalDiscounts     = disc.total;
   const cashDiscPct        = Number(rawDoc.CASH_DISCOUNT_PERCENT ?? 0);
   const cashDiscDays       = rawDoc.CASH_DISCOUNT_DAYS ?? null;
   const cashDiscAmount     = Number(rawDoc.CASH_DISCOUNT ?? 0) || Math.round((totalAmountNet - totalDiscounts) * cashDiscPct / 100 * 100) / 100;
-  const adjustedNet        = Math.round((totalAmountNet - totalDiscounts) * 100) / 100;
+  const adjustedNet        = disc.adjustedNet;
   const vatPct             = Number(rawDoc.VAT_PERCENT ?? 0);
   const adjustedVat        = Math.round(adjustedNet * vatPct / 100 * 100) / 100;
   const adjustedGross      = Math.round((adjustedNet + adjustedVat) * 100) / 100;
-  const hasDiscounts       = totalDiscounts > 0;
+  const hasDiscounts       = Math.abs(totalDiscounts) > 0;
   const hasSkonto          = cashDiscPct > 0;
   const skontoPaymentAmount = Math.round((adjustedNet - cashDiscAmount) * (1 + vatPct / 100) * 100) / 100;
 

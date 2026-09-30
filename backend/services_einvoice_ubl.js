@@ -145,7 +145,7 @@ function buildAllowanceCharges(data) {
     <cbc:AllowanceChargeReason>${x(a.reason)}</cbc:AllowanceChargeReason>
     ${a.percent > 0 ? `<cbc:MultiplierFactorNumeric>${n2(a.percent)}</cbc:MultiplierFactorNumeric>` : ''}
     ${amt(a.amount, cur, 'Amount')}
-    ${a.percent > 0 ? amt(a.percent > 0 ? a.amount / (a.percent / 100) : 0, cur, 'BaseAmount') : ''}
+    ${a.percent > 0 ? amt(a.baseAmount ?? a.amount / (a.percent / 100), cur, 'BaseAmount') : ''}
     <cac:TaxCategory>
       <cbc:ID>${x(vatBreak.category)}</cbc:ID>
       <cbc:Percent>${n2(vatBreak.rate)}</cbc:Percent>

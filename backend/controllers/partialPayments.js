@@ -906,7 +906,7 @@ async function bookPartialPayment(req, res, supabase) {
 
   const { data: pp, error: ppErr } = await supabase
     .from("ADVANCE_INVOICE")
-    .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, STATUS_ID, ADVANCE_INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID")
+    .select("ID, COMPANY_ID, PROJECT_ID, CONTRACT_ID, TOTAL_AMOUNT_NET, VAT_PERCENT, VAT_CATEGORY, STATUS_ID, ADVANCE_INVOICE_NUMBER, DOCUMENT_TEMPLATE_ID")
     .eq("ID", id)
     .eq("TENANT_ID", req.tenantId)
     .maybeSingle();

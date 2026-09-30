@@ -447,13 +447,13 @@ Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
     {% if discounts.d1Percent > 0 %}
     <tr>
       <td class="label">abzgl. {{ discounts.d1Reason if discounts.d1Reason else "Nachlass I" }} ({{ discounts.d1Percent }}&#8239;%)</td>
-      <td class="amount">&minus;&#8239;{{ discounts.d1Amount | money }}</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d1Amount | abs | money }}</td>
     </tr>
     {% endif %}
     {% if discounts.d2Percent > 0 %}
     <tr>
       <td class="label">abzgl. {{ discounts.d2Reason if discounts.d2Reason else "Nachlass II" }} ({{ discounts.d2Percent }}&#8239;%)</td>
-      <td class="amount">&minus;&#8239;{{ discounts.d2Amount | money }}</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d2Amount | abs | money }}</td>
     </tr>
     {% endif %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
@@ -561,13 +561,13 @@ Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
     {% if discounts.d1Percent > 0 %}
     <tr>
       <td class="label">abzgl. {{ discounts.d1Reason if discounts.d1Reason else "Nachlass I" }} ({{ discounts.d1Percent }}&#8239;%)</td>
-      <td class="amount">&minus;&#8239;{{ discounts.d1Amount | money }}</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d1Amount | abs | money }}</td>
     </tr>
     {% endif %}
     {% if discounts.d2Percent > 0 %}
     <tr>
       <td class="label">abzgl. {{ discounts.d2Reason if discounts.d2Reason else "Nachlass II" }} ({{ discounts.d2Percent }}&#8239;%)</td>
-      <td class="amount">&minus;&#8239;{{ discounts.d2Amount | money }}</td>
+      <td class="amount">&minus;&#8239;{{ discounts.d2Amount | abs | money }}</td>
     </tr>
     {% endif %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>

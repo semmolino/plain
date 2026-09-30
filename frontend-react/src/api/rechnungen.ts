@@ -567,6 +567,8 @@ export const createPayment = (body: {
   payment_date: string
   purpose_of_payment?: string
   comment?: string
+  /** mehr als offen: nur mit ausdrücklicher Bestätigung (sonst 409 OVERPAYMENT) */
+  allow_overpayment?: boolean
 }) => apiClient.post<{ success: boolean; id: number }>('/payments', body)
 
 export const deletePayment = (id: number) =>

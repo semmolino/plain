@@ -55,6 +55,7 @@ function leeresFormular() {
   return {
     amount: '', date: todayIso(), purpose: '', comment: '',
     rest: false, reason: 'kuerzung' as AdjustmentReason, rebillable: false, restComment: '',
+    overpay: false,
   }
 }
 
@@ -85,6 +86,8 @@ export function ZahlungDialog({ ziel, onClose }: { ziel: ZahlungZiel | null; onC
   const open    = ziel ? r2(ziel.open) : 0
   const amount  = f.amount.trim() === '' ? 0 : toNum(f.amount)
   const restNow = r2(open - (Number.isFinite(amount) ? amount : 0))
+  // Mehr als offen: nur mit Bestätigung — sonst fällt ein Tipp- oder Doppelfehler nicht auf
+  const over    = amount > 0 && restNow < -0.005
   const skontoAmt = ziel && ziel.cashDiscountPct > 0 ? r2(ziel.payable * (1 - ziel.cashDiscountPct / 100)) : null
   const rebillableOk = !!ziel?.rebillableAllowed && f.reason === 'kuerzung'
 
@@ -109,6 +112,9 @@ export function ZahlungDialog({ ziel, onClose }: { ziel: ZahlungZiel | null; onC
       setMsg({ text: 'Bitte einen Betrag eingeben oder „Rest ausbuchen" wählen.', type: 'error' }); return
     }
     if (!f.date) { setMsg({ text: 'Datum ist erforderlich.', type: 'error' }); return }
+    if (over && !f.overpay) {
+      setMsg({ text: `Die Zahlung ist ${fmtEur(-restNow)} höher als der offene Betrag. Bitte bestätigen, dass die Überzahlung so erfasst werden soll.`, type: 'error' }); return
+    }
     if (f.rest && restNow <= 0.005) {
       setMsg({ text: 'Nach dieser Zahlung bleibt nichts offen, das sich ausbuchen ließe.', type: 'error' }); return
     }
@@ -119,6 +125,7 @@ export function ZahlungDialog({ ziel, onClose }: { ziel: ZahlungZiel | null; onC
         await createPayment({
           ...params, amount_payed_gross: amount, payment_date: f.date,
           purpose_of_payment: f.purpose || undefined, comment: f.comment || undefined,
+          allow_overpayment: over && f.overpay,
         })
       }
       if (f.rest) {
@@ -255,7 +262,14 @@ export function ZahlungDialog({ ziel, onClose }: { ziel: ZahlungZiel | null; onC
                   onChange={e => setF(s => ({ ...s, comment: e.target.value }))} />
               </div>
 
-              <fieldset className="zd-rest">
+              {over && (
+                <label className="zd-check zd-over">
+                  <input type="checkbox" checked={f.overpay} onChange={e => setF(s => ({ ...s, overpay: e.target.checked }))} />
+                  <span>Die Zahlung ist <strong>{money(-restNow)}</strong> höher als der offene Betrag — als Überzahlung trotzdem erfassen</span>
+                </label>
+              )}
+
+              {!over && <fieldset className="zd-rest">
                 <legend className="sr-only">Rest ausbuchen</legend>
                 <label className="zd-check">
                   <input type="checkbox" checked={f.rest} onChange={e => setF(s => ({ ...s, rest: e.target.checked }))} />
@@ -292,7 +306,7 @@ export function ZahlungDialog({ ziel, onClose }: { ziel: ZahlungZiel | null; onC
                     </div>
                   </div>
                 )}
-              </fieldset>
+              </fieldset>}
             </>
           )}
 

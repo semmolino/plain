@@ -10,6 +10,7 @@
 const codelists = require('./einvoice/codelists');
 const { paymentMeansForEinvoice } = require('./services/paymentMeans');
 const { AR_COLS, deductionsFor } = require('./services/arDeduction');
+const { discountsOf } = require('./services/documentDiscounts');
 
 class InvoiceDataError extends Error {
   constructor(msg) { super(msg); this.name = 'InvoiceDataError'; this.status = 422; }
@@ -219,21 +220,16 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   // ── 7. Document-level allowances (Skonto-unabhängige Nachlässe) ───────────
 
-  const allowances = [];
-  if (toNum(doc.DISCOUNT_1) > 0) {
-    allowances.push({
-      reason:  String(doc.DISCOUNT_1_REASON ?? 'Nachlass').trim() || 'Nachlass',
-      percent: toNum(doc.DISCOUNT_1_PERCENT),
-      amount:  fmt2(doc.DISCOUNT_1),
-    });
-  }
-  if (toNum(doc.DISCOUNT_2) > 0) {
-    allowances.push({
-      reason:  String(doc.DISCOUNT_2_REASON ?? 'Nachlass').trim() || 'Nachlass',
-      percent: toNum(doc.DISCOUNT_2_PERCENT),
-      amount:  fmt2(doc.DISCOUNT_2),
-    });
-  }
+  // Nachlass I/II wie auf dem PDF (services/documentDiscounts.js). Bis 10/2026
+  // las diese Stelle nur die Betragsspalten DISCOUNT_1/2, die kein Code
+  // schreibt: das XML nannte keinen Nachlass und forderte den Betrag davor.
+  const discounts  = discountsOf(doc);
+  const allowances = discounts.steps.map((s) => ({
+    reason:     s.reason,
+    percent:    s.percent,
+    amount:     fmt2(s.amount),
+    baseAmount: fmt2(s.baseAmount),
+  }));
 
   // ── 8. Cash discount (Skonto) ─────────────────────────────────────────────
 
@@ -569,13 +565,20 @@ ${basis}`;
   // Buchhaltung ab. toNum(null) ist ebenfalls 0, deshalb entscheidet die
   // Rohspalte: NULL heisst "nicht gerechnet", 0 heisst "wirklich null".
   const stored = (v) => (v !== null && v !== undefined && v !== '' ? fmt2(toNum(v)) : null);
-  const taxBasis   = stored(doc.TOTAL_AMOUNT_NET)   ?? fmt2(lineTotal - allowanceTotal);
-  const taxAmount  = vatCategory === 'S'
-    ? (stored(doc.TAX_AMOUNT_NET)     ?? fmt2(taxBasis * vatPercent / 100))
-    : 0;
-  const grandTotal = vatCategory === 'S'
-    ? (stored(doc.TOTAL_AMOUNT_GROSS) ?? fmt2(taxBasis + taxAmount))
-    : taxBasis;
+  //
+  // Nachlass: gespeichert sind Netto, Steuer und Brutto VOR Nachlass. Mit
+  // Nachlass gilt deshalb der Rechenweg des PDFs — Steuer auf das Netto nach
+  // Nachlass (BR-CO-13: BT-109 = BT-106 − BT-107).
+  const hasAllowances = allowances.length > 0;
+  const taxBasis   = hasAllowances
+    ? fmt2((stored(doc.TOTAL_AMOUNT_NET) ?? lineTotal) - allowanceTotal)
+    : (stored(doc.TOTAL_AMOUNT_NET) ?? fmt2(lineTotal - allowanceTotal));
+  const taxAmount  = vatCategory !== 'S' ? 0
+    : hasAllowances ? fmt2(taxBasis * vatPercent / 100)
+    : (stored(doc.TAX_AMOUNT_NET) ?? fmt2(taxBasis * vatPercent / 100));
+  const grandTotal = vatCategory !== 'S' ? taxBasis
+    : hasAllowances ? fmt2(taxBasis + taxAmount)
+    : (stored(doc.TOTAL_AMOUNT_GROSS) ?? fmt2(taxBasis + taxAmount));
 
   // BT-113 — "Bezahlter Betrag". Die Schlussrechnung ist eine Restrechnung
   // (siehe Abschnitt 11): die vereinnahmten Abschlaege stehen als negative
@@ -699,9 +702,7 @@ ${basis}`;
     l.unitPrice = Math.abs(toNum(l.unitPrice));
     l.quantity  = neg ? -Math.abs(toNum(l.quantity)) : Math.abs(toNum(l.quantity));
   }
-  if (toNum(taxBasis) < 0) {
-    for (const a of allowances) a.amount = -Math.abs(toNum(a.amount));
-  }
+  // Nachlaesse tragen schon das Vorzeichen des Belegs (documentDiscounts.js).
   const totalsOut = {
     lineTotal,
     allowanceTotal: fmt2(allowances.reduce((s, a) => s + a.amount, 0)),

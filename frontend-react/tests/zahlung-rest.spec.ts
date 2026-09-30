@@ -97,6 +97,24 @@ test.describe('Zahlung erfassen — Rest ausbuchen', () => {
     expect(adjs[0].postDataJSON()).toMatchObject({ amount_gross: 1190, reason: 'ausfall', rebillable: false })
   })
 
+  test('Überzahlung nur mit Bestätigung', async ({ page }) => {
+    const pays = capture(page, 'POST', /\/api\/v1\/payments(\?|$)/)
+    const dialog = await oeffneZahlung(page)
+    await dialog.getByLabel('Betrag brutto (€)').fill('1500')
+    // Mehr als offen: kein „Rest ausbuchen", stattdessen die Rückfrage
+    await expect(dialog.getByRole('checkbox', { name: /ausbuchen/ })).toHaveCount(0)
+    const bestaetigen = dialog.getByRole('checkbox', { name: /310,00.*als Überzahlung trotzdem erfassen/ })
+    await expect(bestaetigen).toBeVisible()
+    await dialog.getByRole('button', { name: 'Speichern' }).click()
+    await expect(dialog).toContainText('Bitte bestätigen, dass die Überzahlung so erfasst werden soll.')
+    expect(pays).toHaveLength(0)
+
+    await bestaetigen.check()
+    await dialog.getByRole('button', { name: 'Speichern' }).click()
+    await expect.poll(() => pays.length).toBe(1)
+    expect(pays[0].postDataJSON()).toMatchObject({ amount_payed_gross: 1500, allow_overpayment: true })
+  })
+
   test('nach einer Schlussrechnung kein „wieder abrechenbar"', async ({ page }) => {
     const dialog = await oeffneZahlung(page, { INVOICE_TYPE: 'schlussrechnung' })
     await dialog.getByRole('checkbox', { name: /Offenen Betrag.*ausbuchen/ }).check()

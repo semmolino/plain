@@ -29,6 +29,8 @@
  * Entwurf ueberhaupt „offen" sein kann, entscheidet der Aufrufer.
  */
 
+const { discountsOf } = require("./documentDiscounts");
+
 const TOL = 0.005;
 
 function toNum(v) {
@@ -82,10 +84,8 @@ function claimOf(doc, kind) {
   const net = round2(doc?.TOTAL_AMOUNT_NET);
   const vatPct = effectiveVatPercent(doc);
 
-  // Nachlaesse wie auf dem PDF: gespeicherte Summe, sonst aus den Prozenten.
-  const d1Amt = round2(net * toNum(doc?.DISCOUNT_1_PERCENT) / 100);
-  const d2Amt = round2((net - d1Amt) * toNum(doc?.DISCOUNT_2_PERCENT) / 100);
-  const discounts = toNum(doc?.TOTAL_DISCOUNTS) > 0 ? round2(doc.TOTAL_DISCOUNTS) : round2(d1Amt + d2Amt);
+  // Nachlaesse wie auf dem PDF und im XML (services/documentDiscounts.js)
+  const discounts = discountsOf(doc).total;
 
   let gross;
   if (Math.abs(discounts) < TOL && doc?.TOTAL_AMOUNT_GROSS != null && doc.TOTAL_AMOUNT_GROSS !== "") {

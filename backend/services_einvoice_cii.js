@@ -192,7 +192,7 @@ function buildAllowances(data) {
       <ram:SpecifiedTradeAllowanceCharge>
         <ram:ChargeIndicator><udt:Indicator>false</udt:Indicator></ram:ChargeIndicator>
         ${a.percent > 0 ? `<ram:CalculationPercent>${n2(a.percent)}</ram:CalculationPercent>` : ''}
-        ${a.percent > 0 ? `<ram:BasisAmount>${n2(a.percent > 0 ? a.amount / (a.percent / 100) : 0)}</ram:BasisAmount>` : ''}
+        ${a.percent > 0 ? `<ram:BasisAmount>${n2(a.baseAmount ?? a.amount / (a.percent / 100))}</ram:BasisAmount>` : ''}
         <ram:ActualAmount>${n2(a.amount)}</ram:ActualAmount>
         <ram:ReasonCode>95</ram:ReasonCode>
         <ram:Reason>${x(a.reason)}</ram:Reason>

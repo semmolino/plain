@@ -130,7 +130,10 @@ function makeFakeSupabase(initial = {}, opts = {}) {
           const keys = cols.length ? cols : (r.ID != null ? ["ID"] : []);
           const idx = keys.length ? tables[table].findIndex(x => keys.every(c => String(x[c]) === String(r[c]))) : -1;
           if (idx >= 0 && !cols.length) { tables[table][idx] = { ...tables[table][idx], ...r }; out.push(tables[table][idx]); }
-          else if (idx >= 0) { tables[table][idx] = { ID: tables[table][idx].ID, ...r }; out.push(tables[table][idx]); }
+          // PostgREST (merge-duplicates) setzt beim Konflikt nur die mitgeschickten
+          // Spalten — vorher ersetzte das Fake hier die ganze Zeile, und ein
+          // INVOICED-Upsert loeschte im Test z. B. PAYED am selben Element.
+          else if (idx >= 0) { tables[table][idx] = { ...tables[table][idx], ...r }; out.push(tables[table][idx]); }
           else { const nr = { ID: ++autoId, ...r }; tables[table].push(nr); out.push(nr); }
         }
         return { data: out, error: null };
