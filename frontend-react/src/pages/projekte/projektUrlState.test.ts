@@ -77,9 +77,43 @@ describe('resolveProjektView', () => {
   })
 })
 
+describe('Gesamtprojekte', () => {
+  it('?tab=gesamtprojekte ist ein Listen-Reiter, URL bleibt', () => {
+    expect(resolveProjektView(p('tab=gesamtprojekte'), null, 4)).toEqual({
+      view: { view: 'list', listTab: 'gesamtprojekte', pendingTab: null }, canonical: null,
+    })
+  })
+
+  it('?groupId ohne Tab: Übersicht, URL wird ergänzt', () => {
+    const r = resolveProjektView(p('groupId=3'), null, null)
+    expect(r.view).toEqual({ view: 'group', groupId: 3, tab: 'uebersicht' })
+    expect(r.canonical).toBe('groupId=3&tab=uebersicht')
+  })
+
+  it('?groupId&tab=daten: Daten des Gesamtprojekts', () => {
+    const r = resolveProjektView(p('groupId=3&tab=daten'), null, null)
+    expect(r.view).toEqual({ view: 'group', groupId: 3, tab: 'daten' })
+    expect(r.canonical).toBeNull()
+  })
+
+  // Ein Projekt ist das genauere Ziel — wer beides verlinkt, meint das Projekt.
+  it('Projekt gewinnt gegen Gesamtprojekt', () => {
+    expect(resolveProjektView(p('groupId=3&projectId=12&tab=daten'), null, null).view)
+      .toEqual({ view: 'workspace', projectId: 12, tab: 'daten' })
+  })
+
+  it('ungültige groupId wird ignoriert', () => {
+    expect(resolveProjektView(p('groupId=x'), null, null).view.view).toBe('list')
+  })
+})
+
 describe('serializeProjektView', () => {
   it('schreibt projectId vor tab', () => {
     expect(serializeProjektView({ view: 'workspace', projectId: 1, tab: 'struktur' })).toBe('projectId=1&tab=struktur')
     expect(serializeProjektView({ view: 'list', listTab: 'liste', pendingTab: null })).toBe('')
+  })
+
+  it('Gesamtprojekt: groupId vor tab', () => {
+    expect(serializeProjektView({ view: 'group', groupId: 3, tab: 'daten' })).toBe('groupId=3&tab=daten')
   })
 })

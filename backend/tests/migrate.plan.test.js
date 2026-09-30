@@ -159,6 +159,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0178 vermerkt, in welcher Schlussrechnung ein Abschlag aufgegangen ist.
     // 0179 macht aus der Gutschrift die Rechnungskorrektur (Bezug aufs Original).
     // 0180 vermerkt, welche stornierte Rechnung ein neu ausgestellter Beleg ersetzt.
+    // 0181 fuehrt Gesamtprojekte ein (PROJECT_GROUP, PROJECT.PROJECT_GROUP_ID).
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -206,6 +207,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0178_abschlag_in_schlussrechnung.sql",
       "0179_rechnungskorrektur.sql",
       "0180_rechnung_neu_ausstellen.sql",
+      "0181_gesamtprojekt.sql",
     ]);
   });
 

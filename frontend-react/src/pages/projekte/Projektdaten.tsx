@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { FileSignature } from 'lucide-react'
+import { FileSignature, Layers } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCtrlS } from '@/hooks/useCtrlS'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -15,6 +15,9 @@ import {
 } from '@/api/projekte'
 import { searchAddressesApi, fetchContactsByAddress, fetchCompanies } from '@/api/stammdaten'
 import { fetchOffer } from '@/api/angebote'
+import { fetchProjectGroups } from '@/api/gesamtprojekte'
+import { GesamtprojektDialog } from '@/pages/projekte/gesamtprojekt/GesamtprojektDialog'
+import { groupHref, groupLabel } from '@/pages/projekte/gesamtprojekt/gesamtprojektUi'
 import { angebotHref } from '@/pages/angebote/angebotUrlState'
 import { ActionBar } from '@/components/ui/ActionBar'
 import { Autocomplete } from '@/components/ui/Autocomplete'
@@ -49,12 +52,16 @@ interface DatenForm {
   addrText:   string
   contactId:  number | null
   isInternal: boolean
+  groupId:    string
 }
 
 /** Was als Änderung zählt — `addrText` ist nur die Anzeige zu `addressId`. */
 const FIELDS: (keyof DatenForm)[] = [
-  'abbr', 'name', 'statusId', 'typeId', 'managerId', 'deptId', 'addressId', 'contactId', 'isInternal',
+  'abbr', 'name', 'statusId', 'typeId', 'managerId', 'deptId', 'addressId', 'contactId', 'isInternal', 'groupId',
 ]
+
+/** Eintrag der Auswahl „Gesamtprojekt", der den Dialog öffnet statt zu wählen. */
+const NEW_GROUP = '__neu'
 
 const idStr = (v: number | null | undefined) => (v == null ? '' : String(v))
 const idNum = (v: string) => (v ? Number(v) : null)
@@ -71,6 +78,7 @@ function formFrom(p: Project): DatenForm {
     addrText:   p.ADDRESS_NAME ?? '',
     contactId:  p.CONTACT_ID ?? null,
     isInternal: !!p.IS_INTERNAL,
+    groupId:    idStr(p.PROJECT_GROUP_ID),
   }
 }
 
@@ -125,6 +133,10 @@ function ProjektdatenFormular({ project }: { project: Project }) {
   const { data: mgrData }    = useQuery({ queryKey: ['project-managers'],    queryFn: fetchProjectManagers })
   const { data: deptData }   = useQuery({ queryKey: ['project-departments'], queryFn: fetchDepartments })
   const { data: companyData } = useQuery({ queryKey: ['companies'], queryFn: fetchCompanies })
+  const { data: groupsData }  = useQuery({ queryKey: ['project-groups'], queryFn: fetchProjectGroups })
+  const [creatingGroup, setCreatingGroup] = useState(false)
+  const groups = groupsData?.data ?? []
+  const savedGroupId = project.PROJECT_GROUP_ID ?? null
   const { data: detailData } = useQuery({ queryKey: ['project-detail', pid], queryFn: () => fetchProject(pid) })
   const { data: contactData } = useQuery({
     queryKey: ['contacts-by-address', form.addressId],
@@ -188,7 +200,14 @@ function ProjektdatenFormular({ project }: { project: Project }) {
         address_id:         f.addressId,
         contact_id:         f.addressId != null ? f.contactId : null,
         is_internal:        f.isInternal,
+        ...(f.groupId !== saved.groupId ? { project_group_id: idNum(f.groupId) } : {}),
       })
+      if (f.groupId !== saved.groupId) {
+        void qc.invalidateQueries({ queryKey: ['project-groups'] })
+        void qc.invalidateQueries({ queryKey: ['project-group'] })
+        void qc.invalidateQueries({ queryKey: ['report-group'] })
+        void qc.invalidateQueries({ queryKey: ['project-list'] })
+      }
       await qc.invalidateQueries({ queryKey: ['projects-full'] })
       void qc.invalidateQueries({ queryKey: ['projects-short'] })
       void qc.invalidateQueries({ queryKey: ['project-detail', pid] })
@@ -349,7 +368,39 @@ function ProjektdatenFormular({ project }: { project: Project }) {
             {contactNote && <p id="pd-contact-hint" className="form-field-hint">{contactNote}</p>}
           </div>
         </FormSection>
+
+        <FormSection title="Gesamtprojekt" help="projects.gesamtprojekt"
+          hint="Gehört dieses Projekt mit anderen zu einem Vorhaben (Stufen, Nachtrag als eigener Vertrag, zweiter Rechnungsempfänger)? Vertrag und Rechnungen bleiben hier.">
+          <div className="form-group">
+            <label htmlFor="pd-group">Teil von</label>
+            <select id="pd-group" value={form.groupId}
+              onChange={e => { if (e.target.value === NEW_GROUP) setCreatingGroup(true); else set('groupId', e.target.value) }}>
+              <option value="">— keinem Gesamtprojekt zugeordnet —</option>
+              {groups.map(g => <option key={g.ID} value={g.ID}>{groupLabel(g)}</option>)}
+              {canEdit && <option value={NEW_GROUP}>+ Neues Gesamtprojekt anlegen …</option>}
+            </select>
+          </div>
+          {savedGroupId != null && form.groupId === saved.groupId && (
+            <p className="form-field-hint form-section-wide">
+              <Link to={groupHref(savedGroupId)} className="ws-facts-link">
+                <Layers size={13} strokeWidth={1.75} aria-hidden="true" />
+                Gesamtprojekt „{project.GROUP_NAME}" öffnen
+              </Link>
+            </p>
+          )}
+        </FormSection>
       </fieldset>
+
+      <GesamtprojektDialog
+        open={creatingGroup}
+        onClose={() => setCreatingGroup(false)}
+        preset={{ name: form.name.trim(), abbr: form.abbr.trim(), addressId: form.addressId, addressName: form.addrText, managerId: idNum(form.managerId) }}
+        onCreated={g => {
+          setCreatingGroup(false)
+          set('groupId', String(g.ID))
+          setMsg({ type: 'info', text: `Gesamtprojekt „${g.NAME}" angelegt — mit „Speichern" gehört dieses Projekt dazu.` })
+        }}
+      />
 
       {(detail?.created_at || detail?.OFFER_ID || (company && companies.length > 1)) && (
         <FormSection title="Herkunft">

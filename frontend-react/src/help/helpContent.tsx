@@ -1016,6 +1016,19 @@ export const HELP = {
       </>
     ),
   },
+  'report.gesamtprojekt': {
+    title: 'Summen eines Gesamtprojekts',
+    body: (
+      <>
+        Beträge werden über die Projekte des Gesamtprojekts addiert. Quoten wie Leistungsstand und
+        Kostenquote entstehen <strong>aus diesen Summen</strong>, nicht als Mittelwert — ein kleiner
+        Nachtrag zählt also so viel, wie er wert ist, und nicht so viel wie der Hauptvertrag.
+        <br /><br />
+        Gezählt werden nur Projekte, die du im Reporting sehen darfst. Fehlen welche, steht dabei,
+        wie viele — ihre Beträge sind dann nicht enthalten.
+      </>
+    ),
+  },
   'report.leistungsstand': {
     title: 'Leistungsstand',
     body: (
@@ -1867,6 +1880,20 @@ export const HELP = {
         Deine Einschätzung, wie sicher der Auftrag kommt — von 0 bis 100 %. Sie steht in der
         Angebotsliste und im Kopf des Angebots und lässt sich dort sortieren. In Umsätze, Kennzahlen
         oder das PDF geht sie nicht ein. Leer lassen heißt „keine Einschätzung".
+      </>
+    ),
+  },
+  'projects.gesamtprojekt': {
+    title: 'Gesamtprojekt',
+    body: (
+      <>
+        Fasst Projekte zusammen, die zu <strong>einem Vorhaben</strong> gehören, aber als eigene Verträge
+        laufen — etwa ein Stufenvertrag (LPH 1–4, später 5–8), ein Nachtrag als eigener Vertrag oder
+        Leistungen an einen anderen Rechnungsempfänger. Das Gesamtprojekt zeigt Honorar, Leistungsstand,
+        Abrechnung und Verlauf über alle zusammen.<br /><br />
+        Es ist nur eine Klammer: Vertrag, Rechnungen, Buchungen und Leistungsstände bleiben bei jedem
+        einzelnen Projekt. Ein Projekt gehört zu höchstens einem Gesamtprojekt. Wer ein Projekt
+        kopiert, bekommt die Kopie im selben Gesamtprojekt — praktisch für die nächste Stufe.
       </>
     ),
   },

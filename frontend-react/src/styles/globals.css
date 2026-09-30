@@ -5177,6 +5177,75 @@ fieldset:disabled .ws-check { cursor: default; }
 }
 @media (prefers-reduced-motion: reduce) { .pw-title-chev { transition: none; } }
 
+/* ── Gesamtprojekte (Klammer um mehrere Projekte, Migration 0181) ─────────── */
+/* Abzeichen am Projektnamen in der Liste. inline-block statt inline-flex:
+   nur so kuerzt text-overflow einen langen Namen mit „…". */
+.pg-name-with-badge { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pg-name-with-badge .cell-clamp { min-width: 0; }
+.pg-badge {
+  display: inline-block; flex: 0 1 auto; max-width: 45%;
+  padding: 1px 7px; border-radius: var(--radius-pill);
+  background: var(--accent-bg); color: var(--text-2);
+  font-size: 11px; font-weight: 600; line-height: 18px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pg-badge svg { vertical-align: -1px; margin-right: 3px; }
+/* Kopf: „Teil von …" im Projekt, Symbol in der Plakette des Gesamtprojekts */
+.pg-meta-link { display: inline-flex; align-items: center; gap: 4px; }
+.pg-meta-count { color: var(--text-3); }
+.pw-header .status-pill svg { margin-right: 4px; }
+.pg-scope-note {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  margin: var(--space-2) 0 0; font-size: 13px; color: var(--text-2);
+}
+/* Übersicht und Liste */
+.pg-section-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.pg-icon-btn { display: inline-flex; align-items: center; gap: 6px; }
+.pg-muted { color: var(--text-3); }
+.pg-partial { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.pg-overview .timeline-wrap { margin-top: var(--space-6); }
+.pg-notes { width: 100%; }
+/* Report „Alle Projekte": Kopfzeile je Gesamtprojekt mit Zwischensumme */
+.pg-group-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 36px;
+  font-size: 13px; color: var(--text-2); cursor: pointer;
+}
+.pg-group-toggle input { width: 16px; height: 16px; }
+.master-table .pg-group-row th,
+.master-table .pg-group-row td { background: var(--surface-2); font-weight: 600; }
+.master-table .pg-group-row th { text-align: left; white-space: nowrap; }
+.pg-group-row .link-btn { display: inline-flex; align-items: center; gap: 4px; }
+.pg-group-count { font-weight: 400; color: var(--text-3); }
+.master-table .pg-member-row td:first-child { padding-left: var(--space-6); }
+/* Dialoge: Felder untereinander, Projektauswahl mit eigener Bildlaufleiste */
+.pg-dialog-body { display: grid; gap: var(--space-3); }
+.pg-dialog-body .form-group { margin: 0; }
+.pg-dialog-body textarea { width: 100%; }
+.pg-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.pg-fieldset legend { font-size: 13px; font-weight: 600; color: var(--text-2); margin-bottom: var(--space-2); }
+.pg-pick .list-search { width: 100%; }
+.pg-pick-meta { margin: var(--space-2) 0; font-size: 12px; color: var(--text-3); }
+.pg-pick-list {
+  list-style: none; margin: 0; padding: 0; max-height: 320px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.pg-pick-list li + li .pg-pick-row { border-top: 1px solid var(--border-3); }
+.pg-pick-row {
+  display: flex; align-items: center; gap: var(--space-2); min-height: 44px;
+  padding: 0 var(--space-3); font-size: 13px; cursor: pointer;
+}
+.pg-pick-row:hover { background: var(--hover-bg); }
+.pg-pick-row input { width: 18px; height: 18px; flex: none; margin: 0; }
+.pg-pick-abbr { flex: none; font-weight: 600; white-space: nowrap; color: var(--text); }
+.pg-pick-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+.pg-pick-note { flex: none; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+@media (max-width: 640px) {
+  .pg-col-wide { display: none; }
+  .pg-badge { max-width: 40%; }
+  .pg-pick-note { display: none; }
+  .pg-group-toggle { min-height: 44px; }
+}
+
 /* ── Angebots-Arbeitsbereich (Kopf wie beim Projekt, .pw-*) ─────────────── */
 .aw-action { display: inline-flex; align-items: center; gap: 6px; }
 .page-header-actions .aw-action { height: 38px; margin-top: 0; width: auto; padding: 0 14px; font-size: 13px; }

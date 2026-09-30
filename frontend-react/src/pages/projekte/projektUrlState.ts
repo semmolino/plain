@@ -13,6 +13,8 @@
  *   /projekte?projectId=12                  → Arbeitsbereich, Tab Struktur
  *   /projekte?projectId=12&tab=buchungen    → Arbeitsbereich, Tab Buchungen
  *   /projekte?projectId=12&tab=daten        → Projektdaten (Runde 8, vorher Dialog in der Liste)
+ *   /projekte?tab=gesamtprojekte            → Liste der Gesamtprojekte
+ *   /projekte?groupId=3[&tab=daten]         → ein Gesamtprojekt (Übersicht bzw. Daten)
  *
  * Die alten Einstiege funktionieren weiter: `location.state` mit tab/projectId
  * (sieben Stellen im Code) wird in die URL uebersetzt, ein Arbeitsbereich-Tab
@@ -24,7 +26,10 @@ export type ProjektTab =
   | 'struktur' | 'leistungsstand' | 'buchungen' | 'nachtraege'
   | 'daten' | 'vertraege' | 'honorar' | 'mitarbeiter' | 'budget'
 
-export type ListTab = 'liste' | 'honorar' | 'leistungsstaende'
+export type ListTab = 'liste' | 'gesamtprojekte' | 'honorar' | 'leistungsstaende'
+
+/** Reiter eines Gesamtprojekts. */
+export type GroupTab = 'uebersicht' | 'daten'
 
 export const WORKSPACE_TABS: ProjektTab[] = [
   'struktur', 'leistungsstand', 'buchungen', 'nachtraege',
@@ -36,6 +41,7 @@ export const SELECTED_PID_KEY = 'projekte-selected-pid'
 export type ProjektView =
   | { view: 'list'; listTab: ListTab; pendingTab: ProjektTab | null }
   | { view: 'workspace'; projectId: number; tab: ProjektTab }
+  | { view: 'group'; groupId: number; tab: GroupTab }
 
 function isWorkspaceTab(s: string | null | undefined): s is ProjektTab {
   return !!s && (WORKSPACE_TABS as string[]).includes(s)
@@ -64,6 +70,7 @@ export function resolveProjektView(
 
   const tabRaw = urlTab ?? stTab
   const pid    = urlPid ?? stPid
+  const gid    = toId(params.get('groupId'))
 
   // Sammel-Erinnerungen vor Runde 2 verlinkten „?tab=leistungsstand&filter=mine"
   // — gemeint war immer die Runde ueber alle eigenen Projekte.
@@ -72,6 +79,10 @@ export function resolveProjektView(
   let view: ProjektView
   if (roundLink) {
     view = { view: 'list', listTab: 'leistungsstaende', pendingTab: null }
+  } else if (gid != null && pid == null) {
+    view = { view: 'group', groupId: gid, tab: tabRaw === 'daten' ? 'daten' : 'uebersicht' }
+  } else if (tabRaw === 'gesamtprojekte' && pid == null) {
+    view = { view: 'list', listTab: 'gesamtprojekte', pendingTab: null }
   } else if (pid != null && tabRaw !== 'liste') {
     view = { view: 'workspace', projectId: pid, tab: isWorkspaceTab(tabRaw) ? tabRaw : 'struktur' }
   } else if (pid == null && isWorkspaceTab(tabRaw) && tabRaw !== 'honorar' && savedPid != null) {
@@ -96,7 +107,10 @@ export function serializeProjektView(v: ProjektView): string {
   if (v.view === 'workspace') {
     p.set('projectId', String(v.projectId))
     p.set('tab', v.tab)
-  } else if (v.listTab === 'honorar' || v.listTab === 'leistungsstaende') {
+  } else if (v.view === 'group') {
+    p.set('groupId', String(v.groupId))
+    p.set('tab', v.tab)
+  } else if (v.listTab === 'honorar' || v.listTab === 'leistungsstaende' || v.listTab === 'gesamtprojekte') {
     p.set('tab', v.listTab)
   } else if (v.pendingTab) {
     p.set('tab', v.pendingTab)

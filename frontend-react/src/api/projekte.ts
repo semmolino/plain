@@ -27,6 +27,10 @@ export interface Project {
   ADDRESS_NAME:        string
   CONTACT_NAME:        string
   DEPARTMENT_NAME:     string
+  /** Gesamtprojekt (Migration 0181) — null = keinem zugeordnet. */
+  PROJECT_GROUP_ID:    number | null
+  GROUP_ABBR:          string
+  GROUP_NAME:          string
 }
 
 export interface StructureNode {
@@ -169,6 +173,7 @@ export const updateProject = (id: number, body: Partial<{
   project_status_id: number; project_type_id: number | null; project_manager_id: number
   department_id: number | null; address_id: number | null; contact_id: number | null
   is_internal: boolean
+  project_group_id: number | null
 }>) => apiClient.patch<{ data: Project }>(`/projekte/${id}`, body)
 
 export const searchProjectsApi = (q: string) =>

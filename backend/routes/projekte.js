@@ -2,6 +2,7 @@
 
 const express = require("express");
 const ctrl = require("../controllers/projekte");
+const groups = require("../controllers/gesamtprojekte");
 const { requirePermission } = require("../middleware/permissions");
 
 module.exports = (supabase) => {
@@ -36,6 +37,15 @@ module.exports = (supabase) => {
   router.get("/leistungsstand/runde",                  requirePermission("projects.performance.view"), (req, res) => ctrl.getLeistungsstandRunde(req, res, supabase));
   router.get("/contracts/search",                      (req, res) => ctrl.searchContracts(req, res, supabase));
   router.patch("/contract/:id",                        requirePermission("projects.contracts.edit"), (req, res) => ctrl.patchContract(req, res, supabase));
+
+  // Gesamtprojekte: Zuordnen ist Pflege der Projektdaten, daher projects.edit
+  // (Entscheidung 2026-09-30, keine eigene Permission).
+  router.get("/gruppen",                               (req, res) => groups.listGroups(req, res, supabase));
+  router.post("/gruppen",                              requirePermission("projects.edit"), (req, res) => groups.createGroup(req, res, supabase));
+  router.get("/gruppen/:id",                           (req, res) => groups.getGroup(req, res, supabase));
+  router.patch("/gruppen/:id",                         requirePermission("projects.edit"), (req, res) => groups.patchGroup(req, res, supabase));
+  router.delete("/gruppen/:id",                        requirePermission("projects.edit"), (req, res) => groups.deleteGroup(req, res, supabase));
+  router.put("/gruppen/:id/projekte",                  requirePermission("projects.edit"), (req, res) => groups.setMembers(req, res, supabase));
   router.patch("/structure/:id/completion-percents",   requirePermission("projects.performance.edit"), (req, res) => ctrl.patchStructureCompletionPercents(req, res, supabase));
   router.get("/structure/:id/tec-sum",                 (req, res) => ctrl.getTecSum(req, res, supabase));
   router.get("/structure/:id/child-check",             (req, res) => ctrl.checkParentForChild(req, res, supabase));

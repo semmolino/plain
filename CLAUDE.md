@@ -364,6 +364,21 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Vertrag, „intern" an die Elemente) kommen **nach** dem Speichern und nur,
   wenn sie etwas ändern. Das Kennzeichen „intern" am Projekt wirkt auf die
   Produktivität; Rechnungen lassen nur **Elemente** aus, die selbst intern sind.
+- **Gesamtprojekte** (Migration `0181`, `services/gesamtprojekte.js`,
+  `pages/projekte/gesamtprojekt/`, Konzept `docs/GESAMTPROJEKT_CONCEPT.md`):
+  mehrere Projekte (Einzelverträge: Stufen, Nachtrag als eigener Vertrag,
+  zweiter Rechnungsempfänger) als ein Vorhaben. Eine **Klammer, kein
+  Beleg-Träger** — Vertrag, Rechnungen, Buchungen, Leistungsstände bleiben am
+  Projekt; ein Projekt gehört zu höchstens einem Gesamtprojekt
+  (`PROJECT.PROJECT_GROUP_ID`). Zuordnen **nur** über `assertOwnGroup`, der
+  Fremdschlüssel prüft den Mandanten nicht. Summen: Beträge addieren, Quoten
+  **aus den Summen** (`aggregateKpis`, im Report dieselben `renderTotal`), und
+  nur über Projekte im Reporting-Scope — `/reports/groups/:id/summary` sagt
+  „n von m", die Beträge der übrigen verlassen den Server nicht. Recht:
+  `projects.edit` (keine eigene Permission). `copyProject` übernimmt die
+  Zuordnung (Folgeprojekt). Listen lesen sie über
+  `groupsByProjectIfMigrated` — der Web-Container startet vor dem
+  postdeploy-Hook.
 - **Adressen als Arbeitsbereich** (`/adressen/:id?tab=kontakte|daten|verwendung`,
   `pages/adressen/AddressDetailPage.tsx`): Kopf mit Anschrift/Telefon/E-Mail,
   Reiter Kontakte · Adressdaten · Verwendet in. Bearbeitet wird **nur** dort
@@ -730,6 +745,7 @@ Windows): `owner-console/README.md`.
 
 - Rechnungsentwürfe (`middleware/draftEdit.js`, UI-Pilot Runde 3): die Speicherschritte der Assistenten (PATCH, Leistungsbetrag, Buchungsauswahl, Positionen/Abzüge, Anlagen) verlangen `invoices.edit` **oder** das Anlege-Recht der Belegart (`invoices.create_partial/_single/_final/_credit`) — Letzteres nur, solange der Beleg ein Entwurf ist (`STATUS_ID = 1`). Die Belegart kommt aus der Datenbank, nie aus der Anfrage; ein fremder oder unbekannter Beleg bekommt dieselbe 403 wie ein fehlendes Recht. Buchen bleibt `invoices.book`, Löschen `invoices.delete`.
 
+- Reporting-Scope (`req.reportScopeProjectIds`, ohne `reports.scope.all` nur geleitete Projekte) gilt auch für den Gesamtverlauf `GET /reports/projects/timeline` — der lieferte bis 09/2026 ohne `project_ids` den ganzen Mandanten und mit `project_ids` beliebige Projekte. Summen eines Gesamtprojekts rechnen nur über Projekte im Scope.
 - Drosselung teurer Endpunkte (PDF, Reports) **pro Konto, nicht pro IP** (`middleware/rateLimit.js`) — ein Büro hinter einer NAT-Adresse darf sich nicht selbst aussperren. Die Limiter hängen deshalb hinter `authMiddleware`.
 - Progressive Verzögerung bei Fehlversuchen **je Konto** (`middleware/loginAttempts.js`) — bewusst keine Sperre: die wäre ein Weg, einen bekannten Nutzer gezielt auszusperren.
 - **Registrierung neuer Mandanten braucht zwei Tore** (`services/signupApproval.js`, Migration 0135): E-Mail-Bestätigung des Anmelders, dann Freigabe in der Owner-Konsole (Tab „Registrierungen"). Bis dahin ist die Anmeldung gesperrt — geprüft **nach** der Passwortprüfung, damit der Zustand eines Mandanten nichts über ihn verrät. Ablehnen löscht den Antrag, aber **nur** im Zustand pending. Der Spaltenstandard von `SIGNUP_STATE` ist `active`: Import, Demo-Daten und manuelles SQL sollen weiterhin benutzbare Mandanten erzeugen.

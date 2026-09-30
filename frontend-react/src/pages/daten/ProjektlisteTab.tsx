@@ -3,7 +3,8 @@ import { ListLoading } from '@/components/ui/Skeleton'
 import { ApiRequestError } from '@/api/client'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { useStickyState } from '@/hooks/useStickyState'
-import { SlidersHorizontal } from 'lucide-react'
+import { Layers, SlidersHorizontal } from 'lucide-react'
+import { groupHref } from '@/pages/projekte/gesamtprojekt/gesamtprojektUi'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { FilterBar } from '@/components/ui/FilterBar'
 import type { HelpId } from '@/help/helpContent'
@@ -54,10 +55,10 @@ const fmtPct  = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.fo
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type FilterDimension = 'status' | 'manager' | 'typ' | 'abteilung' | 'adresse'
+type FilterDimension = 'status' | 'manager' | 'typ' | 'abteilung' | 'adresse' | 'gesamtprojekt'
 type ActiveFilters   = Record<FilterDimension, Set<string>>
 const emptyFilters = (): ActiveFilters =>
-  ({ status: new Set(), manager: new Set(), typ: new Set(), abteilung: new Set(), adresse: new Set() })
+  ({ status: new Set(), manager: new Set(), typ: new Set(), abteilung: new Set(), adresse: new Set(), gesamtprojekt: new Set() })
 
 const PL_KEY = 'plain:filt:proj-list'
 
@@ -75,7 +76,7 @@ function buildFilterLabel(
   if (mode === 'as_of'  && asOfDate)             parts.push(`Stichtag ${asOfDate}`)
   if (mode === 'period' && dateFrom && dateTo)   parts.push(`${dateFrom} – ${dateTo}`)
   if (mode === 'now')                            parts.push('Aktuell')
-  const dimLabels: Record<string, string> = { status: 'Status', manager: 'PL', typ: 'Typ', abteilung: 'Abt.', adresse: 'Adresse' }
+  const dimLabels: Record<string, string> = { status: 'Status', manager: 'PL', typ: 'Typ', abteilung: 'Abt.', adresse: 'Adresse', gesamtprojekt: 'Gesamtprojekt' }
   for (const [k, arr] of Object.entries(dimensions)) {
     if (arr.length === 0) continue
     const head = arr.slice(0, 2).join(', ')
@@ -312,7 +313,10 @@ function fmtDateDE(iso: string) {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFilter; filterReady: boolean; projectIds?: number[] }) {
+/** Summierter Verlauf mehrerer Projekte — auch im Gesamtprojekt (eigener `title`). */
+export function ProjectsTimeline({ filter, filterReady, projectIds, title }: {
+  filter: DateFilter; filterReady: boolean; projectIds?: number[]; title?: string
+}) {
   const { data, isLoading } = useQuery({
     queryKey: ['projects-timeline', filter, projectIds ?? null],
     queryFn:  () => fetchProjectsTimeline(filter, projectIds),
@@ -450,7 +454,7 @@ function ProjectsTimeline({ filter, filterReady, projectIds }: { filter: DateFil
 
   return (
     <div className="timeline-wrap">
-      <h3 className="timeline-title">{projectIds !== undefined ? 'Gesamtverlauf der gefilterten Projekte' : 'Gesamtverlauf aller Projekte'}</h3>
+      <h3 className="timeline-title">{title ?? (projectIds !== undefined ? 'Gesamtverlauf der gefilterten Projekte' : 'Gesamtverlauf aller Projekte')}</h3>
       <div className="timeline-chart">
         <Line data={chartData} options={options} />
       </div>
@@ -550,6 +554,7 @@ export function ProjektlisteTab() {
       typ:       uniq(r => r.PROJECT_TYPE_NAME_SHORT),
       abteilung: uniq(r => r.DEPARTMENT_NAME),
       adresse:   uniq(r => r.ADDRESS_NAME ?? r.COMPANY_NAME),
+      gesamtprojekt: uniq(r => r.GROUP_NAME),
     }
   }, [allRows])
 
@@ -584,7 +589,8 @@ export function ProjektlisteTab() {
         (r.PROJECT_STATUS_NAME_SHORT ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_MANAGER_DISPLAY ?? '').toLowerCase().includes(q) ||
         (r.ADDRESS_NAME ?? '').toLowerCase().includes(q) ||
-        (r.COMPANY_NAME ?? '').toLowerCase().includes(q)
+        (r.COMPANY_NAME ?? '').toLowerCase().includes(q) ||
+        (r.GROUP_NAME ?? '').toLowerCase().includes(q)
       )
     }
 
@@ -594,6 +600,7 @@ export function ProjektlisteTab() {
       ['typ',       r => r.PROJECT_TYPE_NAME_SHORT],
       ['abteilung', r => r.DEPARTMENT_NAME],
       ['adresse',   r => r.ADDRESS_NAME ?? r.COMPANY_NAME],
+      ['gesamtprojekt', r => r.GROUP_NAME],
     ]
 
     for (const [dim, getter] of dimMap) {
@@ -630,6 +637,47 @@ export function ProjektlisteTab() {
   }, [filtered, sortField, sortDir])
 
   const hasActiveFilter = Object.values(activeFilters).some(s => s.size > 0) || search.trim() !== ''
+
+  // „Nach Gesamtprojekt zusammenfassen": je Gesamtprojekt eine Kopfzeile mit
+  // Zwischensumme. Die Werte rechnet dieselbe renderTotal wie die Summenzeile
+  // — Quoten also aus Summen, und die Zwischensumme stimmt mit dem Kopf des
+  // Gesamtprojekts ueberein (services/gesamtprojekte.js → aggregateKpis).
+  const hasGroups = filterOptions.gesamtprojekt.length > 0
+  const [groupBy, setGroupBy] = useState<boolean>(() => lsGet<boolean>(`${PL_KEY}:groupBy`, false))
+  useEffect(() => { lsPut(`${PL_KEY}:groupBy`, groupBy) }, [groupBy])
+  const grouped = groupBy && hasGroups
+  const sections = useMemo(() => {
+    if (!grouped) return null
+    const byGroup = new Map<number, { id: number; name: string; rows: ProjectListRow[] }>()
+    const ohne: ProjectListRow[] = []
+    for (const r of sorted) {
+      if (r.PROJECT_GROUP_ID == null) { ohne.push(r); continue }
+      const s = byGroup.get(r.PROJECT_GROUP_ID) ?? { id: r.PROJECT_GROUP_ID, name: r.GROUP_NAME ?? '', rows: [] }
+      s.rows.push(r)
+      byGroup.set(r.PROJECT_GROUP_ID, s)
+    }
+    const list: { id: number | null; name: string; rows: ProjectListRow[] }[] =
+      [...byGroup.values()].sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }))
+    if (ohne.length) list.push({ id: null, name: 'Ohne Gesamtprojekt', rows: ohne })
+    return list
+  }, [grouped, sorted])
+
+  const projectRow = (r: ProjectListRow, inGroup = false) => (
+    <tr
+      key={r.PROJECT_ID}
+      className={`clickable-row${inGroup ? ' pg-member-row' : ''}`}
+      title="Projektbericht öffnen"
+      onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: r.PROJECT_ID } })}
+    >
+      <td>
+        <strong>{r.ABBR}</strong>
+        {r.NAME && <span className="tree-name-long"> – {r.NAME}</span>}
+      </td>
+      {visibleCols.map(c => (
+        <td key={c.key} className={c.className}>{c.render(r, cpiT)}</td>
+      ))}
+    </tr>
+  )
 
   return (
     <div>
@@ -686,7 +734,18 @@ export function ProjektlisteTab() {
               <FilterChip label="Typ"           options={filterOptions.typ}       active={activeFilters.typ}       onChange={v => setDimFilter('typ', v)}       />
               <FilterChip label="Abteilung"     options={filterOptions.abteilung} active={activeFilters.abteilung} onChange={v => setDimFilter('abteilung', v)} />
               <FilterChip label="Adresse"       options={filterOptions.adresse}   active={activeFilters.adresse}   onChange={v => setDimFilter('adresse', v)}   />
+              {hasGroups && (
+                <FilterChip label="Gesamtprojekt" options={filterOptions.gesamtprojekt} active={activeFilters.gesamtprojekt} onChange={v => setDimFilter('gesamtprojekt', v)} />
+              )}
             </FilterBar>
+
+            {hasGroups && (
+              <label className="pg-group-toggle">
+                <input type="checkbox" checked={groupBy} onChange={e => setGroupBy(e.target.checked)} />
+                Nach Gesamtprojekt zusammenfassen
+                <HelpHint id="report.gesamtprojekt" size={12} />
+              </label>
+            )}
 
             {/* Column visibility */}
             <div ref={colPanelRef} className="pl-col-wrap">
@@ -728,24 +787,29 @@ export function ProjektlisteTab() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
-                {sorted.map(r => (
-                  <tr
-                    key={r.PROJECT_ID}
-                    className="clickable-row"
-                    title="Projektbericht öffnen"
-                    onClick={() => navigate('/daten', { state: { tab: 'einzelprojekt', projectId: r.PROJECT_ID } })}
-                  >
-                    <td>
-                      <strong>{r.ABBR}</strong>
-                      {r.NAME && <span className="tree-name-long"> – {r.NAME}</span>}
-                    </td>
+              {sections ? sections.map(s => (
+                <tbody key={s.id ?? 'ohne'}>
+                  <tr className="pg-group-row">
+                    <th scope="rowgroup">
+                      {s.id != null ? (
+                        <button type="button" className="link-btn" title="Gesamtprojekt öffnen"
+                          onClick={() => navigate(groupHref(s.id!))}>
+                          <Layers size={13} strokeWidth={2} aria-hidden="true" /> {s.name}
+                        </button>
+                      ) : s.name}
+                      <span className="pg-group-count"> ({s.rows.length})</span>
+                    </th>
                     {visibleCols.map(c => (
-                      <td key={c.key} className={c.className}>{c.render(r, cpiT)}</td>
+                      <td key={c.key} className={c.className}>{c.renderTotal(s.rows, cpiT)}</td>
                     ))}
                   </tr>
-                ))}
-              </tbody>
+                  {s.rows.map(r => projectRow(r, true))}
+                </tbody>
+              )) : (
+                <tbody>
+                  {sorted.map(r => projectRow(r))}
+                </tbody>
+              )}
               {sorted.length > 1 && (
                 <tfoot>
                   <tr className="sum-row">

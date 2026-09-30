@@ -173,6 +173,10 @@ export interface ProjectListRow {
   PAYED_NET_TOTAL:           number
   SALES_TOTAL:               number
   QTY_EXT_TOTAL:             number
+  /** Gesamtprojekt (Migration 0181) — null = keinem zugeordnet. */
+  PROJECT_GROUP_ID?:         number | null
+  GROUP_ABBR?:               string | null
+  GROUP_NAME?:               string | null
 }
 
 /** Warum die Liste kürzer ist, als der Mandant Projekte hat.
@@ -185,6 +189,42 @@ export interface ProjectListMeta {
 export const fetchProjectList = (filter: DateFilter = { mode: 'now' }) => {
   const qs = buildDateParams(filter)
   return apiClient.get<{ data: ProjectListRow[]; meta?: ProjectListMeta }>(`/reports/projects/list${qs ? `?${qs}` : ''}`)
+}
+
+/** Summen eines Gesamtprojekts — Quoten aus Summen, Werte als null, wo keine Grundlage. */
+export interface GroupTotals {
+  PROJECT_COUNT:          number
+  BUDGET_TOTAL_NET:       number
+  LEISTUNGSSTAND_VALUE:   number
+  LEISTUNGSSTAND_PERCENT: number | null
+  HOURS_TOTAL:            number
+  COST_TOTAL:             number
+  COST_RATIO:             number | null
+  REMAINING_BUDGET_NET:   number
+  BILLED_NET_TOTAL:       number
+  OPEN_NET_TOTAL:         number
+  PAYED_NET_TOTAL:        number
+  SALES_TOTAL:            number
+  QTY_EXT_TOTAL:          number
+}
+
+export interface GroupSummary {
+  group:   { ID: number; ABBR: string | null; NAME: string }
+  /** Nur Projekte im Reporting-Scope des Nutzers. */
+  members: ProjectListRow[]
+  totals:  GroupTotals
+}
+
+/** `members_visible < members_total` → Summen umfassen nicht alle Projekte des Gesamtprojekts. */
+export interface GroupSummaryMeta {
+  members_total:   number
+  members_visible: number
+  scope:           'permission' | 'license' | null
+}
+
+export const fetchGroupSummary = (groupId: number, filter: DateFilter = { mode: 'now' }) => {
+  const qs = buildDateParams(filter)
+  return apiClient.get<{ data: GroupSummary; meta: GroupSummaryMeta }>(`/reports/groups/${groupId}/summary${qs ? `?${qs}` : ''}`)
 }
 
 export const fetchProjectReportHeader = (projectId: number, filter: DateFilter = { mode: 'now' }) => {

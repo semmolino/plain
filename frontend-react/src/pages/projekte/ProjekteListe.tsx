@@ -8,7 +8,7 @@ import { useRowDisclosure, useDetailPanelId, RowExpandButton, RowDetailRow, type
 import { useStickyState } from '@/hooks/useStickyState'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { SlidersHorizontal, Pencil, Copy, Trash2 , ChevronLeft, ChevronRight } from 'lucide-react'
+import { SlidersHorizontal, Pencil, Copy, Trash2 , ChevronLeft, ChevronRight, Layers } from 'lucide-react'
 import { Can } from '@/components/ui/Can'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { usePermission } from '@/store/permissionsStore'
@@ -37,9 +37,9 @@ const OPT_COLS: OptColDef[] = [
   { key: 'ADDRESS_NAME',    label: 'Adresse',   defaultVisible: false },
 ]
 
-type FilterDim = 'status' | 'typ' | 'manager'
+type FilterDim = 'status' | 'typ' | 'manager' | 'gruppe'
 type ActiveFilters = Record<FilterDim, Set<string>>
-const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set(), manager: new Set() })
+const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set(), manager: new Set(), gruppe: new Set() })
 
 // null = all, true = only internal, false = only external
 type InternalFilter = null | boolean
@@ -69,12 +69,13 @@ export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated
   const [sortDir,       setSortDir]       = useStickyState<'asc'|'desc'>('projekte.sortDir', 'asc')
   const [page,          setPage]          = useState(1)
   const [activeFilters, setActiveFilters] = useStickyState<ActiveFilters>('projekte.filters', emptyFilters, {
-    serialize:   f => ({ status: [...f.status], typ: [...f.typ], manager: [...f.manager] }),
+    serialize:   f => ({ status: [...f.status], typ: [...f.typ], manager: [...f.manager], gruppe: [...f.gruppe] }),
     deserialize: raw => {
       const r = emptyFilters(); const o = (raw ?? {}) as Record<string, unknown>
       if (Array.isArray(o.status))  r.status  = new Set(o.status as string[])
       if (Array.isArray(o.typ))     r.typ     = new Set(o.typ as string[])
       if (Array.isArray(o.manager)) r.manager = new Set(o.manager as string[])
+      if (Array.isArray(o.gruppe))  r.gruppe  = new Set(o.gruppe as string[])
       return r
     },
   })
@@ -126,18 +127,20 @@ export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated
       status:  uniq(p => p.STATUS_NAME),
       typ:     uniq(p => p.TYPE_NAME),
       manager: uniq(p => p.MANAGER_NAME),
+      gruppe:  uniq(p => p.GROUP_NAME),
     }
   }, [projects])
 
   const processed = useMemo(() => {
     const q = search.trim().toLowerCase()
     let rows = q
-      ? projects.filter(p => `${p.ABBR} ${p.NAME} ${p.STATUS_NAME} ${p.MANAGER_NAME} ${p.TYPE_NAME ?? ''} ${p.DEPARTMENT_NAME ?? ''} ${p.ADDRESS_NAME ?? ''}`.toLowerCase().includes(q))
+      ? projects.filter(p => `${p.ABBR} ${p.NAME} ${p.STATUS_NAME} ${p.MANAGER_NAME} ${p.TYPE_NAME ?? ''} ${p.DEPARTMENT_NAME ?? ''} ${p.ADDRESS_NAME ?? ''} ${p.GROUP_NAME ?? ''}`.toLowerCase().includes(q))
       : projects
 
     if (activeFilters.status.size > 0) rows = rows.filter(p => p.STATUS_NAME && activeFilters.status.has(p.STATUS_NAME))
     if (activeFilters.typ.size    > 0) rows = rows.filter(p => p.TYPE_NAME    && activeFilters.typ.has(p.TYPE_NAME))
     if (activeFilters.manager.size > 0) rows = rows.filter(p => p.MANAGER_NAME && activeFilters.manager.has(p.MANAGER_NAME))
+    if (activeFilters.gruppe.size > 0) rows = rows.filter(p => p.GROUP_NAME && activeFilters.gruppe.has(p.GROUP_NAME))
     if (internalFilter !== null) rows = rows.filter(p => (p.IS_INTERNAL ?? false) === internalFilter)
 
     rows = [...rows].sort((a, b) => {
@@ -193,7 +196,10 @@ export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated
 
   const deleteMut = useMutation({
     mutationFn: deleteProject,
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['projects-full'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['projects-full'] })
+      void qc.invalidateQueries({ queryKey: ['project-groups'] })
+    },
     onError: (e: Error) => toast.error(e.message),
   })
 
@@ -225,6 +231,8 @@ export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated
     mutationFn: (id: number) => copyProject(id),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
+      // Die Kopie bleibt im selben Gesamtprojekt — dessen Anzahl ändert sich.
+      void qc.invalidateQueries({ queryKey: ['project-groups'] })
       toast.success(`Projekt kopiert: ${res.data.projectName}`)
     },
     onError: (e: Error) => toast.error(e.message),
@@ -289,12 +297,15 @@ export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated
         />
         {/* Auf dem Handy hinter „Filter" eingeklappt (siehe FilterBar). */}
         <FilterBar
-          activeCount={activeFilters.status.size + activeFilters.typ.size + activeFilters.manager.size + (internalFilter !== null ? 1 : 0)}
+          activeCount={activeFilters.status.size + activeFilters.typ.size + activeFilters.manager.size + activeFilters.gruppe.size + (internalFilter !== null ? 1 : 0)}
           onReset={() => { setActiveFilters(emptyFilters()); setSearch(''); setInternalFilter(null); setPage(1) }}
         >
           <FilterChip label="Status"   options={filterOptions.status}  active={activeFilters.status}  onChange={v => setDimFilter('status', v)}  />
           <FilterChip label="Typ"      options={filterOptions.typ}     active={activeFilters.typ}     onChange={v => setDimFilter('typ', v)}     />
           <FilterChip label="Leitung"  options={filterOptions.manager} active={activeFilters.manager} onChange={v => setDimFilter('manager', v)} />
+          {filterOptions.gruppe.length > 0 && (
+            <FilterChip label="Gesamtprojekt" options={filterOptions.gruppe} active={activeFilters.gruppe} onChange={v => setDimFilter('gruppe', v)} />
+          )}
           <button
             className={`filter-chip-btn${internalFilter !== null ? ' active' : ''}`}
             title="Filter: Internes Projekt"
@@ -407,7 +418,19 @@ export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated
                         : p.ABBR}
                       {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6 }}>intern</span>}
                     </td>
-                    <td><span className="cell-clamp" title={p.NAME}>{p.NAME}</span></td>
+                    <td>
+                      {p.GROUP_NAME ? (
+                        <span className="pg-name-with-badge">
+                          <span className="cell-clamp" title={p.NAME}>{p.NAME}</span>
+                          <span className="pg-badge" title={`Teil von Gesamtprojekt „${p.GROUP_NAME}"`}>
+                            <Layers size={11} strokeWidth={2} aria-hidden="true" />
+                            <span className="sr-only">Gesamtprojekt: </span>{p.GROUP_NAME}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="cell-clamp" title={p.NAME}>{p.NAME}</span>
+                      )}
+                    </td>
                     <td>
                       <InlineSelect
                         value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}

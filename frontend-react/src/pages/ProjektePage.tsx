@@ -17,6 +17,8 @@ import { Projektdaten }    from '@/pages/projekte/Projektdaten'
 import { NachtraegeListe } from '@/pages/nachtraege/NachtraegeListe'
 import { ProjektHeader }  from '@/pages/projekte/ProjektHeader'
 import { ProjektTabs, type ProjektTabDef } from '@/pages/projekte/ProjektTabs'
+import { GesamtprojekteListe } from '@/pages/projekte/gesamtprojekt/GesamtprojekteListe'
+import { GesamtprojektAnsicht } from '@/pages/projekte/gesamtprojekt/GesamtprojektAnsicht'
 import {
   resolveProjektView, serializeProjektView, SELECTED_PID_KEY,
   type ProjektTab, type ListTab, type ProjektView,
@@ -40,6 +42,7 @@ const WORKSPACE_TABS: (ProjektTabDef & { permissions: string[]; feature?: string
 
 const LIST_TABS: { id: ListTab; label: string; permissions: string[]; feature?: string }[] = [
   { id: 'liste',            label: 'Projektliste',    permissions: ['projects.view'] },
+  { id: 'gesamtprojekte',   label: 'Gesamtprojekte',  permissions: ['projects.view'] },
   { id: 'leistungsstaende', label: 'Leistungsstände', permissions: ['projects.performance.view'] },
   { id: 'honorar',          label: 'Kalkulationen',   permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
 ]
@@ -106,6 +109,20 @@ function ProjektePageInner() {
     return WORKSPACE_TABS.find(t => t.id === view.pendingTab)?.label ?? null
   }, [view])
 
+  const openGroup = (id: number) => guarded(() => go({ view: 'group', groupId: id, tab: 'uebersicht' }))
+
+  if (view.view === 'group') {
+    return (
+      <GesamtprojektAnsicht
+        groupId={view.groupId}
+        tab={view.tab}
+        onTab={tab => { if (tab !== view.tab) guarded(() => go({ ...view, tab })) }}
+        onBack={() => guarded(() => go({ view: 'list', listTab: 'gesamtprojekte', pendingTab: null }))}
+        onOpenProject={id => guarded(() => go({ view: 'workspace', projectId: id, tab: 'struktur' }))}
+      />
+    )
+  }
+
   if (view.view === 'list') {
     const openProject = (id: number) => go({ view: 'workspace', projectId: id, tab: view.pendingTab ?? 'struktur' })
     return (
@@ -121,6 +138,7 @@ function ProjektePageInner() {
           {view.listTab === 'liste'   && <ProjekteListe onSelectProject={openProject}
             onEditProject={id => go({ view: 'workspace', projectId: id, tab: 'daten' })}
             onProjectCreated={id => go({ view: 'workspace', projectId: id, tab: 'struktur' })} initialSearch={initialSearch} />}
+          {view.listTab === 'gesamtprojekte' && <GesamtprojekteListe onOpenGroup={openGroup} />}
           {view.listTab === 'honorar' && <HonorarTab />}
           {view.listTab === 'leistungsstaende' && <LeistungsstandRunde />}
         </div>
@@ -135,7 +153,7 @@ function ProjektePageInner() {
 
   return (
     <div className="master-page pw-root">
-      <ProjektHeader projectId={pid} onBack={toList} onSwitch={switchTo} />
+      <ProjektHeader projectId={pid} onBack={toList} onSwitch={switchTo} onOpenGroup={openGroup} />
       <ProjektTabs tabs={workspaceTabs} active={view.tab} onChange={setTab} />
       <div className="master-tab-content">
         {view.tab === 'struktur'       && <ProjektStruktur initialProjectId={pid} />}

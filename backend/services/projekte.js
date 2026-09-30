@@ -3,6 +3,7 @@
 const { contractDefaults } = require("./contractDefaults");
 const runde = require("./leistungsstandRunde");
 const { suchwert } = require("./pgrestFilter");
+const gesamtprojekte = require("./gesamtprojekte");
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -382,13 +383,14 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
   const ctctIds   = [...new Set((projects || []).map((p) => p.CONTACT_ID).filter(Boolean))];
   const deptIds   = [...new Set((projects || []).map((p) => p.DEPARTMENT_ID).filter(Boolean))];
 
-  const [stRes, tyRes, mgRes, addrRes, ctctRes, deptRes] = await Promise.all([
+  const [stRes, tyRes, mgRes, addrRes, ctctRes, deptRes, groupMap] = await Promise.all([
     statusIds.length ? supabase.from("PROJECT_STATUS").select("ID, ABBR").in("ID", statusIds) : Promise.resolve({ data: [] }),
     typeIds.length   ? supabase.from("PROJECT_TYPE").select("ID, ABBR").in("ID", typeIds)     : Promise.resolve({ data: [] }),
     mgrIds.length    ? supabase.from("EMPLOYEE").select("ID, ABBR").in("ID", mgrIds)          : Promise.resolve({ data: [] }),
     addrIds.length   ? supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").in("ID", addrIds)      : Promise.resolve({ data: [] }),
     ctctIds.length   ? supabase.from("CONTACTS").select("ID, FIRST_NAME, LAST_NAME").in("ID", ctctIds) : Promise.resolve({ data: [] }),
     deptIds.length   ? supabase.from("DEPARTMENT").select("ID, ABBR").in("ID", deptIds)       : Promise.resolve({ data: [] }),
+    gesamtprojekte.groupsByProjectIfMigrated(supabase, { tenantId }),
   ]);
 
   const statusMap  = new Map((stRes.data  || []).map((x) => [String(x.ID), x.ABBR]));
@@ -398,15 +400,21 @@ async function listProjectsFull(supabase, { tenantId, limit }) {
   const contactMap = new Map((ctctRes.data || []).map((x) => [String(x.ID), `${x.FIRST_NAME || ""} ${x.LAST_NAME || ""}`.trim()]));
   const deptMap    = new Map((deptRes.data || []).map((x) => [String(x.ID), x.ABBR]));
 
-  return (projects || []).map((p) => ({
-    ...p,
-    STATUS_NAME:     statusMap.get(String(p.PROJECT_STATUS_ID))  || "",
-    TYPE_NAME:       typeMap.get(String(p.PROJECT_TYPE_ID))       || "",
-    MANAGER_NAME:    mgrMap.get(String(p.PROJECT_MANAGER_ID))     || "",
-    ADDRESS_NAME:    addressMap.get(String(p.ADDRESS_ID))         || "",
-    CONTACT_NAME:    contactMap.get(String(p.CONTACT_ID))         || "",
-    DEPARTMENT_NAME: deptMap.get(String(p.DEPARTMENT_ID))         || "",
-  }));
+  return (projects || []).map((p) => {
+    const g = groupMap.get(String(p.ID));
+    return {
+      ...p,
+      STATUS_NAME:      statusMap.get(String(p.PROJECT_STATUS_ID))  || "",
+      TYPE_NAME:        typeMap.get(String(p.PROJECT_TYPE_ID))       || "",
+      MANAGER_NAME:     mgrMap.get(String(p.PROJECT_MANAGER_ID))     || "",
+      ADDRESS_NAME:     addressMap.get(String(p.ADDRESS_ID))         || "",
+      CONTACT_NAME:     contactMap.get(String(p.CONTACT_ID))         || "",
+      DEPARTMENT_NAME:  deptMap.get(String(p.DEPARTMENT_ID))         || "",
+      PROJECT_GROUP_ID: g?.ID ?? null,
+      GROUP_ABBR:       g?.ABBR ?? "",
+      GROUP_NAME:       g?.NAME ?? "",
+    };
+  });
 }
 
 async function getProject(supabase, { id, tenantId }) {
@@ -446,6 +454,17 @@ async function patchProject(supabase, { id, body, tenantId }) {
   }
   if (b.is_internal !== undefined) {
     upd.IS_INTERNAL = !!b.is_internal;
+  }
+  // Gesamtprojekt: null loest die Zuordnung. Der Fremdschluessel prueft den
+  // Mandanten nicht — ohne assertOwnGroup liesse sich ein Projekt in das
+  // Gesamtprojekt eines fremden Bueros haengen.
+  if (b.project_group_id !== undefined) {
+    if (b.project_group_id === null || b.project_group_id === "") {
+      upd.PROJECT_GROUP_ID = null;
+    } else {
+      const g = await gesamtprojekte.assertOwnGroup(supabase, { tenantId, groupId: b.project_group_id });
+      upd.PROJECT_GROUP_ID = g.ID;
+    }
   }
   // Root-level surcharge settings (Option A)
   if (b.SURCHARGE_1_LABEL !== undefined) upd.SURCHARGE_1_LABEL = b.SURCHARGE_1_LABEL;
@@ -495,6 +514,7 @@ async function patchProject(supabase, { id, body, tenantId }) {
 
   return {
     ...updated,
+    ...(upd.PROJECT_GROUP_ID !== undefined ? { PROJECT_GROUP_ID: upd.PROJECT_GROUP_ID } : {}),
     STATUS_NAME: st.data?.ABBR || "",
     TYPE_NAME: ty.data?.ABBR || "",
     MANAGER_NAME: mg.data?.ABBR || "",
@@ -1898,7 +1918,8 @@ async function copyProject(supabase, { projectId, tenantId }) {
   const { data: num, error: numErr } = await supabase.rpc("next_project_number", { p_company_id: companyId });
   if (numErr || !num) throw { status: 500, message: "Nummernkreis Fehler: " + (numErr?.message || "") };
 
-  // Insert new project
+  // Insert new project. PROJECT_GROUP_ID geht mit: die Kopie ist meist das
+  // Folgeprojekt (naechste Stufe) und gehoert ins selbe Gesamtprojekt.
   // eslint-disable-next-line no-unused-vars
   const { ID: _id, CREATED_AT: _ca, UPDATED_AT: _ua, ABBR: _ns, OFFER_ID: _oid, ...projRest } = src;
   let newProject = null;

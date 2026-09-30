@@ -6,6 +6,7 @@ const { requirePermission } = require("../middleware/permissions");
 const wipSvc = require("../services/wipReport");
 const { openAmountsFor, withClaimCols } = require("../services/openAmount");
 const { loadParentSurchargesByProject: loadSurcharges } = require("../services/reportSurcharges");
+const gesamtprojekte = require("../services/gesamtprojekte");
 
 /**
  * Reporting endpoints
@@ -728,13 +729,17 @@ module.exports = (supabase) => {
   });
 
   // All projects with KPIs (multi-project list)
-  router.get("/projects/list", async (req, res) => {
-    const tenantId = requireTenantId(req, res);
-    if (!tenantId) return;
-
-    const filter = parseDateFilter(req, res);
-    if (filter === null) return;
-
+  /**
+   * Zeilen des Reports „Alle Projekte" — View (heute) oder RPC (Stichtag/
+   * Zeitraum), Scope-Filter, Zuschlaege der Vaterknoten, Gesamtprojekt je
+   * Zeile. Genutzt von /projects/list und /groups/:id/summary, damit die
+   * Zwischensumme im Report und der Kopf des Gesamtprojekts aus denselben
+   * Zeilen rechnen.
+   *
+   * `onlyProjectIds` (optional) schraenkt vorab ein. Rueckgabe:
+   * { rows, total } — total = Treffer VOR dem Scope-Filter.
+   */
+  async function loadProjectListRows(req, tenantId, filter, onlyProjectIds = null) {
     let data, error;
 
     if (filter.useRpc) {
@@ -744,7 +749,7 @@ module.exports = (supabase) => {
           ...filter.rpcParams,
         }));
     } else {
-      ({ data, error } = await supabase
+      let q = supabase
         .from("VW_REPORT_PROJECT_DETAIL")
         .select([
           "PROJECT_ID", "ABBR", "NAME",
@@ -759,36 +764,100 @@ module.exports = (supabase) => {
           "REMAINING_BUDGET_NET", "BILLED_NET_TOTAL",    "OPEN_NET_TOTAL",
           "PAYED_NET_TOTAL",   "SALES_TOTAL",            "QTY_EXT_TOTAL",
         ].join(", "))
-        .eq("TENANT_ID", tenantId)
-        .order("ABBR", { ascending: true }));
+        .eq("TENANT_ID", tenantId);
+      if (onlyProjectIds) q = q.in("PROJECT_ID", onlyProjectIds.length ? onlyProjectIds : [-1]);
+      ({ data, error } = await q.order("ABBR", { ascending: true }));
     }
 
-    if (error) return res.status(500).json({ error: error.message });
+    if (error) throw error;
+
+    let rows = data || [];
+    if (onlyProjectIds) {
+      const only = new Set(onlyProjectIds.map(String));
+      rows = rows.filter(r => only.has(String(r.PROJECT_ID)));
+    }
+    const total = rows.length;
 
     // Phase 6: Scope-Filter — ohne reports.scope.all nur eigene Projekte
-    let rows = data || [];
-    // Wieviele Projekte VOR dem Scope-Filter da waren, und warum gefiltert
-    // wurde. Ohne diese Auskunft sieht eine leere Liste genauso aus wie ein
-    // Mandant ohne Projekte — die Oberflaeche behauptete dann „Keine Projekte
-    // vorhanden", obwohl es hunderte gibt, die dieser Nutzer nur nicht sehen
-    // darf. Unterschieden wird dabei Recht (Rolle) von Tarif (Lizenz): das
-    // eine aendert der Buerochef selbst, das andere kostet Geld.
-    const meta = { total: rows.length, scope: null };
     if (req.reportScopeProjectIds !== null) {
       rows = rows.filter(r => req.reportScopeProjectIds.has(r.PROJECT_ID));
-      meta.scope = req._licenseSuppressed?.has("reports.scope.all") ? "license" : "permission";
     }
 
     // Add parent-level surcharges per project
     const projectIds = rows.map(r => r.PROJECT_ID).filter(Boolean);
-    const parentSurchargesMap = await loadParentSurchargesByProject(projectIds, tenantId);
+    const [parentSurchargesMap, groupMap] = await Promise.all([
+      loadParentSurchargesByProject(projectIds, tenantId),
+      gesamtprojekte.groupsByProjectIfMigrated(supabase, { tenantId, projectIds }),
+    ]);
     for (const row of rows) {
+      const g = groupMap.get(String(row.PROJECT_ID));
+      row.PROJECT_GROUP_ID = g?.ID ?? null;
+      row.GROUP_ABBR       = g?.ABBR ?? null;
+      row.GROUP_NAME       = g?.NAME ?? null;
       const sur = parentSurchargesMap.get(String(row.PROJECT_ID)) || 0;
       if (!sur) continue;
       row.BUDGET_TOTAL_NET     = round2(Number(row.BUDGET_TOTAL_NET || 0) + sur);
       row.REMAINING_BUDGET_NET = round2(Number(row.REMAINING_BUDGET_NET || 0) + sur);
     }
-    res.json({ data: rows, meta });
+    return { rows, total };
+  }
+
+  /** Warum der Scope filtert: Recht (Rolle) oder Tarif (Lizenz). */
+  const scopeReason = (req) =>
+    req.reportScopeProjectIds === null ? null
+      : req._licenseSuppressed?.has("reports.scope.all") ? "license" : "permission";
+
+  router.get("/projects/list", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const filter = parseDateFilter(req, res);
+    if (filter === null) return;
+
+    try {
+      const { rows, total } = await loadProjectListRows(req, tenantId, filter);
+      // Wieviele Projekte VOR dem Scope-Filter da waren, und warum gefiltert
+      // wurde. Ohne diese Auskunft sieht eine leere Liste genauso aus wie ein
+      // Mandant ohne Projekte — die Oberflaeche behauptete dann „Keine Projekte
+      // vorhanden", obwohl es hunderte gibt, die dieser Nutzer nur nicht sehen
+      // darf. Unterschieden wird dabei Recht (Rolle) von Tarif (Lizenz): das
+      // eine aendert der Buerochef selbst, das andere kostet Geld.
+      res.json({ data: rows, meta: { total, scope: scopeReason(req) } });
+    } catch (e) {
+      res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
+  // ── Gesamtprojekt: Kennzahlen ueber seine Projekte ───────────────────────
+  // Summiert nur, was im Reporting-Scope des Aufrufers liegt. Die Summe der
+  // verborgenen Projekte verlaesst den Server nicht — auch nicht als
+  // Differenz: `totals` rechnet allein aus `members`, und die Antwort sagt
+  // nur, WIE VIELE Projekte fehlen (members_total vs. members_visible).
+  router.get("/groups/:groupId/summary", async (req, res) => {
+    const tenantId = requireTenantId(req, res);
+    if (!tenantId) return;
+
+    const filter = parseDateFilter(req, res);
+    if (filter === null) return;
+
+    try {
+      const group = await gesamtprojekte.getGroup(supabase, { tenantId, id: req.params.groupId });
+      const { rows } = await loadProjectListRows(req, tenantId, filter, group.PROJECT_IDS);
+      res.json({
+        data: {
+          group: { ID: group.ID, ABBR: group.ABBR, NAME: group.NAME },
+          members: rows,
+          totals: gesamtprojekte.aggregateKpis(rows),
+        },
+        meta: {
+          members_total:   group.PROJECT_COUNT,
+          members_visible: rows.length,
+          scope:           scopeReason(req),
+        },
+      });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
   });
 
   // Project progress timeline (for chart visualization)
@@ -979,9 +1048,17 @@ module.exports = (supabase) => {
     // Optional: auf eine Teilmenge von Projekten einschraenken (entspricht den
     // gesetzten Listen-Filtern). Param vorhanden aber leer => leeres Chart.
     const hasProjectFilter = req.query.project_ids !== undefined;
-    const projectIds = hasProjectFilter
+    let projectIds = hasProjectFilter
       ? String(req.query.project_ids).split(",").map(Number).filter(Number.isFinite)
       : null;
+    // Reporting-Scope: ohne reports.scope.all nur eigene Projekte. Vorher
+    // beachtete dieser Endpunkt den Scope nicht — ohne project_ids kam der
+    // Verlauf des ganzen Mandanten, mit project_ids der beliebiger Projekte.
+    if (req.reportScopeProjectIds !== null) {
+      projectIds = (projectIds ?? [...req.reportScopeProjectIds])
+        .filter(id => req.reportScopeProjectIds.has(id));
+      if (projectIds.length === 0) return res.json({ data: [] });
+    }
     if (hasProjectFilter && projectIds.length === 0) return res.json({ data: [] });
 
     try {

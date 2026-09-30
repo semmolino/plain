@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, BarChart3, Receipt } from 'lucide-react'
+import { ChevronDown, BarChart3, Layers, Receipt } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { RowMenu } from '@/components/ui/RowMenu'
 import { HelpHint } from '@/components/ui/HelpHint'
@@ -35,10 +35,12 @@ const fmtPct  = (v: number | null | undefined) => v == null ? NO_VALUE : `${FMT_
  * Kennzahlen kommen aus dem Projekt-Report und brauchen `reports.view`.
  * Ohne das Recht (oder bei 403) entfaellt die Leiste, statt Nullen zu zeigen.
  */
-export function ProjektHeader({ projectId, onBack, onSwitch }: {
-  projectId: number
-  onBack:    () => void
-  onSwitch:  (id: number) => void
+export function ProjektHeader({ projectId, onBack, onSwitch, onOpenGroup }: {
+  projectId:    number
+  onBack:       () => void
+  onSwitch:     (id: number) => void
+  /** Gesamtprojekt öffnen, zu dem das Projekt gehört. */
+  onOpenGroup?: (groupId: number) => void
 }) {
   const navigate    = useNavigate()
   const narrow      = useIsNarrow()
@@ -60,6 +62,9 @@ export function ProjektHeader({ projectId, onBack, onSwitch }: {
   const abbr    = full?.ABBR ?? short?.ABBR ?? ''
   const name    = full?.NAME ?? short?.NAME ?? ''
   const header  = canReports && !headerError ? headerData?.data : undefined
+  // Gesamtprojekt: Anzahl aus der ohnehin geladenen Projektliste, keine eigene Abfrage.
+  const groupId = full?.PROJECT_GROUP_ID ?? null
+  const groupSize = groupId != null ? (fullData?.data ?? []).filter(p => p.PROJECT_GROUP_ID === groupId).length : 0
 
   useTrackRecent('project', projectId, abbr ? [abbr, name].filter(Boolean).join(' · ') : null)
 
@@ -165,6 +170,18 @@ export function ProjektHeader({ projectId, onBack, onSwitch }: {
         </div>
       ) : undefined}
       meta={full && (<>
+        {groupId != null && (
+          <span>
+            <span className="page-header-meta-label">Teil von</span>
+            {onOpenGroup ? (
+              <button type="button" className="link-btn pg-meta-link" onClick={() => onOpenGroup(groupId)}
+                title="Gesamtprojekt öffnen">
+                <Layers size={13} strokeWidth={1.75} aria-hidden="true" />{full.GROUP_NAME}
+              </button>
+            ) : full.GROUP_NAME}
+            {groupSize > 1 && <span className="pg-meta-count"> · {groupSize} Projekte</span>}
+          </span>
+        )}
         {full.ADDRESS_NAME && <span><span className="page-header-meta-label">Auftraggeber</span>{full.ADDRESS_NAME}</span>}
         {full.MANAGER_NAME && <span><span className="page-header-meta-label">Projektleitung</span>{full.MANAGER_NAME}</span>}
         {full.TYPE_NAME && !narrow && <span><span className="page-header-meta-label">Typ</span>{full.TYPE_NAME}</span>}
