@@ -278,14 +278,14 @@ führende `Invoice/`. Die vollständigen Pfade stehen in der Registry.
 | BT-110 | Gesamtbetrag der Umsatzsteuer | 0..1 | INVOICE.TAX_AMOUNT_NET | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TaxTotalAmount` | `cac:TaxTotal/cbc:TaxAmount` | ✅ ausgegeben |
 | BT-111 | Umsatzsteuerbetrag in Buchungswährung | 0..1 | — | — | — | — nicht unterstützt |
 | BT-112 | Gesamtbetrag mit Umsatzsteuer | 1..1 | INVOICE.TOTAL_AMOUNT_GROSS | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:GrandTotalAmount` | `cac:LegalMonetaryTotal/cbc:TaxInclusiveAmount` | ✅ ausgegeben |
-| BT-113 | Bereits gezahlter Betrag | 0..1 | abgeleitet: Summe der VEREINNAHMTEN Abschläge (brutto abzüglich Einbehalt) | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TotalPrepaidAmount` | `cac:LegalMonetaryTotal/cbc:PrepaidAmount` | ✅ ausgegeben |
+| BT-113 | Bereits gezahlter Betrag | 0..1 | immer 0 — die Schlussrechnung ist eine Restrechnung | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:TotalPrepaidAmount` | `cac:LegalMonetaryTotal/cbc:PrepaidAmount` | ✅ ausgegeben |
 | BT-114 | Rundungsbetrag | 0..1 | — | — | — | — nicht unterstützt |
 | BT-115 | Fälliger Zahlungsbetrag | 1..1 | abgeleitet: BT-112 − BT-113 | `…/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation/ram:DuePayableAmount` | `cac:LegalMonetaryTotal/cbc:PayableAmount` | ✅ ausgegeben |
 
 - **BT-108** — Immer 0 — siehe BG-21.
 - **BT-109** — Gespeicherter Wert schlägt die Berechnung — eine gespeicherte 0 ist eine Aussage, kein fehlender Wert (Befund R9).
 - **BT-111** — Siehe BT-6.
-- **BT-113** — Maßgeblich ist das Vereinnahmte, nicht das Fakturierte: § 14 Abs. 5 UStG verlangt den Abzug der vereinnahmten Teilentgelte. Der Sicherheitseinbehalt war nie gezahlt und zählt deshalb nicht mit (Befund N10).
+- **BT-113** — Die Schlussrechnung ist eine Restrechnung (UStAE 14.8 Abs. 11) und wird so gespeichert: Honorar minus Abzüge. Die vereinnahmten Abschläge (services/arDeduction.js) stehen deshalb als Positionen mit negativer Menge im Dokument, nicht in BT-113 — vorher zog BT-113 sie ein zweites Mal ab und BR-CO-13 schlug fehl.
 - **BT-115** — Der Sicherheitseinbehalt wird hier NICHT abgezogen — er ist eine Zahlungsmodalität, keine Rechnungsgröße, und ein Abzug verletzt BR-CO-16. Er steht als Hinweis mit Betreffcode PMT im Dokument (Befund N10).
 
 ### BG-23 — Aufschlüsselung der Umsatzsteuer

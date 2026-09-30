@@ -805,14 +805,19 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
   // SE-Auflösung (Phase 2) — only for INVOICE docs (Schluss/Teilschluss)
   let seReleaseRows = [];
   let seReleaseTotal = Number(rawDoc.SE_RELEASE_TOTAL ?? 0);
+  // Einbehalte abgesetzter Abschlagsrechnungen stecken schon im Restentgelt —
+  // abgesetzt wird nur Gezahltes (services/arDeduction.js). Aufgeschlagen wird
+  // nur der Einbehalt einer Abschlagsrechnung, die diese Rechnung NICHT absetzt.
+  const deductedArIds = new Set((inv.deductions || []).map(d => String(d.arId)));
   if (docType === 'INVOICE') {
     try {
-      const { data: rels } = await supabase
+      const { data: relsAll } = await supabase
         .from('ADVANCE_INVOICE')
         .select('ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, SE_AMOUNT')
         .eq('SE_RELEASED_BY_INVOICE_ID', parseInt(rawDoc.ID, 10))
         .order('ADVANCE_INVOICE_DATE', { ascending: true });
-      seReleaseRows = (rels || []).map(r => ({
+      const rels = (relsAll || []).filter(r => !deductedArIds.has(String(r.ID)));
+      seReleaseRows = rels.map(r => ({
         number: r.ADVANCE_INVOICE_NUMBER || String(r.ID),
         date:   r.ADVANCE_INVOICE_DATE,
         amount: Number(r.SE_AMOUNT || 0),
@@ -830,7 +835,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
           .in('ID', previewReleasePpIds)
           .order('ADVANCE_INVOICE_DATE', { ascending: true });
         const openPreview = (previewPps || []).filter(p =>
-          Number(p.SE_AMOUNT || 0) > 0 && p.SE_RELEASED_BY_INVOICE_ID == null
+          Number(p.SE_AMOUNT || 0) > 0 && p.SE_RELEASED_BY_INVOICE_ID == null && !deductedArIds.has(String(p.ID))
         );
         seReleaseRows = openPreview.map(r => ({
           number: r.ADVANCE_INVOICE_NUMBER || String(r.ID),

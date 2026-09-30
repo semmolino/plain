@@ -255,6 +255,11 @@ async function createAdjustment(supabase, { tenantId, employeeId = null, body })
   const doc = await loadDoc(supabase, { kind, id, tenantId });
   assertAdjustable(doc, kind);
 
+  const open = (await openAmountsFor(supabase, { kind, docs: [doc], tenantId })).get(String(doc.ID));
+  if (open.absorbedBy != null) {
+    throw fail(400, "Diese Abschlagsrechnung ist in einer Schlussrechnung aufgegangen — ein Rest wird dort ausgebucht.");
+  }
+
   const reason = String(body.reason || "").trim();
   if (!REASONS[reason]) throw fail(400, `Unbekannter Grund. Erlaubt: ${Object.values(REASONS).join(", ")}.`);
 
@@ -272,7 +277,6 @@ async function createAdjustment(supabase, { tenantId, employeeId = null, body })
     throw fail(400, "Nach einer Schluss- oder Teilschlussrechnung wird nichts mehr abgerechnet — bitte endgültig ausbuchen.");
   }
 
-  const open = (await openAmountsFor(supabase, { kind, docs: [doc], tenantId })).get(String(doc.ID));
   if (gross > round2(open.open) + TOL) {
     throw fail(400, `Es sind nur noch ${open.open.toFixed(2).replace(".", ",")} € offen.`);
   }

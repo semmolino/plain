@@ -38,6 +38,8 @@ export interface ZahlungZiel {
   cashDiscountDays:  number
   /** Darf ein ausgebuchter Rest „wieder abrechenbar" sein? Nicht nach einer Schlussrechnung. */
   rebillableAllowed: boolean
+  /** Abschlag ist in einer Schlussrechnung aufgegangen — Zahlungen gehören dorthin */
+  absorbed?:         boolean
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100
@@ -294,7 +296,13 @@ export function ZahlungDialog({ ziel, onClose }: { ziel: ZahlungZiel | null; onC
             </>
           )}
 
-          {open <= 0.005 && <p className="zd-note">Dieser Beleg ist vollständig erledigt.</p>}
+          {open <= 0.005 && (
+            <p className="zd-note">
+              {ziel.absorbed
+                ? 'Diese Abschlagsrechnung ist in einer Schlussrechnung aufgegangen: was hier noch offen war, steht dort in Rechnung. Zahlungen bitte auf der Schlussrechnung erfassen.'
+                : 'Dieser Beleg ist vollständig erledigt.'}
+            </p>
+          )}
 
           <Message text={msg?.text ?? null} type={msg?.type} />
           <DialogFooter>

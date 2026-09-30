@@ -124,6 +124,8 @@ body {
   white-space: nowrap;
   padding-left: 6mm;
 }
+.calc-table tr.sub td { padding: 0.5mm 0; font-size: 8.5pt; color: #4b5563; }
+.calc-table tr.sub td.label { padding-left: 4mm; }
 .calc-table tr.sep td { padding: 0; height: 2mm; }
 .calc-table tr.sep td.line-cell {
   border-top: 0.5pt solid #9ca3af;
@@ -406,12 +408,22 @@ table.data-table thead { display: table-header-group; }
     </tr>
     {% endif %}
 
-    {% if deductionTotals.net > 0 %}
+    {% if deductionTotals.net > 0 or inv.deductions.length %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
+    {# Restrechnung (UStAE 14.8 Abs. 11): abgesetzt wird, was auf den
+       Abschlagsrechnungen gezahlt ist. Was dort noch offen war (auch ein
+       Sicherheitseinbehalt), steht jetzt in dieser Rechnung — das sagt die
+       Zeile je Abschlag, damit der Kunde es nachvollziehen kann. #}
     <tr>
-      <td class="label">abzgl. Abschlagsrechnungen</td>
+      <td class="label">abzgl. geleistete Abschlagszahlungen</td>
       <td class="amount">&minus;&#8239;{{ deductionTotals.net | money }}</td>
     </tr>
+    {% for d in inv.deductions %}
+    <tr class="sub">
+      <td class="label">Abschlagsrechnung {{ d.number }}{% if d.date %} vom {{ d.date | date_de }}{% endif %}: berechnet {{ d.billedGross | money }}, gezahlt {{ d.paidAmount | money }}{% if d.minderungGross > 0.005 %}, gemindert {{ d.minderungGross | money }}{% endif %}{% if d.includedGross > 0.005 %}, noch offen {{ d.includedGross | money }} brutto &ndash; in dieser Rechnung enthalten{% endif %}</td>
+      <td class="amount">&minus;&#8239;{{ d.netAmount | money }}</td>
+    </tr>
+    {% endfor %}
     <tr class="sep"><td class="line-cell"></td><td class="line-cell"></td></tr>
     <tr>
       <td class="label">Rechnungssumme netto</td>

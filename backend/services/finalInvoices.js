@@ -4,6 +4,7 @@ const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { insertProgressSnapshot } = require("./projectProgress");
 const { rebillableByStructure } = require("./receivableAdjustments");
+const { AR_COLS, deductionsFor } = require("./arDeduction");
 const {
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
@@ -361,7 +362,7 @@ async function getDeductions(supabase, { id, tenantId }) {
   // gehören zum Storno-Paar mit dem Original und beide saldieren netto auf 0.
   const { data: ppRows, error: ppErr } = await supabase
     .from("ADVANCE_INVOICE")
-    .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_NET, CANCELS_ADVANCE_INVOICE_ID")
+    .select(AR_COLS)
     .eq("PROJECT_ID", inv.PROJECT_ID)
     .eq("STATUS_ID", 2)
     .is("CANCELS_ADVANCE_INVOICE_ID", null)
@@ -395,14 +396,16 @@ async function getDeductions(supabase, { id, tenantId }) {
 
   const filteredPpRows = (ppRows || []).filter((pp) => !alreadyUsedPpIds.has(String(pp.ID)));
 
-  // Saved deduction amounts for this draft invoice
+  // Ausgewaehlt ist, was der Entwurf gespeichert hat. Der BETRAG kommt nicht
+  // aus der gespeicherten Zeile, sondern aus dem aktuellen Stand der
+  // Abschlagsrechnung (services/arDeduction.js) — eine Zahlung seit dem
+  // letzten Speichern aendert ihn.
   const { data: idRows } = await supabase
     .from("INVOICE_DEDUCTION")
-    .select("ADVANCE_INVOICE_ID, DEDUCTION_AMOUNT_NET")
+    .select("ADVANCE_INVOICE_ID")
     .eq("INVOICE_ID", id);
-  const selectedMap = new Map(
-    (idRows || []).map((r) => [String(r.ADVANCE_INVOICE_ID), toNum(r.DEDUCTION_AMOUNT_NET)])
-  );
+  const selectedIds = new Set((idRows || []).map((r) => String(r.ADVANCE_INVOICE_ID)));
+  const dedById = await deductionsFor(supabase, { ars: filteredPpRows, tenantId });
 
   // Structure IDs linked to each PP (for warning feature in frontend)
   const ppIds = filteredPpRows.map((pp) => pp.ID);
@@ -419,21 +422,28 @@ async function getDeductions(supabase, { id, tenantId }) {
     }
   }
 
-  return filteredPpRows.map((pp) => ({
-    ID: pp.ID,
-    ADVANCE_INVOICE_NUMBER: pp.ADVANCE_INVOICE_NUMBER ?? "",
-    ADVANCE_INVOICE_DATE: pp.ADVANCE_INVOICE_DATE ?? null,
-    AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
-    TOTAL_AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
-    SELECTED: selectedMap.has(String(pp.ID)),
-    DEDUCTION_AMOUNT_NET: selectedMap.has(String(pp.ID))
-      ? selectedMap.get(String(pp.ID))
-      : toNum(pp.TOTAL_AMOUNT_NET),
-    STRUCTURE_IDS: ppStructureMap.get(String(pp.ID)) ?? [],
-  }));
+  return filteredPpRows.map((pp) => {
+    const d = dedById.get(String(pp.ID));
+    return {
+      ID: pp.ID,
+      ADVANCE_INVOICE_NUMBER: pp.ADVANCE_INVOICE_NUMBER ?? "",
+      ADVANCE_INVOICE_DATE: pp.ADVANCE_INVOICE_DATE ?? null,
+      AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
+      TOTAL_AMOUNT_NET: toNum(pp.TOTAL_AMOUNT_NET),
+      SELECTED: selectedIds.has(String(pp.ID)),
+      DEDUCTION_AMOUNT_NET: d ? d.deductionNet : toNum(pp.TOTAL_AMOUNT_NET),
+      BILLED_GROSS:     d?.billedGross ?? null,
+      PAID_GROSS:       d?.paidGross ?? 0,
+      SE_HELD:          d?.seHeld ?? 0,
+      MINDERUNG_GROSS:  d?.minderungGross ?? 0,
+      REBILLABLE_GROSS: d?.rebillableGross ?? 0,
+      INCLUDED_GROSS:   d?.includedGross ?? 0,
+      STRUCTURE_IDS: ppStructureMap.get(String(pp.ID)) ?? [],
+    };
+  });
 }
 
-async function saveDeductions(supabase, { id, tenantId, items }) {
+async function loadDraftForDeductions(supabase, { id, tenantId }) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
     .select("ID, STATUS_ID, TENANT_ID")
@@ -442,27 +452,67 @@ async function saveDeductions(supabase, { id, tenantId, items }) {
     .maybeSingle();
   if (invErr || !inv) throw { status: 404, message: "INVOICE nicht gefunden" };
   if (String(inv.STATUS_ID) === "2") throw { status: 400, message: "Gebuchte Rechnungen können nicht geändert werden" };
+  return inv;
+}
+
+/**
+ * Speichert, WELCHE Abschlagsrechnungen abgesetzt werden. Den Betrag rechnet
+ * der Server (getDeductions → arDeduction.js); ein mitgeschickter
+ * deduction_amount_net wird nicht mehr uebernommen. Jede Abweichung davon
+ * haette entweder schon Gezahltes ein zweites Mal gefordert oder einen offenen
+ * Rest verloren gehen lassen.
+ */
+async function saveDeductions(supabase, { id, tenantId, items }) {
+  const inv = await loadDraftForDeductions(supabase, { id, tenantId });
+  const wanted = new Set((items || []).map((i) => String(i?.advance_invoice_id ?? "")).filter(Boolean));
+  const eligible = await getDeductions(supabase, { id, tenantId });
 
   const { error: delErr } = await supabase.from("INVOICE_DEDUCTION").delete().eq("INVOICE_ID", id);
   if (delErr) throw new Error(delErr.message);
 
-  if (items.length > 0) {
-    const rows = items
-      .filter((item) => item.advance_invoice_id)
-      .map((item) => ({
-        INVOICE_ID: parseInt(id, 10),
-        ADVANCE_INVOICE_ID: parseInt(item.advance_invoice_id, 10),
-        DEDUCTION_AMOUNT_NET: round2(toNum(item.deduction_amount_net)),
-        TENANT_ID: inv.TENANT_ID,
-      }));
-
-    if (rows.length > 0) {
-      const { error: insErr } = await supabase.from("INVOICE_DEDUCTION").insert(rows);
-      if (insErr) throw new Error(insErr.message);
-    }
+  const rows = eligible
+    .filter((d) => wanted.has(String(d.ID)))
+    .map((d) => ({
+      INVOICE_ID: parseInt(id, 10),
+      ADVANCE_INVOICE_ID: d.ID,
+      DEDUCTION_AMOUNT_NET: round2(d.DEDUCTION_AMOUNT_NET),
+      TENANT_ID: inv.TENANT_ID,
+    }));
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase.from("INVOICE_DEDUCTION").insert(rows);
+    if (insErr) throw new Error(insErr.message);
   }
 
   return recomputeTotal(supabase, id);
+}
+
+/**
+ * Bringt die gespeicherten Abzuege auf den aktuellen Stand der
+ * Abschlagsrechnungen. Liefert, welche sich geaendert haben — kam seit dem
+ * Entwurf eine Zahlung herein, stimmt der gespeicherte Abzug nicht mehr.
+ */
+async function refreshDeductions(supabase, { id, tenantId }) {
+  const { data: saved } = await supabase
+    .from("INVOICE_DEDUCTION")
+    .select("ID, ADVANCE_INVOICE_ID, DEDUCTION_AMOUNT_NET")
+    .eq("INVOICE_ID", id);
+  if (!saved || saved.length === 0) return { changed: [] };
+  const current = new Map((await getDeductions(supabase, { id, tenantId })).map((d) => [String(d.ID), d]));
+  const changed = [];
+  for (const row of saved) {
+    const d = current.get(String(row.ADVANCE_INVOICE_ID));
+    const now = d ? round2(d.DEDUCTION_AMOUNT_NET) : null;
+    if (now === null || Math.abs(now - round2(toNum(row.DEDUCTION_AMOUNT_NET))) > 0.005) {
+      changed.push({ advanceInvoiceId: row.ADVANCE_INVOICE_ID, number: d?.ADVANCE_INVOICE_NUMBER ?? String(row.ADVANCE_INVOICE_ID), before: toNum(row.DEDUCTION_AMOUNT_NET), now });
+      if (now === null) {
+        await supabase.from("INVOICE_DEDUCTION").delete().eq("ID", row.ID);
+      } else {
+        await supabase.from("INVOICE_DEDUCTION").update({ DEDUCTION_AMOUNT_NET: now }).eq("ID", row.ID);
+      }
+    }
+  }
+  if (changed.length > 0) await recomputeTotal(supabase, id);
+  return { changed };
 }
 
 async function getFinalInvoice(supabase, { id, tenantId }) {
@@ -508,6 +558,22 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
     throw { status: 400, message: "Nur Schluss- und Teilschlussrechnungen können über diesen Endpunkt gebucht werden" };
   }
 
+  // ── Abzuege auf den Stand der Abschlagsrechnungen bringen ────────────────
+  // Kam seit dem Entwurf eine Zahlung herein, stimmt der gespeicherte Abzug
+  // nicht mehr. Dann nicht still mit dem neuen Betrag buchen, sondern
+  // anhalten: die Summen, die der Nutzer gesehen hat, sind andere.
+  const { changed } = await refreshDeductions(supabase, { id, tenantId });
+  if (changed.length > 0) {
+    throw {
+      status: 409,
+      message: `Seit dem Entwurf hat sich der Zahlungsstand geändert (${changed.map((c) => c.number).join(", ")}). ` +
+        "Die Abzüge sind aktualisiert — bitte die Summen prüfen und erneut buchen.",
+    };
+  }
+  const { data: dedRows } = await supabase
+    .from("INVOICE_DEDUCTION").select("ADVANCE_INVOICE_ID").eq("INVOICE_ID", id);
+  const deductedIds = new Set((dedRows || []).map((r) => String(r.ADVANCE_INVOICE_ID)));
+
   // ── E-Rechnung Vorpruefung (Branch 6) ─────────────────────────────────────
   try {
     const { loadInvoiceData } = require("../services_einvoice_data");
@@ -532,13 +598,22 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
 
   // ── Sicherheitseinbehalt-Auflösung (Phase 2) ──────────────────────────────
   // BEFORE PDF render so PDF reflects the SE release rows.
+  //
+  // Einbehalte abgesetzter Abschlagsrechnungen stecken bereits in dieser
+  // Rechnung: abgesetzt wird nur Gezahltes (arDeduction.js), der nie gezahlte
+  // Einbehalt ist damit Teil des Restentgelts. Sie werden als aufgeloest
+  // vermerkt, aber NICHT noch einmal auf den Zahlbetrag aufgeschlagen.
+  // Aufgeschlagen wird nur noch der Einbehalt einer Abschlagsrechnung, die
+  // diese Rechnung nicht absetzt (Altbestand: frueher abgesetzt, Einbehalt
+  // nie aufgeloest).
   let seReleaseTotal = 0;
-  if (Array.isArray(releasePpIds) && releasePpIds.length > 0) {
+  const releaseIds = [...new Set([...(Array.isArray(releasePpIds) ? releasePpIds : []).map(String), ...deductedIds])];
+  if (releaseIds.length > 0) {
     try {
       const { data: pps, error: ppsErr } = await supabase
         .from("ADVANCE_INVOICE")
         .select("ID, SE_AMOUNT, SE_RELEASED_BY_INVOICE_ID, PROJECT_ID, TENANT_ID")
-        .in("ID", releasePpIds);
+        .in("ID", releaseIds);
       if (ppsErr) throw new Error(ppsErr.message);
 
       const validPps = (pps || []).filter(p =>
@@ -550,7 +625,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
 
       for (const pp of validPps) {
         const amt = round2(Number(pp.SE_AMOUNT || 0));
-        seReleaseTotal = round2(seReleaseTotal + amt);
+        if (!deductedIds.has(String(pp.ID))) seReleaseTotal = round2(seReleaseTotal + amt);
         const { error: upPpErr } = await supabase
           .from("ADVANCE_INVOICE")
           .update({ SE_RELEASED_BY_INVOICE_ID: parseInt(id, 10) })
@@ -657,6 +732,18 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
     throw new Error(upErr.message);
   }
 
+  // Abgesetzte Abschlagsrechnungen sind in dieser Rechnung aufgegangen
+  // (Migration 0178): ihr offener Rest steht jetzt hier in Rechnung und wird
+  // dort weder als offen gefuehrt noch gemahnt. Best-effort — fehlt die
+  // Spalte noch, bleibt die Buchung gueltig.
+  if (deductedIds.size > 0) {
+    const { error: absErr } = await supabase.from("ADVANCE_INVOICE")
+      .update({ ABSORBED_BY_INVOICE_ID: parseInt(id, 10) })
+      .in("ID", [...deductedIds].map((x) => parseInt(x, 10)))
+      .eq("TENANT_ID", tenantId);
+    if (absErr) console.error("[BOOK_FINAL][ABSORBED]", absErr.message);
+  }
+
   const { data: project } = await supabase
     .from("PROJECT")
     .select("ID, INVOICED")
@@ -739,6 +826,7 @@ module.exports = {
   savePhases,
   getDeductions,
   saveDeductions,
+  refreshDeductions,
   getFinalInvoice,
   bookFinalInvoice,
 };

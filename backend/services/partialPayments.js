@@ -527,6 +527,7 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
     AMOUNT_ADJUSTED_GROSS: openById.get(String(r.ID))?.adjusted ?? 0,
     OPEN_AMOUNT_GROSS: openById.get(String(r.ID))?.open ?? null,
     SKONTO_TAKEN: openById.get(String(r.ID))?.skontoTaken ?? false,
+    ABSORBED_BY_INVOICE_ID: openById.get(String(r.ID))?.absorbedBy ?? null,
     COMMENT: r.COMMENT ?? "",
     SE_AMOUNT:                  r.SE_AMOUNT ?? null,
     SE_PERCENT:                 r.SE_PERCENT ?? null,

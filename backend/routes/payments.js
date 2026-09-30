@@ -38,6 +38,20 @@ module.exports = (supabase) => {
     return Number.isFinite(p) ? p : 0;
   }
 
+  /** Nummer der Schlussrechnung, in der die Abschlagsrechnung aufgegangen ist — oder null. */
+  async function absorbedBy(advanceInvoiceId, tenantId) {
+    const { data, error } = await supabase
+      .from("ADVANCE_INVOICE")
+      .select("ABSORBED_BY_INVOICE_ID")
+      .eq("ID", advanceInvoiceId)
+      .eq("TENANT_ID", tenantId)
+      .maybeSingle();
+    if (error || !data?.ABSORBED_BY_INVOICE_ID) return null;   // Spalte fehlt (vor 0178) → nicht gesperrt
+    const { data: inv } = await supabase
+      .from("INVOICE").select("INVOICE_NUMBER").eq("ID", data.ABSORBED_BY_INVOICE_ID).eq("TENANT_ID", tenantId).maybeSingle();
+    return inv?.INVOICE_NUMBER || `#${data.ABSORBED_BY_INVOICE_ID}`;
+  }
+
   // Re-aggregate PROJECT_STRUCTURE upward from a given node's parent
   async function propagatePayedUpwards(structureId) {
     const { data: node } = await supabase
@@ -127,6 +141,15 @@ module.exports = (supabase) => {
         if (error) return res.status(500).json({ error: error.message });
         if (!data) return res.status(404).json({ error: "Abschlagsrechnung nicht gefunden." });
         ref = data;
+
+        // In einer Schlussrechnung aufgegangen (Migration 0178): der Rest steht
+        // dort in Rechnung — eine Zahlung hier wuerde ihn doppelt erledigen.
+        const absorbed = await absorbedBy(partialPaymentId, req.tenantId);
+        if (absorbed) {
+          return res.status(409).json({
+            error: `Diese Abschlagsrechnung ist in der Schlussrechnung ${absorbed} aufgegangen — bitte die Zahlung dort erfassen.`,
+          });
+        }
       }
 
       if (invoiceId) {

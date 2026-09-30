@@ -446,6 +446,18 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   (`removeForCancelledDoc`); Zurücknehmen ist gesperrt, sobald danach wieder
   abgerechnet wurde. UI: `pages/rechnungen/ZahlungDialog.tsx`. Analyse und
   Rechtslage: `docs/RECHNUNGSKUERZUNGEN_ANALYSE.md`.
+- **Schlussrechnung = Restrechnung** (UStAE 14.8 Abs. 11): gespeichert ist
+  `TOTAL_AMOUNT_NET` = Positionen − Abzüge. Der Abzug je Abschlag ist das
+  **Gezahlte** plus endgültige Minderungen und kommt **nur** vom Server
+  (`services/arDeduction.js`; `saveDeductions` übernimmt keinen Betrag vom
+  Client). Offener Rest, Einbehalt und „wieder abrechenbar" stehen damit in der
+  Schlussrechnung; eine separate Einbehalts-Auflösung gibt es nur noch für
+  Abschläge, die diese Rechnung nicht abzieht. Beim Buchen gleicht
+  `refreshDeductions` ab (Zahlung seit dem Entwurf → 409), und die Abschläge
+  werden `ABSORBED_BY_INVOICE_ID` (Migration `0178`): offen 0, keine Zahlung
+  und kein Ausbuchen mehr darauf; ein Storno der Schlussrechnung leert es. Im
+  XML stehen die Abzüge als Positionen mit negativer Menge, BT-113 bleibt 0 —
+  vorher zog BT-113 sie ein zweites Mal ab (BR-CO-13).
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
 - **Umbuchen von Buchungen** (`rebookBuchungen` in `services/buchungen.js`,

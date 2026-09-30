@@ -9,6 +9,7 @@
 
 const codelists = require('./einvoice/codelists');
 const { paymentMeansForEinvoice } = require('./services/paymentMeans');
+const { AR_COLS, deductionsFor } = require('./services/arDeduction');
 
 class InvoiceDataError extends Error {
   constructor(msg) { super(msg); this.name = 'InvoiceDataError'; this.status = 422; }
@@ -423,8 +424,23 @@ ${basis}`;
   }
 
   // ── 11. Deductions (Schlussrechnung only) ─────────────────────────────────
+  //
+  // Die Schlussrechnung ist eine Restrechnung (UStAE 14.8 Abs. 11): abgesetzt
+  // werden die vereinnahmten Teilentgelte (services/arDeduction.js), und
+  // gespeichert ist genau der Rest — TOTAL_AMOUNT_NET = Positionen minus
+  // Abzuege (finalInvoices.recomputeTotal). Im XML stehen die Abzuege deshalb
+  // als Positionen mit negativer Menge (BR-27 verbietet den negativen
+  // Einzelpreis, wie beim Storno), und BT-113 „bereits bezahlt" bleibt 0.
+  //
+  // Vorher: volle Positionen, BT-109 = Rest UND BT-113 = Abschlaege. Das
+  // verletzte BR-CO-13 (Buchen nur mit „trotzdem buchen") und zog die
+  // Abschlaege im Zahlbetrag ein zweites Mal ab — bei 100.000 € Honorar und
+  // 30.000 € Abschlag forderte das XML 47.600 statt 83.300 €. Der Test dazu
+  // hatte TOTAL_AMOUNT_NET mit dem vollen Honorar angelegt, also anders, als
+  // die Anwendung speichert.
 
   let deductions = [];
+  let deductedArIds = new Set();
   if (isFinal) {
     const { data: dedRows } = await supabase
       .from('INVOICE_DEDUCTION')
@@ -434,30 +450,53 @@ ${basis}`;
 
     if (dedRows && dedRows.length > 0) {
       const ppIds = dedRows.map(r => r.ADVANCE_INVOICE_ID);
+      deductedArIds = new Set(ppIds.map(String));
       const { data: partials } = await supabase
         .from('ADVANCE_INVOICE')
-        .select('ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, SE_AMOUNT')
+        .select(AR_COLS)
         .in('ID', ppIds);
-
       const ppMap = Object.fromEntries((partials ?? []).map(p => [p.ID, p]));
+      const stand = await deductionsFor(supabase, { ars: partials ?? [], tenantId });
+
       deductions = dedRows.map(d => {
-        const pp    = ppMap[d.ADVANCE_INVOICE_ID] ?? {};
-        const gross = fmt2(pp.TOTAL_AMOUNT_GROSS ?? 0);
-        const net   = fmt2(d.DEDUCTION_AMOUNT_NET ?? pp.TOTAL_AMOUNT_NET ?? 0);
-        // N10: Was die Abschlagsrechnung gefordert hat, und was davon
-        // tatsaechlich geflossen ist, sind zwei verschiedene Betraege --
-        // der Sicherheitseinbehalt wurde nie gezahlt.
-        const retained = fmt2(pp.SE_AMOUNT ?? 0);
+        const pp  = ppMap[d.ADVANCE_INVOICE_ID] ?? {};
+        const s   = stand.get(String(d.ADVANCE_INVOICE_ID)) ?? {};
+        const net = fmt2(d.DEDUCTION_AMOUNT_NET ?? 0);
+        const vat = fmt2(net * effectiveVatPercent / 100);
         return {
-          number:      pp.ADVANCE_INVOICE_NUMBER ?? String(d.ADVANCE_INVOICE_ID),
-          date:        asIsoDate(pp.ADVANCE_INVOICE_DATE),
-          netAmount:   net,
-          vatAmount:   fmt2(gross - net),
-          grossAmount: gross,             // fakturiert
-          retainedAmount: retained,       // davon einbehalten
-          paidAmount:  fmt2(gross - retained),  // davon vereinnahmt
+          arId:           d.ADVANCE_INVOICE_ID,
+          number:         pp.ADVANCE_INVOICE_NUMBER ?? String(d.ADVANCE_INVOICE_ID),
+          date:           asIsoDate(pp.ADVANCE_INVOICE_DATE),
+          netAmount:      net,                      // abgesetzt (netto)
+          vatAmount:      vat,
+          grossAmount:    fmt2(net + vat),          // abgesetzt (brutto)
+          billedGross:    fmt2(s.billedGross ?? pp.TOTAL_AMOUNT_GROSS ?? 0),  // fakturiert
+          paidAmount:     fmt2(s.paidGross ?? 0),   // davon vereinnahmt
+          retainedAmount: fmt2(s.seHeld ?? pp.SE_AMOUNT ?? 0),
+          minderungGross: fmt2(s.minderungGross ?? 0),
+          // Einbehalt + offener Rest + wieder abrechenbar: in dieser Rechnung enthalten
+          includedGross:  fmt2(s.includedGross ?? 0),
         };
       });
+
+      for (const d of deductions) {
+        if (!(d.netAmount > 0.005)) continue;   // nichts gezahlt: nichts abzusetzen
+        lines.push({
+          id:          lines.length + 1,
+          description: `Abzug Abschlagsrechnung ${d.number}${d.date ? ` vom ${d.date}` : ''}`,
+          note:        d.includedGross > 0.005
+            ? `Vereinnahmt abgesetzt; noch offen und in dieser Rechnung enthalten: ${d.includedGross} EUR brutto`
+            : 'Vereinnahmt abgesetzt',
+          quantity:    -1,
+          unitCode:    codelists.UNIT_LUMP_SUM,
+          unitPrice:   d.netAmount,
+          lineTotal:   -d.netAmount,
+          vatRate:     effectiveVatPercent,
+          vatCategory,
+          billingPeriodStart: asIsoDate(doc.BILLING_PERIOD_START),
+          billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
+        });
+      }
     }
   }
 
@@ -485,17 +524,12 @@ ${basis}`;
     ? (stored(doc.TOTAL_AMOUNT_GROSS) ?? fmt2(taxBasis + taxAmount))
     : taxBasis;
 
-  // N10/BT-113 — "Bezahlter Betrag". Frueher stand hier die Summe der
-  // FAKTURIERTEN Bruttobetraege der Abschlagsrechnungen. Der einbehaltene
-  // Anteil ist darin enthalten, wurde aber nie gezahlt -- BT-113 behauptete
-  // also eine Zahlung, die es nicht gab.
-  //
-  // Massgeblich ist das Vereinnahmte: § 14 Abs. 5 UStG verlangt in der
-  // Endrechnung den Abzug der "vereinnahmten Teilentgelte", nicht der
-  // fakturierten. Beides zusammen ergibt denselben Zahlbetrag wie bisher --
-  // der Einbehalt kommt zurueck, weil er nie als gezahlt galt, und die
-  // frueher noetige "+ Aufloesung" entfaellt.
-  const prepaidGross = fmt2(deductions.reduce((s, d) => s + d.paidAmount, 0));
+  // BT-113 — "Bezahlter Betrag". Die Schlussrechnung ist eine Restrechnung
+  // (siehe Abschnitt 11): die vereinnahmten Abschlaege stehen als negative
+  // Positionen darin und sind im Gesamtbetrag schon abgezogen. BT-113 wird
+  // deshalb nicht noch einmal belegt — vorher zog es dieselben Abschlaege ein
+  // zweites Mal ab.
+  const prepaidGross = 0;
 
   // ── Sicherheitseinbehalt (Phase 4) ────────────────────────────────────────
   // SE held in THIS doc → reduces payable (customer pays less).
@@ -514,10 +548,14 @@ ${basis}`;
         .from('ADVANCE_INVOICE')
         .select('ID, ADVANCE_INVOICE_NUMBER, SE_AMOUNT')
         .eq('SE_RELEASED_BY_INVOICE_ID', doc.ID);
-      seReleaseRows = (rels || []).map(r => ({
-        number: r.ADVANCE_INVOICE_NUMBER || String(r.ID),
-        amount: fmt2(toNum(r.SE_AMOUNT ?? 0)),
-      }));
+      // Einbehalte abgesetzter Abschlagsrechnungen stecken bereits im
+      // Restentgelt (Abschnitt 11) — sie sind keine zusaetzliche Aufloesung.
+      seReleaseRows = (rels || [])
+        .filter(r => !deductedArIds.has(String(r.ID)))
+        .map(r => ({
+          number: r.ADVANCE_INVOICE_NUMBER || String(r.ID),
+          amount: fmt2(toNum(r.SE_AMOUNT ?? 0)),
+        }));
     } catch (_) { /* schema may lack column */ }
   }
 

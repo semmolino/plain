@@ -2086,9 +2086,17 @@ export const HELP = {
     title: 'Abschläge abziehen',
     body: (
       <>
-        Gebuchte Abschlagsrechnungen des Projekts, die noch nicht abgezogen sind. Vorgeschlagen ist
-        ihr Nettobetrag; du kannst ihn ändern, etwa wenn ein Abschlag nur teilweise zu den gewählten
-        Positionen gehört. Ein Hinweis erscheint, wenn ein Abschlag Positionen enthält, die hier nicht
+        Gebuchte Abschlagsrechnungen des Projekts, die noch nicht abgezogen sind. Abgezogen wird, was
+        auf ihnen <strong>gezahlt</strong> ist (plus endgültig ausgebuchte Minderungen) — so verlangt es
+        das Umsatzsteuerrecht für die Schlussrechnung. Der Betrag ergibt sich aus den Zahlungen und lässt
+        sich nicht eintippen.<br /><br />
+        Was auf einem Abschlag <strong>noch offen</strong> ist — ein nicht gezahlter Rest, der
+        Sicherheitseinbehalt, ein wieder abrechenbar ausgebuchter Betrag —, steht in dieser Rechnung
+        (Spalte „hier enthalten"). Mit dem Buchen gilt der Abschlag als in dieser Rechnung aufgegangen:
+        er ist nicht mehr offen und wird nicht mehr gemahnt; spätere Zahlungen gehören auf diese
+        Rechnung.<br /><br />
+        Kommt zwischen Entwurf und Buchen noch eine Zahlung herein, hält das Buchen an und aktualisiert
+        die Abzüge. Ein Hinweis erscheint, wenn ein Abschlag Positionen enthält, die hier nicht
         abgerechnet werden.
       </>
     ),

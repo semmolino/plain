@@ -183,13 +183,14 @@ das Original als Entwurf kopiert und die Zahlungen auf die neue Rechnung **über
 1. **Offener Betrag an drei Stellen verschieden** (Liste / Mahnwesen /
    Fälligkeitshinweise). Folge: Skontozahler und einbehaltene Sicherheiten werden
    gemahnt, die Liste nennt dieselbe Rechnung erledigt. Behebt sich mit Vorschlag A.
-2. **Verdacht, nicht verifiziert: XML der Schlussrechnung zieht doppelt ab.**
+2. **XML der Schlussrechnung zieht doppelt ab — bestätigt und in (b) behoben.**
    `finalInvoices.recomputeTotal` speichert `TOTAL_AMOUNT_NET = Honorar − Abzüge`. Im
-   XML sind die Positionen das volle Honorar, BT-109 ist dieser Restbetrag und BT-113
-   zieht die Abschläge ein zweites Mal ab. Das verletzte BR-CO-13, Buchen ginge nur mit
-   „trotzdem buchen". Der Test [einvoice_security_retention.test.js](../backend/tests/einvoice_security_retention.test.js)
-   legt `TOTAL_AMOUNT_NET` = volles Honorar an, also nicht so, wie der echte Weg es
-   speichert. Braucht einen Test über `saveDeductions` → `loadInvoiceData`.
+   XML waren die Positionen das volle Honorar, BT-109 dieser Restbetrag und BT-113 zog
+   die Abschläge ein zweites Mal ab: BR-CO-13 schlug fehl (Buchen nur mit „trotzdem
+   buchen"), und bei 100.000 € Honorar und 30.000 € Abschlag forderte das XML
+   47.600 € statt 83.300 €. Der Test [einvoice_security_retention.test.js](../backend/tests/einvoice_security_retention.test.js)
+   hatte `TOTAL_AMOUNT_NET` = volles Honorar angelegt, also nicht so, wie der echte
+   Weg speichert.
 3. **Storno mit „Zahlungen löschen" lässt `PAYED` stehen.** `cancelInvoice` (und das
    Gegenstück bei Abschlägen) rechnet `PROJECT_STRUCTURE.PAYED` nur für Elemente neu,
    die **noch** Zahlungen haben. War die gelöschte Zahlung die einzige, bleibt der alte
@@ -200,16 +201,24 @@ das Original als Entwurf kopiert und die Zahlungen auf die neue Rechnung **über
 
 ---
 
-## 5. Entscheidungen, bevor gebaut wird
+## 5. Entscheidungen und Umsetzungsstand
 
-1. Kürzung „wieder abrechenbar" vs. „endgültig" — beides anbieten?
-2. Recht für „Rest ausbuchen": eigenes `payments.adjust` (Vorschlag: Rollen, die
-   heute `payments.create` haben) oder `payments.create` wiederverwenden?
-3. „Gutschrift" in „Rechnungskorrektur" umbenennen?
-4. Reihenfolge. Vorschlag: (a) gemeinsame Funktion für den offenen Betrag +
-   „Rest ausbuchen", (b) Schlussrechnung auf Vereinnahmtes + „aufgegangen",
-   (c) Rechnungskorrektur statt Gutschrift, abgestimmt mit dem Belegimport,
-   (d) Storno + Neu mit Zahlungsübertrag.
+Entschieden am 30.09.2026:
+
+1. „Wieder abrechenbar" und „endgültig" — **beides**.
+2. Recht für „Rest ausbuchen" — **`payments.create`** (Löschen `payments.delete`).
+3. „Gutschrift" wird **„Rechnungskorrektur"**.
+4. Reihenfolge (a) → (b) → (c) → (d) wie vorgeschlagen.
+5. Einbehalt in der Schlussrechnung — **nur Gezahltes abziehen**: der nie gezahlte
+   Einbehalt steht im Restentgelt; eine separate Auflösung gibt es nur noch für
+   Abschläge, die diese Rechnung nicht abzieht.
+
+| Schritt | Stand |
+|---|---|
+| (a) Rest ausbuchen + ein offener Betrag | umgesetzt (Migration 0177, `openAmount.js`, `receivableAdjustments.js`, `ZahlungDialog.tsx`). Nebenbefund 1 behoben, dazu: Mahnungs-PDF forderte den vollen Betrag trotz Teilzahlung, Mahnstatistik und Mahn-Checker zählten bezahlte Belege. |
+| (b) Schlussrechnung auf Vereinnahmtes + „aufgegangen" | umgesetzt (Migration 0178, `arDeduction.js`, `refreshDeductions`, XML als Restrechnung). Nebenbefund 2 behoben. |
+| (c) Rechnungskorrektur statt Gutschrift | offen |
+| (d) Storno + Neu mit Zahlungsübertrag | offen |
 
 ---
 

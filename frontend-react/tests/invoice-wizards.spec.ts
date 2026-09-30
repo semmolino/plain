@@ -139,11 +139,15 @@ test.describe('Schlussrechnung', () => {
     const patches = capture(page, 'PATCH', /\/invoices\/701(\?|$)/)
     await page.goto('/rechnungen?tab=schluss&draftId=701')
     await next(page, 3)
-    // Gespeichert war nur AR-2025-0058 — vorher waren beim Fortsetzen wieder alle gewaehlt.
+    // Einbehalte der abgezogenen Abschläge stecken schon in der Rechnung —
+    // abgezogen wird nur Gezahltes. Sie stehen nicht mehr zur Auswahl.
+    await expect(page.getByText(/Sicherheitseinbehalte aus AR-2025-0031, AR-2025-0058 .* bereits enthalten/)).toBeVisible()
+    // Gespeichert war nur AR-2024-0019 — vorher waren beim Fortsetzen wieder alle gewaehlt.
     const se = page.getByRole('group', { name: /Sicherheitseinbehalte auflösen/ })
-    await expect(se.getByRole('checkbox', { name: /AR-2025-0031/ })).not.toBeChecked()
-    await expect(se.getByRole('checkbox', { name: /AR-2025-0058/ })).toBeChecked()
-    await expect(se).toContainText('+ 4.849,25')
+    await expect(se.getByRole('checkbox', { name: /AR-2025-0031/ })).toHaveCount(0)
+    await expect(se.getByRole('checkbox', { name: /AR-2024-0012/ })).not.toBeChecked()
+    await expect(se.getByRole('checkbox', { name: /AR-2024-0019/ })).toBeChecked()
+    await expect(se).toContainText('+ 1.560,50')
 
     await bar(page).getByRole('button', { name: 'Jetzt buchen' }).click()
     const dialog = page.getByRole('dialog', { name: 'Schlussrechnung buchen?' })
@@ -152,9 +156,9 @@ test.describe('Schlussrechnung', () => {
     await dialog.getByRole('button', { name: 'Jetzt buchen' }).click()
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Rechnungen')
     expect(books).toHaveLength(1)
-    expect(books[0].postDataJSON()).toEqual({ release_partial_payment_ids: [512] })
+    expect(books[0].postDataJSON()).toEqual({ release_partial_payment_ids: [506] })
     // Skonto aus dem Entwurf (2 %) und die SE-Auswahl gehen vorher in den Entwurf.
-    expect(patches.at(-1)!.postDataJSON()).toMatchObject({ cash_discount_percent: 2, se_release_advance_ids: [512] })
+    expect(patches.at(-1)!.postDataJSON()).toMatchObject({ cash_discount_percent: 2, se_release_advance_ids: [506] })
     expect(patches.at(-1)!.postDataJSON()).not.toHaveProperty('se_percent')
   })
 
@@ -165,10 +169,21 @@ test.describe('Schlussrechnung', () => {
     await next(page, 3)
     await expect(page.getByRole('button', { name: /Jetzt buchen/ })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /PDF-Vorschau/ })).toHaveCount(0)
-    await page.getByRole('checkbox', { name: /AR-2025-0031/ }).check()
+    await page.getByRole('checkbox', { name: /AR-2024-0012/ }).check()
     await bar(page).getByRole('button', { name: 'Entwurf speichern' }).click()
     await expect(page.getByRole('status').filter({ hasText: 'Entwurf gespeichert' })).toHaveCount(1)
-    expect(patches.at(-1)!.postDataJSON()).toMatchObject({ se_release_advance_ids: expect.arrayContaining([511, 512]) })
+    expect(patches.at(-1)!.postDataJSON()).toMatchObject({ se_release_advance_ids: expect.arrayContaining([505, 506]) })
+  })
+
+  test('Abzüge: nur Gezahltes, Betrag nicht eintippbar, Offenes „hier enthalten"', async ({ page }) => {
+    await setup(page)
+    await page.goto('/rechnungen?tab=schluss&draftId=701')
+    await next(page, 2)
+    const row = page.getByRole('row', { name: /AR-2025-0031/ })
+    await expect(row).toContainText('4.284,00')        // Einbehalt: hier enthalten
+    await expect(row).toContainText('68.400,00')       // Abzug: gezahlt 81.396 brutto = 68.400 netto
+    await expect(row.getByRole('textbox')).toHaveCount(0)
+    await expect(page.getByText(/Abgezogen wird, was auf der Abschlagsrechnung/)).toBeVisible()
   })
 
   test('Zusammenfassung zeigt den Betrag — als Spalte am Desktop, als Zeile am Handy', async ({ page }, info) => {

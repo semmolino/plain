@@ -112,7 +112,7 @@ function claimOf(doc, kind) {
  * @param {ReturnType<typeof claimOf>} claim
  * @param {{ payments?: {gross:number, date?:string|null}[], adjustments?: {gross:number}[] }} p
  */
-function computeOpen(claim, { payments = [], adjustments = [] } = {}) {
+function computeOpen(claim, { payments = [], adjustments = [], absorbedBy = null } = {}) {
   const paid = round2(payments.reduce((s, p) => s + toNum(p.gross), 0));
   const adjusted = round2(adjustments.reduce((s, a) => s + toNum(a.gross), 0));
   let open = round2(claim.payable - paid - adjusted);
@@ -129,7 +129,11 @@ function computeOpen(claim, { payments = [], adjustments = [] } = {}) {
     }
   }
 
-  return { paid, adjusted, open, skontoTaken, settled: open <= TOL };
+  // In einer Schlussrechnung aufgegangen (Migration 0178): der Rest steht
+  // jetzt dort in Rechnung — hier ist nichts mehr offen, gemahnt wird er dort.
+  if (absorbedBy != null) open = 0;
+
+  return { paid, adjusted, open, skontoTaken, settled: open <= TOL, absorbedBy: absorbedBy ?? null };
 }
 
 // ── Laden ──────────────────────────────────────────────────────────────────
@@ -195,12 +199,43 @@ async function loadMovements(supabase, { kind, ids, tenantId = null }) {
  */
 async function openAmountsFor(supabase, { kind, docs, tenantId = null }) {
   const list = Array.isArray(docs) ? docs : [];
-  const { payments, adjustments } = await loadMovements(supabase, { kind, ids: list.map(d => d.ID), tenantId });
+  const ids = list.map(d => d.ID);
+  const [{ payments, adjustments }, absorbed] = await Promise.all([
+    loadMovements(supabase, { kind, ids, tenantId }),
+    kind === "ADVANCE_INVOICE" ? loadAbsorbed(supabase, { ids, tenantId }) : Promise.resolve(new Map()),
+  ]);
   const out = new Map();
   for (const d of list) {
     const k = String(d.ID);
     const claim = claimOf(d, kind);
-    out.set(k, { claim, ...computeOpen(claim, { payments: payments.get(k) || [], adjustments: adjustments.get(k) || [] }) });
+    const pays = payments.get(k) || [];
+    const adjs = adjustments.get(k) || [];
+    out.set(k, {
+      claim, payments: pays, adjustments: adjs,
+      ...computeOpen(claim, { payments: pays, adjustments: adjs, absorbedBy: absorbed.get(k) ?? null }),
+    });
+  }
+  return out;
+}
+
+/**
+ * ABSORBED_BY_INVOICE_ID je Abschlagsrechnung (Migration 0178). Bewusst eine
+ * eigene Abfrage statt einer Spalte in CLAIM_COLS: der Web-Container startet
+ * vor dem postdeploy-Hook, und eine unbekannte Spalte in der Listenabfrage
+ * haette Rechnungsliste und Mahnwesen bis zum Ende der Migration lahmgelegt.
+ */
+async function loadAbsorbed(supabase, { ids, tenantId }) {
+  const out = new Map();
+  const uniq = Array.from(new Set((ids || []).filter(x => x !== null && x !== undefined)));
+  for (let i = 0; i < uniq.length; i += CHUNK) {
+    let q = supabase.from("ADVANCE_INVOICE").select("ID, ABSORBED_BY_INVOICE_ID").in("ID", uniq.slice(i, i + CHUNK));
+    if (tenantId != null) q = q.eq("TENANT_ID", tenantId);
+    const { data, error } = await q;
+    if (error) {
+      if (/ABSORBED_BY_INVOICE_ID|schema cache|does not exist/i.test(String(error.message || ""))) return out;
+      throw new Error(error.message);
+    }
+    for (const r of data || []) if (r.ABSORBED_BY_INVOICE_ID != null) out.set(String(r.ID), r.ABSORBED_BY_INVOICE_ID);
   }
   return out;
 }

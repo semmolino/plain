@@ -10,7 +10,6 @@ import { RowMenu }      from '@/components/ui/RowMenu'
 import { Disclosure }   from '@/components/ui/Disclosure'
 import { Autocomplete } from '@/components/ui/Autocomplete'
 import { FormField }    from '@/components/ui/FormField'
-import { AmountInput }  from '@/components/ui/AmountInput'
 import { HelpHint }     from '@/components/ui/HelpHint'
 import { ValidationModal } from '@/components/ui/ValidationModal'
 import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
@@ -308,7 +307,12 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     se: false, sePct: '', seBasis: 'BRUTTO' as const,
   }
   const totals       = computeTotals(totalsInput)
-  const seReleaseSum = r2(openSeList.filter(e => seReleaseSel.has(e.ID)).reduce((s, e) => s + (e.SE_AMOUNT || 0), 0))
+  // Einbehalte abgezogener Abschläge stecken schon im Restentgelt — abgezogen
+  // wird nur Gezahltes (backend/services/arDeduction.js). Aufzulösen bleibt nur
+  // der Einbehalt eines Abschlags, den diese Rechnung nicht abzieht.
+  const releasableSe = openSeList.filter(e => !dedSelected.has(e.ID))
+  const includedSe   = openSeList.filter(e => dedSelected.has(e.ID))
+  const seReleaseSum = r2(releasableSe.filter(e => seReleaseSel.has(e.ID)).reduce((s, e) => s + (e.SE_AMOUNT || 0), 0))
   const payable      = r2(totals.grossAfter + seReleaseSum)
 
   // Nachlaesse und Skonto — der Sicherheitseinbehalt einer Schlussrechnung ist
@@ -984,6 +988,12 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
             <p className="empty-note">Für dieses Projekt gibt es keine gebuchten Abschlagsrechnungen, die noch abzuziehen sind.</p>
           )}
           {deductions.length > 0 && (
+            <>
+            <p className="iw-note">
+              Abgezogen wird, was auf der Abschlagsrechnung <strong>gezahlt</strong> ist. Was dort noch offen ist —
+              ein Rest oder der Sicherheitseinbehalt —, steht in dieser Rechnung und ist danach auf der
+              Abschlagsrechnung erledigt.
+            </p>
             <div className="list-section table-scroll">
               <table className="master-table sw-table">
                 <thead>
@@ -994,7 +1004,9 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
                     </th>
                     <th scope="col">Nummer</th>
                     <th scope="col" className="sw-hide-narrow">Datum</th>
-                    <th scope="col" className="num">Betrag netto €</th>
+                    <th scope="col" className="num sw-hide-narrow">berechnet brutto €</th>
+                    <th scope="col" className="num sw-hide-narrow">gezahlt €</th>
+                    <th scope="col" className="num">hier enthalten €</th>
                     <th scope="col" className="num">Abzug netto €</th>
                   </tr>
                 </thead>
@@ -1009,22 +1021,17 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
                         </td>
                         <td>{d.ADVANCE_INVOICE_NUMBER ?? NO_VALUE}</td>
                         <td className="sw-hide-narrow">{deDay(d.ADVANCE_INVOICE_DATE)}</td>
-                        <td className="num">{money(d.AMOUNT_NET)}</td>
-                        <td className="num">
-                          <AmountInput
-                            className="sw-amount"
-                            aria-label={`Abzug netto ${label}`}
-                            value={dedSelected.has(d.ID) ? (deductAmounts[d.ID] ?? '') : ''}
-                            disabled={!dedSelected.has(d.ID)}
-                            onChange={v => setDeductAmounts(prev => ({ ...prev, [d.ID]: v }))}
-                          />
-                        </td>
+                        <td className="num sw-hide-narrow">{money(d.BILLED_GROSS ?? null)}</td>
+                        <td className="num sw-hide-narrow">{money(d.PAID_GROSS ?? 0)}</td>
+                        <td className="num">{money(d.INCLUDED_GROSS ?? 0)}</td>
+                        <td className="num">{dedSelected.has(d.ID) ? money(Number(deductAmounts[d.ID] ?? d.DEDUCTION_AMOUNT_NET ?? 0)) : NO_VALUE}</td>
                       </tr>
                     )
                   })}
                 </tbody>
               </table>
             </div>
+            </>
           )}
           {dedWarn && (
             <p className="sw-warn" role="status">
@@ -1101,8 +1108,17 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
               )}
             </div>
 
-            {/* Sicherheitseinbehalt-Auflösung (Phase 2) */}
-            {openSeList.length > 0 && (
+            {/* Einbehalte abgezogener Abschläge: schon enthalten */}
+            {includedSe.length > 0 && (
+              <p className="iw-note">
+                Die Sicherheitseinbehalte aus {includedSe.map(e => e.ADVANCE_INVOICE_NUMBER || `#${e.ID}`).join(', ')}{' '}
+                ({fmtEur(r2(includedSe.reduce((s, e) => s + (e.SE_AMOUNT || 0), 0)))}) sind in dieser Rechnung
+                bereits enthalten — abgezogen wurde nur, was gezahlt ist.
+              </p>
+            )}
+
+            {/* Sicherheitseinbehalt-Auflösung (Phase 2) — nur noch für Abschläge, die diese Rechnung nicht abzieht */}
+            {releasableSe.length > 0 && (
               <fieldset className="iw-discounts sw-se">
                 <legend className="iw-section-title iw-check-row">
                   Sicherheitseinbehalte auflösen <HelpHint id="invoice.sicherheitseinbehalt" />
@@ -1111,7 +1127,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
                   Diese Abschlagsrechnungen haben einbehaltene Beträge. Ausgewählte kommen mit dieser Rechnung
                   zur Zahlung; ohne eigene Auswahl sind alle vorgewählt.
                 </p>
-                {openSeList.map(e => (
+                {releasableSe.map(e => (
                   <label key={e.ID} className="iw-check sw-se-row">
                     <input
                       type="checkbox"

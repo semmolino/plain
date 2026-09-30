@@ -532,10 +532,10 @@ const ENTRIES = [
     cii: `${SUM}/ram:GrandTotalAmount`, ubl: `${U_TOTAL}/cbc:TaxInclusiveAmount` },
 
   { id: "BT-113", group: "BG-22", labelDe: "Bereits gezahlter Betrag", cardinality: "0..1",
-    source: "abgeleitet: Summe der VEREINNAHMTEN Abschläge (brutto abzüglich Einbehalt)",
+    source: "immer 0 — die Schlussrechnung ist eine Restrechnung",
     data: "totals.prepaidGross",
     cii: `${SUM}/ram:TotalPrepaidAmount`, ubl: `${U_TOTAL}/cbc:PrepaidAmount`,
-    note: "Maßgeblich ist das Vereinnahmte, nicht das Fakturierte: § 14 Abs. 5 UStG verlangt den Abzug der vereinnahmten Teilentgelte. Der Sicherheitseinbehalt war nie gezahlt und zählt deshalb nicht mit (Befund N10)." },
+    note: "Die Schlussrechnung ist eine Restrechnung (UStAE 14.8 Abs. 11) und wird so gespeichert: Honorar minus Abzüge. Die vereinnahmten Abschläge (services/arDeduction.js) stehen deshalb als Positionen mit negativer Menge im Dokument, nicht in BT-113 — vorher zog BT-113 sie ein zweites Mal ab und BR-CO-13 schlug fehl." },
 
   { id: "BT-114", group: "BG-22", labelDe: "Rundungsbetrag", cardinality: "0..1",
     source: null, data: null, cii: null, ubl: null, status: "unsupported" },

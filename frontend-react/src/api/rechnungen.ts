@@ -90,6 +90,8 @@ export interface PartialPayment {
   AMOUNT_ADJUSTED_GROSS?:       number | null
   OPEN_AMOUNT_GROSS?:           number | null
   SKONTO_TAKEN?:                boolean
+  /** In dieser Schluss-/Teilschlussrechnung aufgegangen (Migration 0178) */
+  ABSORBED_BY_INVOICE_ID?:      number | null
   STATUS_ID:                    number
   PROJECT_ID:                   number | null
   CONTRACT_ID:                  number | null
@@ -170,9 +172,17 @@ export interface FinalDeduction {
   ADVANCE_INVOICE_DATE:    string | null
   AMOUNT_NET:              number | null
   TOTAL_AMOUNT_NET:        number | null
+  /** Abzug netto — rechnet der Server (vereinnahmt + endgültige Minderung), nicht eintippbar */
   DEDUCTION_AMOUNT_NET:    number | null
   SELECTED:                boolean
   STRUCTURE_IDS:           number[]
+  BILLED_GROSS?:           number | null
+  PAID_GROSS?:             number
+  SE_HELD?:                number
+  MINDERUNG_GROSS?:        number
+  REBILLABLE_GROSS?:       number
+  /** Einbehalt + offener Rest + wieder abrechenbar — steht in dieser Schlussrechnung */
+  INCLUDED_GROSS?:         number
 }
 
 export interface FinalTotals {

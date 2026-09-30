@@ -185,6 +185,8 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   let statusClass: string
   if (isOrigCancelled)          { statusLabel = 'Storniert';       statusClass = 'cancelled' }
   else if (isStornoRow)         { statusLabel = 'Storno-Rechnung'; statusClass = 'cancelled' }
+  // In einer Schlussrechnung aufgegangen: ein offener Rest steht jetzt dort.
+  else if (pp.STATUS_ID === 2 && pp.ABSORBED_BY_INVOICE_ID) { statusLabel = 'In Schlussrechnung'; statusClass = 'booked' }
   else if (pp.STATUS_ID === 2)  { statusLabel = 'Gebucht';         statusClass = 'booked' }
   else                          { statusLabel = 'Entwurf';         statusClass = 'draft' }
 
@@ -301,6 +303,7 @@ function zahlungZiel(row: UnifiedRow): ZahlungZiel {
     cashDiscountPct:   Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
     cashDiscountDays:  Number(raw.CASH_DISCOUNT_DAYS ?? 0),
     rebillableAllowed: row.source === 'pp' || typ === 'rechnung',
+    absorbed:          row.source === 'pp' && !!(raw as PartialPayment).ABSORBED_BY_INVOICE_ID,
   }
 }
 

@@ -1330,6 +1330,13 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
     await supabase.from("ADVANCE_INVOICE")
       .update({ INVOICE_ID: null })
       .eq("INVOICE_ID", id);
+    // „In Schlussrechnung aufgegangen" (Migration 0178) zuruecknehmen: der
+    // offene Rest der Abschlagsrechnung steht wieder dort in Rechnung.
+    const { error: absErr } = await supabase.from("ADVANCE_INVOICE")
+      .update({ ABSORBED_BY_INVOICE_ID: null })
+      .eq("ABSORBED_BY_INVOICE_ID", parseInt(id, 10))
+      .eq("TENANT_ID", tenantId);
+    if (absErr) console.error("[CANCEL_INVOICE][ABSORBED]", absErr.message);
   }
 
   // Unlink BOOKING bookings so they can be re-invoiced

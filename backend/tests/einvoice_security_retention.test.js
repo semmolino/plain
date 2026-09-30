@@ -14,6 +14,15 @@
 //
 // Auf der Schlussrechnung zaehlt entsprechend das VEREINNAHMTE, nicht das
 // fakturierte -- so verlangt es auch § 14 Abs. 5 UStG fuer die Endrechnung.
+//
+// Seit 09/2026 (docs/RECHNUNGSKUERZUNGEN_ANALYSE.md, Schritt b): die
+// Schlussrechnung ist eine Restrechnung (UStAE 14.8 Abs. 11) und wird genau
+// so gespeichert — TOTAL_AMOUNT_NET = Honorar minus Abzuege. Abgesetzt wird
+// nur Gezahltes; der nie gezahlte Einbehalt steht damit im Restentgelt und
+// braucht keine eigene „Aufloesung" mehr. Die Tests unten legten die
+// Schlussrechnung vorher mit dem VOLLEN Honorar an — anders, als die
+// Anwendung speichert —, und uebersahen so, dass das XML die Abschlaege ein
+// zweites Mal abzog.
 
 const { makeFakeSupabase } = require("./helpers/fakeSupabase");
 const { loadInvoiceData } = require("../services_einvoice_data");
@@ -75,28 +84,38 @@ function abschlag({ seAmount = SE } = {}) {
   }));
 }
 
-/** Schlussrechnung, die den Abschlag absetzt. */
+/**
+ * Schlussrechnung, die den Abschlag absetzt — gespeichert, wie
+ * finalInvoices.recomputeTotal es tut: Honorar minus Abzug. Abgesetzt ist das
+ * GEZAHLTE (services/arDeduction.js): bei Einbehalt 11.305 brutto = 9.500
+ * netto, ohne Einbehalt 11.900 brutto = 10.000 netto.
+ */
 function schlussrechnung({ seAmount = SE } = {}) {
+  const gezahlt  = AR_BRUTTO - seAmount;
+  const abzug    = Math.round(gezahlt / 1.19 * 100) / 100;
+  const restNet  = Math.round((SR_NETTO - abzug) * 100) / 100;
+  const restUSt  = Math.round(restNet * 0.19 * 100) / 100;
   return makeFakeSupabase(Object.assign({}, stammdaten, {
     INVOICE: [Object.assign({}, belegFelder, {
       ID: 800, INVOICE_NUMBER: "SR-2026-0001", INVOICE_DATE: "2026-09-30",
       INVOICE_TYPE: "schlussrechnung",
-      TOTAL_AMOUNT_NET: SR_NETTO, TAX_AMOUNT_NET: SR_USt, TOTAL_AMOUNT_GROSS: SR_BRUTTO,
-      SE_RELEASE_TOTAL: seAmount,
+      TOTAL_AMOUNT_NET: restNet, TAX_AMOUNT_NET: restUSt, TOTAL_AMOUNT_GROSS: restNet + restUSt,
+      SE_RELEASE_TOTAL: 0,
     })],
     INVOICE_STRUCTURE: [
       { ID: 1, TENANT_ID: TENANT, INVOICE_ID: 800, STRUCTURE_ID: 500, AMOUNT_NET: SR_NETTO, AMOUNT_EXTRAS_NET: 0 },
     ],
     PROJECT_STRUCTURE: [{ ID: 500, TENANT_ID: TENANT, ABBR: "LPH 1-9", NAME: "Gesamt", BILLING_TYPE_ID: 1 }],
     INVOICE_DEDUCTION: [
-      { ID: 1, TENANT_ID: TENANT, INVOICE_ID: 800, ADVANCE_INVOICE_ID: 700, DEDUCTION_AMOUNT_NET: AR_NETTO },
+      { ID: 1, TENANT_ID: TENANT, INVOICE_ID: 800, ADVANCE_INVOICE_ID: 700, DEDUCTION_AMOUNT_NET: abzug },
     ],
     ADVANCE_INVOICE: [{
       ID: 700, TENANT_ID: TENANT, ADVANCE_INVOICE_NUMBER: "AR-2026-0007",
-      ADVANCE_INVOICE_DATE: "2026-06-09",
-      TOTAL_AMOUNT_NET: AR_NETTO, TOTAL_AMOUNT_GROSS: AR_BRUTTO,
+      ADVANCE_INVOICE_DATE: "2026-06-09", STATUS_ID: 2, PROJECT_ID: 40, CONTRACT_ID: 30,
+      TOTAL_AMOUNT_NET: AR_NETTO, TOTAL_AMOUNT_GROSS: AR_BRUTTO, VAT_PERCENT: 19, VAT_CATEGORY: "S",
       SE_AMOUNT: seAmount, SE_RELEASED_BY_INVOICE_ID: 800,
     }],
+    PAYMENT: [{ ID: 1, TENANT_ID: TENANT, ADVANCE_INVOICE_ID: 700, AMOUNT_PAYED_GROSS: gezahlt, PAYMENT_DATE: "2026-06-30" }],
     ADVANCE_INVOICE_STRUCTURE: [],
   }));
 }
@@ -151,33 +170,51 @@ describe("Sicherheitseinbehalt: Abschlagsrechnung (N10)", () => {
   });
 });
 
-describe("Sicherheitseinbehalt: Schlussrechnung (N10)", () => {
+describe("Sicherheitseinbehalt: Schlussrechnung (Restrechnung)", () => {
   it("setzt das Vereinnahmte ab, nicht das Fakturierte", async () => {
     const data = await ladeSchluss(schlussrechnung());
     // Fakturiert war die Abschlagsrechnung ueber 11.900; geflossen sind
     // 11.305. § 14 Abs. 5 UStG verlangt die vereinnahmten Teilentgelte.
-    expect(data.deductions[0].grossAmount).toBe(AR_BRUTTO);
-    expect(data.deductions[0].retainedAmount).toBe(SE);
+    expect(data.deductions[0].billedGross).toBe(AR_BRUTTO);
     expect(data.deductions[0].paidAmount).toBe(AR_BRUTTO - SE);
-    expect(data.totals.prepaidGross).toBe(AR_BRUTTO - SE);
+    expect(data.deductions[0].netAmount).toBe(9500);
+    // Der nie gezahlte Einbehalt steht in dieser Rechnung.
+    expect(data.deductions[0].includedGross).toBe(SE);
   });
 
-  it("kommt auf denselben Zahlbetrag wie die frueher Rechnung", async () => {
+  it("fuehrt den Abzug als negative Position, nicht als „bereits bezahlt“", async () => {
     const data = await ladeSchluss(schlussrechnung());
-    // Frueher: 16.660 - 11.900 (fakturiert) + 595 (Aufloesung) = 5.355
-    // Jetzt:   16.660 - 11.305 (vereinnahmt)                    = 5.355
+    const abzug = data.lines.find(l => l.quantity < 0);
+    expect(abzug).toMatchObject({ quantity: -1, unitPrice: 9500, lineTotal: -9500 });
+    expect(abzug.description).toContain("AR-2026-0007");
+    expect(data.totals.lineTotal).toBe(4500);
+    expect(data.totals.taxBasis).toBe(4500);
+    expect(data.totals.prepaidGross).toBe(0);
+  });
+
+  it("kommt auf denselben Zahlbetrag wie frueher — ohne doppelten Abzug", async () => {
+    const data = await ladeSchluss(schlussrechnung());
+    // Frueher (PDF): 14.000 − 10.000 = 4.000 + USt 760 = 4.760 + 595 Aufloesung = 5.355
+    // Jetzt:         14.000 −  9.500 = 4.500 + USt 855 = 5.355, Einbehalt darin enthalten
+    expect(data.totals.grandTotal).toBe(5355);
     expect(data.totals.duePayable).toBe(5355);
   });
 
-  it("ist ohne force buchbar", async () => {
+  it("ist ohne force buchbar (BR-CO-13 und BR-CO-16)", async () => {
     const r = validateEInvoiceData(await ladeSchluss(schlussrechnung()));
-    expect(r.errors.some(e => e.code === "BR-CO-16")).toBe(false);
+    expect(r.errors.map(e => `${e.code}/${e.btField}: ${e.message}`)).toEqual([]);
     expect(r.ok).toBe(true);
   });
 
-  it("verhaelt sich ohne Einbehalt wie zuvor", async () => {
+  it("nennt einen enthaltenen Einbehalt nicht noch einmal als Aufloesung", async () => {
+    const data = await ladeSchluss(schlussrechnung());
+    expect(data.securityRetention.hasRelease).toBe(false);
+    expect(generateUblXml(data)).not.toContain("#PMT#");
+  });
+
+  it("ohne Einbehalt: voller Abzug, Rest wie gehabt", async () => {
     const data = await ladeSchluss(schlussrechnung({ seAmount: 0 }));
-    expect(data.totals.prepaidGross).toBe(AR_BRUTTO);
+    expect(data.deductions[0].netAmount).toBe(AR_NETTO);
     expect(data.totals.duePayable).toBe(SR_BRUTTO - AR_BRUTTO);
     expect(validateEInvoiceData(data).ok).toBe(true);
   });

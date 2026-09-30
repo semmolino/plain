@@ -105,6 +105,13 @@ describe("Rest ausbuchen — anlegen", () => {
     expect(ok.AMOUNT_NET).toBe(84.03);
   });
 
+  test("in einer Schlussrechnung aufgegangen: dort wird ausgebucht, nicht hier", async () => {
+    const db = welt();
+    db._tables.ADVANCE_INVOICE[0].ABSORBED_BY_INVOICE_ID = 800;
+    await expect(adj.createAdjustment(db, { tenantId: T, body: kuerzung({ rebillable: false }) }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringContaining("Schlussrechnung") });
+  });
+
   test("Stornobeleg und fremder Mandant sind ausgeschlossen", async () => {
     const db = welt({
       ADVANCE_INVOICE: [
