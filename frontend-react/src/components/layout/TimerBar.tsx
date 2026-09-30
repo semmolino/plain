@@ -747,7 +747,7 @@ export function TimerBar() {
   if (!session) {
     return (
       <>
-        <button className="hdr-action hdr-action--ghost" onClick={() => setModal('start')} title="Stempeluhr starten – misst die Zeit, während du arbeitest">
+        <button className="hdr-action hdr-action--primary" onClick={() => setModal('start')} title="Stempeluhr starten – misst die Zeit, während du arbeitest">
           <Play size={15} strokeWidth={2} aria-hidden="true" />
           <span className="hdr-label">Stempeluhr</span>
         </button>

@@ -1147,18 +1147,20 @@ input::placeholder { color: var(--text-4); }
   transition: color 0.13s;
 }
 .bottom-nav-item:hover { transform: none; box-shadow: none; background: transparent; color: var(--nav-fg-strong); }
-/* Der aktive Eintrag war allein ueber die Farbe markiert (WCAG 1.4.1) und
-   nach dem Anheben des inaktiven Texts in fuenf Themes sogar dunkler als
-   seine Nachbarn. Jetzt: helles Label plus Balken oben in --nav-active,
-   spiegelbildlich zum Balken links in der Seitennavigation. */
+/* Der aktive Eintrag war allein ueber die Farbe markiert (WCAG 1.4.1).
+   Testversion 1: wie in der Seitenleiste ein helles Feld (--nav-active-bg)
+   mit dunkler Schrift (--nav-active-fg) — die Flaeche traegt den Zustand,
+   nicht die Farbe allein. Das Feld liegt als ::before hinter Symbol und
+   Label, damit die Beruehrflaeche des Eintrags unveraendert bleibt. */
 .bottom-nav-item { position: relative; }
-.bottom-nav-item.active { color: var(--nav-fg-strong); }
+.bottom-nav-item.active { color: var(--nav-active-fg); }
 .bottom-nav-item.active::before {
-  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-  width: 28px; height: 3px; border-radius: 0 0 3px 3px;
-  background: var(--nav-active);
+  content: ''; position: absolute; inset: 5px 3px;
+  border-radius: var(--radius-nav);
+  background: var(--nav-active-bg);
 }
-.bottom-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; border-radius: 4px; }
+.bottom-nav-item > * { position: relative; }
+.bottom-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; border-radius: var(--radius-nav); }
 .bn-icon  { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; }
 /* 11px = Untergrenze aus CLAUDE.md (vorher 9px). Bei max. 5 Spalten passt
    das Label jetzt auch auf 390px-Geraeten ohne Umbruch. */
@@ -1200,7 +1202,10 @@ input::placeholder { color: var(--text-4); }
   transition: color 0.13s, background 0.13s;
 }
 .bn-more-item:hover  { background: var(--nav-hover-bg); color: var(--nav-fg-strong); }
-.bn-more-item.active { color: var(--nav-fg-strong); box-shadow: inset 3px 0 0 var(--nav-active); }
+.bn-more-item.active {
+  color: var(--nav-active-fg); background: var(--nav-active-bg);
+  border-radius: var(--radius-nav); margin: 0 var(--space-1);
+}
 .bn-more-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; }
 
 @media (min-width: 1024px) {
@@ -1216,47 +1221,73 @@ input::placeholder { color: var(--text-4); }
 @media (min-width: 1024px) {
   /* App-Shell auf Viewport-Hoehe fixieren: nur .app-main scrollt (hat bereits
      overflow-y:auto), Header und Sidebar bleiben statisch sichtbar. Mobile
-     behaelt den Dokument-Scroll + fixe Bottom-Nav. */
-  .app-layout { height: 100dvh; overflow: hidden; }
+     behaelt den Dokument-Scroll + fixe Bottom-Nav.
+
+     Testversion 1: Die Seitenleiste laeuft ueber die volle Hoehe (Logo oben),
+     die Kopfzeile steht rechts daneben ueber dem Inhalt. Umgesetzt als Raster
+     ohne Umbau des Markups: .app-body loest sich mit display: contents auf,
+     Kopfzeile, Leiste und Inhalt bekommen feste Zellen. Alles andere in der
+     Shell (Dialoge, Toasts, Bottom-Nav) ist fixiert und belegt keine Zelle. */
+  .app-layout {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100dvh; overflow: hidden;
+  }
+  .app-body { display: contents; }
+  .app-layout > .app-header { grid-column: 2; grid-row: 1; }
+  .app-body > .side-nav     { grid-column: 1; grid-row: 1 / span 2; }
+  .app-body > .app-main     { grid-column: 2; grid-row: 2; min-height: 0; }
+
+  /* Seitenleiste: Nachttinte, Eintraege weiss, aktiver Eintrag als weisses
+     Feld mit schwarzer Schrift (42px hoch, Radius 12). Masse aus der Vorgabe:
+     232px breit, Innenabstand 26 / 14 / 18. */
   .side-nav {
-    display: flex; flex-direction: column;
-    width: 200px; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 2px;
+    width: 232px; flex-shrink: 0;
     background: var(--nav-bg);
-    border-right: 1px solid var(--nav-border);
-    padding: 8px 0;
+    padding: 26px 14px 18px;
     overflow-y: auto;
   }
   .side-nav-brand {
-    display: flex; align-items: center; justify-content: center;
-    padding: 6px 16px 14px;
-    margin-bottom: 4px;
-    border-bottom: 1px solid var(--nav-border);
+    display: flex; align-items: center; justify-content: flex-start;
+    padding: 2px 10px 24px;
   }
   .side-nav-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 16px;
+    display: flex; align-items: center; gap: 12px;
+    height: 42px; padding: 0 12px; flex-shrink: 0;
+    border-radius: var(--radius-nav);
     color: var(--nav-inactive);
-    text-decoration: none; font-size: 13px; font-weight: 600;
-    border-left: 3px solid transparent;
+    text-decoration: none; font-size: 14px; font-weight: 500;
     transition: color 0.13s, background 0.13s;
     white-space: nowrap;
   }
   .side-nav-item:hover  { background: var(--nav-hover-bg); color: var(--nav-fg-strong); }
-  /* Aktiv = Label in --chrome-text, Balken in --nav-active. Vorher trug die
-     Akzentfarbe beides: als 13-px-Text auf dunkler Chrome lag sie je nach
-     Theme bei 4.6–4.8:1 und war schwer zu lesen. Der Balken traegt die
-     Identitaet, das Label die Lesbarkeit. */
-  .side-nav-item.active {
-    color: var(--nav-fg-strong);
-    border-left-color: var(--nav-active);
-    background: var(--nav-hover-bg);
+  .side-nav-item.active,
+  .side-nav-item.active:hover {
+    color: var(--nav-active-fg);
+    background: var(--nav-active-bg);
+    font-weight: 600;
   }
-  .side-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -2px; border-radius: 2px; }
+  /* Trennlinie vor „Service" — bzw. vor „Einstellungen", wenn Service fuer
+     diesen Nutzer nicht sichtbar ist. Rein optisch, ohne eigenes Element. */
+  .side-nav-item[href="/service"],
+  .side-nav-item[href="/admin"]:not(.side-nav-item[href="/service"] + .side-nav-item) {
+    position: relative; margin-top: 21px;
+  }
+  .side-nav-item[href="/service"]::before,
+  .side-nav-item[href="/admin"]:not(.side-nav-item[href="/service"] + .side-nav-item)::before {
+    content: ''; position: absolute; left: 10px; right: 10px; top: -11px;
+    height: 1px; background: var(--nav-border);
+  }
+  .side-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: 2px; }
   .sn-icon  { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; }
-  .sn-label { font-size: 13px; }
+  .sn-label { font-size: 14px; }
   /* Hide bottom nav + remove bottom padding on desktop */
   .bottom-nav  { display: none; }
   .app-main    { padding-bottom: 16px; }
+  /* Inhalt: 26px oben, 32px links/rechts (Vorgabe „Inhalt"). */
+  .app-main .master-page, .app-main .dash-page { padding: 26px 32px 0; }
 }
 
 /* ── Dashboard page ──────────────────────────────────────────────────────── */
@@ -2863,17 +2894,30 @@ th.doc-actions, td.doc-actions {
 @media (min-width: 1024px) { .app-header-brand { display: none; } }
 .app-header-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .app-main { padding-top: 0; }
+/* Testversion 1: Kopfzeile 64px, Innenabstand 32px, weiss mit 1px Linie. */
+@media (min-width: 1024px) {
+  .app-header { height: 64px; padding: 0 32px; gap: 14px; }
+  .app-header-left, .app-header-right { gap: 10px; }
+}
 
 /* ── User menu ───────────────────────────────────────────────────────────── */
 .user-menu-wrap { position: relative; }
 .user-menu-btn {
-  display: flex; align-items: center; gap: 5px;
+  display: flex; align-items: center; gap: 8px;
   background: none; border: none; cursor: pointer;
-  padding: 4px 8px; border-radius: 6px;
-  font-size: 12px; font-weight: 600; color: var(--chrome-text, var(--text-2));
-  min-height: 32px;
+  padding: 4px 6px 4px 4px; border-radius: var(--radius-md);
+  font-size: 13px; font-weight: 600; color: var(--chrome-text, var(--text-2));
+  min-height: 38px;
 }
-.user-menu-btn:hover { background: rgba(0,0,0,0.07); transform: none; box-shadow: none; }
+.user-menu-btn:hover { background: var(--chrome-hover-bg); transform: none; box-shadow: none; }
+/* Avatar 28px: Nachttinte mit weissem Symbol, solange kein Foto hinterlegt
+   ist; ein Foto bekommt dieselbe Groesse. */
+.user-menu-btn > svg {
+  width: 28px; height: 28px; padding: 6px; flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--accent); color: var(--accent-fg);
+}
+.user-menu-btn > img { width: 28px; height: 28px; }
 .user-menu-name { max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-menu-panel {
   position: absolute; top: calc(100% + 6px); right: 0;
@@ -5702,33 +5746,42 @@ fieldset:disabled .ws-check { cursor: default; }
    Vorher: gruener „Start"-Knopf und im Lauf drei verschiedenfarbige Flaechen
    (Orange, Blau, Schwarz) — das Lauteste auf jeder Seite. Jetzt ruhige
    Umriss-Knoepfe in den Chrome-Farben des Themes. */
+/* Testversion 1: Kopfzeilen-Knoepfe wie die Buttons im Inhalt — 38px hoch,
+   Radius 8. „Zeit buchen" ist der Nebenbutton (weiss, Rahmen), der Start der
+   Stempeluhr der Hauptbutton in Nachttinte (--btn). */
 .hdr-action {
-  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
-  height: 32px; padding: 0 12px;
+  display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0;
+  height: 38px; padding: 0 14px;
   border: 1px solid var(--chrome-border); border-radius: var(--radius-md);
-  background: transparent; color: var(--chrome-text); box-shadow: none;
-  font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  background: var(--chrome); color: var(--chrome-text); box-shadow: none;
+  font-size: 14px; font-weight: 500; white-space: nowrap; cursor: pointer;
 }
 .hdr-action:hover:not(:disabled) { background: var(--chrome-hover-bg); }
 .hdr-action svg { color: var(--chrome-icon); }
-.hdr-action--accent { border-color: var(--nav-active); }
-.hdr-action--accent svg { color: var(--nav-active); }
-.hdr-action--ghost { border-color: transparent; }
+.hdr-action--accent { border-color: var(--chrome-border); }
+.hdr-action--ghost { border-color: transparent; background: transparent; }
+.hdr-action--primary {
+  background: var(--btn); border-color: var(--btn); color: var(--btn-fg);
+}
+.hdr-action--primary svg { color: var(--btn-fg); }
+.hdr-action--primary:hover:not(:disabled) { background: var(--btn-h); border-color: var(--btn-h); }
 .hdr-action:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .timer-run { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* Laufende Stempeluhr: weisses Feld mit Rahmen, farbiger Punkt, Aufgabe,
+   Uhrzeit in Geist Mono (Referenz: Kopfzeile in TV1-Projekte). */
 .timer-chip {
-  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
-  height: 32px; padding: 0 12px;
-  border: 1px solid transparent; border-radius: var(--radius-pill);
-  background: var(--chrome-hover-bg); color: var(--chrome-text);
-  font-size: 13px;
+  display: inline-flex; align-items: center; gap: 10px; min-width: 0;
+  height: 38px; padding: 0 12px;
+  border: 1px solid var(--chrome-border); border-radius: var(--radius-md);
+  background: var(--chrome); color: var(--chrome-text);
+  font-size: 14px; font-weight: 600;
 }
 .timer-chip--break { border-color: var(--warning); }
 .timer-chip--button { cursor: pointer; box-shadow: none; }
 .timer-clock { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .timer-task {
-  font-size: 12px; color: var(--chrome-icon);
+  font-size: 13px; font-weight: 500; color: var(--chrome-text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px;
 }
 .timer-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--success); }

@@ -16,7 +16,7 @@ export function SideNav() {
   return (
     <nav className="side-nav" aria-label="Hauptnavigation">
       <div className="side-nav-brand">
-        <BrandWordmark size={22} />
+        <BrandWordmark size={24} />
       </div>
       {visibleItems.map(({ to, icon: Icon, label }) => (
         <NavLink
