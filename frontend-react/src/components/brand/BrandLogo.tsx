@@ -1,19 +1,14 @@
 // Zentrale Marken-Assets (plan&simple). Dateien liegen in /public/brand.
-// Wordmark: zwei Varianten (color/white), per CSS am data-theme umgeschaltet,
-// damit der dunkle Schriftzug nicht auf dunklem Grund verschwindet.
+// Stand: Design „Testversion 1" (design/testversion-1/logo).
 //
-// ZEITLICH BEGRENZT: In den Vorschau-Themes „trust"/„trust-dark" zeigen die
-// Dateien auf umgefaerbte Varianten. Ohne das stuende in der Kopfzeile das
-// alte Ampersand (#2a55d4) direkt neben der neuen Akzentfarbe — dE 34, also
-// sichtbar zwei verschiedene Blaus, und die Vorschau haette etwas gezeigt,
-// was der Vorschlag nicht ist. Heute faellt das nicht auf, weil #2a55d4 und
-// #2563eb nur dE 7,0 auseinanderliegen.
-// Welche Datei gilt, kann NICHT per CSS entschieden werden (es ist ein
-// src-Attribut) — daher der Hook statt einer weiteren Klasse.
-// Mit der Entscheidung: Originaldateien ersetzen, diesen Zweig und die drei
-// *-trust-PNGs loeschen. docs/MARKENFARBKONZEPT_2026-09.md §6
-
-import { useThemeName } from '@/hooks/useThemeName'
+// Wordmark: zwei Varianten (Nachttinte / weiss), per CSS am Ort umgeschaltet,
+// damit der dunkle Schriftzug nicht auf dunklem Grund verschwindet. Das „&"
+// ist eine Zeichnung (SVG), kein Schriftzeichen — nie mit einer Schrift
+// nachbauen.
+//
+// Die frueheren Sonderdateien fuer die Vorschau-Themes „trust"/„trust-dark"
+// (umgefaerbtes Ampersand) sind entfallen: die neue Wortmarke ist einfarbig
+// und passt zu jedem Theme.
 
 interface BrandProps {
   /** Hoehe in px; Breite skaliert automatisch. */
@@ -23,28 +18,22 @@ interface BrandProps {
 
 /** Schriftzug „plan&simple" — fuer Login, Sidebar etc. */
 export function BrandWordmark({ size = 28, className }: BrandProps) {
-  const theme = useThemeName()
   // Beide Varianten bleiben im Markup: WELCHE sichtbar ist, entscheidet
   // weiterhin das CSS (es haengt nicht nur am Theme, sondern auch am Ort —
   // Seitennavigation gegen Login-Seite).
-  const color = theme === 'trust' ? '/brand/wordmark-trust.png' : '/brand/wordmark-color.png'
-  const white = theme === 'trust-dark' ? '/brand/wordmark-trust-white.png' : '/brand/wordmark-white.png'
   return (
     <span className={`brand-wordmark${className ? ' ' + className : ''}`} role="img" aria-label="plan&simple">
-      <img src={color} alt="" height={size} className="brand-wordmark-color" />
-      <img src={white} alt="" height={size} className="brand-wordmark-white" />
+      <img src="/brand/wortmarke.svg" alt="" height={size} className="brand-wordmark-color" />
+      <img src="/brand/wortmarke-weiss.svg" alt="" height={size} className="brand-wordmark-white" />
     </span>
   )
 }
 
-/** Icon-Mark (blaues „&") — fuer kompakte Stellen wie den Mobile-Header. */
+/** App-Icon (weisses „&" auf Nachttinte) — fuer kompakte Stellen wie den Mobile-Header. */
 export function BrandMark({ size = 24, className }: BrandProps) {
-  const theme = useThemeName()
-  const src = theme === 'trust' || theme === 'trust-dark'
-    ? '/brand/icon-256-trust.png' : '/brand/icon-256.png'
   return (
     <img
-      src={src}
+      src="/brand/app-icon.svg"
       alt="plan&simple"
       width={size}
       height={size}

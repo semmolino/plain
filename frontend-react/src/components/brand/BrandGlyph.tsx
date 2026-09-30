@@ -1,10 +1,11 @@
 import type { CSSProperties } from 'react'
 
-// Freigestelltes Marken-"&" (plan&simple, RGBA mit Alpha). Wird als CSS-Maske
-// genutzt, damit die exakte Logo-Form füllbar ist: zwei deckungsgleiche, auf
-// die &-Silhouette maskierte Flächen — unten die blasse (leere), darüber die
-// volle, die per clip-path von unten nach oben sichtbar wird.
-const AMP_URL = '/brand/ampersand.png'
+// Marken-"&" (plan&simple, Testversion 1) als CSS-Maske, damit die exakte
+// Logo-Form füllbar ist: zwei deckungsgleiche, auf die &-Silhouette maskierte
+// Flächen — unten die blasse (leere), darüber die volle, die per clip-path von
+// unten nach oben sichtbar wird. Die Maske ist das Zeichen OHNE Stiftspitze:
+// die Spitze gehört laut Vorgabe nur ins Logo, nicht an Fortschrittsanzeigen.
+const AMP_URL = '/brand/zeichen-maske.svg'
 
 interface Props {
   /** Kantenlänge in px (quadratische Box, "&" wird darin zentriert). */
