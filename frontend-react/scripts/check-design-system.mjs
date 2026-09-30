@@ -186,9 +186,24 @@ function resolve(value, bg) {
   return null
 }
 
+/*
+ * Tokens, die auf andere Tokens zeigen (`--nav-bg: var(--chrome)`), gegen
+ * das Theme aufloesen — so wie der Browser es am <html> tut. Ohne das fiele
+ * jede solche Zeile lautlos aus der Pruefung (resolve() kennt nur Farben).
+ */
+function deref(t) {
+  const out = { ...t }
+  for (const k of Object.keys(out)) {
+    let v = out[k], guard = 0
+    for (let m; (m = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v)) && guard < 5; guard++) v = t[m[1]]
+    out[k] = v
+  }
+  return out
+}
+
 const root = block(':root')
 for (const [name, sel] of THEMES) {
-  const t = { ...root, ...block(sel) }
+  const t = deref({ ...root, ...block(sel) })
   const surface = hex2rgb(t['--surface']), bg = hex2rgb(t['--bg'])
   const onBoth = tok => Math.min(
     ratio(resolve(t[tok], surface), surface),
@@ -235,11 +250,24 @@ for (const [name, sel] of THEMES) {
   // Navigationstext trotzdem schwer zu lesen. 4.5:1 ist die Untergrenze fuer
   // Fliesstext, kein Ziel fuer 11–13-px-Label auf dunklem Grund. Wer den Wert
   // hier senkt, holt sich den Befund zurueck.
+  //
+  // Seit Testversion 1 hat die Navigation eine eigene Flaeche (--nav-bg,
+  // Nachttinte), waehrend die Kopfzeile auf --chrome (weiss) bleibt. Die
+  // Navigationstokens werden deshalb gegen --nav-bg gerechnet, die
+  // Kopfzeilentokens gegen --chrome.
   const chrome = hex2rgb(t['--chrome'])
+  const navBg = resolve(t['--nav-bg'], chrome) ?? chrome
   const NAV_MIN = { '--nav-inactive': 7 }
-  for (const tok of ['--nav-inactive', '--nav-active', '--chrome-icon', '--chrome-text']) {
+  for (const tok of ['--nav-inactive', '--nav-active', '--nav-fg-strong']) {
+    const c = resolve(t[tok], navBg)
+    if (c) checks.push([`${tok} auf --nav-bg`, ratio(c, navBg), NAV_MIN[tok] ?? 4.5])
+  }
+  const navActiveBg = resolve(t['--nav-active-bg'], navBg)
+  const navActiveFg = navActiveBg && resolve(t['--nav-active-fg'], navActiveBg)
+  if (navActiveFg) checks.push(['--nav-active-fg auf --nav-active-bg', ratio(navActiveFg, navActiveBg), 4.5])
+  for (const tok of ['--chrome-icon', '--chrome-text']) {
     const c = resolve(t[tok], chrome)
-    if (c) checks.push([`${tok} auf --chrome`, ratio(c, chrome), NAV_MIN[tok] ?? 4.5])
+    if (c) checks.push([`${tok} auf --chrome`, ratio(c, chrome), 4.5])
   }
   // Schrift auf farbigen Flaechen
   for (const [surfTok, fgTok] of [

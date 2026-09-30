@@ -75,14 +75,17 @@ export function negativeOr(v: number | null | undefined, fallback: string): CSSP
   return negativeStyle(v) ?? { color: fallback }
 }
 
-/** Betrag als fertige Zelle: formatiert, negative Werte rot. Der Normalfall. */
+/**
+ * Betrag als fertige Zelle: formatiert, negative Werte rot. Der Normalfall.
+ * Die Klasse `money` setzt Geist Mono mit tabellarischen Ziffern (globals.css).
+ */
 export function money(v: number | null | undefined): ReactNode {
-  return <span style={negativeStyle(v)}>{fmtEur(v)}</span>
+  return <span className="money" style={negativeStyle(v)}>{fmtEur(v)}</span>
 }
 
 /** Wie `money`, ohne Nachkommastellen. */
 export function money0(v: number | null | undefined): ReactNode {
-  return <span style={negativeStyle(v)}>{fmtEur0(v)}</span>
+  return <span className="money" style={negativeStyle(v)}>{fmtEur0(v)}</span>
 }
 
 /**
@@ -90,5 +93,5 @@ export function money0(v: number | null | undefined): ReactNode {
  * Wert schlaegt.
  */
 export function moneyOr(v: number | null | undefined, fallback: string): ReactNode {
-  return <span style={negativeOr(v, fallback)}>{fmtEur(v)}</span>
+  return <span className="money" style={negativeOr(v, fallback)}>{fmtEur(v)}</span>
 }

@@ -18,7 +18,7 @@ export function useChartDefaults(): void {
   useEffect(() => {
     ChartJS.defaults.color       = t.textMuted
     ChartJS.defaults.borderColor = t.grid
-    ChartJS.defaults.font.family = "'Hanken Grotesk', system-ui, sans-serif"
+    ChartJS.defaults.font.family = "'Geist', system-ui, sans-serif"
 
     // Die Plugin-Defaults existieren erst, wenn das jeweilige Plugin
     // registriert ist — daher defensiv zuweisen.

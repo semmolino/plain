@@ -1,75 +1,146 @@
-/* ── Brand-Font: Hanken Grotesk (SIL OFL, selbst gehostet) ───────────────────
-   Variable Fonts (Gewicht 100–900) in /public/fonts. Eine Datei pro Stil deckt
-   alle Gewichte ab; font-display: swap zeigt sofort den Fallback und tauscht
-   beim Laden. Lizenz: frontend-react/public/fonts/OFL.txt */
+/* ── Schrift: Geist + Geist Mono (SIL OFL, selbst gehostet) ──────────────────
+   Design „plan&simple – Testversion 1" (design/testversion-1/). Variable Fonts
+   (Gewicht 100–900) in /public/fonts, je Stil latin + latin-ext. Selbst
+   gehostet statt Google Fonts: kein Abruf von Google-Servern beim Seitenaufruf.
+   Geist fuer alles, Geist Mono fuer Zahlen, Kuerzel (P-26-014), Betraege,
+   Prozente und Zeiten — immer mit tabellarischen Ziffern.
+   Lizenz: frontend-react/public/fonts/OFL-Geist.txt */
 @font-face {
-  font-family: 'Hanken Grotesk';
+  font-family: 'Geist';
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
-  src: url('/fonts/HankenGrotesk-variable.woff2') format('woff2');
+  src: url('/fonts/Geist-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 @font-face {
-  font-family: 'Hanken Grotesk';
+  font-family: 'Geist';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/Geist-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Geist';
   font-style: italic;
   font-weight: 100 900;
   font-display: swap;
-  src: url('/fonts/HankenGrotesk-variable-italic.woff2') format('woff2');
+  src: url('/fonts/Geist-latin-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/GeistMono-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/fonts/GeistMono-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 /* ── Design tokens ───────────────────────────────────────────────────────── */
+/* Standard-Theme „Hell" = plan&simple Testversion 1.
+   Grundregeln der Vorgabe (design/testversion-1/README.md):
+   1. Kontrast: Text ist Schwarz (#0F1115) auf hellem Grund oder Weiss auf
+      Nachttinte — keine grauen Texte. Deshalb stehen --text-2 … --text-4 hier
+      bewusst auf Schwarz: Hierarchie laeuft ueber Groesse und Gewicht.
+      Reine Symbole duerfen --ps-symbol (#3A3F4D) sein.
+   2. Die Stiftspitze gehoert nur zum Logo — keine Spitze an Balken, Reitern,
+      Diagrammen oder Buttons.
+   3. Status = Punkt + Wort: Schild weiss, Text schwarz, nur der Punkt farbig. */
 :root {
-  --bg:         #f4f6fb;
+  /* ── Testversion 1: Grundwerte (tokens/plan-simple-tokens.css) ──────── */
+  --ps-nachttinte:   #10163D;  /* Marke, Seitenleiste, Buttons (Weiss darauf 17,4:1) */
+  --ps-schwarz:      #0F1115;  /* jede Schrift auf hellen Flaechen */
+  --ps-weiss:        #FFFFFF;
+  --ps-grund:        #F7F7F5;  /* Seitenhintergrund */
+  --ps-linie:        #E6E6E1;  /* Rahmen, Tabellen- und Trennlinien */
+  --ps-linie-stark:  #C9CED9;  /* Rahmen von Status-Schildern */
+  --ps-rahmen-feld:  #5A6072;  /* Rahmen leerer Checkboxen (3:1) */
+  --ps-symbol:       #3A3F4D;  /* reine Symbole — nie fuer Text */
+  --ps-spur:         #E7EAF6;  /* Spur von Fortschrittsbalken */
+
+  /* Status — Farbe nur im Punkt. Bedeutungsebene: in keinem Branchen-Theme
+     ueberschrieben, nur fuer dunkle Themes aufgehellt. */
+  --ps-status-im-plan:       #1F8A55;
+  --ps-status-knapp:         #C98A12;
+  --ps-status-ueber:         #C8452D;
+  --ps-status-aktiv:         #25348C;
+  --ps-status-angeboten:     #C98A12;
+  --ps-status-ruhend:        #8A90A2;
+  --ps-status-abgeschlossen: #1F8A55;
+
+  --font-sans: 'Geist', 'Geist Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+
+  --bg:         #F7F7F5;
   --surface:    #ffffff;
-  --surface-2:  #f8f9fb;
-  --surface-3:  #f9fafb;
+  --surface-2:  #F7F7F5;
+  --surface-3:  #FAFAF8;
 
-  /* --text-2/-3 sind WCAG-AA-tauglich (>= 4.5:1 auf --bg UND --surface).
-     --text-4 erreicht 3:1 (Schwelle fuer UI-Elemente/Platzhalter),
-     --text-5 ist rein dekorativ — NICHT fuer lesbaren Text verwenden. */
-  --text:       #111827;
-  --text-2:     rgba(17,24,39,0.70);
-  --text-3:     rgba(17,24,39,0.60);
-  --text-4:     rgba(17,24,39,0.47);
-  --text-5:     rgba(17,24,39,0.38);
+  /* Alle Textstufen schwarz (Regel 1 oben). --text-5 ist rein dekorativ
+     (Symbole) und nimmt deshalb die Symbolfarbe. */
+  --text:       #0F1115;
+  --text-2:     #0F1115;
+  --text-3:     #0F1115;
+  --text-4:     #0F1115;
+  --text-5:     #3A3F4D;
 
-  --border:     rgba(17,24,39,0.10);
-  --border-2:   rgba(17,24,39,0.08);
-  --border-3:   rgba(17,24,39,0.06);
-  --border-4:   rgba(17,24,39,0.05);
+  --border:     #E6E6E1;
+  --border-2:   #E6E6E1;
+  --border-3:   #E6E6E1;
+  --border-4:   #E6E6E1;
 
-  --accent:       #2563eb;
-  --accent-dark:  #1d4ed8;
-  --accent-bg:    #eff6ff;
-  --accent-bg2:   #dbeafe;
-  --accent-tint:  rgba(37,99,235,0.04);
-  --accent-tint2: rgba(37,99,235,0.08);
-  --accent-tint3: rgba(37,99,235,0.10);
-  --accent-ring:  rgba(37,99,235,0.15);
+  --accent:       #10163D;
+  --accent-dark:  #0B1030;
+  --accent-bg:    #E7EAF6;
+  --accent-bg2:   #D6DBEF;
+  --accent-tint:  rgba(16,22,61,0.04);
+  --accent-tint2: rgba(16,22,61,0.07);
+  --accent-tint3: rgba(16,22,61,0.10);
+  --accent-ring:  rgba(16,22,61,0.22);
 
   /* Marken-"&" (BrandGlyph) — Belohnungs-/Fortschritts-Icon. Default = Akzent. */
   --brand-glyph: var(--accent);
-  --brand-glyph-empty: rgba(37,99,235,0.18);
+  --brand-glyph-empty: #E7EAF6;
 
-  /* Chrome = app-header + bottom-nav background */
+  /* Chrome = Kopfzeile (und in den Branchen-Themes auch die Navigation).
+     Testversion 1: Kopfzeile weiss mit feiner Linie, ohne Schatten. */
   --chrome:          #ffffff;
-  --chrome-border:   rgba(17,24,39,0.08);
-  --chrome-shadow-h: 0 1px 6px rgba(17,24,39,0.05);
-  --chrome-shadow-n: 0 -2px 12px rgba(17,24,39,0.06);
-  --chrome-text:     #111827;
-  --chrome-icon:     rgba(17,24,39,0.60);
-  --chrome-hover-bg: rgba(17,24,39,0.06);
+  --chrome-border:   #E6E6E1;
+  --chrome-shadow-h: none;
+  --chrome-shadow-n: 0 -2px 12px rgba(16,22,61,0.12);
+  --chrome-text:     #0F1115;
+  --chrome-icon:     #3A3F4D;
+  --chrome-hover-bg: rgba(16,22,61,0.05);
 
-  --nav-active:   #2563eb;
-  --nav-inactive: #56575c;
+  /* Navigation (Seitenleiste + Bottom-Nav). Getrennt von --chrome, weil die
+     Kopfzeile in Testversion 1 weiss ist, die Navigation aber Nachttinte.
+     Aktiver Eintrag = weisses Feld mit schwarzer Schrift. Die Branchen- und
+     Dunkel-Themes setzen diese Tokens unten auf ihre Chrome-Farben. */
+  --nav-bg:        #10163D;
+  --nav-border:    rgba(255,255,255,0.12);
+  --nav-hover-bg:  rgba(255,255,255,0.10);
+  --nav-active-bg: #FFFFFF;
+  --nav-active-fg: #0F1115;
+  --nav-fg-strong: #FFFFFF;    /* Schrift bei Hover/aktiv auf --nav-bg */
+  --nav-active:   #FFFFFF;
+  --nav-inactive: #FFFFFF;
 
   /* Primary action button (auth, modal confirm) */
-  --btn:   #1a1a2e;
-  --btn-h: #2d2d4e;
+  --btn:   #10163D;
+  --btn-h: #1E2758;
 
   /* CTA = prominent action button in content area (tbr-next, wizard active step) */
-  --cta:   #2563eb;
-  --cta-h: #1d4ed8;
+  --cta:   #10163D;
+  --cta-h: #1E2758;
 
   /* Schriftfarbe AUF --btn/--cta. Als Token, damit Themes mit hellem
      Button-Hintergrund (dark) auf dunkle Schrift wechseln koennen —
@@ -78,24 +149,32 @@
   --accent-fg: #ffffff;   /* Schriftfarbe AUF --accent-Flaechen */
   --cta-fg:    #ffffff;   /* Schriftfarbe AUF --cta-Flaechen (kann vom Button abweichen) */
 
-  --notif-badge: #dc2626;
+  --notif-badge: #10163D;
   --notif-badge-fg: #ffffff;
-  --notif-dot:   #2563eb;
-  --overlay:     rgba(17,24,39,0.45);
-  --timer-color: #16a34a;
+  --notif-dot:   #10163D;
+  --overlay:     rgba(15,17,21,0.45);
+  --timer-color: #1F8A55;
 
-  --dim:   rgba(17,24,39,0.04);
-  --dim-2: rgba(17,24,39,0.025);
+  --dim:   rgba(16,22,61,0.04);
+  --dim-2: rgba(16,22,61,0.025);
+
+  /* Status-Schild und Fortschrittsbalken (Testversion 1). Ueber Tokens, damit
+     Dunkel- und Branchen-Themes dieselbe Form mit ihren Flaechen bekommen. */
+  --badge-bg:       var(--surface);
+  --badge-border:   #C9CED9;
+  --progress-track: var(--accent-bg);
+  --progress-fill:  var(--accent);
 
   /* Typografie-Skala — zentrale Steuerung fuer Titel/Headings.
-     Hierarchie laeuft ueber die GROESSE; Gewicht bewusst nur 700/800
-     (Brand: Hanken Grotesk Bold/ExtraBold). Theme-unabhaengig -> nur hier. */
-  --fw-title:         800;     /* Seitentitel (oberste Ebene) */
-  --fw-heading:       700;     /* Modal / Section / Card / Eyebrow */
-  --fs-page-title:    20px;
+     Hierarchie laeuft ueber die GROESSE; Testversion 1: Titel 600 mit enger
+     Laufweite (H1 28px / 600 / −0,025em, H2 16px / 600). Theme-unabhaengig. */
+  --fw-title:         600;     /* Seitentitel (oberste Ebene) */
+  --fw-heading:       600;     /* Modal / Section / Card / Eyebrow */
+  --ls-title:         -0.025em;
+  --fs-page-title:    28px;
   --fs-modal-title:   16px;
-  --fs-section-title: 15px;
-  --fs-card-title:    14px;
+  --fs-section-title: 16px;
+  --fs-card-title:    16px;
   --fs-eyebrow:       12px;    /* Overline / Abschnitts-Label (UPPERCASE) */
   --fs-label:         11px;    /* Feld-/Kennzahl-Label (UPPERCASE) */
   --ls-eyebrow:       0.05em;  /* einheitliches Tracking fuer ALLE Versal-Labels */
@@ -113,16 +192,18 @@
 
   /* ── Radius-Skala ──────────────────────────────────────────────────────
      Vier Stufen statt bisher 14 verschiedener Werte.
-     sm = Badges/Chips · md = Buttons/Inputs · lg = Cards/Modals · pill = rund */
+     sm = Badges/Chips · md = Buttons/Inputs · lg = Cards/Modals · pill = rund
+     Testversion 1: Schild 6 · Button/Feld 8 · Karte 10 · Menuepunkt 12. */
   --radius-sm:   6px;
-  --radius-md:  10px;
-  --radius-lg:  14px;
+  --radius-md:   8px;
+  --radius-lg:  10px;
+  --radius-nav: 12px;
   --radius-pill: 999px;
 
   /* ── Schatten-Skala ────────────────────────────────────────────────────
      Theme-abhaengig (--shadow-color), damit Schatten im Dark-Theme
      nicht unsichtbar werden. */
-  --shadow-color: 17,24,39;
+  --shadow-color: 16,22,61;
   --shadow-sm: 0 1px 2px  rgba(var(--shadow-color),0.06);
   --shadow-md: 0 2px 8px  rgba(var(--shadow-color),0.08);
   --shadow-lg: 0 8px 24px rgba(var(--shadow-color),0.12);
@@ -180,8 +261,8 @@
      --accent-rgb und --hover-bg wurden im Code bereits per var(…) genutzt,
      waren aber nirgends definiert: der Fokusring war dadurch in JEDEM Theme
      blau (Fallback 59,130,246) und Hover im Dark-Theme dunkler statt heller. */
-  --accent-rgb: 37,99,235;
-  --hover-bg:   rgba(17,24,39,0.06);
+  --accent-rgb: 16,22,61;
+  --hover-bg:   rgba(16,22,61,0.05);
   --focus-ring: 0 0 0 3px var(--accent-ring);
 }
 
@@ -545,7 +626,8 @@
 
   --brand-glyph-empty: rgba(45,102,177,0.18);
 
-  --nav-active:   #2d66b1;
+  /* --nav-active bleibt aus Testversion 1 (weiss auf Nachttinte) — die
+     Navigation liegt seit TV1 auf --nav-bg, nicht mehr auf weissem Chrome. */
 
   /* Variante A: eine Handlungsfarbe statt zwei. */
   --btn:   #2d66b1;
@@ -598,16 +680,85 @@
   --notif-dot:   #6b96df;
 }
 
+/* ── Navigation in allen Themes ausser „Hell" (Testversion 1) ─────────────
+   Testversion 1 trennt Kopfzeile (weiss, --chrome) und Navigation
+   (Nachttinte, --nav-bg). In den uebrigen Themes teilen sich beide weiter
+   die Chrome-Flaeche; die Form (aktiver Eintrag als helles Feld) ist dieselbe,
+   nur in den Farben des Themes. „trust" fehlt hier bewusst: es setzt auf
+   Testversion 1 auf und aendert nur die Akzentfamilie. */
+[data-theme="dark"],
+[data-theme="trust-dark"],
+[data-theme="architecture"],
+[data-theme="architecture-foto"],
+[data-theme="civil"],
+[data-theme="civil-foto"],
+[data-theme="urban"],
+[data-theme="urban-foto"],
+[data-theme="tga"],
+[data-theme="tga-foto"],
+[data-theme="structural"],
+[data-theme="structural-foto"] {
+  --nav-bg:        var(--chrome);
+  --nav-border:    var(--chrome-border);
+  --nav-hover-bg:  var(--chrome-hover-bg);
+  --nav-active-bg: var(--chrome-text);
+  --nav-active-fg: var(--chrome);
+  --nav-fg-strong: var(--chrome-text);
+}
+
+/* Dunkle Flaechen: Schildrahmen und Balkenspur aus dem Theme, der blaue
+   Status-Punkt aufgehellt (#25348C waere auf #1c1c21 unsichtbar). */
+[data-theme="dark"],
+[data-theme="trust-dark"] {
+  --badge-border:   var(--border);
+  --progress-track: var(--surface-2);
+  --ps-status-aktiv: #8C9BE6;
+  --ps-status-ruhend: #9DA3B4;
+}
+
 /* ── Reset / base ───────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  font-family: 'Hanken Grotesk', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
   min-height: 100dvh;
 }
+
+/* ── Zahlen in Geist Mono (Testversion 1) ────────────────────────────────
+   Zahlen, Kuerzel (P-26-014), Betraege, Prozente und Zeiten stehen in
+   Geist Mono mit tabellarischen Ziffern. Zentral an den Stellen, durch die
+   solche Werte ohnehin laufen: money()/money0()/moneyOr() (Klasse .money),
+   Zahlenzellen (td.num), die Kuerzelspalte (.cell-id), Kuerzel im Kopf eines
+   Objekts und die bestehenden Zahlen-Klassen der Module. Bewusst NICHT:
+   grosse Kennzahl-Kacheln (Vorgabe: Kennzahl in Geist 28/600), Datumsangaben
+   und Eingabefelder mit fester Breite. */
+.money,
+td.num,
+.cell-id, .cell-id *,
+.page-header-eyebrow > span:not(.status-pill),
+.project-ac-short, .qb-chip-project, .bud-el-abbr, .lr-el-abbr, .nt-abbr,
+.sx-root-abbr, .sxm-abbr, .hw-abbr,
+.timer-clock, .timer-sheet-clock,
+.row-detail-list dd, .surcharge-eur, .setup-checklist-progress-pct,
+.pw-kpi dd, .ma-balance, .ma-balance-neg, .sc-figs dd, .bw-table td.num,
+.sxm-nums, .sxm-sur-eur, .sx-surcharge-static,
+.km-value, .km-total dd, .km-facts dd, .km-result strong,
+.ox-effort-amount, .ox-effort-sum,
+.tm-block-time, .tm-row-time, .tm-row-hours,
+.mz-day-hours, .mz-row-time, .mz-row-hours,
+.prl-rate, .bud-share-pct, .lr-table .lr-num, .lsr-item-pct,
+.iw-amount, .iw-sum-num, .iw-sum-head strong, .sw-se-amt, .sw-table .sw-amount,
+.ks-breakdown-group > div span:last-child,
+.dash-attn-amount, .dash-time-today strong {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+/* Kennzahl-Kacheln bleiben in Geist, auch wenn der Wert aus money() kommt. */
+.kpi-value .money, .ws-tile-value .money, .daten-kpi-value .money,
+.recap-stat-value .money { font-family: inherit; }
 
 /* ── Auth loading overlay ───────────────────────────────────────────────── */
 .auth-loading {
@@ -749,9 +900,14 @@ body {
    behaelt bewusst die WEISSE Kopfzeile (docs/MARKENFARBKONZEPT_2026-09.md §2).
    Ohne das :not() haette die weisse Wortmarke dort weiss auf weiss gestanden —
    sichtbar waere nur das „&" geblieben. "trust-dark" ist NICHT ausgenommen:
-   dessen Kopfzeile ist dunkel. */
-[data-theme]:not([data-theme="trust"]) .side-nav-brand .brand-wordmark-color { display: none; }
-[data-theme]:not([data-theme="trust"]) .side-nav-brand .brand-wordmark-white { display: block; }
+   dessen Kopfzeile ist dunkel.
+
+   Seit Testversion 1 liegt die Seitennavigation in JEDEM Theme auf dunkler
+   Flaeche (--nav-bg: Nachttinte bzw. die dunkle Chrome der Branchen-Themes)
+   — auch im Standard-Theme und in „trust". Deshalb gilt die weisse Fassung
+   dort jetzt ohne Ausnahme. Login und Signup bleiben bei der Farbversion. */
+.side-nav-brand .brand-wordmark-color { display: none; }
+.side-nav-brand .brand-wordmark-white { display: block; }
 .brand-mark { display: block; border-radius: 6px; }
 .auth-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; margin-bottom: 24px; }
 .auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); margin-bottom: 20px; color: var(--text); }
@@ -965,8 +1121,8 @@ input::placeholder { color: var(--text-4); }
   padding-bottom: env(safe-area-inset-bottom, 0px);
   padding-left:  env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
-  background: var(--chrome);
-  border-top: 1px solid var(--chrome-border);
+  background: var(--nav-bg);
+  border-top: 1px solid var(--nav-border);
   display: flex;
   box-shadow: var(--chrome-shadow-n);
   z-index: 100;
@@ -990,13 +1146,13 @@ input::placeholder { color: var(--text-4); }
   cursor: pointer;
   transition: color 0.13s;
 }
-.bottom-nav-item:hover { transform: none; box-shadow: none; background: transparent; color: var(--chrome-text); }
+.bottom-nav-item:hover { transform: none; box-shadow: none; background: transparent; color: var(--nav-fg-strong); }
 /* Der aktive Eintrag war allein ueber die Farbe markiert (WCAG 1.4.1) und
    nach dem Anheben des inaktiven Texts in fuenf Themes sogar dunkler als
    seine Nachbarn. Jetzt: helles Label plus Balken oben in --nav-active,
    spiegelbildlich zum Balken links in der Seitennavigation. */
 .bottom-nav-item { position: relative; }
-.bottom-nav-item.active { color: var(--chrome-text); }
+.bottom-nav-item.active { color: var(--nav-fg-strong); }
 .bottom-nav-item.active::before {
   content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
   width: 28px; height: 3px; border-radius: 0 0 3px 3px;
@@ -1027,8 +1183,8 @@ input::placeholder { color: var(--text-4); }
   /* sitzt direkt ueber der Bottom-Nav — deren Safe-Area mitrechnen */
   position: fixed; bottom: calc(58px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0;
   z-index: 101;
-  background: var(--chrome);
-  border-top: 1px solid var(--chrome-border);
+  background: var(--nav-bg);
+  border-top: 1px solid var(--nav-border);
   box-shadow: var(--chrome-shadow-n);
   padding: var(--space-2) 0 var(--space-1);
   display: grid; grid-template-columns: repeat(3, 1fr);
@@ -1043,8 +1199,8 @@ input::placeholder { color: var(--text-4); }
   text-decoration: none;
   transition: color 0.13s, background 0.13s;
 }
-.bn-more-item:hover  { background: var(--chrome-hover-bg); color: var(--chrome-text); }
-.bn-more-item.active { color: var(--chrome-text); box-shadow: inset 3px 0 0 var(--nav-active); }
+.bn-more-item:hover  { background: var(--nav-hover-bg); color: var(--nav-fg-strong); }
+.bn-more-item.active { color: var(--nav-fg-strong); box-shadow: inset 3px 0 0 var(--nav-active); }
 .bn-more-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -3px; }
 
 @media (min-width: 1024px) {
@@ -1065,8 +1221,8 @@ input::placeholder { color: var(--text-4); }
   .side-nav {
     display: flex; flex-direction: column;
     width: 200px; flex-shrink: 0;
-    background: var(--chrome);
-    border-right: 1px solid var(--chrome-border);
+    background: var(--nav-bg);
+    border-right: 1px solid var(--nav-border);
     padding: 8px 0;
     overflow-y: auto;
   }
@@ -1074,7 +1230,7 @@ input::placeholder { color: var(--text-4); }
     display: flex; align-items: center; justify-content: center;
     padding: 6px 16px 14px;
     margin-bottom: 4px;
-    border-bottom: 1px solid var(--chrome-border);
+    border-bottom: 1px solid var(--nav-border);
   }
   .side-nav-item {
     display: flex; align-items: center; gap: 10px;
@@ -1085,15 +1241,15 @@ input::placeholder { color: var(--text-4); }
     transition: color 0.13s, background 0.13s;
     white-space: nowrap;
   }
-  .side-nav-item:hover  { background: var(--chrome-hover-bg); color: var(--chrome-text); }
+  .side-nav-item:hover  { background: var(--nav-hover-bg); color: var(--nav-fg-strong); }
   /* Aktiv = Label in --chrome-text, Balken in --nav-active. Vorher trug die
      Akzentfarbe beides: als 13-px-Text auf dunkler Chrome lag sie je nach
      Theme bei 4.6–4.8:1 und war schwer zu lesen. Der Balken traegt die
      Identitaet, das Label die Lesbarkeit. */
   .side-nav-item.active {
-    color: var(--chrome-text);
+    color: var(--nav-fg-strong);
     border-left-color: var(--nav-active);
-    background: var(--chrome-hover-bg);
+    background: var(--nav-hover-bg);
   }
   .side-nav-item:focus-visible { outline: 2px solid var(--nav-active); outline-offset: -2px; border-radius: 2px; }
   .sn-icon  { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; }
