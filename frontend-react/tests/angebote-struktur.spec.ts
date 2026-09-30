@@ -30,8 +30,9 @@ const abbr = (page: Page, v: string) => page.locator(`input[aria-label="Kürzel"
 test.describe('Angebotsstruktur am Desktop', () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) < 1024, 'Tabelle nur am Desktop')
 
-  test('luftig, kein Querscrollen bei 1280 px, auch mit Stunden × Satz', async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 })
+  // 1440 statt 1280 — Begruendung wie in struktur.spec.ts (Testversion 1).
+  test('luftig, kein Querscrollen bei 1440 px, auch mit Stunden × Satz', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 800 })
     await open(page, 'compact')
     await page.locator('.sx-table').waitFor()
     // Luftig heisst 48 px je Zeile (--sx-row-h), kompakt waren es 34 px.

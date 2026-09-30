@@ -748,9 +748,26 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 | Schrift auf Farbflächen | `--btn-fg` (auf `--btn`/`--cta`), `--accent-fg` (auf `--accent`) — **nie `#fff` hartkodieren** |
 | Status | `--success`, `--danger`, `--warning`, `--info` + je `-strong` und `-bg` (statt `#dc2626`, `#16a34a`, …) |
 | Abstand | `--space-1` (4px) … `--space-8` (32px) |
-| Radius | `--radius-sm` (6) · `--radius-md` (10) · `--radius-lg` (14) · `--radius-pill` |
-| Schatten | `--shadow-sm/md/lg` (theme-abhängig über `--shadow-color`) |
+| Radius | `--radius-sm` (6, Schild) · `--radius-md` (8, Button/Feld) · `--radius-lg` (10, Karte) · `--radius-nav` (12, Menüpunkt) · `--radius-pill` |
+| Schatten | `--shadow-sm` (**flach** — Karten tragen einen Rahmen) · `--shadow-md/lg` (Dialoge, Menüs) |
 | Interaktion | `--hover-bg`, `--focus-ring` |
+| Navigation | `--nav-bg`, `--nav-active-bg`/`-fg`, `--nav-hover-bg`, `--nav-border` (getrennt von `--chrome` = Kopfzeile) |
+| Status / Balken | `--ps-status-*` (Punktfarben), `--badge-bg`/`-border`, `--progress-track`/`-fill`, `--row-stripe` |
+| Schrift | `--font-sans` (Geist), `--font-mono` (Geist Mono) |
+
+**Design „Testversion 1" (seit 09/2026, Vorgabe in `design/testversion-1/`)** ist
+das Standard-Theme „Hell". Die übrigen Themes behalten ihre Farben und bekommen
+nur die Form. Was bei neuem UI gilt:
+- **Keine grauen Texte** im Standard-Theme: `--text-2…-4` stehen dort auf
+  Schwarz, Hierarchie läuft über Größe und Gewicht. Reine Symbole dürfen
+  `--ps-symbol` sein.
+- **Zahlen, Kürzel, Beträge, Prozente, Zeiten in Geist Mono** — zentral über
+  `money()` (Klasse `.money`), `td.num`, `.cell-id` und die Liste im Abschnitt
+  „Zahlen in Geist Mono" in `globals.css`. Neue Zahlen-Klassen dort ergänzen.
+- **Status immer als Schild** (Abschnitt „Status-Schild"): weiß, Rahmen, schwarzer
+  Text, farbiger Punkt über `--dot`. Keine eigenen farbigen Badges mehr bauen.
+  Projekt-/Angebotsstatus haben keine Farbe in der DB — `utils/statusTone.ts`.
+- **Stiftspitze nur im Logo** — nicht an Balken, Reitern, Diagrammen.
 
 **Regeln**
 - Kontrast: neue Farbkombinationen müssen WCAG AA (4,5:1 für Text) in **allen 6 Themes** erfüllen — nicht nur im Default.
@@ -810,6 +827,10 @@ fehlende Einstellung die Spalte ausblendet, statt eine Zahl zu behaupten).
 
 **Farbe ist nie der einzige Träger** (WCAG 1.4.1): Ampelstufen tragen Symbol
 und Klartext, negative Beträge das Minuszeichen.
+
+Seit „Testversion 1" färbt `KpiValue` nur noch das **Symbol** (Punktfarben
+`--ps-status-knapp`/`-ueber`), der Wert bleibt schwarz. `--kpi-*` bleiben als
+Textfarben dort, wo sie noch direkt benutzt werden (z. B. rote Zahlen).
 
 **Diagrammreihen** stehen in `theme/chartTheme.ts` (Okabe-Ito, ein Satz für
 hell und dunkel). Nicht frei Hand erweitern — die Prüfung rechnet den

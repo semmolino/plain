@@ -77,6 +77,10 @@
   --ps-status-ruhend:        #8A90A2;
   --ps-status-abgeschlossen: #1F8A55;
 
+  /* Hinweis-Kacheln („Braucht Aufmerksamkeit"): weisses Symbol auf voller Farbe. */
+  --ps-hinweis-rot:  #B8412B;
+  --ps-hinweis-gelb: #A86A0C;
+
   --font-sans: 'Geist', 'Geist Sans', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   --font-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Consolas, monospace;
 
@@ -690,6 +694,11 @@
   --notif-dot:   #6b96df;
 }
 
+/* Titel am Handy: 28px wuerde dort jeden Objektnamen abschneiden. */
+@media (max-width: 640px) {
+  :root { --fs-page-title: 22px; }
+}
+
 /* ── Navigation in allen Themes ausser „Hell" (Testversion 1) ─────────────
    Testversion 1 trennt Kopfzeile (weiss, --chrome) und Navigation
    (Nachttinte, --nav-bg). In den uebrigen Themes teilen sich beide weiter
@@ -804,7 +813,7 @@ td.num,
 .auth-container {
   display: flex; align-items: center; justify-content: center;
   min-height: 100dvh;
-  background: linear-gradient(135deg, var(--accent-bg) 0%, var(--bg) 100%);
+  background: var(--bg);
   padding: 24px;
   position: relative;
   overflow: hidden;
@@ -884,10 +893,11 @@ td.num,
 .branch-empty-state-action { margin-top: 6px; }
 .auth-card {
   background: var(--surface);
-  border-radius: 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
   padding: 40px 36px;
   width: 100%; max-width: 400px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
 }
 .auth-logo   { display: flex; align-items: center; margin-bottom: 2px; }
 
@@ -931,7 +941,7 @@ td.num,
 .side-nav-brand .brand-wordmark-white { display: block; }
 .brand-mark { display: block; border-radius: 6px; }
 .auth-subtitle { font-size: 13px; color: var(--text-3); margin-top: 2px; margin-bottom: 24px; }
-.auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); margin-bottom: 20px; color: var(--text); }
+.auth-title  { font-size: var(--fs-page-title); font-weight: var(--fw-title); letter-spacing: var(--ls-title); margin-bottom: 20px; color: var(--text); }
 .auth-links  { text-align: center; margin-top: 18px; font-size: 13px; color: var(--text-3); }
 .auth-links a { color: var(--accent); text-decoration: none; }
 .auth-links a:hover { text-decoration: underline; }
@@ -1078,6 +1088,8 @@ input, select, textarea {
   color: inherit;
   box-sizing: border-box;
 }
+/* Testversion 1: angehakte Checkboxen und Radios in Nachttinte. */
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
 input[type="date"], input[type="time"] {
   color-scheme: light;
 }
@@ -4656,6 +4668,7 @@ th.doc-actions, td.doc-actions {
 .page-header-titlerow { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .page-header-title {
   font-size: var(--fs-page-title); font-weight: var(--fw-title); line-height: 1.25;
+  letter-spacing: var(--ls-title);
   margin: 0; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -5481,7 +5494,7 @@ fieldset:disabled .ws-check { cursor: default; }
   --sx-input-h: 36px;
   --sx-font: 14px;
   --sx-pad-y: 6px;
-  --sx-pad-x: 10px;
+  --sx-pad-x: 8px;    /* 8 statt 10: Betraege in Geist Mono laufen breiter (Testversion 1) */
   --sx-indent: 20px;
 }
 /* Touch und Handy: immer luftig — 44-px-Ziele sind nicht verhandelbar. */
@@ -6542,9 +6555,15 @@ fieldset:disabled .ws-check { cursor: default; }
 div.dash-attn-link { cursor: default; }
 div.dash-attn-link:hover { background: transparent; }
 .dash-attn-link:hover { background: var(--hover-bg); }
-.dash-attn-icon { flex-shrink: 0; color: var(--text-3); }
-.dash-attn-row--critical .dash-attn-icon { color: var(--kpi-critical); }
-.dash-attn-row--watch .dash-attn-icon { color: var(--kpi-watch); }
+/* Testversion 1: Hinweis-Kachel 34px, Radius 10, weisses Symbol auf voller
+   Farbe (Rot = Handlungsbedarf, Gelb = beobachten, sonst Nachttinte). */
+.dash-attn-icon {
+  flex-shrink: 0; width: 34px; height: 34px; padding: 9px;
+  border-radius: var(--radius-lg);
+  background: var(--accent); color: var(--accent-fg);
+}
+.dash-attn-row--critical .dash-attn-icon { background: var(--ps-hinweis-rot); color: var(--ps-weiss); }
+.dash-attn-row--watch .dash-attn-icon { background: var(--ps-hinweis-gelb); color: var(--ps-weiss); }
 .dash-attn-text { flex: 1; min-width: 0; line-height: 1.35; }
 .dash-attn-amount { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
 .dash-attn-chev { flex-shrink: 0; color: var(--text-3); }
