@@ -39,6 +39,10 @@ export interface Invoice {
   COMMENT:              string | null
   INVOICE_TYPE:         InvoiceType | null
   CANCELS_INVOICE_ID:   number | null
+  /** Rechnungskorrektur: korrigiertes Original (Migration 0179) */
+  CORRECTS_INVOICE_ID?:          number | null
+  CORRECTS_ADVANCE_INVOICE_ID?:  number | null
+  CORRECTION_REASON?:            string | null
   TOTAL_DISCOUNTS:        number | null
   CASH_DISCOUNT:          number | null
   DISCOUNT_1_PERCENT:     number | null
@@ -551,6 +555,42 @@ export const createPayment = (body: {
 
 export const deletePayment = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/payments/${id}`)
+
+// ── Rechnungskorrektur (Migration 0179) ──────────────────────────────────────
+// INVOICE_TYPE bleibt 'gutschrift'; Beträge stehen negativ, mit Bezug auf das
+// Original. Gebucht wird wie jede Rechnung über bookInvoice.
+
+export interface CorrectionBasisRow {
+  STRUCTURE_ID:  number
+  ABBR:          string
+  NAME:          string
+  BILLED_NET:    number
+  CORRECTED_NET: number
+  MAX_NET:       number
+  DRAFT_NET:     number | null
+}
+
+export interface CorrectionBasis {
+  original: { kind: 'INVOICE' | 'ADVANCE_INVOICE'; id: number; number: string | null; date: string | null; invoiceType: string; vatPercent: number }
+  rows:     CorrectionBasisRow[]
+}
+
+export const fetchCorrectionBasis = (p: { invoice_id?: number; advance_invoice_id?: number; draft_id?: number }) => {
+  const q = new URLSearchParams()
+  if (p.invoice_id) q.set('invoice_id', String(p.invoice_id))
+  if (p.advance_invoice_id) q.set('advance_invoice_id', String(p.advance_invoice_id))
+  if (p.draft_id) q.set('draft_id', String(p.draft_id))
+  return apiClient.get<{ data: CorrectionBasis }>(`/invoices/correction-basis?${q}`)
+}
+
+export const saveCorrection = (body: {
+  invoice_id?: number
+  advance_invoice_id?: number
+  draft_id?: number
+  invoice_date: string
+  reason: string
+  rows: { structure_id: number; amount_net: number }[]
+}) => apiClient.post<{ id: number; total_amount_net: number; tax_amount_net: number; total_amount_gross: number }>('/invoices/corrections', body)
 
 // ── Rest ausbuchen (Forderungsminderung, Migration 0177) ─────────────────────
 

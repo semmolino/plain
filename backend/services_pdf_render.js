@@ -572,6 +572,9 @@ const DOC_TITLES = {
   schlussrechnung:    'Schlussrechnung',
   teilschlussrechnung:'Teilschlussrechnung',
   stornorechnung:     'Stornorechnung',
+  // INVOICE_TYPE bleibt 'gutschrift' (Bestand, Recht, Import) — auf dem Beleg
+  // steht, was es ist (Migration 0179).
+  gutschrift:         'Rechnungskorrektur',
 };
 
 async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewReleasePpIds = [] }) {

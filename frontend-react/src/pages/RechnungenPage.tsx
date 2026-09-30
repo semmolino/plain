@@ -15,6 +15,7 @@ import { useFilterTabs } from '@/store/permissionsStore'
 import { useLicenseFilterTabs } from '@/store/licenseStore'
 import { DirtyGuardProvider } from '@/components/ui/DirtyGuard'
 import { useGuardedAction } from '@/hooks/useDirtyGuard'
+import { KorrekturDialog } from '@/pages/rechnungen/KorrekturDialog'
 
 type ListTab = 'liste' | 'mahnungen' | 'se'
 type Tab = ListTab | InvoiceKind
@@ -46,7 +47,7 @@ const WIZARD_TITLE: Record<InvoiceKind, [neu: string, entwurf: string]> = {
   abschlag:   ['Neue Abschlagsrechnung',             'Abschlagsrechnung (Entwurf) bearbeiten'],
   rechnung:   ['Neue Einzelrechnung',                'Einzelrechnung (Entwurf) bearbeiten'],
   schluss:    ['Neue Teilschluss-/Schlussrechnung',  'Schlussrechnung (Entwurf) bearbeiten'],
-  gutschrift: ['Neue Gutschrift',                    'Gutschrift (Entwurf) bearbeiten'],
+  gutschrift: ['Neue Rechnungskorrektur',            'Rechnungskorrektur (Entwurf) bearbeiten'],
 }
 
 /**
@@ -86,7 +87,11 @@ function RechnungenSeite() {
   const urlDraft    = Number(searchParams.get('draftId')) || null
   const isKind      = KIND_IDS.includes(rawTab)
   const kindAllowed = isKind && kinds.some(k => k.id === rawTab)
-  const wizardKind  = kindAllowed ? rawTab as InvoiceKind : null
+  // Rechnungskorrektur (Migration 0179): eine neue beginnt mit der Wahl des
+  // Originals im Korrektur-Dialog über der Liste. Nur ältere „Gutschrift"-
+  // Entwürfe ohne Bezug (mit draftId) öffnen noch den Assistenten.
+  const pickCorrection = kindAllowed && rawTab === 'gutschrift' && !urlDraft
+  const wizardKind  = kindAllowed && !pickCorrection ? rawTab as InvoiceKind : null
   const listTab: ListTab = listTabs.some(t => t.id === rawTab) ? rawTab as ListTab : (listTabs[0]?.id ?? 'liste')
 
   const [editDraft,   setEditDraft]   = useState<{ draft: DraftResume; type: InvoiceKind } | null>(null)
@@ -213,6 +218,7 @@ function RechnungenSeite() {
         {listTab === 'mahnungen' && <MahnungenListe openMahnung={openMahnung} />}
         {listTab === 'se'        && <Sicherheitseinbehalte />}
       </div>
+      <KorrekturDialog open={pickCorrection} start={null} onClose={() => goList()} />
     </div>
   )
 }

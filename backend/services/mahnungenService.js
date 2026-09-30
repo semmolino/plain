@@ -31,7 +31,8 @@ async function listMahnungen(supabase, { tenantId }) {
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
       .lt("DUE_DATE", today)
-      .neq("INVOICE_TYPE", "stornorechnung"),
+      .neq("INVOICE_TYPE", "stornorechnung")
+      .neq("INVOICE_TYPE", "gutschrift"),   // Rechnungskorrektur: keine Forderung
 
     supabase
       .from("ADVANCE_INVOICE")
@@ -170,7 +171,8 @@ async function getMahnungStats(supabase, { tenantId }) {
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
       .lt("DUE_DATE", today)
-      .neq("INVOICE_TYPE", "stornorechnung"),
+      .neq("INVOICE_TYPE", "stornorechnung")
+      .neq("INVOICE_TYPE", "gutschrift"),   // Rechnungskorrektur: keine Forderung
 
     supabase
       .from("ADVANCE_INVOICE")

@@ -47,7 +47,7 @@ INSERT INTO "LICENSE_CAPABILITY" ("KEY","MODULE_KEY","LABEL_DE","TYPE","UNIT","P
   ('invoices.basic', 'invoices', 'Rechnungen & Zahlungen (Basis)', 'boolean', NULL, 100),
   ('invoices.partial', 'invoices', 'Abschlagsrechnungen', 'boolean', NULL, 110),
   ('invoices.final', 'invoices', 'Teil-/Schlussrechnungen', 'boolean', NULL, 120),
-  ('invoices.credit', 'invoices', 'Gutschriften', 'boolean', NULL, 130),
+  ('invoices.credit', 'invoices', 'Rechnungskorrekturen', 'boolean', NULL, 130),
   ('invoices.cancel', 'invoices', 'Stornierung', 'boolean', NULL, 140),
   ('invoices.security_retention', 'invoices', 'Sicherheitseinbehalte', 'boolean', NULL, 150),
   ('einvoice.xrechnung', 'einvoice', 'XRechnung (CII/UBL)', 'boolean', NULL, 160),

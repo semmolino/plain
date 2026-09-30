@@ -18,6 +18,10 @@ module.exports = (supabase) => {
   router.use(requirePermission("invoices.view"));
 
   router.get("/",                              (req, res) => ctrl.listInvoices(req, res, supabase));
+  // Rechnungskorrektur: mit Bezug auf einen gebuchten Beleg (Migration 0179).
+  // Gebucht wird wie jede Rechnung ueber POST /:id/book (invoices.book).
+  router.get("/correction-basis",              (req, res) => ctrl.getCorrectionBasis(req, res, supabase));
+  router.post("/corrections",                  requirePermission("invoices.create_credit"), (req, res) => ctrl.saveCorrection(req, res, supabase));
   router.post("/init",                         requireAnyPermission("invoices.create_single","invoices.create_final","invoices.create_credit"), (req, res) => ctrl.initInvoice(req, res, supabase));
   router.patch("/:id",                         draftEdit, (req, res) => ctrl.patchInvoice(req, res, supabase));
   router.get("/:id/billing-proposal",          (req, res) => ctrl.getBillingProposal(req, res, supabase));

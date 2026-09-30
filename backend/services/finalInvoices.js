@@ -125,6 +125,15 @@ async function recomputeTotal(supabase, invoiceId) {
 // Bei jedem Fehler ist ok=false — der Aufrufer faellt dann auf die gecachten
 // Spalten zurueck. Lieber der alte Wert als gar keiner.
 // ---------------------------------------------------------------------------
+/** IDs der Rechnungen, die eine Abschlagsrechnung korrigieren (Migration 0179). Tolerant. */
+async function advanceCorrectionIds(supabase, invoiceIds) {
+  const ids = (invoiceIds || []).filter(Boolean);
+  if (ids.length === 0) return new Set();
+  const { data, error } = await supabase.from("INVOICE").select("ID, CORRECTS_ADVANCE_INVOICE_ID").in("ID", ids);
+  if (error) return new Set();
+  return new Set((data || []).filter(r => r.CORRECTS_ADVANCE_INVOICE_ID != null).map(r => String(r.ID)));
+}
+
 async function recomputeBilledByStructure(supabase, { contractId, excludeInvoiceId = null }) {
   const recomputedInvoiced = new Map();
   const recomputedPartial  = new Map();
@@ -137,15 +146,20 @@ async function recomputeBilledByStructure(supabase, { contractId, excludeInvoice
       .neq("ID", excludeInvoiceId)
       .in("STATUS_ID", [2, 3]);
     const otherInvIds = (otherInvs || []).map(i => i.ID);
+    // Rechnungskorrekturen auf Abschlaege (Migration 0179) mindern das
+    // ABSCHLAGS-Abgerechnete, nicht das der Schlussrechnungen: sonst stiege
+    // der Vorschlag einer Schlussrechnung um den korrigierten Betrag, waehrend
+    // der Abschlag weiter mit seinem Gezahlten abgesetzt wird.
+    const arCorrectionIds = await advanceCorrectionIds(supabase, otherInvIds);
     if (otherInvIds.length > 0) {
       const { data: invStructs } = await supabase
         .from("INVOICE_STRUCTURE")
-        .select("STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
+        .select("INVOICE_ID, STRUCTURE_ID, AMOUNT_NET, AMOUNT_EXTRAS_NET")
         .in("INVOICE_ID", otherInvIds);
       for (const r of invStructs || []) {
         const sid = String(r.STRUCTURE_ID);
-        recomputedInvoiced.set(sid,
-          round2((recomputedInvoiced.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
+        const target = arCorrectionIds.has(String(r.INVOICE_ID)) ? recomputedPartial : recomputedInvoiced;
+        target.set(sid, round2((target.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
       }
     }
     // STATUS 2 (gebucht) + 3 (stornoiertes Original) — beide nötig, sonst

@@ -115,7 +115,7 @@ const INVOICE_TYPE_LABELS = {
   schlussrechnung:     "Schlussrechnung",
   teilschlussrechnung: "Teilschlussrechnung",
   stornorechnung:      "Stornorechnung",
-  gutschrift:          "Gutschrift",
+  gutschrift:          "Rechnungskorrektur",
 };
 
 // ── Vorlagen lesen / schreiben ────────────────────────────────────────────────

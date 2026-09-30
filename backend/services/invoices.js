@@ -462,7 +462,15 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
     }
     return q1;
   };
-  let { data: rows, error } = await buildQuery(BASE_COLS + SE_COLS);
+  // Bezug einer Rechnungskorrektur (Migration 0179). Wie die SE-Spalten
+  // optional: der Web-Container startet vor dem postdeploy-Hook, und eine
+  // unbekannte Spalte legte sonst die ganze Rechnungsliste lahm.
+  const CORR_COLS = ", CORRECTS_INVOICE_ID, CORRECTS_ADVANCE_INVOICE_ID, CORRECTION_REASON";
+  let { data: rows, error } = await buildQuery(BASE_COLS + SE_COLS + CORR_COLS);
+  if (error && /CORRECT/.test(error.message || "")) {
+    const r = await buildQuery(BASE_COLS + SE_COLS);
+    rows = r.data; error = r.error;
+  }
   if (error && /SE_/.test(error.message || "")) {
     // Migration 0047 nicht gelaufen — Fallback ohne SE-Spalten.
     const r = await buildQuery(BASE_COLS);
@@ -522,6 +530,9 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
     STATUS_ID: r.STATUS_ID ?? null,
     INVOICE_TYPE: r.INVOICE_TYPE ?? null,
     CANCELS_INVOICE_ID: r.CANCELS_INVOICE_ID ?? null,
+    CORRECTS_INVOICE_ID: r.CORRECTS_INVOICE_ID ?? null,
+    CORRECTS_ADVANCE_INVOICE_ID: r.CORRECTS_ADVANCE_INVOICE_ID ?? null,
+    CORRECTION_REASON: r.CORRECTION_REASON ?? null,
     PROJECT_ID: r.PROJECT_ID ?? null,
     CONTRACT_ID: r.CONTRACT_ID ?? null,
     VAT_PERCENT: r.VAT_PERCENT ?? null,

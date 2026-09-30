@@ -22,7 +22,7 @@ export const EMAIL_TEMPLATE_LABELS: Record<EmailTemplateKey, string> = {
 }
 
 export const EMAIL_TEMPLATE_HINTS: Record<EmailTemplateKey, string> = {
-  invoice:        'Gilt für Rechnungen, Abschlags- und Schlussrechnungen sowie Gutschriften.',
+  invoice:        'Gilt für Rechnungen, Abschlags- und Schlussrechnungen sowie Rechnungskorrekturen.',
   invoice_storno: 'Gilt für Stornorechnungen und Storno-Abschlagsrechnungen — eigener Text, weil hier nichts mehr zu zahlen ist.',
   dunning:        'Gilt für Zahlungserinnerungen und alle Mahnstufen.',
 }

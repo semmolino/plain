@@ -62,7 +62,12 @@ function documentTypeCode({ docType, invoiceType, isCancellation, syntax }) {
 
   if (storno) return "384";
   if (isAdvance) return syntax === "CII" ? "875" : "326";
-  if (type === "gutschrift") return "381";
+  // Rechnungskorrektur (INVOICE_TYPE 'gutschrift', Migration 0179): mindert
+  // eine gebuchte Rechnung mit Bezug auf sie (BT-25) — 384, wie der Storno.
+  // Nicht 381: das ist im UBL eine eigene CreditNote-Wurzel, die Peppol fuer
+  // 381 verlangt (PEPPOL-EN16931-P0101); in der Invoice-Wurzel wurde sie
+  // abgewiesen. 384 gilt in beiden Syntaxen und in beiden Profilen.
+  if (type === "gutschrift") return "384";
   if (syntax === "CII" && type === "schlussrechnung")     return "877";
   if (syntax === "CII" && type === "teilschlussrechnung") return "876";
   return "380";

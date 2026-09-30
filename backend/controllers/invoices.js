@@ -2,6 +2,7 @@
 
 const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/invoices");
+const correction = require("../services/invoiceCorrection");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 const { generateUblXml, generatePeppolXml } = require("../services_einvoice_ubl");
@@ -893,7 +894,34 @@ async function postEinvoiceCiiSnapshot(req, res, supabase) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Rechnungskorrektur (services/invoiceCorrection.js, Migration 0179)
+// GET  /api/invoices/correction-basis?invoice_id=X | advance_invoice_id=X [&draft_id=Y]
+// POST /api/invoices/corrections
+// ---------------------------------------------------------------------------
+async function getCorrectionBasis(req, res, supabase) {
+  try {
+    const data = await correction.correctionBasis(supabase, { tenantId: req.tenantId, query: req.query });
+    return res.json({ data });
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
+async function saveCorrection(req, res, supabase) {
+  try {
+    const data = await correction.saveCorrection(supabase, {
+      tenantId: req.tenantId, employeeId: req.employeeId ?? null, body: req.body || {},
+    });
+    return res.json(data);
+  } catch (e) {
+    return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+  }
+}
+
 module.exports = {
+  getCorrectionBasis,
+  saveCorrection,
   listInvoices,
   initInvoice,
   patchInvoice,

@@ -89,7 +89,7 @@ const capabilities = [
     permissions: ["invoices.create_partial"], since: SINCE },
   { key: "invoices.final", module: "invoices", labelDe: "Teil-/Schlussrechnungen", type: "boolean",
     permissions: ["invoices.create_final"], since: SINCE },
-  { key: "invoices.credit", module: "invoices", labelDe: "Gutschriften", type: "boolean",
+  { key: "invoices.credit", module: "invoices", labelDe: "Rechnungskorrekturen", type: "boolean",
     permissions: ["invoices.create_credit"], since: SINCE },
   { key: "invoices.cancel", module: "invoices", labelDe: "Stornierung", type: "boolean",
     permissions: ["invoices.cancel"], since: SINCE },

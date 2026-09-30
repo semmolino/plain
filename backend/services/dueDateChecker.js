@@ -74,6 +74,7 @@ async function checkDueDates(supabase) {
     .select(withClaimCols("INVOICE", "ID, TENANT_ID, INVOICE_NUMBER, DUE_DATE"))
     .eq("STATUS_ID", 2)
     .neq("INVOICE_TYPE", "stornorechnung")
+    .neq("INVOICE_TYPE", "gutschrift")   // Rechnungskorrektur: keine Forderung
     .not("DUE_DATE", "is", null);
 
   if (error) {

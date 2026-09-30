@@ -675,11 +675,11 @@ async function patchBuchung(supabase, { id, body, tenantId }) {
   // Abgerechnet heisst unveraenderlich — wie beim Loeschen (dependencyCheck)
   // und Umbuchen. Vorher liess sich eine Buchung, die in einer gestellten
   // Rechnung steckt, hier umschreiben: Stunden, Saetze, Datum, Projekt.
-  // Korrektur laeuft ueber Storno/Gutschrift.
+  // Korrektur laeuft ueber Storno/Rechnungskorrektur.
   if (istAbgerechnet(existing)) {
     throw {
       status: 409,
-      message: "Diese Buchung ist bereits abgerechnet und kann nicht mehr geändert werden. Korrekturen laufen über Storno oder Gutschrift.",
+      message: "Diese Buchung ist bereits abgerechnet und kann nicht mehr geändert werden. Korrekturen laufen über Storno oder Rechnungskorrektur.",
     };
   }
   // Monatsabschluss: der bisherige Monat darf nicht mehr bewegt werden, und

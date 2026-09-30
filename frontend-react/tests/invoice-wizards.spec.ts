@@ -100,18 +100,16 @@ test.describe('Einzelrechnung und Gutschrift', () => {
     expect(order[1]).toBe('xml')
   })
 
-  test('Gutschrift nutzt denselben Assistenten und legt den Entwurf als Gutschrift an', async ({ page }) => {
+  // Die „Gutschrift" lief hier früher durch denselben Assistenten — ohne Bezug
+  // auf das Original. Heute ist sie die Rechnungskorrektur mit eigenem Dialog:
+  // tests/rechnungskorrektur.spec.ts.
+  test('Neue Rechnungskorrektur öffnet keinen Assistenten, sondern die Wahl des Originals', async ({ page }) => {
     await setup(page)
     const inits = capture(page, 'POST', /\/invoices\/init/)
     await page.goto('/rechnungen?tab=gutschrift')
-    await expect(page.getByRole('heading', { level: 1 })).toHaveText('Neue Gutschrift')
-    await page.locator('#pp-project').fill('P-2024')
-    await page.locator('.autocomplete-item').first().click()
-    await expect(page.locator('#pp-contract-ro')).toHaveValue(/V-2024-001/)
-    await weiter(page).click()
-    await expect(page).toHaveURL(/draftId=601/)
-    expect(inits).toHaveLength(1)
-    expect(inits[0].postDataJSON()).toMatchObject({ invoice_type: 'gutschrift', project_id: 1, contract_id: 11 })
+    await expect(page.getByRole('dialog', { name: 'Rechnung korrigieren' })).toBeVisible()
+    await expect(page.getByLabel('Welche Rechnung wird korrigiert?*')).toBeVisible()
+    expect(inits).toHaveLength(0)
   })
 })
 

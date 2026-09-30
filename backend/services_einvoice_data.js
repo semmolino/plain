@@ -109,6 +109,9 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
 
   const isFinal  = invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung';
   const isStorno = invoiceType === 'stornorechnung';
+  // Rechnungskorrektur (Migration 0179): mindert eine gebuchte Rechnung, mit
+  // Bezug auf sie (BT-25). Betraege stehen negativ gespeichert, wie beim Storno.
+  const isCorrection = invoiceType === 'gutschrift';
 
   const number  = isInvoice ? doc.INVOICE_NUMBER        : doc.ADVANCE_INVOICE_NUMBER;
   const docDate = isInvoice ? doc.INVOICE_DATE          : doc.ADVANCE_INVOICE_DATE;
@@ -264,14 +267,23 @@ ${basis}`;
 
   let canceledDocNumber = null;
   let canceledDocDate   = null;
+  let canceledOrig      = null;   // das stornierte Original (fuer Abzuege einer Schlussrechnung)
   if (isStorno && isInvoice && doc.CANCELS_INVOICE_ID) {
     const orig = await one(supabase, 'INVOICE', doc.CANCELS_INVOICE_ID, tenantId);
+    canceledOrig      = orig;
     canceledDocNumber = orig?.INVOICE_NUMBER ?? String(doc.CANCELS_INVOICE_ID);
     canceledDocDate   = asIsoDate(orig?.INVOICE_DATE);
   } else if (isStornoPP) {
     const orig = await one(supabase, 'ADVANCE_INVOICE', doc.CANCELS_ADVANCE_INVOICE_ID, tenantId);
     canceledDocNumber = orig?.ADVANCE_INVOICE_NUMBER ?? String(doc.CANCELS_ADVANCE_INVOICE_ID);
     canceledDocDate   = asIsoDate(orig?.ADVANCE_INVOICE_DATE);
+  } else if (isCorrection && (doc.CORRECTS_INVOICE_ID || doc.CORRECTS_ADVANCE_INVOICE_ID)) {
+    // Rechnungskorrektur: derselbe Verweis (BT-25) auf das korrigierte Original.
+    const isInv = !!doc.CORRECTS_INVOICE_ID;
+    const orig  = await one(supabase, isInv ? 'INVOICE' : 'ADVANCE_INVOICE', isInv ? doc.CORRECTS_INVOICE_ID : doc.CORRECTS_ADVANCE_INVOICE_ID, tenantId);
+    canceledDocNumber = (isInv ? orig?.INVOICE_NUMBER : orig?.ADVANCE_INVOICE_NUMBER)
+      ?? String(isInv ? doc.CORRECTS_INVOICE_ID : doc.CORRECTS_ADVANCE_INVOICE_ID);
+    canceledDocDate   = asIsoDate(isInv ? orig?.INVOICE_DATE : orig?.ADVANCE_INVOICE_DATE);
   }
 
   // ── 10. Line items ────────────────────────────────────────────────────────
@@ -500,6 +512,38 @@ ${basis}`;
     }
   }
 
+  // ── 11b. Storno einer Schlussrechnung: Abzuege zuruecknehmen ─────────────
+  // Der Storno kopiert die Positionen des Originals negativ (volles Honorar),
+  // gespeichert ist aber der negative REST (Honorar minus Abzuege). Ohne die
+  // Ruecknahme-Positionen passten Positionssumme und Gesamtbetrag nicht
+  // zusammen (BR-CO-13).
+  if (isStorno && canceledOrig
+      && (canceledOrig.INVOICE_TYPE === 'schlussrechnung' || canceledOrig.INVOICE_TYPE === 'teilschlussrechnung')) {
+    const { data: origDed } = await supabase
+      .from('INVOICE_DEDUCTION')
+      .select('DEDUCTION_AMOUNT_NET, ADVANCE_INVOICE_ID')
+      .eq('INVOICE_ID', canceledOrig.ID)
+      .eq('TENANT_ID', tenantId);
+    const arIds = (origDed || []).map(r => r.ADVANCE_INVOICE_ID);
+    const { data: ars } = arIds.length
+      ? await supabase.from('ADVANCE_INVOICE').select('ID, ADVANCE_INVOICE_NUMBER').in('ID', arIds)
+      : { data: [] };
+    const nr = Object.fromEntries((ars || []).map(a => [a.ID, a.ADVANCE_INVOICE_NUMBER]));
+    for (const d of origDed || []) {
+      const net = fmt2(d.DEDUCTION_AMOUNT_NET ?? 0);
+      if (!(net > 0.005)) continue;
+      lines.push({
+        id: lines.length + 1,
+        description: `Rücknahme Abzug Abschlagsrechnung ${nr[d.ADVANCE_INVOICE_ID] ?? d.ADVANCE_INVOICE_ID}`,
+        note: '',
+        quantity: 1, unitCode: codelists.UNIT_LUMP_SUM, unitPrice: net, lineTotal: net,
+        vatRate: effectiveVatPercent, vatCategory,
+        billingPeriodStart: asIsoDate(doc.BILLING_PERIOD_START),
+        billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
+      });
+    }
+  }
+
   // ── 12. Monetary totals ───────────────────────────────────────────────────
 
   const lineTotal      = fmt2(lines.reduce((s, l) => s + l.lineTotal, 0));
@@ -628,40 +672,30 @@ ${basis}`;
 
   // ── 14. Assemble ─────────────────────────────────────────────────────────
 
-  // Storno: TypeCode 384, Beleg zeigt korrigierende Bewegung. EN 16931
-  // erlaubt zwar positive Werte mit Kennung als "Korrektur", aber viele
-  // Empfaenger erwarten negative Betraege. Wir setzen sie negativ um —
-  // Lines, Allowances, Totals werden gespiegelt.
-  const negateForStorno = (isStorno || isStornoPP);
-  const flip = v => negateForStorno ? -v : v;
-  if (negateForStorno) {
-    for (const l of lines) {
-      // BT-146 (Einzelpreis) darf nach BR-27 nicht negativ sein — Pruefportale
-      // weisen das fatal ab. Die korrigierende Bewegung wird deshalb ueber die
-      // negative Menge BT-129 ausgedrueckt, die zulaessig ist. So bleibt
-      // Menge x Einzelpreis = Positionsbetrag rechnerisch konsistent.
-      l.quantity  = flip(l.quantity);
-      l.lineTotal = flip(l.lineTotal);
-    }
-    for (const a of allowances) { a.amount = flip(a.amount); }
-    for (const vb of vatBreakdown) {
-      vb.basis  = flip(vb.basis);
-      vb.amount = flip(vb.amount);
-    }
+  // Vorzeichen. Storno und Rechnungskorrektur (384) stehen NEGATIV
+  // gespeichert — cancelInvoice/cancelPartialPayment, invoiceCorrection.js und
+  // der Belegimport legen sie so an. Bis 09/2026 wurden sie hier trotzdem noch
+  // einmal gespiegelt: das Storno-XML trug dadurch POSITIVE Summen (es
+  // forderte den stornierten Betrag ein zweites Mal ein) und einen negativen
+  // Einzelpreis, den Pruefportale nach BR-27 fatal abweisen — der eigene
+  // Validator prueft BR-27 nicht, deshalb fiel es nicht auf.
+  //
+  // Jetzt gilt fuer jeden Beleg dieselbe Regel: Summen wie gespeichert; je
+  // Position ist der Einzelpreis (BT-146) positiv und die Menge (BT-129)
+  // traegt das Vorzeichen des Positionsbetrags. Das deckt auch die negativen
+  // Abzugspositionen einer Schlussrechnung und die positiven
+  // Ruecknahme-Positionen ihres Stornos ab.
+  for (const l of lines) {
+    const neg = toNum(l.lineTotal) < 0;
+    l.unitPrice = Math.abs(toNum(l.unitPrice));
+    l.quantity  = neg ? -Math.abs(toNum(l.quantity)) : Math.abs(toNum(l.quantity));
   }
-  const totalsOut = negateForStorno ? {
-    lineTotal:      flip(lineTotal),
-    allowanceTotal: flip(allowanceTotal),
-    chargeTotal,
-    taxBasis:       flip(taxBasis),
-    taxAmount:      flip(taxAmount),
-    grandTotal:     flip(grandTotal),
-    prepaidGross:   flip(prepaidGross),
-    duePayable:     flip(duePayable),
-    prepaidAmount:  flip(prepaidGross),
-  } : {
+  if (toNum(taxBasis) < 0) {
+    for (const a of allowances) a.amount = -Math.abs(toNum(a.amount));
+  }
+  const totalsOut = {
     lineTotal,
-    allowanceTotal,
+    allowanceTotal: fmt2(allowances.reduce((s, a) => s + a.amount, 0)),
     chargeTotal,
     taxBasis,
     taxAmount,
@@ -735,6 +769,9 @@ ${basis}`;
 
     canceledDocNumber,
     canceledDocDate,
+    // Rechnungskorrektur: worauf sie sich bezieht und warum (steht auf dem PDF)
+    correctsLabel:    isCorrection ? (doc.CORRECTS_ADVANCE_INVOICE_ID ? 'Abschlagsrechnung' : 'Rechnung') : null,
+    correctionReason: isCorrection ? (String(doc.CORRECTION_REASON ?? '').trim() || null) : null,
     projectNumber,                                          // BT-11
     contractNumber,                                         // BT-12
     orderNumber:           String(doc.BUYER_ORDER_REFERENCE      ?? '').trim(), // BT-13

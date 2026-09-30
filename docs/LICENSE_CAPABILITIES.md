@@ -39,7 +39,7 @@ Die Spalte **Enthaltene Funktionen** zeigt, welche konkreten Aktionen/Ansichten 
 | **Rechnungen & Zahlungen (Basis)**<br>`invoices.basic` | boolean | Rechnungen sehen; Einzelrechnung anlegen; Rechnungsentwürfe bearbeiten; Rechnungsentwürfe löschen; Rechnungen buchen; Rechnungs-PDF herunterladen; Rechnungen per E-Mail senden; Zahlungen sehen; Zahlungen anlegen; Zahlungen bearbeiten; Zahlungen loeschen |
 | **Abschlagsrechnungen**<br>`invoices.partial` | boolean | Abschlagsrechnung anlegen |
 | **Teil-/Schlussrechnungen**<br>`invoices.final` | boolean | Teil-/Schlussrechnung anlegen |
-| **Gutschriften**<br>`invoices.credit` | boolean | Gutschrift anlegen |
+| **Rechnungskorrekturen**<br>`invoices.credit` | boolean | Gutschrift anlegen |
 | **Stornierung**<br>`invoices.cancel` | boolean | Rechnungen stornieren |
 | **Sicherheitseinbehalte**<br>`invoices.security_retention` | boolean | Sicherheitseinbehalte sehen |
 

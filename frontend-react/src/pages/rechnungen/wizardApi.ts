@@ -72,7 +72,7 @@ const abschlag: WizardApi = {
 
 function invoiceApi(kind: 'rechnung' | 'gutschrift'): WizardApi {
   return {
-    kind, noun: kind === 'gutschrift' ? 'Gutschrift' : 'Rechnung',
+    kind, noun: kind === 'gutschrift' ? 'Rechnungskorrektur' : 'Rechnung',
     dateCol: 'INVOICE_DATE', dateKey: 'invoice_date', supportsSe: false,
     attachments: 'invoices', listKey: 'invoices',
     init:        b => initInvoice({ ...b, invoice_type: kind }),

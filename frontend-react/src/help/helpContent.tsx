@@ -234,7 +234,7 @@ export const HELP = {
         <br /><strong>Abgerechnete Buchungen sind gesperrt.</strong> Steckt eine Buchung in
         einer Rechnung oder einem Abschlag, bleibt sie liegen — sonst verliert ein
         gestellter Beleg seine Grundlage. Die Vorschau nennt die betroffene Belegnummer;
-        korrigiert wird über Storno bzw. Gutschrift.
+        korrigiert wird über Storno bzw. Rechnungskorrektur.
         <br /><strong>Der Stundensatz richtet sich nach dem Ziel.</strong> Er kommt aus der
         Mitarbeiter/Projekt-Zuordnung des Zielprojekts, nicht aus der Buchung — der
         abrechenbare Erlös kann sich dadurch ändern. Die Vorschau zeigt vorher, um wie
@@ -564,6 +564,23 @@ export const HELP = {
         Rechnungskorrektur nötig — dann über Storno und neue Rechnung.<br /><br />
         Solange der Kunde den Rest noch zahlen soll, <strong>nichts ausbuchen</strong>: der Betrag
         bleibt offen und wird mit der nächsten Rechnung nicht noch einmal abgerechnet.
+      </>
+    ),
+  },
+  'invoice.rechnungskorrektur': {
+    title: 'Rechnungskorrektur',
+    body: (
+      <>
+        Mindert eine <strong>gebuchte</strong> Rechnung oder Abschlagsrechnung — etwa weil sich die Leistung
+        geändert hat (Aufmaß, Umfang). Dafür ist eine Rechnungsberichtigung nötig: ein eigener Beleg, der
+        eindeutig auf die ursprüngliche Rechnung verweist und den Grund nennt. Die E-Rechnung geht als
+        Belegart 384 (Rechnungskorrektur) mit negativen Beträgen und Verweis auf das Original hinaus.<br /><br />
+        Die Korrektur mindert das Abgerechnete und den offenen Betrag des Originals. Sie ist selbst keine
+        Forderung: sie wird nicht gemahnt und hat keine Fälligkeit.<br /><br />
+        <strong>Nur weniger gezahlt, Leistung unverändert?</strong> Dann genügt „Rest ausbuchen" im
+        Zahlungsdialog — eine reine Minderung des Entgelts braucht keine Rechnungsberichtigung.
+        Früher hieß diese Funktion „Gutschrift"; im Umsatzsteuerrecht ist eine Gutschrift aber die
+        Abrechnung durch den Kunden selbst.
       </>
     ),
   },
@@ -1945,7 +1962,7 @@ export const HELP = {
         <strong>Nochmal buchen</strong> öffnet „Zeit buchen" mit demselben Projekt, derselben Leistung
         und derselben Beschreibung. Ändern und Löschen gehen, solange eine Buchung noch nicht
         abgerechnet und der Monat nicht abgeschlossen ist — danach steht dort ein Schloss mit dem
-        Grund. Eine abgerechnete Buchung wird über Storno oder Gutschrift korrigiert.
+        Grund. Eine abgerechnete Buchung wird über Storno oder Rechnungskorrektur korrigiert.
       </>
     ),
   },

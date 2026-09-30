@@ -52,14 +52,20 @@ function deductionOf(ar, o) {
   const scale = claim.net > 0 && afterDiscount > 0 ? claim.net / afterDiscount : 1;
   const deductionNet = round2((settledGross / (1 + vatPct / 100)) * scale);
 
+  // Eine Rechnungskorrektur auf diesen Abschlag (Migration 0179) hat das
+  // Abgerechnete schon selbst gemindert — sie wird nicht abgesetzt, steht
+  // aber auch nicht mehr offen in der Schlussrechnung.
+  const correctedGross = round2(toNum(o.corrected));
+
   return {
     billedGross:     claim.gross,
     paidGross:       o.paid,
     seHeld:          claim.seHeld,
     minderungGross:  minderung,
     rebillableGross: rebillAdj,
+    correctedGross,
     // Einbehalt + offener Rest + wieder abrechenbar: steht jetzt in der Schlussrechnung
-    includedGross:   round2(claim.gross - settledGross),
+    includedGross:   round2(claim.gross - settledGross - correctedGross),
     deductionNet,
     vatPct,
   };

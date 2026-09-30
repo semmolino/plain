@@ -24,6 +24,7 @@ import { BatchEmailModal, type BatchEmailItem } from '@/components/ui/BatchEmail
 import { useToast }     from '@/store/toastStore'
 import { AbrechenbareProjekte } from '@/pages/rechnungen/AbrechenbareProjekte'
 import { ZahlungDialog, type ZahlungZiel } from '@/pages/rechnungen/ZahlungDialog'
+import { KorrekturDialog, type KorrekturStart } from '@/pages/rechnungen/KorrekturDialog'
 import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
@@ -64,7 +65,7 @@ function capitalizeInvType(t: string | null | undefined): string {
     schlussrechnung:     'Teilschluss-/Schlussrechnung',
     teilschlussrechnung: 'Teilschluss-/Schlussrechnung',
     stornorechnung:      'Stornorechnung',
-    gutschrift:          'Gutschrift',
+    gutschrift:          'Rechnungskorrektur',
   }
   return map[t.toLowerCase()] ?? (t.charAt(0).toUpperCase() + t.slice(1))
 }
@@ -475,6 +476,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [stornoState,   setStornoState]   = useState<{ label: string; hasPayments: boolean; payCount: number; payTotal: number; onStorno: (del: boolean) => Promise<void> } | null>(null)
   const [payKey,        setPayKey]        = useState<string | null>(null)
+  const [korrektur,     setKorrektur]     = useState<{ start: KorrekturStart; draftId?: number } | null>(null)
 
   // ── Multi-select + Email modal state ─────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -687,7 +689,8 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     }
   }
 
-  function canPay(row: UnifiedRow) {
+  /** Gebucht und kein Storno — gilt fürs Stornieren, auch für eine Rechnungskorrektur. */
+  function isBookedDoc(row: UnifiedRow) {
     if (row.source === 'invoice') {
       const inv = row.raw as Invoice
       return inv.STATUS_ID === 2 && inv.INVOICE_TYPE !== 'stornorechnung'
@@ -696,7 +699,23 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     return pp.STATUS_ID === 2 && !pp.CANCELS_ADVANCE_INVOICE_ID
   }
 
-  function canCancel(row: UnifiedRow) { return canPay(row) }
+  // Eine Rechnungskorrektur ist keine Forderung — darauf wird nichts gezahlt.
+  function canPay(row: UnifiedRow) {
+    return isBookedDoc(row) && !(row.source === 'invoice' && (row.raw as Invoice).INVOICE_TYPE === 'gutschrift')
+  }
+
+  function canCancel(row: UnifiedRow) { return isBookedDoc(row) }
+
+  /** Korrigieren: gebucht, keine Korrektur, kein aufgegangener Abschlag. */
+  function canCorrect(row: UnifiedRow) {
+    if (!canPay(row)) return false
+    return !(row.source === 'pp' && (row.raw as PartialPayment).ABSORBED_BY_INVOICE_ID)
+  }
+
+  function openCorrection(row: UnifiedRow) {
+    const raw = row.raw as Invoice & PartialPayment
+    setKorrektur({ start: { kind: row.source, id: raw.ID, label: row.number ?? `#${raw.ID}` } })
+  }
 
   function canDelete(row: UnifiedRow) {
     if (row.source === 'invoice') return (row.raw as Invoice).STATUS_ID === 1
@@ -717,6 +736,15 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   function handleEditDraftClick(row: UnifiedRow) {
     setDetailRow(null)
     const raw = row.raw as Invoice & PartialPayment
+    // Korrektur-Entwurf (mit Bezug aufs Original): im Korrektur-Dialog fortsetzen.
+    // Ältere „Gutschrift"-Entwürfe ohne Bezug laufen weiter durch den Assistenten.
+    if (row.source === 'invoice' && raw.INVOICE_TYPE === 'gutschrift' && (raw.CORRECTS_INVOICE_ID || raw.CORRECTS_ADVANCE_INVOICE_ID)) {
+      const isInv = !!raw.CORRECTS_INVOICE_ID
+      const origId = (isInv ? raw.CORRECTS_INVOICE_ID : raw.CORRECTS_ADVANCE_INVOICE_ID) as number
+      const orig = allRows.find(r => r.source === (isInv ? 'invoice' : 'pp') && (r.raw as Invoice & PartialPayment).ID === origId)
+      setKorrektur({ start: { kind: isInv ? 'invoice' : 'pp', id: origId, label: orig?.number ?? `#${origId}` }, draftId: raw.ID })
+      return
+    }
     onEditDraft?.({
       id:            raw.ID,
       projectId:     raw.PROJECT_ID,
@@ -1011,6 +1039,13 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                         {canPay(row) && (
                           <button className="row-menu-item" onClick={() => openPayment(row)}>Zahlung erfassen</button>
                         )}
+                        {canCorrect(row) && (
+                          <Can permission="invoices.create_credit">
+                            <HasFeature feature="invoices.credit">
+                              <button className="row-menu-item" onClick={() => openCorrection(row)}>Rechnung korrigieren</button>
+                            </HasFeature>
+                          </Can>
+                        )}
                         <Can permission="invoices.download_xml">
                           <HasFeature feature="einvoice.xrechnung">
                             <button className="row-menu-item" onClick={() => openXRechnung(row)}>XRechnung</button>
@@ -1257,6 +1292,10 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
 
       {/* Zahlung erfassen / Rest ausbuchen */}
       <ZahlungDialog ziel={payZiel} onClose={() => setPayKey(null)} />
+
+      {/* Rechnungskorrektur (Migration 0179) */}
+      <KorrekturDialog open={korrektur !== null} start={korrektur?.start ?? null} draftId={korrektur?.draftId}
+        onClose={() => setKorrektur(null)} />
 
       {/* Email modal */}
       <Modal

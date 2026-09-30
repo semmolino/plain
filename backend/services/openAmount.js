@@ -44,7 +44,7 @@ function round2(n) {
 const CLAIM_COLS = {
   INVOICE:
     "TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, " +
-    "VAT_PERCENT, VAT_CATEGORY, SE_AMOUNT, SE_RELEASE_TOTAL, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, INVOICE_DATE",
+    "VAT_PERCENT, VAT_CATEGORY, SE_AMOUNT, SE_RELEASE_TOTAL, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, INVOICE_DATE, INVOICE_TYPE",
   ADVANCE_INVOICE:
     "TOTAL_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, " +
     "VAT_PERCENT, VAT_CATEGORY, SE_AMOUNT, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, ADVANCE_INVOICE_DATE",
@@ -112,18 +112,23 @@ function claimOf(doc, kind) {
  * @param {ReturnType<typeof claimOf>} claim
  * @param {{ payments?: {gross:number, date?:string|null}[], adjustments?: {gross:number}[] }} p
  */
-function computeOpen(claim, { payments = [], adjustments = [], absorbedBy = null } = {}) {
+function computeOpen(claim, { payments = [], adjustments = [], absorbedBy = null, corrected = 0, isCorrection = false } = {}) {
   const paid = round2(payments.reduce((s, p) => s + toNum(p.gross), 0));
   const adjusted = round2(adjustments.reduce((s, a) => s + toNum(a.gross), 0));
-  let open = round2(claim.payable - paid - adjusted);
+  const correctedGross = round2(Math.abs(toNum(corrected)));
+  let open = round2(claim.payable - paid - adjusted - correctedGross);
   let skontoTaken = false;
 
   if (claim.skontoGross != null && open > TOL) {
+    // Nach einer Rechnungskorrektur bezieht sich Skonto auf den geminderten Betrag.
+    const skontoGross = correctedGross > 0
+      ? round2((claim.payable - correctedGross) * claim.skontoGross / (claim.payable || 1))
+      : claim.skontoGross;
     const paidInTime = claim.skontoDeadline
       ? round2(payments.filter(p => !p.date || String(p.date).slice(0, 10) <= claim.skontoDeadline)
           .reduce((s, p) => s + toNum(p.gross), 0))
       : paid;
-    if (paidInTime >= claim.skontoGross - TOL) {
+    if (paidInTime >= skontoGross - TOL) {
       open = 0;
       skontoTaken = true;
     }
@@ -133,7 +138,14 @@ function computeOpen(claim, { payments = [], adjustments = [], absorbedBy = null
   // jetzt dort in Rechnung — hier ist nichts mehr offen, gemahnt wird er dort.
   if (absorbedBy != null) open = 0;
 
-  return { paid, adjusted, open, skontoTaken, settled: open <= TOL, absorbedBy: absorbedBy ?? null };
+  // Eine Rechnungskorrektur ist keine Forderung: sie mindert den offenen
+  // Betrag ihres Originals (corrected dort), selbst ist sie nie offen.
+  if (isCorrection) open = 0;
+
+  return {
+    paid, adjusted, corrected: correctedGross, open, skontoTaken, settled: open <= TOL,
+    absorbedBy: absorbedBy ?? null, isCorrection,
+  };
 }
 
 // ── Laden ──────────────────────────────────────────────────────────────────
@@ -200,9 +212,10 @@ async function loadMovements(supabase, { kind, ids, tenantId = null }) {
 async function openAmountsFor(supabase, { kind, docs, tenantId = null }) {
   const list = Array.isArray(docs) ? docs : [];
   const ids = list.map(d => d.ID);
-  const [{ payments, adjustments }, absorbed] = await Promise.all([
+  const [{ payments, adjustments }, absorbed, corrections] = await Promise.all([
     loadMovements(supabase, { kind, ids, tenantId }),
     kind === "ADVANCE_INVOICE" ? loadAbsorbed(supabase, { ids, tenantId }) : Promise.resolve(new Map()),
+    loadCorrections(supabase, { kind, ids, tenantId }),
   ]);
   const out = new Map();
   for (const d of list) {
@@ -212,8 +225,36 @@ async function openAmountsFor(supabase, { kind, docs, tenantId = null }) {
     const adjs = adjustments.get(k) || [];
     out.set(k, {
       claim, payments: pays, adjustments: adjs,
-      ...computeOpen(claim, { payments: pays, adjustments: adjs, absorbedBy: absorbed.get(k) ?? null }),
+      ...computeOpen(claim, {
+        payments: pays, adjustments: adjs, absorbedBy: absorbed.get(k) ?? null,
+        corrected: corrections.get(k) || 0,
+        isCorrection: kind === "INVOICE" && d.INVOICE_TYPE === "gutschrift",
+      }),
     });
+  }
+  return out;
+}
+
+/**
+ * Gebuchte Rechnungskorrekturen je Original (Migration 0179), als Betrag
+ * (brutto, positiv). Tolerant wie loadAbsorbed: fehlt die Spalte, keine.
+ */
+async function loadCorrections(supabase, { kind, ids, tenantId }) {
+  const out = new Map();
+  const ref = kind === "INVOICE" ? "CORRECTS_INVOICE_ID" : "CORRECTS_ADVANCE_INVOICE_ID";
+  const uniq = Array.from(new Set((ids || []).filter(x => x !== null && x !== undefined)));
+  for (let i = 0; i < uniq.length; i += CHUNK) {
+    let q = supabase.from("INVOICE").select(`${ref}, TOTAL_AMOUNT_GROSS`).in(ref, uniq.slice(i, i + CHUNK)).eq("STATUS_ID", 2);
+    if (tenantId != null) q = q.eq("TENANT_ID", tenantId);
+    const { data, error } = await q;
+    if (error) {
+      if (/CORRECTS_|schema cache|does not exist/i.test(String(error.message || ""))) return out;
+      throw new Error(error.message);
+    }
+    for (const r of data || []) {
+      const k = String(r[ref]);
+      out.set(k, round2((out.get(k) || 0) + Math.abs(toNum(r.TOTAL_AMOUNT_GROSS))));
+    }
   }
   return out;
 }

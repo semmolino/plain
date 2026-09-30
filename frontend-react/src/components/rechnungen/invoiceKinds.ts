@@ -11,7 +11,7 @@ export const INVOICE_KINDS: { id: InvoiceKind; label: string; hint: string; perm
   { id: 'abschlag',   label: 'Abschlagsrechnung',             hint: 'nach Leistungsstand',               permissions: ['invoices.create_partial'], feature: 'invoices.partial' },
   { id: 'rechnung',   label: 'Einzelrechnung',                hint: 'freie Positionen',                  permissions: ['invoices.create_single'] },
   { id: 'schluss',    label: 'Teilschluss-/Schlussrechnung',  hint: 'rechnet Abschläge gegen',           permissions: ['invoices.create_final'], feature: 'invoices.final' },
-  { id: 'gutschrift', label: 'Gutschrift',                    hint: 'mindert eine gestellte Rechnung',   permissions: ['invoices.create_credit'], feature: 'invoices.credit' },
+  { id: 'gutschrift', label: 'Rechnungskorrektur',            hint: 'mindert eine gebuchte Rechnung',   permissions: ['invoices.create_credit'], feature: 'invoices.credit' },
 ]
 
 export function useInvoiceKinds() {

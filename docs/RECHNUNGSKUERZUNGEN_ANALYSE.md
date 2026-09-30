@@ -198,6 +198,19 @@ das Original als Entwurf kopiert und die Zahlungen auf die neue Rechnung **über
    toter Code.
 4. **Überzahlung ohne Hinweis.** `POST /payments` prüft nur `> 0`, nicht gegen den
    offenen Betrag; der offene Betrag wird negativ.
+5. **Storno-XML mit positiven Summen — in (c) behoben.** Der Storno wird negativ
+   gespeichert, `loadInvoiceData` spiegelte ihn trotzdem noch einmal: das XML forderte
+   den stornierten Betrag ein zweites Mal ein, mit negativem Einzelpreis (BR-27, von
+   Prüfportalen fatal abgewiesen; der eigene Validator prüft BR-27 nicht).
+6. **Nachlass I/II fehlt im XML — offen.** Das XML liest die Nachlässe aus
+   `INVOICE.DISCOUNT_1/2` (Betrag), die kein Code schreibt; gespeichert werden nur
+   Prozente und `TOTAL_DISCOUNTS`. `TOTAL_AMOUNT_NET` ist der Betrag **vor** Nachlass.
+   Folge: das XML nennt keinen Nachlass und fordert den Betrag vor Nachlass, das PDF
+   den danach. Betrifft jede Rechnung mit Nachlass; eigener Schritt.
+7. **Steuer beim Buchen ohne Blick auf die Steuerkategorie — offen.** `bookInvoice`
+   rechnet `TAX_AMOUNT_NET = Netto × VAT_PERCENT`, auch bei §13b/steuerfrei;
+   `recomputeInvoiceTotals` ersetzt 0 % durch den Standardsatz. Unkritisch, solange
+   solche Verträge einen 0-%-Steuersatz tragen — zu prüfen.
 
 ---
 
@@ -217,7 +230,7 @@ Entschieden am 30.09.2026:
 |---|---|
 | (a) Rest ausbuchen + ein offener Betrag | umgesetzt (Migration 0177, `openAmount.js`, `receivableAdjustments.js`, `ZahlungDialog.tsx`). Nebenbefund 1 behoben, dazu: Mahnungs-PDF forderte den vollen Betrag trotz Teilzahlung, Mahnstatistik und Mahn-Checker zählten bezahlte Belege. |
 | (b) Schlussrechnung auf Vereinnahmtes + „aufgegangen" | umgesetzt (Migration 0178, `arDeduction.js`, `refreshDeductions`, XML als Restrechnung). Nebenbefund 2 behoben. |
-| (c) Rechnungskorrektur statt Gutschrift | offen |
+| (c) Rechnungskorrektur statt Gutschrift | umgesetzt (Migration 0179, `invoiceCorrection.js`, `KorrekturDialog.tsx`, XML 384 mit BT-25). Dabei behoben: das Storno-XML trug positive Summen und einen negativen Einzelpreis (Nebenbefund 5), der Storno einer Schlussrechnung passte nicht zu ihrem Rest (BR-CO-13). |
 | (d) Storno + Neu mit Zahlungsübertrag | offen |
 
 ---

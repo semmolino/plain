@@ -317,7 +317,7 @@ export function EmployeeTimeAccount({ empId }: { empId: number }) {
                                         <Pencil size={13} strokeWidth={1.75} aria-hidden="true" />
                                       </button>
                                     ) : (b.billed || isClosed) && (
-                                      <span className="ta-lock" title={b.billed ? 'Abgerechnet — Korrektur über Storno oder Gutschrift' : 'Monat abgeschlossen'}>
+                                      <span className="ta-lock" title={b.billed ? 'Abgerechnet — Korrektur über Storno oder Rechnungskorrektur' : 'Monat abgeschlossen'}>
                                         <Lock size={12} strokeWidth={2} aria-hidden="true" />
                                         <span className="sr-only">{b.billed ? 'abgerechnet' : 'Monat abgeschlossen'}</span>
                                       </span>

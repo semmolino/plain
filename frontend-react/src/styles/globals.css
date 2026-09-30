@@ -6275,6 +6275,12 @@ fieldset:disabled .ws-check { cursor: default; }
 .zd-check input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; }
 .zd-rest-body { margin-top: var(--space-2); }
 
+/* ── Rechnungskorrektur (KorrekturDialog, .kd-*) ─────────────────────────── */
+/* .master-form begrenzt auf 480 px — die Tabelle je Element braucht die
+   Breite des breiten Dialogs, sonst scrollt sie seitlich und schneidet den
+   Namen des Elements ab. */
+.kd-form { max-width: none; }
+
 /* ═══ Übersicht ═══════════════════════════════════════════════════════════ */
 
 /* ── Übersicht ───────────────────────────────────────────────────────────── */

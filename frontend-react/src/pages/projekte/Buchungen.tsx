@@ -405,7 +405,7 @@ export function Buchungen({ initialProjectId }: Props = {}) {
 
   function rowActions(b: Buchung) {
     if (isBilled(b)) {
-      return <span className="bk-billed" title="Abgerechnet – Korrektur nur über Storno/Gutschrift"><Lock size={12} strokeWidth={2} aria-hidden="true" /> abgerechnet</span>
+      return <span className="bk-billed" title="Abgerechnet – Korrektur nur über Storno/Rechnungskorrektur"><Lock size={12} strokeWidth={2} aria-hidden="true" /> abgerechnet</span>
     }
     const acts = [
       canEdit && { key: 'edit', label: 'Bearbeiten', icon: Pencil, run: () => openEdit(b) },

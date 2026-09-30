@@ -458,6 +458,20 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   und kein Ausbuchen mehr darauf; ein Storno der Schlussrechnung leert es. Im
   XML stehen die Abzüge als Positionen mit negativer Menge, BT-113 bleibt 0 —
   vorher zog BT-113 sie ein zweites Mal ab (BR-CO-13).
+- **Rechnungskorrektur** (früher „Gutschrift"; `INVOICE_TYPE` bleibt
+  `'gutschrift'`, Recht `invoices.create_credit`, Migration `0179`,
+  `services/invoiceCorrection.js`, UI `pages/rechnungen/KorrekturDialog.tsx`):
+  immer mit Bezug auf einen gebuchten Beleg (`CORRECTS_INVOICE_ID` /
+  `CORRECTS_ADVANCE_INVOICE_ID` — **nie** `CANCELS_INVOICE_ID`, das setzt beim
+  Buchen das Original auf storniert) und Pflichtgrund (`CORRECTION_REASON`,
+  steht auf dem PDF). Beträge **negativ** wie Storno und Belegimport, keine
+  Fälligkeit, nie offen; mindert den offenen Betrag des Originals
+  (`openAmount.js`) und — bei Abschlägen — deren Abgerechnetes, nicht das der
+  Schlussrechnungen (`advanceCorrectionIds`). E-Rechnung: Belegart **384** mit
+  BT-25 (381 bräuchte im UBL eine CreditNote-Wurzel). **Vorzeichen im XML**:
+  Summen wie gespeichert, je Position Einzelpreis positiv und Menge mit dem
+  Vorzeichen — vorher spiegelte `loadInvoiceData` den negativ gespeicherten
+  Storno ein zweites Mal (positive Summen, negativer Einzelpreis, BR-27).
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
 - **Umbuchen von Buchungen** (`rebookBuchungen` in `services/buchungen.js`,

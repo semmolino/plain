@@ -241,7 +241,7 @@ function MeineZeitInner({ employeeId }: { employeeId: number }) {
                         </button>
                       )}
                       {lock ? (
-                        <span className="mz-lock" title={b.BILLED ? 'Steckt in einer Rechnung – Korrektur über Storno oder Gutschrift' : 'Der Monat ist abgeschlossen'}>
+                        <span className="mz-lock" title={b.BILLED ? 'Steckt in einer Rechnung – Korrektur über Storno oder Rechnungskorrektur' : 'Der Monat ist abgeschlossen'}>
                           <Lock size={12} strokeWidth={2} aria-hidden="true" /> {lock}
                         </span>
                       ) : (

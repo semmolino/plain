@@ -157,6 +157,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0174 verknuepft Angebotselemente mit ihrer Kalkulation.
     // 0177 fuehrt „Rest ausbuchen" ein (RECEIVABLE_ADJUSTMENT).
     // 0178 vermerkt, in welcher Schlussrechnung ein Abschlag aufgegangen ist.
+    // 0179 macht aus der Gutschrift die Rechnungskorrektur (Bezug aufs Original).
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -202,6 +203,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0174_angebot_kalkulation_verknuepfung.sql",
       "0177_forderungsminderung.sql",
       "0178_abschlag_in_schlussrechnung.sql",
+      "0179_rechnungskorrektur.sql",
     ]);
   });
 

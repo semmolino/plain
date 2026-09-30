@@ -379,6 +379,13 @@ table.data-table thead { display: table-header-group; }
 
   {# Document title #}
   <div class="doc-title">{{ docTitle }}</div>
+  {# Rechnungskorrektur: spezifischer, eindeutiger Bezug auf das Original
+     (§ 31 Abs. 5 UStDV) und der Grund der Korrektur. #}
+  {% if inv.invoiceType == 'gutschrift' and inv.canceledDocNumber %}
+  <div class="text-block">Korrektur zu {{ inv.correctsLabel or 'Rechnung' }} Nr. {{ inv.canceledDocNumber }}{% if inv.canceledDocDate %} vom {{ inv.canceledDocDate | date_de }}{% endif %}.{% if inv.correctionReason %}
+Grund: {{ inv.correctionReason }}{% endif %}
+Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
+  {% endif %}
 
   {# Anrede — geschlechtsgerechte Briefanrede direkt über dem Kopftext #}
   {% if salutationLine %}<div class="salutation">{{ salutationLine }}</div>{% endif %}
