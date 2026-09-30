@@ -105,7 +105,11 @@ test.describe('Projekt-Arbeitsbereich', () => {
   // um 8 px — kurze Namen wurden zu „BLAN…", obwohl Platz war.
   test('Projektname wird nicht abgeschnitten, solange Platz ist', async ({ page }, info) => {
     test.skip(info.project.name !== 'desktop', 'Desktop-Breite')
-    await page.setViewportSize({ width: 1280, height: 800 })
+    // 1440 statt 1280: Seit „Testversion 1" steht der Titel in 28px (H1 der
+    // Vorgabe). Der 52 Zeichen lange Name der Testdaten passt bei 1280px
+    // neben den Aktionen nicht mehr — dort ist Abschneiden richtig. Geprueft
+    // wird hier der alte Fehler (8px zu frueh abgeschnitten), nicht die Breite.
+    await page.setViewportSize({ width: 1440, height: 800 })
     await mockPilot(page)
     await page.goto('/projekte?projectId=1&tab=struktur')
     const text = page.locator('.pw-title-text')

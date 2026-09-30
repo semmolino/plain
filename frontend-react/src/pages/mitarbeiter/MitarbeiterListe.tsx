@@ -149,13 +149,16 @@ export function MitarbeiterListe({ employees, isLoading }: { employees: Employee
   // eine feste 9 bzw. 10 bei bis zu 13 Spalten.
   const colCount = 8 + (canSalary ? 1 : 0) + (canBookings ? 1 : 0) + (canRoles ? 1 : 0)
 
+  // Status-Schild (Testversion 1): weiss mit farbigem Punkt, die Auswahl
+  // bleibt direkt bedienbar.
   const statusCell = (r: Employee) => (
-    <InlineSelect
-      value={r.ACTIVE === 2 ? 2 : 1} options={STATUS_OPTS} allowEmpty={false}
-      readOnly={!canEdit} ariaLabel={`Status ${r.ABBR}`}
-      tone={r.ACTIVE === 2 ? { bg: 'var(--danger-bg)', color: 'var(--danger-strong)' } : { bg: 'var(--success-bg)', color: 'var(--success-strong)' }}
-      onChange={v => inlineMut.mutate({ id: r.ID, body: { active: Number(v) }, label: `${r.ABBR} ist jetzt ${Number(v) === 2 ? 'inaktiv' : 'aktiv'}.` })}
-    />
+    <span className="status-select" data-tone={r.ACTIVE === 2 ? 'ruhend' : 'aktiv'}>
+      <InlineSelect
+        value={r.ACTIVE === 2 ? 2 : 1} options={STATUS_OPTS} allowEmpty={false}
+        readOnly={!canEdit} ariaLabel={`Status ${r.ABBR}`}
+        onChange={v => inlineMut.mutate({ id: r.ID, body: { active: Number(v) }, label: `${r.ABBR} ist jetzt ${Number(v) === 2 ? 'inaktiv' : 'aktiv'}.` })}
+      />
+    </span>
   )
 
   let body: React.ReactNode

@@ -19,6 +19,7 @@ import { costRatioLevel, readCpiThresholds } from '@/utils/kpiLevel'
 import { money0, NO_VALUE } from '@/utils/money'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
+import { statusTone } from '@/utils/statusTone'
 
 const FMT_PCT = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const fmtPct  = (v: number | null | undefined) => v == null ? NO_VALUE : `${FMT_PCT.format(v)} %`
@@ -145,7 +146,7 @@ export function ProjektHeader({ projectId, onBack, onSwitch }: {
       back={{ label: 'Projekte', onClick: onBack }}
       eyebrow={<>
         <span>{abbr}</span>
-        {full?.STATUS_NAME && <span className="status-pill">{full.STATUS_NAME}</span>}
+        {full?.STATUS_NAME && <span className="status-pill" data-tone={statusTone(full.STATUS_NAME)}>{full.STATUS_NAME}</span>}
         {full?.IS_INTERNAL && <span className="status-pill">Intern</span>}
       </>}
       title={

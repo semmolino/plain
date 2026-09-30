@@ -96,7 +96,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
           <strong style={{ fontSize: 14 }}>Abrechenbare Projekte</strong>
           {!isLoading && projects.length > 0 && (
             <span style={{
-              background: 'rgba(29, 78, 216, 0.12)', color: 'var(--info)',
+              background: 'var(--accent-bg)', color: 'var(--text)',
               fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
             }}>
               {projects.length}
@@ -170,7 +170,7 @@ export function AbrechenbareProjekte({ onCreateInvoice, storageKey = 'rl-abreche
                       <td className="ls-td" style={{ fontSize: 12, color: 'var(--text-3)' }}>
                         {p.PROJECT_MANAGER_DISPLAY ?? '—'}
                       </td>
-                      <td className="ls-td ls-col-num" style={{ color: 'var(--info)', fontWeight: 600 }}>
+                      <td className="ls-td ls-col-num" style={{ color: 'var(--text)', fontWeight: 600 }}>
                         {money(p.OPEN_NET_TOTAL)}
                       </td>
                     </tr>

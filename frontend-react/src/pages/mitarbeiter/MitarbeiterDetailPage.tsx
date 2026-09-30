@@ -161,7 +161,7 @@ function MitarbeiterHeader({ employee, onBack }: { employee: Employee; onBack: (
         eyebrow={<>
           <span>{employee.ABBR}</span>
           {employee.PERSONNEL_NUMBER && <span>Pers.-Nr. {employee.PERSONNEL_NUMBER}</span>}
-          <span className={`status-pill${inactive ? ' ma-pill-inactive' : ''}`}>{inactive ? 'Inaktiv' : 'Aktiv'}</span>
+          <span className={`status-pill${inactive ? ' ma-pill-inactive' : ''}`} data-tone={inactive ? 'ruhend' : 'aktiv'}>{inactive ? 'Inaktiv' : 'Aktiv'}</span>
         </>}
         title={<span className="ma-title">
           <span className="ma-avatar" aria-hidden="true">

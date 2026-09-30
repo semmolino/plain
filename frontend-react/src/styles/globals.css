@@ -162,6 +162,8 @@
      Dunkel- und Branchen-Themes dieselbe Form mit ihren Flaechen bekommen. */
   --badge-bg:       var(--surface);
   --badge-border:   #C9CED9;
+  /* Punktfarbe eines Status-Schilds; Varianten setzen sie, Standard = grau. */
+  --dot:            var(--ps-status-ruhend);
   --progress-track: var(--accent-bg);
   --progress-fill:  var(--accent);
   /* Zebrastreifen in Tabellen: Testversion 1 trennt Zeilen nur ueber Linien. */
@@ -1439,8 +1441,11 @@ input::placeholder { color: var(--text-4); }
 .status-row {}
 .status-label-row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 3px; }
 .status-count { font-weight: 700; color: var(--accent); }
-.status-bar-wrap { height: 6px; background: var(--border-2); border-radius: 3px; overflow: hidden; }
-.status-bar { height: 100%; background: var(--accent); border-radius: 3px; }
+/* Fortschrittsbalken (Testversion 1): 6px, ganz rund, Spur --progress-track,
+   Fuellung --progress-fill (Nachttinte). Ohne Stiftspitze — die gehoert nur
+   ins Logo. In dichten Listen 5px. */
+.status-bar-wrap { height: 6px; background: var(--progress-track); border-radius: var(--radius-pill); overflow: hidden; }
+.status-bar { height: 100%; background: var(--progress-fill); border-radius: var(--radius-pill); }
 
 /* Empty note */
 .empty-note { font-size: 13px; color: var(--text-3); padding: 8px 0; }
@@ -1681,7 +1686,7 @@ input::placeholder { color: var(--text-4); }
 .list-toolbar .list-search,
 .pl-toolbar .list-search {
   padding-left: 32px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233A3F4D' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: 10px center;
   background-size: 15px 15px;
@@ -1689,6 +1694,12 @@ input::placeholder { color: var(--text-4); }
 [data-theme="dark"] .list-toolbar .list-search,
 [data-theme="dark"] .pl-toolbar .list-search {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23909090' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.6-3.6'/%3E%3C/svg%3E");
+  /* Eine spaetere Kurzform setzte im Dark-Theme Wiederholung und Abstand
+     zurueck — die Lupe stand dann ueber die ganze Feldbreite gekachelt. */
+  background-repeat: no-repeat;
+  background-position: 10px center;
+  background-size: 15px 15px;
+  padding-left: 32px;
 }
 
 .list-info { font-size: 12px; color: var(--text-3); white-space: nowrap; }
@@ -1729,7 +1740,7 @@ input::placeholder { color: var(--text-4); }
    Linien in --border, Zeilen nur ueber Linien getrennt (--row-stripe). */
 .master-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 400px; }
 .master-table th {
-  text-align: left; padding: 0 12px; height: 38px;
+  text-align: left; padding: 0 10px; height: 38px;
   font-size: 12.5px; font-weight: 600;
   color: var(--text-2); border-bottom: 1px solid var(--border-2);
   white-space: nowrap;
@@ -1743,7 +1754,7 @@ input::placeholder { color: var(--text-4); }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.master-table td { padding: 6px 12px; height: 44px; border-bottom: 1px solid var(--border-4); vertical-align: middle; }
+.master-table td { padding: 6px 10px; height: 44px; border-bottom: 1px solid var(--border-4); vertical-align: middle; }
 /* Zeilenköpfe (th scope="row"/"rowgroup") sehen aus wie Zellen. Die
    Kopfregel oben machte sie fett, mit Doppelrand — und klebend am oberen Rand. */
 .master-table tbody th { position: static; font-weight: 400; color: var(--text); border-bottom: 1px solid var(--border-4); background: transparent; }
@@ -1903,12 +1914,14 @@ input::placeholder { color: var(--text-4); }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 260px;
+  /* 232 statt 260: mit 14px-Tabellen und Status-Schildern (Testversion 1)
+     passt die Grundausstattung der Rechnungsliste sonst erst ab ~1310px. */
+  max-width: 232px;
 }
 .master-table--sticky-actions tbody td.doc-actions { overflow: visible; max-width: none; }
 /* Status-Badges nebeneinander statt gestapelt — zwei Badges („Gebucht" +
    „Ueberfaellig") haben die Zeile sonst zusaetzlich in die Hoehe getrieben. */
-.master-table--sticky-actions .status-badge { vertical-align: middle; }
+.master-table--sticky-actions .status-badge { vertical-align: middle; padding: 0 8px; gap: 6px; }
 .master-table--sticky-actions th.doc-actions { z-index: 3; }
 /* Die Zebra-Regel (.master-table tbody tr:nth-child(even) td) nutzt die
    background-KURZFORM und hat hoehere Spezifitaet — sie hat die
@@ -2714,14 +2727,11 @@ th.doc-actions, td.doc-actions {
 
 /* ── Phase 5: Rechnungen ─────────────────────────────────────────────────── */
 
-.status-badge {
-  display: inline-block; padding: 2px 8px; border-radius: 20px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.03em;
-}
-.status-badge.booked    { background: var(--success-bg); color: var(--success-strong); }
-.status-badge.draft     { background: var(--warning-bg); color: var(--warning-strong); }
-.status-badge.cancelled { background: var(--danger-bg); color: var(--danger-strong); }
-.status-badge.overdue   { background: var(--danger-bg); color: var(--danger-strong); margin-left: 4px; }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.status-badge.booked    { --dot: var(--ps-status-abgeschlossen); }
+.status-badge.draft     { --dot: var(--ps-status-aktiv); }
+.status-badge.cancelled { --dot: var(--ps-status-ruhend); }
+.status-badge.overdue   { --dot: var(--ps-status-ueber); margin-left: 4px; }
 
 /* Row status left-border indicator (Rechnungen list) */
 .row-status-booked    { border-left: 3px solid var(--success); }
@@ -2837,15 +2847,8 @@ th.doc-actions, td.doc-actions {
   display: flex; flex-wrap: wrap; gap: var(--space-1);
   margin-top: var(--space-1);
 }
-.tfl-flag {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 1px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--warning-bg);
-  color: var(--warning-strong);
-  font-size: 11px; font-weight: 600; line-height: 1.5;
-  white-space: nowrap;
-}
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.tfl-flag { --dot: var(--ps-status-knapp); }
 
 /* ── Prognose / EVM section ──────────────────────────────────────────────────── */
 .prognose-section {
@@ -3232,10 +3235,6 @@ th.doc-actions, td.doc-actions {
 .theme-check { margin-left: auto; font-size: 13px; }
 
 /* Dark theme status badge overrides (semantic color inversion) */
-[data-theme="dark"] .status-badge.booked    { background: rgba(22,163,74,0.14);  color: #4ade80; border: 1px solid rgba(22,163,74,0.30); }
-[data-theme="dark"] .status-badge.draft     { background: rgba(122,122,198,0.12); color: #a5a5e0; border: 1px solid rgba(122,122,198,0.30); }
-[data-theme="dark"] .status-badge.cancelled { background: rgba(220,38,38,0.14);  color: #f87171; border: 1px solid rgba(220,38,38,0.30); }
-[data-theme="dark"] .status-badge.overdue   { background: rgba(220,38,38,0.14);  color: #f87171; border: 1px solid rgba(220,38,38,0.30); }
 
 /* Dark theme message overrides */
 [data-theme="dark"] .message.success { background: rgba(22,163,74,0.18);   color: #4ade80; border: 1px solid rgba(22,163,74,0.30); }
@@ -3245,16 +3244,16 @@ th.doc-actions, td.doc-actions {
 /* ── Mahnungswesen ──────────────────────────────────────────────────────────── */
 
 /* Mahnstufe colored badges */
-.mahnstufe-badge        { display: inline-block; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-.mahnstufe-badge.ms-0   { background: #e5e7eb; color: #6b7280; }
-.mahnstufe-badge.ms-1   { background: #dbeafe; color: #1d4ed8; }
-.mahnstufe-badge.ms-2   { background: #fef3c7; color: #92400e; }
-.mahnstufe-badge.ms-3   { background: #fed7aa; color: #9a3412; }
-.mahnstufe-badge.ms-4   { background: #fecaca; color: #7f1d1d; }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.mahnstufe-badge.ms-0   { --dot: var(--ps-status-ruhend); }
+.mahnstufe-badge.ms-1   { --dot: var(--ps-status-aktiv); }
+.mahnstufe-badge.ms-2   { --dot: var(--ps-status-knapp); }
+.mahnstufe-badge.ms-3   { --dot: var(--ps-status-ueber); }
+.mahnstufe-badge.ms-4   { --dot: var(--ps-status-ueber); }
 
-/* Days overdue coloring */
-.days-warn { color: #92400e; font-weight: 600; }
-.days-crit { color: #b91c1c; font-weight: 700; }
+/* Tage ueberfaellig: Bedeutungsfarben statt fester Hex-Werte. */
+.days-warn { color: var(--kpi-watch); font-weight: 600; }
+.days-crit { color: var(--kpi-critical); font-weight: 700; }
 
 /* Detail modal 2-column grid */
 .mahnung-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-width: 0; }
@@ -3340,10 +3339,6 @@ th.doc-actions, td.doc-actions {
 .mahnung-stufe-row        { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 13px; }
 .mahnung-stufe-row .count { font-weight: 600; margin-left: auto; color: var(--text); }
 
-/* Dark mode badge overrides */
-[data-theme="dark"] .mahnstufe-badge.ms-1 { background: rgba(29,78,216,0.2);  color: #93c5fd; }
-[data-theme="dark"] .mahnstufe-badge.ms-2 { background: rgba(180,83,9,0.2);   color: #fcd34d; }
-[data-theme="dark"] .mahnstufe-badge.ms-3 { background: rgba(154,52,18,0.2);  color: #fb923c; }
 
 /* ── Risk Cockpit (Ampel-Filter) ─────────────────────────────────────────── */
 .dash-ampel-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -3355,16 +3350,16 @@ th.doc-actions, td.doc-actions {
 .ampel-filter-btn.active.ampel-gruen  { background: #f0fdf4; border-color: #16a34a; color: #166534; }
 .ampel-filter-btn.active.ampel-alle   { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
 
-.flag-badge { display: inline-block; border-radius: 4px; padding: 2px 6px; font-size: 11px; font-weight: 600; white-space: nowrap; }
-.flag-badge.flag-rot    { background: #fef2f2; color: #b91c1c; }
-.flag-badge.flag-orange { background: #fff7ed; color: #c2410c; }
-.flag-badge.flag-gelb   { background: #fefce8; color: #854d0e; }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.flag-badge.flag-rot    { --dot: var(--ps-status-ueber); }
+.flag-badge.flag-orange { --dot: var(--ps-status-knapp); }
+.flag-badge.flag-gelb   { --dot: var(--ps-status-knapp); }
 
 .detail-kv-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .detail-kv-table td { padding: 5px 0; border-bottom: 1px solid var(--border); }
 .detail-kv-table td:last-child { text-align: right; font-weight: 500; }
 
-.dept-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #dbeafe; color: #1d4ed8; }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
 
 .projekt-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-width: 0; }
 @media (max-width: 700px) { .projekt-detail-grid { grid-template-columns: 1fr; } }
@@ -3423,22 +3418,13 @@ th.doc-actions, td.doc-actions {
 .project-context-back { background: none; border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: var(--text-2); display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .project-context-back:hover { background: var(--surface-2); color: var(--text); }
 
-/* ── Mahnstufe badges ────────────────────────────────────────────────────── */
-.mahnstufe-badge { display: inline-block; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
-.mahnstufe-badge.ms-0 { background: #e5e7eb; color: #6b7280; }
-.mahnstufe-badge.ms-1 { background: #dbeafe; color: #1d4ed8; }
-.mahnstufe-badge.ms-2 { background: #fef3c7; color: #92400e; }
-.mahnstufe-badge.ms-3 { background: #fed7aa; color: #9a3412; }
-.mahnstufe-badge.ms-4 { background: #fecaca; color: #7f1d1d; }
+/* ── Mahnstufe badges: siehe „Mahnungswesen" (vorher doppelt definiert) ─── */
 .mahnung-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; min-width: 0; }
 @media (max-width: 700px) { .mahnung-detail-grid { grid-template-columns: 1fr; } }
 .mahnung-history-list { list-style: none; padding: 0; margin: 0; font-size: 12px; }
 .mahnung-history-list li { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
-.days-warn { color: #92400e; }
-.days-crit { color: #b91c1c; font-weight: 600; }
 .text-template-type-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; background: transparent; }
 .text-template-type-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-[data-theme="dark"] .mahnstufe-badge.ms-4 { background: rgba(127,29,29,0.2);  color: #fca5a5; }
 
 /* ── Unternehmenskennzahlen ───────────────────────────────────────────────── */
 .unk-root { padding: 4px 0 32px; max-width: 900px; }
@@ -3700,16 +3686,16 @@ th.doc-actions, td.doc-actions {
   min-width: 180px; flex: 1; max-width: 280px;
 }
 .setup-checklist-progress-track {
-  flex: 1; height: 8px;
-  background: var(--accent-bg2); border-radius: 999px; overflow: hidden;
+  flex: 1; height: 6px;
+  background: var(--progress-track); border-radius: var(--radius-pill); overflow: hidden;
 }
 .setup-checklist-progress-fill {
-  height: 100%; background: var(--accent);
+  height: 100%; background: var(--progress-fill);
   border-radius: 999px;
   transition: width 0.4s ease-out;
 }
 .setup-checklist-progress-pct {
-  font-size: 11px; font-weight: 700; color: var(--accent-dark);
+  font-size: 12px; font-weight: 600; color: var(--text);
   min-width: 36px; text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -3969,14 +3955,14 @@ th.doc-actions, td.doc-actions {
 }
 .mastery-bar-track {
   height: 5px;
-  background: var(--dim);
-  border-radius: 3px;
+  background: var(--progress-track);
+  border-radius: var(--radius-pill);
   overflow: hidden;
   margin-top: 2px;
 }
 .mastery-bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   transition: width 0.4s ease-out;
 }
 .mastery-row-count {
@@ -4254,16 +4240,13 @@ th.doc-actions, td.doc-actions {
 .sg-vote:disabled { cursor: not-allowed; opacity: 0.75; }
 
 /* Badges */
-.sg-badge {
-  display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
-  border: 1px solid transparent; white-space: nowrap;
-}
-.sg-st-new        { background: var(--surface-2); color: var(--text-2); border-color: var(--border); }
-.sg-st-reviewing  { background: var(--info-bg); color: var(--info); border-color: var(--info-bg); }
-.sg-st-planned    { background: var(--accent2-bg); color: var(--accent2); border-color: var(--accent2-bg); }
-.sg-st-progress   { background: var(--warning-bg); color: var(--warning); border-color: var(--warning-bg); }
-.sg-st-shipped    { background: var(--success-bg); color: var(--success-strong); border-color: var(--success-bg); }
-.sg-st-notplanned { background: var(--surface-3); color: var(--text-3); border-color: var(--border); }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.sg-st-new        { --dot: var(--ps-status-aktiv); }
+.sg-st-reviewing  { --dot: var(--ps-status-aktiv); }
+.sg-st-planned    { --dot: var(--ps-status-angeboten); }
+.sg-st-progress   { --dot: var(--ps-status-knapp); }
+.sg-st-shipped    { --dot: var(--ps-status-abgeschlossen); }
+.sg-st-notplanned { --dot: var(--ps-status-ruhend); }
 .sg-cat { font-size: 11px; color: var(--text-3); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 2px 7px; }
 
 /* plan&simple-Antwort in „Meine Vorschläge" */
@@ -4697,11 +4680,55 @@ th.doc-actions, td.doc-actions {
 }
 
 /* Status-Plakette im Seitenkopf (Projektstatus o. ä.) */
-.status-pill {
-  display: inline-flex; align-items: center; height: 20px; padding: 0 8px;
-  border-radius: var(--radius-pill);
-  background: var(--dim); color: var(--text-2);
-  font-size: 11px; font-weight: 700; letter-spacing: 0.2px;
+/* ── Status-Schild (Testversion 1) ───────────────────────────────────────
+   Weisses Schild mit 1px Rahmen (#C9CED9), schwarze Schrift 12,5px / 600,
+   24px hoch, Radius 6 — und davor ein farbiger Punkt (8px). Die Farbe steckt
+   NUR im Punkt, das Wort traegt die Bedeutung (auch fuer Farbfehlsichtige).
+
+   Ein Baustein fuer alle Status-Anzeigen: Varianten setzen nur --dot, die
+   Punktfarben sind --ps-status-* (Bedeutungsebene, in keinem Branchen-Theme
+   ueberschrieben). Neutrale Marken („Intern", Abteilung, Typ) haben keinen
+   Punkt. Projekt- und Angebotsstatus haben keine Farbe in der Datenbank —
+   deren Punkt kommt als data-tone aus utils/statusTone.ts. */
+.status-pill, .status-badge, .nt-status, .abs-status, .sg-badge, .mahnstufe-badge,
+.flag-badge, .lsr-chip, .tfl-flag, .st-badge, .ma-hist-badge, .bk-badge, .dept-badge,
+.status-select {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 24px; padding: 0 9px;
+  border: 1px solid var(--badge-border); border-radius: var(--radius-sm);
+  background: var(--badge-bg); color: var(--text);
+  font-size: 12.5px; font-weight: 600; letter-spacing: 0; line-height: 1;
+  white-space: nowrap; vertical-align: middle;
+}
+.status-pill[data-tone]::before, .status-select::before,
+.status-badge::before, .nt-status::before, .abs-status::before, .sg-badge::before,
+.mahnstufe-badge::before, .flag-badge::before, .lsr-chip::before, .tfl-flag::before,
+.ma-hist-badge::before, .bk-badge[class*="bk-badge--"]::before {
+  content: ''; flex-shrink: 0;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--dot, var(--ps-status-ruhend));
+}
+[data-tone="aktiv"]         { --dot: var(--ps-status-aktiv); }
+[data-tone="angeboten"]     { --dot: var(--ps-status-angeboten); }
+[data-tone="ruhend"]        { --dot: var(--ps-status-ruhend); }
+[data-tone="abgeschlossen"] { --dot: var(--ps-status-abgeschlossen); }
+[data-tone="ueber"]         { --dot: var(--ps-status-ueber); }
+[data-tone="im-plan"]       { --dot: var(--ps-status-im-plan); }
+[data-tone="knapp"]         { --dot: var(--ps-status-knapp); }
+
+/* Status als Auswahl in Listen (Projekt, Angebot, Mitarbeiter): das Schild
+   ist die Huelle, die Auswahl darin bleibt direkt bedienbar. */
+.status-select { padding: 0 4px 0 9px; }
+.status-select .inline-edit-select,
+.status-select .inline-edit-static {
+  min-height: 0; height: 22px; padding: 0 2px; margin: 0;
+  border: none; background: transparent; box-shadow: none;
+  color: var(--text); font: inherit; font-weight: 600;
+}
+.status-select .inline-edit-select:hover { border: none; background: transparent; }
+@media (pointer: coarse), (max-width: 640px) {
+  .status-select { height: 44px; }
+  .status-select .inline-edit-select { height: 42px; min-height: 0; }
 }
 
 /* ── Modulseite ohne sichtbaren Titel ───────────────────────────────────────
@@ -4946,10 +4973,8 @@ fieldset:disabled .ws-check { cursor: default; }
 .st-flag-on { color: var(--text); vertical-align: middle; }
 .st-flag-off { color: var(--text-4); }
 .st-row--inactive th, .st-row--inactive td { color: var(--text-3); }
-.st-badge {
-  display: inline-block; margin-left: var(--space-2); padding: 0 6px; border-radius: var(--radius-pill);
-  background: var(--surface-3); color: var(--text-2); font-size: 11px; font-weight: 600; line-height: 18px;
-}
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.st-badge { margin-left: var(--space-2); }
 .st-zero { color: var(--text-4); }
 .st-week { font-weight: 600; }
 /* Karten am Handy (Abwesenheitsarten, Arbeitszeitmodelle) */
@@ -5052,7 +5077,7 @@ fieldset:disabled .ws-check { cursor: default; }
   background: var(--accent); color: var(--accent-fg); font-size: 15px; font-weight: 700;
 }
 .ma-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.status-pill.ma-pill-inactive { background: var(--danger-bg); color: var(--danger-strong); }
+.status-pill.ma-pill-inactive { --dot: var(--ps-status-ruhend); }
 .ma-balance { font-weight: 600; font-variant-numeric: tabular-nums; }
 .ma-balance-neg { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--kpi-critical); }
 .ma-none { color: var(--text-3); }
@@ -5088,9 +5113,9 @@ fieldset:disabled .ws-check { cursor: default; }
 .ma-hist-actions { white-space: nowrap; text-align: right; }
 .ma-hist-editing .ma-hist-actions { display: flex; gap: var(--space-2); justify-content: flex-end; }
 .ma-hist-sub { color: var(--text-3); }
-.ma-hist-badge { display: inline-flex; margin-left: var(--space-2); padding: 1px 7px; border-radius: var(--radius-pill); font-size: 11px; font-weight: 700; }
-.ma-hist-badge--current { background: var(--success-bg); color: var(--success-strong); }
-.ma-hist-badge--planned { background: var(--info-bg); color: var(--info-strong); }
+.ma-hist-badge { margin-left: var(--space-2); }   /* Form: Status-Schild */
+.ma-hist-badge--current { --dot: var(--ps-status-im-plan); }
+.ma-hist-badge--planned { --dot: var(--ps-status-aktiv); }
 .ma-hist-add { display: flex; justify-content: flex-end; padding-bottom: var(--space-3); }
 .ma-hist-add .btn-primary, .ma-access-actions .btn-primary, .ma-access-actions .btn-danger { width: auto; margin-top: 0; display: inline-flex; align-items: center; gap: 6px; }
 /* Zugang */
@@ -5156,13 +5181,10 @@ fieldset:disabled .ws-check { cursor: default; }
 @media (pointer: coarse) { .ent-year-btn, .ent-actions button, .ent-bulk button { min-height: 44px; min-width: 44px; } }
 /* Abwesenheiten (Runde 11) — Postfach, Kalender, Meine Anträge, Antragsdialog.
    Vorher Inline-Stile in drei Dateien; ein Resturlaub im Plus stand grün. */
-.abs-status {
-  display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: var(--radius-pill);
-  font-size: 11px; font-weight: 700; white-space: nowrap; background: var(--surface-2); color: var(--text-3);
-}
-.abs-status--requested { background: var(--warning-bg); color: var(--warning-strong); }
-.abs-status--approved  { background: var(--success-bg); color: var(--success-strong); }
-.abs-status--rejected  { background: var(--danger-bg); color: var(--danger-strong); }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.abs-status--requested { --dot: var(--ps-status-knapp); }
+.abs-status--approved  { --dot: var(--ps-status-im-plan); }
+.abs-status--rejected  { --dot: var(--ps-status-ueber); }
 .abs-type { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .abs-type-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .abs-neg { color: var(--kpi-critical); }
@@ -5590,7 +5612,7 @@ fieldset:disabled .ws-check { cursor: default; }
 /* Zuschläge farbig (positiv gruen, Nachlass rot) und in jeder Zeile
    buendig: der Knopf hat 1 px Rahmen + 6 px Innenabstand, der reine Wert in
    der Gesamtzeile bekommt denselben Kasten. */
-.sx-sur-pos { color: var(--success); }
+.sx-sur-pos { color: var(--text); }   /* Testversion 1: keine farbige Schrift; negativ bleibt rot (rote Zahlen) */
 .sx-sur-neg { color: var(--kpi-critical); }
 .sx-surcharge-static {
   display: inline-block; min-width: 64px; padding: 0 6px; border: 1px solid transparent;
@@ -5915,12 +5937,9 @@ fieldset:disabled .ws-check { cursor: default; }
 .bk-desc-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .bk-sub { display: block; font-size: 12px; color: var(--text-3); }
 .bk-sub--path { margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60vw; }
-.bk-badge {
-  display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 4px;
-  font-size: 11px; font-weight: 700; vertical-align: middle;
-}
-.bk-badge--special { color: var(--accent2-strong); background: var(--info-bg); }
-.bk-badge--break   { color: var(--warning-strong); background: var(--warning-bg); }
+.bk-badge { margin-right: 6px; }   /* Form: Status-Schild */
+.bk-badge--special { --dot: var(--ps-status-aktiv); }
+.bk-badge--break   { --dot: var(--ps-status-knapp); }
 .bk-billed { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
 .bk-foot td { font-weight: 600; border-top: 2px solid var(--border); font-variant-numeric: tabular-nums; }
 .bk-textarea { width: 100%; resize: vertical; font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); }
@@ -6036,8 +6055,8 @@ fieldset:disabled .ws-check { cursor: default; }
 .mz-day-date  { font-weight: 500; }
 .mz-day-hours { font-size: 15px; font-variant-numeric: tabular-nums; }
 .mz-day-soll  { font-size: 12px; color: var(--text-3); }
-.mz-day-bar   { width: 100%; height: 4px; border-radius: var(--radius-pill); background: var(--dim); overflow: hidden; }
-.mz-day-bar span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.mz-day-bar   { width: 100%; height: 5px; border-radius: var(--radius-pill); background: var(--progress-track); overflow: hidden; }
+.mz-day-bar span { display: block; height: 100%; background: var(--progress-fill); border-radius: inherit; }
 .mz-day-note  { font-size: 11px; color: var(--text-2); }
 .mz-weeksum { margin: 0; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
 .mz-weeksum strong { color: var(--text); }
@@ -6117,10 +6136,11 @@ fieldset:disabled .ws-check { cursor: default; }
 .bud-el-name { color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bud-col-share { width: 180px; }
 .bud-share { display: flex; align-items: center; gap: var(--space-2); justify-content: flex-end; }
-.bud-bar { flex: 1; max-width: 90px; height: 6px; border-radius: var(--radius-pill); background: var(--dim-2); overflow: hidden; }
-.bud-bar-fill { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
-.bud-bar-fill--over { background: var(--kpi-critical); }
-.bud-bar-fill--watch { background: var(--kpi-watch); }
+.bud-bar { flex: 1; max-width: 90px; height: 5px; border-radius: var(--radius-pill); background: var(--progress-track); overflow: hidden; }
+.bud-bar-fill { display: block; height: 100%; background: var(--progress-fill); border-radius: inherit; }
+/* Ueber Budget / knapp: die Status-Punktfarben der Vorgabe. */
+.bud-bar-fill--over { background: var(--ps-status-ueber); }
+.bud-bar-fill--watch { background: var(--ps-status-knapp); }
 .bud-share-pct { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
 .bud-scope-project { font-weight: 700; }
 .bud-recipients { font-size: 12px; color: var(--text-2); }
@@ -6155,15 +6175,11 @@ fieldset:disabled .ws-check { cursor: default; }
 .nt-abbr { font-size: 12px; font-weight: 600; color: var(--text-3); }
 .nt-name { font-weight: 600; }
 .nt-sum td { font-weight: 600; }
-.nt-status {
-  display: inline-block; padding: 2px 10px; border-radius: var(--radius-pill);
-  font-size: 12px; font-weight: 600; white-space: nowrap;
-  background: var(--surface-2); color: var(--text-2);
-}
-.nt-status--info     { background: var(--info-bg);    color: var(--info-strong); }
-.nt-status--progress { background: var(--accent-bg);  color: var(--text); box-shadow: inset 0 0 0 1px var(--accent-ring); }
-.nt-status--done     { background: var(--success-bg); color: var(--success-strong); }
-.nt-status--problem  { background: var(--danger-bg);  color: var(--danger-strong); }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.nt-status--info     { --dot: var(--ps-status-aktiv); }
+.nt-status--progress { --dot: var(--ps-status-knapp); }
+.nt-status--done     { --dot: var(--ps-status-abgeschlossen); }
+.nt-status--problem  { --dot: var(--ps-status-ueber); }
 .nt-project-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
 .nt-facts {
   margin: 0; display: grid; gap: var(--space-3) var(--space-5);
@@ -6262,8 +6278,8 @@ fieldset:disabled .ws-check { cursor: default; }
 .lsr-scope button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .lsr-progress { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--text-2); }
 .lsr-progress strong { color: var(--text); }
-.lsr-progress-bar { width: 120px; height: 6px; border-radius: var(--radius-pill); background: var(--dim); overflow: hidden; }
-.lsr-progress-bar span { display: block; height: 100%; background: var(--accent); }
+.lsr-progress-bar { width: 120px; height: 6px; border-radius: var(--radius-pill); background: var(--progress-track); overflow: hidden; }
+.lsr-progress-bar span { display: block; height: 100%; background: var(--progress-fill); border-radius: inherit; }
 .lsr-panes { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
 .lsr-list {
   position: sticky; top: var(--space-2); max-height: calc(100dvh - 220px); overflow-y: auto;
@@ -6288,9 +6304,11 @@ fieldset:disabled .ws-check { cursor: default; }
 .lsr-item-saved { font-size: 12px; color: var(--text-2); }
 .lsr-item-pct { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-2); }
 .lsr-item-chev { color: var(--text-4); }
-.lsr-chip { padding: 0 6px; border-radius: var(--radius-pill); border: 1px solid var(--border); font-weight: 600; color: var(--text-2); }
-.lsr-chip--done { border-color: var(--success); color: var(--success-strong); background: var(--success-bg); }
-.lsr-chip--skip { border-style: dashed; }
+/* Form: Status-Schild (Abschnitt „Status-Schild" bei .status-pill). */
+.lsr-chip { height: 20px; padding: 0 7px; gap: 5px; font-size: 12px; }
+.lsr-chip--open { --dot: var(--ps-status-knapp); }
+.lsr-chip--done { --dot: var(--ps-status-abgeschlossen); }
+.lsr-chip--skip { --dot: var(--ps-status-ruhend); border-style: dashed; }
 .lsr-editor { min-width: 0; }
 .lsr-ed { display: flex; flex-direction: column; gap: var(--space-3); }
 .lsr-ed-head { display: flex; flex-direction: column; gap: 2px; }
@@ -6344,8 +6362,8 @@ fieldset:disabled .ws-check { cursor: default; }
 .wizard-steps-mobile-label { font-size: 13px; color: var(--text-2); }
 .wizard-steps-mobile-label strong { color: var(--text); }
 .wizard-steps-mobile-bar { display: flex; gap: 4px; }
-.wizard-steps-mobile-seg { flex: 1; height: 4px; border-radius: var(--radius-pill); background: var(--dim-2); }
-.wizard-steps-mobile-seg.done { background: var(--accent); }
+.wizard-steps-mobile-seg { flex: 1; height: 5px; border-radius: var(--radius-pill); background: var(--progress-track); }
+.wizard-steps-mobile-seg.done { background: var(--progress-fill); }
 @media (max-width: 640px) {
   .wizard-steps-mobile { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-4); }
   .wizard-steps--compact { display: none; }

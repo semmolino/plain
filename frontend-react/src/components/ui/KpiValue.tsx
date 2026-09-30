@@ -21,6 +21,18 @@ const ICON: Partial<Record<KpiLevel, typeof TrendingDown>> = {
   good:     Minus,          // wird derzeit nicht vergeben, siehe cpiLevel()
 }
 
+/*
+ * Design „Testversion 1": Text ist immer schwarz, die Farbe steckt nur im
+ * Symbol — wie der Punkt im Status-Schild. Die Farben sind die Status-Punkte
+ * der Vorgabe (knapp = gelb, ueber = rot); das Wort im title und im
+ * Screenreader-Text traegt die Aussage weiterhin.
+ */
+const ICON_COLOR: Partial<Record<KpiLevel, string>> = {
+  watch:    'var(--ps-status-knapp)',
+  critical: 'var(--ps-status-ueber)',
+  good:     'var(--ps-status-im-plan)',
+}
+
 export function KpiValue({
   level,
   children,
@@ -40,7 +52,7 @@ export function KpiValue({
     <span
       title={level === 'unknown' ? undefined : title}
       style={{
-        color: KPI_COLOR[level],
+        color: level === 'unknown' ? KPI_COLOR.unknown : 'var(--text)',
         fontWeight: bold && level !== 'unknown' ? 600 : undefined,
         display: 'inline-flex',
         alignItems: 'center',
@@ -49,7 +61,7 @@ export function KpiValue({
         whiteSpace: 'nowrap',
       }}
     >
-      {Icon && <Icon size={13} strokeWidth={2} aria-hidden />}
+      {Icon && <Icon size={13} strokeWidth={2} aria-hidden style={{ color: ICON_COLOR[level] }} />}
       {children}
       {/* Nur fuer Screenreader: die Stufe im Klartext. Der title allein wird
           nicht von jeder Kombination aus Screenreader und Browser vorgelesen. */}

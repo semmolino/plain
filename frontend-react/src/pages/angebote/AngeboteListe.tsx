@@ -26,6 +26,7 @@ import {
 import { BeauftragtDialog } from './BeauftragtDialog'
 import { AngebotAnlegenDialog } from './AngebotAnlegenDialog'
 import { money } from '@/utils/money'
+import { statusTone } from '@/utils/statusTone'
 
 const PAGE_SIZE = 25
 
@@ -242,11 +243,13 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                       und 96px schwankten. Volltext im title-Attribut. */}
                   <td className="cell-ellipsis" title={r.NAME}>{r.NAME}</td>
                   <td>
-                    <InlineSelect
-                      value={r.OFFER_STATUS_ID} options={statusOpts} allowEmpty={false}
-                      readOnly={!canEdit} ariaLabel="Status" fallbackLabel={r.STATUS_NAME ?? undefined}
-                      onChange={v => v && inlineMut.mutate({ id: r.ID, body: { offer_status_id: Number(v) } })}
-                    />
+                    <span className="status-select" data-tone={statusTone(r.STATUS_NAME)}>
+                      <InlineSelect
+                        value={r.OFFER_STATUS_ID} options={statusOpts} allowEmpty={false}
+                        readOnly={!canEdit} ariaLabel="Status" fallbackLabel={r.STATUS_NAME ?? undefined}
+                        onChange={v => v && inlineMut.mutate({ id: r.ID, body: { offer_status_id: Number(v) } })}
+                      />
+                    </span>
                   </td>
                   <td className="cell-nowrap">{r.EMPLOYEE_NAME ?? '—'}</td>
                   <td className="cell-ellipsis" title={r.ADDRESS_NAME ?? undefined}>{r.ADDRESS_NAME ?? '—'}</td>

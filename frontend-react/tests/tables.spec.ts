@@ -137,7 +137,7 @@ test('Rechnungsliste — weggelassene Spalten kehren beim Aufziehen zurueck', as
   // einmal weggelassene Spalten waeren fuer immer weg gewesen.
   //
   // Schmale Breite 1280 statt 1100: Seit „Testversion 1" (Seitenleiste
-  // 232px, Inhalt mit 32px Rand, Tabellen 14px mit 12px Zellabstand) passt
+  // 232px, Inhalt mit 32px Rand, Tabellen 14px, Status als Schild) passt
   // die Grundausstattung der Liste erst ab rund 1280px ganz hinein. Darunter
   // scrollt sie mit fixierter Aktionsspalte — geprueft wird hier das
   // Weglassen und Zurueckholen, nicht die kleinste denkbare Breite.

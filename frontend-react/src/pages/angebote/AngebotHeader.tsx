@@ -16,6 +16,7 @@ import { useToast } from '@/store/toastStore'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { useTrackRecent } from '@/hooks/useTrackRecent'
 import { money0, NO_VALUE } from '@/utils/money'
+import { statusTone } from '@/utils/statusTone'
 import { BeauftragtDialog } from './BeauftragtDialog'
 
 const deDate = (iso: string | null | undefined) => (iso ? iso.slice(0, 10).split('-').reverse().join('.') : NO_VALUE)
@@ -160,7 +161,7 @@ export function AngebotHeader({ offerId, onBack, onSwitch, onEditData, onDeleted
         back={{ label: 'Angebote', onClick: onBack }}
         eyebrow={<>
           <span>{abbr}</span>
-          {offer?.STATUS_NAME && <span className="status-pill">{offer.STATUS_NAME}</span>}
+          {offer?.STATUS_NAME && <span className="status-pill" data-tone={statusTone(offer.STATUS_NAME)}>{offer.STATUS_NAME}</span>}
           {offer?.PROJECT_ID != null && <span className="status-pill">Projekt {offer.PROJECT_NAME ?? ''}</span>}
         </>}
         title={

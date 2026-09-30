@@ -24,6 +24,7 @@ import {
   type Project,
 } from '@/api/projekte'
 import { rowClickHandler } from '@/utils/rowClick'
+import { statusTone } from '@/utils/statusTone'
 
 const PAGE_SIZE = 25
 type SortKey = 'ABBR' | 'NAME' | 'STATUS_NAME' | 'MANAGER_NAME' | 'TYPE_NAME' | 'DEPARTMENT_NAME' | 'ADDRESS_NAME'
@@ -405,15 +406,17 @@ export function ProjekteListe({ onSelectProject, onEditProject, onProjectCreated
                       {onSelectProject
                         ? <button className="link-btn" onClick={() => onSelectProject(p.ID)}>{p.ABBR}</button>
                         : p.ABBR}
-                      {p.IS_INTERNAL && <span className="mahnstufe-badge ms-0" style={{ marginLeft: 6 }}>intern</span>}
+                      {p.IS_INTERNAL && <span className="status-pill" style={{ marginLeft: 6 }}>intern</span>}
                     </td>
                     <td><span className="cell-clamp" title={p.NAME}>{p.NAME}</span></td>
                     <td>
-                      <InlineSelect
-                        value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}
-                        readOnly={!canEdit} ariaLabel="Status" fallbackLabel={p.STATUS_NAME || undefined}
-                        onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_status_id: Number(v) } })}
-                      />
+                      <span className="status-select" data-tone={statusTone(p.STATUS_NAME)}>
+                        <InlineSelect
+                          value={p.PROJECT_STATUS_ID} options={statusOpts} allowEmpty={false}
+                          readOnly={!canEdit} ariaLabel="Status" fallbackLabel={p.STATUS_NAME || undefined}
+                          onChange={v => v && inlineMut.mutate({ id: p.ID, body: { project_status_id: Number(v) } })}
+                        />
+                      </span>
                     </td>
                     <td>
                       <InlineSelect
