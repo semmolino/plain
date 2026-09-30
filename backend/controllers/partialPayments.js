@@ -2,6 +2,7 @@
 
 const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/partialPayments");
+const reissueSvc = require("../services/reissue");
 const { assertPaymentMeans } = require("../services/paymentMeans");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
@@ -759,6 +760,21 @@ async function deletePartialPayment(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/partial-payments/:id/reissue — stornieren und neu ausstellen (Migration 0180)
+// Storno braucht invoices.cancel (Route), der Entwurf das Anlege-Recht der Belegart.
+// ---------------------------------------------------------------------------
+async function reissuePartialPayment(req, res, supabase) {
+  try {
+    const can = (key) => typeof req.hasPermission === "function" && req.hasPermission(key);
+    const result = await reissueSvc.reissue(supabase, { kind: "ADVANCE_INVOICE", id: req.params.id, tenantId: req.tenantId, can });
+    return res.json(result);
+  } catch (e) {
+    const status = e?.status || 500;
+    return res.status(status).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/partial-payments/:id/cancel
 // ---------------------------------------------------------------------------
 async function cancelPartialPayment(req, res, supabase) {
@@ -1224,6 +1240,7 @@ module.exports = {
   getPartialPayment,
   deletePartialPayment,
   cancelPartialPayment,
+  reissuePartialPayment,
   getEinvoiceUbl,
   postEinvoiceUblSnapshot,
   getEinvoiceCii,

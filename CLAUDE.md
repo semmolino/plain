@@ -472,6 +472,19 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Summen wie gespeichert, je Position Einzelpreis positiv und Menge mit dem
   Vorzeichen — vorher spiegelte `loadInvoiceData` den negativ gespeicherten
   Storno ein zweites Mal (positive Summen, negativer Einzelpreis, BR-27).
+- **Stornieren und neu ausstellen** (`services/reissue.js`, Migration `0180`,
+  `POST /invoices|partial-payments/:id/reissue`, Recht `invoices.cancel` **plus**
+  das Anlege-Recht der Belegart): Storno wie bisher (Zahlungen bleiben stehen)
+  und ein Entwurf als Kopie — Positionen, Buchungen, bei Schlussrechnungen die
+  Auswahl der Abzüge und der SE-Freigabe; Datum heute, gleiches Zahlungsziel,
+  `REPLACES_INVOICE_ID` / `REPLACES_ADVANCE_INVOICE_ID` zeigt aufs Original
+  (PDF-Hinweis, BT-25). Die Zahlungen samt `PAYMENT_STRUCTURE` wandern erst
+  **beim Buchen** (`transferReplacedPayments` in `bookInvoice`,
+  `bookFinalInvoice`, `bookPartialPayment`) — ein Entwurf ohne Nummer trägt
+  keine Zahlung, und verworfen bleibt alles wie nach einem Storno. Der Storno
+  eines Ersatzbelegs erbt `REPLACES_*` **nicht**. Nicht für
+  Rechnungskorrekturen und nicht für in einer Schlussrechnung aufgegangene
+  Abschläge.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
 - **Umbuchen von Buchungen** (`rebookBuchungen` in `services/buchungen.js`,

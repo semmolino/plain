@@ -22,6 +22,8 @@ import { Message }      from '@/components/ui/Message'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { BatchEmailModal, type BatchEmailItem } from '@/components/ui/BatchEmailModal'
 import { useToast }     from '@/store/toastStore'
+import { usePermission } from '@/store/permissionsStore'
+import { HelpHint }     from '@/components/ui/HelpHint'
 import { AbrechenbareProjekte } from '@/pages/rechnungen/AbrechenbareProjekte'
 import { ZahlungDialog, type ZahlungZiel } from '@/pages/rechnungen/ZahlungDialog'
 import { KorrekturDialog, type KorrekturStart } from '@/pages/rechnungen/KorrekturDialog'
@@ -32,6 +34,7 @@ import {
   downloadInvoicePdfHybrid, downloadPpPdfHybrid,
   downloadInvoicePeppol, downloadPpPeppol,
   cancelInvoice, cancelPartialPayment,
+  reissueInvoice, reissuePartialPayment,
   deleteInvoice, deletePartialPayment,
   fetchPayments,
   sendInvoiceEmail, sendPpEmail,
@@ -474,7 +477,16 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   const toast = useToast()
   const [detailRow,     setDetailRow]     = useState<UnifiedRow | null>(null)
   const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-  const [stornoState,   setStornoState]   = useState<{ label: string; hasPayments: boolean; payCount: number; payTotal: number; onStorno: (del: boolean) => Promise<void> } | null>(null)
+  const [stornoState,   setStornoState]   = useState<{
+    label: string; hasPayments: boolean; payCount: number; payTotal: number
+    onStorno: (del: boolean) => Promise<void>
+    /** Stornieren und neu ausstellen — null, wenn es für diesen Beleg nicht geht */
+    onReissue: (() => Promise<void>) | null
+  } | null>(null)
+  // Neu ausstellen legt einen Entwurf der Belegart an — dafür braucht es deren Anlege-Recht
+  const mayCreateSingle  = usePermission('invoices.create_single')
+  const mayCreateFinal   = usePermission('invoices.create_final')
+  const mayCreatePartial = usePermission('invoices.create_partial')
   const [payKey,        setPayKey]        = useState<string | null>(null)
   const [korrektur,     setKorrektur]     = useState<{ start: KorrekturStart; draftId?: number } | null>(null)
 
@@ -664,7 +676,25 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       }
     }
 
-    setStornoState({ label, hasPayments: pays.length > 0, payCount: pays.length, payTotal, onStorno: doStorno })
+    async function doReissue() {
+      try {
+        const id = (row.raw as Invoice & PartialPayment).ID
+        const r = row.source === 'invoice' ? await reissueInvoice(id) : await reissuePartialPayment(id)
+        void qc.invalidateQueries({ queryKey: ['invoices'] })
+        void qc.invalidateQueries({ queryKey: ['partial-payments'] })
+        toast.success(r.payments_pending > 0
+          ? `${label} storniert. Neuer Entwurf angelegt – ${r.payments_pending} Zahlung(en) gehen beim Buchen über.`
+          : `${label} storniert. Neuer Entwurf angelegt.`)
+        onEditDraft?.({ ...draftPayload(row), id: r.draft_id })
+      } catch (e: unknown) {
+        toast.error((e as { message?: string })?.message ?? 'Fehler beim Neu-Ausstellen')
+      }
+    }
+
+    setStornoState({
+      label, hasPayments: pays.length > 0, payCount: pays.length, payTotal,
+      onStorno: doStorno, onReissue: canReissue(row) ? doReissue : null,
+    })
   }
 
   function handleDelete(row: UnifiedRow) {
@@ -712,6 +742,13 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     return !(row.source === 'pp' && (row.raw as PartialPayment).ABSORBED_BY_INVOICE_ID)
   }
 
+  /** Neu ausstellen: wie Korrigieren, dazu das Anlege-Recht der Belegart. */
+  function canReissue(row: UnifiedRow) {
+    if (!canCorrect(row)) return false
+    if (row.source === 'pp') return mayCreatePartial && !(row.raw as PartialPayment & { INVOICE_ID?: number | null }).INVOICE_ID
+    return wizardTypeOf(row) === 'schluss' ? mayCreateFinal : mayCreateSingle
+  }
+
   function openCorrection(row: UnifiedRow) {
     const raw = row.raw as Invoice & PartialPayment
     setKorrektur({ start: { kind: row.source, id: raw.ID, label: row.number ?? `#${raw.ID}` } })
@@ -745,7 +782,14 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       setKorrektur({ start: { kind: isInv ? 'invoice' : 'pp', id: origId, label: orig?.number ?? `#${origId}` }, draftId: raw.ID })
       return
     }
-    onEditDraft?.({
+    onEditDraft?.(draftPayload(row))
+  }
+
+  /** Was der Assistent zum Fortsetzen eines Entwurfs braucht — beim Neu-Ausstellen
+   *  vom Original übernommen, der Entwurf ist dessen Kopie. */
+  function draftPayload(row: UnifiedRow): EditDraftPayload {
+    const raw = row.raw as Invoice & PartialPayment
+    return {
       id:            raw.ID,
       projectId:     raw.PROJECT_ID,
       contractId:    raw.CONTRACT_ID,
@@ -758,7 +802,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
       d2Reason:      raw.DISCOUNT_2_REASON ?? null,
       cashDiscPct:   Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
       cashDiscDays:  Number(raw.CASH_DISCOUNT_DAYS ?? 0),
-    })
+    }
   }
 
   /** Detailansicht oeffnen. Liegt als Funktion vor, weil der Einstieg an
@@ -1168,6 +1212,14 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             ) : (
               <p>Stornorechnung für <strong>{stornoState.label}</strong> erstellen?</p>
             )}
+            {stornoState.onReissue && (
+              <p className="form-field-hint">
+                <strong>Stornieren und neu ausstellen</strong> legt zusätzlich einen Entwurf mit denselben
+                Positionen an, der die stornierte Rechnung ersetzt.
+                {stornoState.hasPayments && ' Die Zahlungen gehen beim Buchen auf die neue Rechnung über.'}
+                {' '}<HelpHint id="invoice.neu_ausstellen" />
+              </p>
+            )}
           </div>
           <DialogFooter>
             <button type="button" className="btn-secondary" onClick={() => setStornoState(null)}>Abbrechen</button>
@@ -1179,6 +1231,11 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
             <button type="button" className="btn btn-danger" onClick={() => { void stornoState.onStorno(false); setStornoState(null) }}>
               {stornoState.hasPayments ? 'Nur stornieren' : 'Stornieren'}
             </button>
+            {stornoState.onReissue && (
+              <button type="button" className="btn btn-primary" onClick={() => { void stornoState.onReissue?.(); setStornoState(null) }}>
+                Stornieren und neu ausstellen
+              </button>
+            )}
           </DialogFooter>
         </Modal>
       )}

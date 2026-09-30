@@ -39,6 +39,7 @@ import { localIsoDate } from '@/utils/zeit'
 import { draftFormFromRow, abbrNameLabel } from './draftForm'
 import { computeTotals, discountBody, r2 } from './invoiceTotals'
 import { InvoiceSummary, type SummaryAmounts } from './InvoiceSummary'
+import { paymentsNote } from './wizardApi'
 
 const deDay = (v: string | null | undefined) => v ? v.slice(0, 10).split('-').reverse().join('.') : NO_VALUE
 // Lokales Datum — das UTC-Datum ist zwischen 0 und 2 Uhr noch gestern.
@@ -409,10 +410,10 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
       await patchInvoice(id, step4Body())
       return bookFinalInvoice(id, { release_partial_payment_ids: Array.from(seReleaseSel) })
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['invoices'] })
       setBookOpen(false)
-      toast.success('Schlussrechnung gebucht')
+      toast.success(`Schlussrechnung gebucht${paymentsNote(res)}`)
       draftIdRef.current = null
       onExit?.()
     },
@@ -439,10 +440,10 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
       if (!draftId) throw new Error('Kein Entwurf')
       return bookFinalInvoiceForce(draftId, { release_partial_payment_ids: Array.from(seReleaseSel) })
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['invoices'] })
       setValidationOpen(false)
-      toast.success('Schlussrechnung trotz Hinweisen gebucht')
+      toast.success(`Schlussrechnung trotz Hinweisen gebucht${paymentsNote(res)}`)
       draftIdRef.current = null
       onExit?.()
     },

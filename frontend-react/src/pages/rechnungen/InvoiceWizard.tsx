@@ -32,7 +32,7 @@ import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
 import { fetchPaymentMeans } from '@/api/stammdaten'
 import { fmtEur, money } from '@/utils/money'
 import { localIsoDate } from '@/utils/zeit'
-import { wizardApi, type WizardKind } from './wizardApi'
+import { wizardApi, paymentsNote, type WizardKind } from './wizardApi'
 import { computeTotals, discountBody } from './invoiceTotals'
 import { draftFormFromRow, abbrNameLabel } from './draftForm'
 import { InvoiceSummary, type SummaryAmounts } from './InvoiceSummary'
@@ -365,10 +365,10 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
       await api.patch(id, step3Body())
       return api.book(id)
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: [api.listKey] })
       setBookOpen(false)
-      toast.success(`${noun} gebucht`)
+      toast.success(`${noun} gebucht${paymentsNote(res)}`)
       draftIdRef.current = null
       onExit?.()
     },
@@ -395,10 +395,10 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
       if (!draftId) throw new Error('Kein Entwurf')
       return api.bookForce(draftId)
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: [api.listKey] })
       setValidationOpen(false)
-      toast.success(`${noun} trotz Hinweisen gebucht`)
+      toast.success(`${noun} trotz Hinweisen gebucht${paymentsNote(res)}`)
       draftIdRef.current = null
       onExit?.()
     },

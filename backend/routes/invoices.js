@@ -35,6 +35,7 @@ module.exports = (supabase) => {
   router.post("/:id/einvoice/cii/snapshot",    requirePermission("invoices.edit"), (req, res) => ctrl.postEinvoiceCiiSnapshot(req, res, supabase));
   router.post("/:id/book",                     requirePermission("invoices.book"),   (req, res) => ctrl.bookInvoice(req, res, supabase));
   router.post("/:id/cancel",                   requirePermission("invoices.cancel"), (req, res) => ctrl.cancelInvoice(req, res, supabase));
+  router.post("/:id/reissue",                  requirePermission("invoices.cancel"), (req, res) => ctrl.reissueInvoice(req, res, supabase));
   router.delete("/:id",                        requirePermission("invoices.delete"), (req, res) => ctrl.deleteInvoice(req, res, supabase));
   router.get("/:id/pdf",                       requirePermission("invoices.download_pdf"), (req, res) => ctrl.getPdf(req, res, supabase));
   router.get("/:id/pdf-hybrid",                requirePermission("invoices.download_pdf"), (req, res) => ctrl.getPdfHybrid(req, res, supabase));

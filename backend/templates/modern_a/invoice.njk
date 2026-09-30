@@ -386,6 +386,10 @@ table.data-table thead { display: table-header-group; }
 Grund: {{ inv.correctionReason }}{% endif %}
 Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
   {% endif %}
+  {# Neu ausgestellt: ersetzt eine stornierte Rechnung (Migration 0180) #}
+  {% if inv.replacesLabel and inv.canceledDocNumber %}
+  <div class="text-block">Diese Rechnung ersetzt die stornierte {{ inv.replacesLabel }} Nr. {{ inv.canceledDocNumber }}{% if inv.canceledDocDate %} vom {{ inv.canceledDocDate | date_de }}{% endif %}.</div>
+  {% endif %}
 
   {# Anrede — geschlechtsgerechte Briefanrede direkt über dem Kopftext #}
   {% if salutationLine %}<div class="salutation">{{ salutationLine }}</div>{% endif %}

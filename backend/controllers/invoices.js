@@ -3,6 +3,7 @@
 const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/invoices");
 const correction = require("../services/invoiceCorrection");
+const reissueSvc = require("../services/reissue");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 const { generateUblXml, generatePeppolXml } = require("../services_einvoice_ubl");
@@ -562,6 +563,21 @@ async function cancelInvoice(req, res, supabase) {
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/invoices/:id/reissue — stornieren und neu ausstellen (Migration 0180)
+// Storno braucht invoices.cancel (Route), der Entwurf das Anlege-Recht der Belegart.
+// ---------------------------------------------------------------------------
+async function reissueInvoice(req, res, supabase) {
+  try {
+    const can = (key) => typeof req.hasPermission === "function" && req.hasPermission(key);
+    const result = await reissueSvc.reissue(supabase, { kind: "INVOICE", id: req.params.id, tenantId: req.tenantId, can });
+    return res.json(result);
+  } catch (e) {
+    const status = e?.status || 500;
+    return res.status(status).json({ error: e?.message || String(e) });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/invoices/:id
 // ---------------------------------------------------------------------------
 async function getInvoice(req, res, supabase) {
@@ -936,6 +952,7 @@ module.exports = {
   bookInvoice,
   deleteInvoice,
   cancelInvoice,
+  reissueInvoice,
   getInvoice,
   getPdf,
   getPdfHybrid,

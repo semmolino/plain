@@ -5,6 +5,7 @@ const { renderDocumentPdf } = require("../services_pdf_render");
 const { insertProgressSnapshot } = require("./projectProgress");
 const { rebillableByStructure } = require("./receivableAdjustments");
 const { AR_COLS, deductionsFor } = require("./arDeduction");
+const { transferReplacedPayments } = require("./reissue");
 const {
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
@@ -832,7 +833,10 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
     console.error("[BOOK_FINAL][CLOSE_PHASES]", e);
   }
 
-  return { number: inv.INVOICE_NUMBER, pdf_asset_id: pdfAsset?.ID ?? null };
+  // Neu ausgestellt (Migration 0180): die Zahlungen der ersetzten Rechnung gehen hierher über
+  const paymentsTransferred = await transferReplacedPayments(supabase, { kind: "INVOICE", id, tenantId: tenantId ?? inv.TENANT_ID });
+
+  return { number: inv.INVOICE_NUMBER, pdf_asset_id: pdfAsset?.ID ?? null, payments_transferred: paymentsTransferred };
 }
 
 module.exports = {

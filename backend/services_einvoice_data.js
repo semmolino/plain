@@ -268,6 +268,7 @@ ${basis}`;
   let canceledDocNumber = null;
   let canceledDocDate   = null;
   let canceledOrig      = null;   // das stornierte Original (fuer Abzuege einer Schlussrechnung)
+  let replacesLabel     = null;   // neu ausgestellt: Art der ersetzten Rechnung (PDF-Hinweis)
   if (isStorno && isInvoice && doc.CANCELS_INVOICE_ID) {
     const orig = await one(supabase, 'INVOICE', doc.CANCELS_INVOICE_ID, tenantId);
     canceledOrig      = orig;
@@ -284,6 +285,14 @@ ${basis}`;
     canceledDocNumber = (isInv ? orig?.INVOICE_NUMBER : orig?.ADVANCE_INVOICE_NUMBER)
       ?? String(isInv ? doc.CORRECTS_INVOICE_ID : doc.CORRECTS_ADVANCE_INVOICE_ID);
     canceledDocDate   = asIsoDate(isInv ? orig?.INVOICE_DATE : orig?.ADVANCE_INVOICE_DATE);
+  } else if (isInvoice ? doc.REPLACES_INVOICE_ID : doc.REPLACES_ADVANCE_INVOICE_ID) {
+    // Neu ausgestellt (Migration 0180): Verweis (BT-25) auf die stornierte
+    // Rechnung, die dieser Beleg ersetzt — der Empfaenger ordnet so zu.
+    const replacedId = isInvoice ? doc.REPLACES_INVOICE_ID : doc.REPLACES_ADVANCE_INVOICE_ID;
+    const orig = await one(supabase, isInvoice ? 'INVOICE' : 'ADVANCE_INVOICE', replacedId, tenantId);
+    canceledDocNumber = (isInvoice ? orig?.INVOICE_NUMBER : orig?.ADVANCE_INVOICE_NUMBER) ?? String(replacedId);
+    canceledDocDate   = asIsoDate(isInvoice ? orig?.INVOICE_DATE : orig?.ADVANCE_INVOICE_DATE);
+    replacesLabel     = isInvoice ? 'Rechnung' : 'Abschlagsrechnung';
   }
 
   // ── 10. Line items ────────────────────────────────────────────────────────
@@ -772,6 +781,8 @@ ${basis}`;
     // Rechnungskorrektur: worauf sie sich bezieht und warum (steht auf dem PDF)
     correctsLabel:    isCorrection ? (doc.CORRECTS_ADVANCE_INVOICE_ID ? 'Abschlagsrechnung' : 'Rechnung') : null,
     correctionReason: isCorrection ? (String(doc.CORRECTION_REASON ?? '').trim() || null) : null,
+    // Neu ausgestellt: ersetzt die stornierte Rechnung canceledDocNumber (steht auf dem PDF)
+    replacesLabel,
     projectNumber,                                          // BT-11
     contractNumber,                                         // BT-12
     orderNumber:           String(doc.BUYER_ORDER_REFERENCE      ?? '').trim(), // BT-13

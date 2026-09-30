@@ -10,6 +10,7 @@ const { suchwert } = require("./pgrestFilter");
 const { openAmountsFor } = require("./openAmount");
 const { rebillableByStructure, removeForCancelledDoc } = require("./receivableAdjustments");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
+const { transferReplacedPayments } = require("./reissue");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -1157,7 +1158,11 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
     }).eq("ID", inv.CANCELS_INVOICE_ID);
   }
 
-  return { success: true, number: inv.INVOICE_NUMBER || null, pdf_asset_id: pdfAsset?.ID ?? null };
+  // Neu ausgestellt (Migration 0180): die Zahlungen der ersetzten Rechnung gehen hierher über
+  const paymentsTransferred = inv.CANCELS_INVOICE_ID ? 0
+    : await transferReplacedPayments(supabase, { kind: "INVOICE", id, tenantId: tenantId ?? inv.TENANT_ID });
+
+  return { success: true, number: inv.INVOICE_NUMBER || null, pdf_asset_id: pdfAsset?.ID ?? null, payments_transferred: paymentsTransferred };
 }
 
 // ---------------------------------------------------------------------------
@@ -1294,6 +1299,8 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
   if ("SE_AMOUNT" in orig)        cancelRow.SE_AMOUNT        = orig.SE_AMOUNT        != null ? -round2(toNum(orig.SE_AMOUNT))        : null;
   if ("SE_BASIS_AMT" in orig)     cancelRow.SE_BASIS_AMT     = orig.SE_BASIS_AMT     != null ? -round2(toNum(orig.SE_BASIS_AMT))     : null;
   if ("SE_RELEASE_TOTAL" in orig) cancelRow.SE_RELEASE_TOTAL = orig.SE_RELEASE_TOTAL != null ? -round2(toNum(orig.SE_RELEASE_TOTAL)) : null;
+  // Der Storno ersetzt nichts — der Bezug einer neu ausgestellten Rechnung bleibt bei ihr.
+  if ("REPLACES_INVOICE_ID" in orig) cancelRow.REPLACES_INVOICE_ID = null;
 
   const { data: created, error: insertErr } = await supabase
     .from("INVOICE").insert([cancelRow]).select("ID").single();

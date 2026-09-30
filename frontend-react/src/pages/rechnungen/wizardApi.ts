@@ -96,3 +96,10 @@ function invoiceApi(kind: 'rechnung' | 'gutschrift'): WizardApi {
 export function wizardApi(kind: WizardKind): WizardApi {
   return kind === 'abschlag' ? abschlag : invoiceApi(kind)
 }
+
+/** Zusatz zur „gebucht"-Meldung: ersetzt der Beleg eine stornierte Rechnung
+ *  (Stornieren und neu ausstellen), sind deren Zahlungen jetzt hier. */
+export function paymentsNote(res: unknown): string {
+  const n = Number((res as { payments_transferred?: number } | null)?.payments_transferred ?? 0)
+  return n > 0 ? ` – ${n} Zahlung(en) der stornierten Rechnung übernommen` : ''
+}

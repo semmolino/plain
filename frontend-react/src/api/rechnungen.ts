@@ -330,6 +330,19 @@ export const deleteInvoice = (id: number) =>
 export const cancelInvoice = (id: number, opts?: { delete_payments?: boolean }) =>
   apiClient.post<{ id: number }>(`/invoices/${id}/cancel`, opts ?? {})
 
+/** Stornieren und neu ausstellen (Migration 0180): Storno plus Entwurf, der das
+ *  Original ersetzt. Die Zahlungen gehen beim Buchen des Entwurfs über. */
+export interface ReissueResult {
+  storno_id:        number | null
+  draft_id:         number
+  kind:             'INVOICE' | 'ADVANCE_INVOICE'
+  invoice_type:     string | null
+  payments_pending: number
+}
+
+export const reissueInvoice = (id: number) =>
+  apiClient.post<ReissueResult>(`/invoices/${id}/reissue`, {})
+
 export const openInvoicePdf = (id: number, opts?: { releasePpIds?: number[] }) => {
   const ids = opts?.releasePpIds?.filter(n => n > 0) ?? []
   const q = ids.length > 0 ? `&release_pp_ids=${ids.join(',')}` : ''
@@ -480,6 +493,9 @@ export const deletePartialPayment = (id: number) =>
 
 export const cancelPartialPayment = (id: number, opts?: { delete_payments?: boolean }) =>
   apiClient.post<{ id: number }>(`/partial-payments/${id}/cancel`, opts ?? {})
+
+export const reissuePartialPayment = (id: number) =>
+  apiClient.post<ReissueResult>(`/partial-payments/${id}/reissue`, {})
 
 
 export function downloadPpEinvoice(

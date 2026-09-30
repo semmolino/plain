@@ -219,11 +219,11 @@ const ENTRIES = [
     ubl: `${UBL_ROOT}/cbc:CustomizationID` },
 
   { id: "BT-25", group: "BG-3", labelDe: "Referenz auf die vorausgegangene Rechnung", cardinality: "0..1",
-    source: "INVOICE.CANCELS_INVOICE_ID / INVOICE_DEDUCTION.ADVANCE_INVOICE_ID",
+    source: "INVOICE.CANCELS_INVOICE_ID / CORRECTS_* / REPLACES_* / INVOICE_DEDUCTION.ADVANCE_INVOICE_ID",
     data: "canceledDocNumber / deductions[].number",
     cii: `${STL}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID`,
     ubl: `${UBL_ROOT}/cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID`,
-    note: "Zwei Anlässe, ein Element: Storno verweist auf den stornierten Beleg, die Schlussrechnung auf jede abgezogene Abschlagsrechnung." },
+    note: "Ein Element, mehrere Anlässe: Storno verweist auf den stornierten Beleg, die Rechnungskorrektur auf die korrigierte Rechnung, eine neu ausgestellte Rechnung auf die stornierte, die sie ersetzt, die Schlussrechnung auf jede abgezogene Abschlagsrechnung." },
 
   { id: "BT-26", group: "BG-3", labelDe: "Datum der vorausgegangenen Rechnung", cardinality: "0..1",
     source: "INVOICE.INVOICE_DATE / ADVANCE_INVOICE.ADVANCE_INVOICE_DATE des Bezugsbelegs",

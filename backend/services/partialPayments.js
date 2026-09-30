@@ -10,6 +10,7 @@ const { suchwert } = require("./pgrestFilter");
 const { openAmountsFor } = require("./openAmount");
 const { rebillableByStructure, removeForCancelledDoc } = require("./receivableAdjustments");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
+const { transferReplacedPayments } = require("./reissue");
 const {
   streamPdfAsset,
   streamXmlAsset,
@@ -921,7 +922,11 @@ async function bookPartialPayment(supabase, { id, pp, tenantId = null, force = f
     await supabase.from("ADVANCE_INVOICE").update({ STATUS_ID: 3 }).eq("ID", pp.CANCELS_ADVANCE_INVOICE_ID);
   }
 
-  return { success: true, pdf_asset_id: pdfAsset?.ID ?? null, xml_asset_id: xmlAsset?.ID ?? null };
+  // Neu ausgestellt (Migration 0180): die Zahlungen der ersetzten Abschlagsrechnung gehen hierher über
+  const paymentsTransferred = pp.CANCELS_ADVANCE_INVOICE_ID ? 0
+    : await transferReplacedPayments(supabase, { kind: "ADVANCE_INVOICE", id, tenantId: tenantId ?? pp.TENANT_ID });
+
+  return { success: true, pdf_asset_id: pdfAsset?.ID ?? null, xml_asset_id: xmlAsset?.ID ?? null, payments_transferred: paymentsTransferred };
 }
 
 // ---------------------------------------------------------------------------
@@ -1027,6 +1032,8 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   // muss = −Brutto + SEB sein, damit die Summe der beiden auf 0 saldiert.
   if ("SE_AMOUNT"    in orig) cancelRow.SE_AMOUNT    = orig.SE_AMOUNT    != null ? -round2(toNum(orig.SE_AMOUNT))    : null;
   if ("SE_BASIS_AMT" in orig) cancelRow.SE_BASIS_AMT = orig.SE_BASIS_AMT != null ? -round2(toNum(orig.SE_BASIS_AMT)) : null;
+  // Der Storno ersetzt nichts — der Bezug einer neu ausgestellten Rechnung bleibt bei ihr.
+  if ("REPLACES_ADVANCE_INVOICE_ID" in orig) cancelRow.REPLACES_ADVANCE_INVOICE_ID = null;
 
   const { data: created, error: insertErr } = await supabase
     .from("ADVANCE_INVOICE").insert([cancelRow]).select("ID").single();

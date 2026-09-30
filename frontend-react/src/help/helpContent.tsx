@@ -561,7 +561,7 @@ export const HELP = {
         werden Datum, Betrag, Umsatzsteueranteil und Grund; die Steuer korrigiert deine Buchhaltung
         im Monat der Minderung.<br /><br />
         Hat sich dagegen die <strong>Leistung</strong> geändert (Aufmaß, Umfang), ist eine
-        Rechnungskorrektur nötig — dann über Storno und neue Rechnung.<br /><br />
+        Rechnungskorrektur nötig — über „Rechnung korrigieren" oder „Stornieren und neu ausstellen".<br /><br />
         Solange der Kunde den Rest noch zahlen soll, <strong>nichts ausbuchen</strong>: der Betrag
         bleibt offen und wird mit der nächsten Rechnung nicht noch einmal abgerechnet.
       </>
@@ -581,6 +581,23 @@ export const HELP = {
         Zahlungsdialog — eine reine Minderung des Entgelts braucht keine Rechnungsberichtigung.
         Früher hieß diese Funktion „Gutschrift"; im Umsatzsteuerrecht ist eine Gutschrift aber die
         Abrechnung durch den Kunden selbst.
+      </>
+    ),
+  },
+  'invoice.neu_ausstellen': {
+    title: 'Stornieren und neu ausstellen',
+    body: (
+      <>
+        Für eine Rechnung, die als Ganzes falsch ist — falscher Empfänger, falsche Positionen, falscher
+        Zeitraum. Die Rechnung wird storniert, und es entsteht gleich ein <strong>Entwurf</strong> mit
+        denselben Positionen und Leistungen, den du korrigierst und neu buchst. Er bekommt eine neue
+        Nummer, das heutige Datum und dasselbe Zahlungsziel; auf dem Beleg und in der E-Rechnung steht,
+        welche stornierte Rechnung er ersetzt.<br /><br />
+        <strong>Zahlungen</strong>, die auf die alte Rechnung eingegangen sind, gehen beim Buchen auf die
+        neue über — du musst sie nicht löschen und neu erfassen. Verwirfst du den Entwurf, bleiben sie
+        bei der stornierten Rechnung.<br /><br />
+        Stimmt nur ein Teil nicht, ist „Rechnung korrigieren" der kürzere Weg; hat der Kunde nur
+        weniger gezahlt, „Rest ausbuchen" im Zahlungsdialog.
       </>
     ),
   },

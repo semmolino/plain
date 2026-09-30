@@ -93,10 +93,10 @@ führende `Invoice/`. Die vollständigen Pfade stehen in der Registry.
 
 | BT | Bezeichnung | Kard. | Herkunft (DB) | CII | UBL | Status |
 |---|---|---|---|---|---|---|
-| BT-25 | Referenz auf die vorausgegangene Rechnung | 0..1 | INVOICE.CANCELS_INVOICE_ID / INVOICE_DEDUCTION.ADVANCE_INVOICE_ID | `…/ram:ApplicableHeaderTradeSettlement/ram:InvoiceReferencedDocument/ram:IssuerAssignedID` | `cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID` | ✅ ausgegeben |
+| BT-25 | Referenz auf die vorausgegangene Rechnung | 0..1 | INVOICE.CANCELS_INVOICE_ID / CORRECTS_* / REPLACES_* / INVOICE_DEDUCTION.ADVANCE_INVOICE_ID | `…/ram:ApplicableHeaderTradeSettlement/ram:InvoiceReferencedDocument/ram:IssuerAssignedID` | `cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID` | ✅ ausgegeben |
 | BT-26 | Datum der vorausgegangenen Rechnung | 0..1 | INVOICE.INVOICE_DATE / ADVANCE_INVOICE.ADVANCE_INVOICE_DATE des Bezugsbelegs | `…/ram:ApplicableHeaderTradeSettlement/ram:InvoiceReferencedDocument/ram:FormattedIssueDateTime/qdt:DateTimeString` | `cac:BillingReference/cac:InvoiceDocumentReference/cbc:IssueDate` | ✅ ausgegeben |
 
-- **BT-25** — Zwei Anlässe, ein Element: Storno verweist auf den stornierten Beleg, die Schlussrechnung auf jede abgezogene Abschlagsrechnung.
+- **BT-25** — Ein Element, mehrere Anlässe: Storno verweist auf den stornierten Beleg, die Rechnungskorrektur auf die korrigierte Rechnung, eine neu ausgestellte Rechnung auf die stornierte, die sie ersetzt, die Schlussrechnung auf jede abgezogene Abschlagsrechnung.
 
 ### BG-4 — Verkäufer
 

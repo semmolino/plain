@@ -129,6 +129,7 @@ Fall der reinen Entgeltminderung.
 
 **C — Storno + Neu komfortabler.** Eine Aktion „Stornieren und neu ausstellen", die
 das Original als Entwurf kopiert und die Zahlungen auf die neue Rechnung **überträgt**.
+(Umgesetzt in Schritt (d); der Übertrag geschieht beim Buchen der neuen Rechnung.)
 
 ---
 
@@ -231,7 +232,7 @@ Entschieden am 30.09.2026:
 | (a) Rest ausbuchen + ein offener Betrag | umgesetzt (Migration 0177, `openAmount.js`, `receivableAdjustments.js`, `ZahlungDialog.tsx`). Nebenbefund 1 behoben, dazu: Mahnungs-PDF forderte den vollen Betrag trotz Teilzahlung, Mahnstatistik und Mahn-Checker zählten bezahlte Belege. |
 | (b) Schlussrechnung auf Vereinnahmtes + „aufgegangen" | umgesetzt (Migration 0178, `arDeduction.js`, `refreshDeductions`, XML als Restrechnung). Nebenbefund 2 behoben. |
 | (c) Rechnungskorrektur statt Gutschrift | umgesetzt (Migration 0179, `invoiceCorrection.js`, `KorrekturDialog.tsx`, XML 384 mit BT-25). Dabei behoben: das Storno-XML trug positive Summen und einen negativen Einzelpreis (Nebenbefund 5), der Storno einer Schlussrechnung passte nicht zu ihrem Rest (BR-CO-13). |
-| (d) Storno + Neu mit Zahlungsübertrag | offen |
+| (d) Storno + Neu mit Zahlungsübertrag | umgesetzt (Migration 0180, `reissue.js`, Storno-Dialog „Stornieren und neu ausstellen"). Der Entwurf kopiert Positionen, Buchungen und bei Schlussrechnungen die Abzugsauswahl und nennt die ersetzte Rechnung (PDF, BT-25). Die Zahlungen wandern **beim Buchen**, nicht beim Anlegen: ein Entwurf ohne Nummer trägt keine Zahlung, und verworfen bleibt alles wie nach einem Storno. |
 
 ---
 
