@@ -7,6 +7,8 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
+const { openAmountsFor } = require("./openAmount");
+const { rebillableByStructure, removeForCancelledDoc } = require("./receivableAdjustments");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
 const {
   streamPdfAsset,
@@ -177,8 +179,8 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   else if (projectId !== null && projectId !== undefined) invQ = invQ.eq("PROJECT_ID", projectId);
 
   const { data: invRows, error: invErr } = await invQ;
-  if (!invErr && invRows && invRows.length > 0) {
-    const invIds = invRows.map((r) => r.ID);
+  const invIds = !invErr ? (invRows || []).map((r) => r.ID) : [];
+  if (invIds.length > 0) {
     const { data: isRows, error: isErr } = await supabase
       .from("INVOICE_STRUCTURE")
       .select("STRUCTURE_ID, AMOUNT_NET")
@@ -190,6 +192,15 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
         map.set(sid, round2((map.get(sid) || 0) + toNum(r.AMOUNT_NET)));
       });
     }
+  }
+
+  // Wieder abrechenbar ausgebuchte Reste (Migration 0177) gelten als nicht
+  // abgerechnet — der Vorschlag bietet sie erneut an.
+  const wanted = new Set(structureIds.map(String));
+  const back = await rebillableByStructure(supabase, { invoiceIds: invIds, advanceInvoiceIds: ppIds });
+  for (const [sid, v] of back) {
+    if (!wanted.has(sid)) continue;
+    map.set(sid, round2((map.get(sid) || 0) - v.net));
   }
 
   return map;
@@ -431,7 +442,7 @@ async function updateBt2FromTec(supabase, { partialPaymentId, contractId, projec
 // ---------------------------------------------------------------------------
 
 async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
-  const BASE_COLS = "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, CANCELS_ADVANCE_INVOICE_ID";
+  const BASE_COLS = "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, AMOUNT_NET, AMOUNT_EXTRAS_NET, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, VAT_CATEGORY, CANCELS_ADVANCE_INVOICE_ID";
   const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASED_BY_INVOICE_ID";
   const buildQuery = (cols) => {
     let q1 = supabase
@@ -457,19 +468,9 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
 
   const ppRows = Array.isArray(rows) ? rows : [];
 
-  const ppIds = Array.from(new Set(ppRows.map((r) => r.ID).filter(Boolean)));
-  const payedGrossMap = {};
-  if (ppIds.length > 0) {
-    const { data: pays, error: payErr } = await supabase.from("PAYMENT").select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", ppIds);
-    if (!payErr) {
-      (pays || []).forEach((p) => {
-        const k = p.ADVANCE_INVOICE_ID;
-        const v = typeof p.AMOUNT_PAYED_GROSS === "number" ? p.AMOUNT_PAYED_GROSS : parseFloat(String(p.AMOUNT_PAYED_GROSS ?? "0"));
-        if (!Number.isFinite(v)) return;
-        payedGrossMap[k] = (payedGrossMap[k] || 0) + v;
-      });
-    }
-  }
+  // Offener Betrag aus der einen Rechnung dafuer (services/openAmount.js) —
+  // die Liste rechnete ihn vorher selbst und anders als das Mahnwesen.
+  const openById = await openAmountsFor(supabase, { kind: "ADVANCE_INVOICE", docs: ppRows, tenantId });
 
   const projectIds = Array.from(new Set(ppRows.map((r) => r.PROJECT_ID).filter(Boolean)));
   const contractIds = Array.from(new Set(ppRows.map((r) => r.CONTRACT_ID).filter(Boolean)));
@@ -522,7 +523,10 @@ async function listPartialPayments(supabase, { tenantId, limit, statusId, q }) {
     CONTACT: r.CONTACT ?? "",
     CONTACT_MAIL: r.CONTACT_MAIL ?? null,
     ADDRESS_NAME_1: r.ADDRESS_NAME_1 ?? "",
-    AMOUNT_PAYED_GROSS: payedGrossMap[r.ID] ?? 0,
+    AMOUNT_PAYED_GROSS: openById.get(String(r.ID))?.paid ?? 0,
+    AMOUNT_ADJUSTED_GROSS: openById.get(String(r.ID))?.adjusted ?? 0,
+    OPEN_AMOUNT_GROSS: openById.get(String(r.ID))?.open ?? null,
+    SKONTO_TAKEN: openById.get(String(r.ID))?.skontoTaken ?? false,
     COMMENT: r.COMMENT ?? "",
     SE_AMOUNT:                  r.SE_AMOUNT ?? null,
     SE_PERCENT:                 r.SE_PERCENT ?? null,
@@ -942,6 +946,10 @@ async function cancelPartialPayment(supabase, { id, tenantId, deletePayments = f
   if (Number(orig.SE_AMOUNT || 0) > 0 && orig.SE_RELEASED_BY_INVOICE_ID) {
     console.warn(`[CANCEL_ADVANCE_INVOICE] AR ${id} has SE_AMOUNT=${orig.SE_AMOUNT} already released by INVOICE ${orig.SE_RELEASED_BY_INVOICE_ID}. Storno will not auto-reverse the Schluss; manual reconciliation may be required.`);
   }
+
+  // Ausgebuchte Reste gehen mit dem Beleg — ein wieder abrechenbarer Anteil
+  // hat die Summen schon gemindert und wuerde sie sonst ein zweites Mal mindern.
+  await removeForCancelledDoc(supabase, { tenantId, kind: "ADVANCE_INVOICE", id: parseInt(id, 10) });
 
   // ── Optional: delete existing payments ──────────────────────────────────
   if (deletePayments) {

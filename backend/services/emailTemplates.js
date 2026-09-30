@@ -14,6 +14,8 @@
  * jemand etwas konfiguriert hat.
  */
 
+const { openAmountsFor, withClaimCols } = require("./openAmount");
+
 const TABLE = "EMAIL_TEMPLATE";
 
 /** Gueltige Vorlagenschluessel. */
@@ -215,29 +217,20 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
 
   const { data: doc, error } = await supabase
     .from(table)
-    .select(`ID, ${numberCol}, ${dateCol}, DUE_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, VAT_PERCENT, PROJECT_ID, COMPANY_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL${typeCols}`)
+    .select(withClaimCols(table, `ID, ${numberCol}, ${dateCol}, DUE_DATE, TOTAL_AMOUNT_GROSS, TOTAL_AMOUNT_NET, VAT_PERCENT, PROJECT_ID, COMPANY_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL${typeCols}`))
     .eq("ID", docId)
     .eq("TENANT_ID", tenantId)
     .maybeSingle();
   if (error) throw error;
   if (!doc) return null;
 
-  // Brutto: bevorzugt der gebuchte Wert, sonst aus Netto + USt rekonstruiert.
-  let gross = doc.TOTAL_AMOUNT_GROSS != null ? Number(doc.TOTAL_AMOUNT_GROSS) : null;
-  if (gross == null && doc.TOTAL_AMOUNT_NET != null) {
-    gross = Math.round(Number(doc.TOTAL_AMOUNT_NET) * (1 + Number(doc.VAT_PERCENT ?? 0) / 100) * 100) / 100;
-  }
-
-  const payCol = isInvoice ? "INVOICE_ID" : "ADVANCE_INVOICE_ID";
-  const { data: pays } = await supabase
-    .from("PAYMENT")
-    .select("AMOUNT_PAYED_GROSS")
-    .eq(payCol, docId);
-  const paid = (pays || []).reduce((s, p) => {
-    const v = parseFloat(String(p.AMOUNT_PAYED_GROSS ?? "0"));
-    return s + (Number.isFinite(v) ? v : 0);
-  }, 0);
-  const open = gross != null ? Math.round((gross - paid) * 100) / 100 : null;
+  // Betrag und offener Betrag wie auf PDF und in der Rechnungsliste: nach
+  // Nachlass, abzueglich Zahlungen und ausgebuchter Reste (openAmount.js).
+  // Vorher: gespeichertes Brutto vor Nachlass minus Zahlungen.
+  const o = (await openAmountsFor(supabase, { kind: table, docs: [doc], tenantId })).get(String(doc.ID));
+  const gross = o ? o.claim.gross : null;
+  const paid  = o ? o.paid : 0;
+  const open  = o ? o.open : null;
 
   let projekt = "";
   if (doc.PROJECT_ID) {

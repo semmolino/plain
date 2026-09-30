@@ -424,6 +424,28 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   nach Aufwand starten im Projekt bei 0 und bringen ihre Schätzung als Plan mit (wie beim
   Beauftragen); Rollen gehen **nicht** in die Projektstruktur, die hat keine Rollenspalten.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
+- **Offener Betrag — eine Rechnung** (`backend/services/openAmount.js`): Forderung
+  = Brutto **nach** Nachlass I/II (gespeichert ist `TOTAL_AMOUNT_GROSS` **vor**
+  Nachlass) − Einbehalt (+ aufgelöster Einbehalt); offen = Forderung − Zahlungen −
+  ausgebuchte Reste; Skontozahlung innerhalb der Frist erledigt den Beleg.
+  Rechnungsliste (`OPEN_AMOUNT_GROSS` aus `listInvoices`/`listPartialPayments`),
+  Mahnwesen samt Mahnungs-PDF, Fälligkeits- und Mahn-Checker, Dashboard „Offene
+  Posten" und E-Mail-Platzhalter lesen **nur** daraus — vorher rechneten sechs
+  Stellen selbst, und nur die Liste kannte Nachlass, Einbehalt und Skonto. Nie
+  wieder `TOTAL_AMOUNT_GROSS − Σ PAYMENT` von Hand; select-Listen über
+  `withClaimCols(kind, …)`.
+- **Rest ausbuchen** (`RECEIVABLE_ADJUSTMENT`, Migration `0177`,
+  `services/receivableAdjustments.js`, `/payments/adjustments`, Rechte wie die
+  Zahlungen): akzeptierte Kürzung ohne Storno (Entgeltminderung nach § 17 UStG,
+  keine Rechnungsberichtigung nötig — BMF 15.10.2025 Rn. 51a). Grund Pflicht;
+  „wieder abrechenbar" nur bei „Kürzung" auf Abschlags- und Einzelrechnungen und
+  nur auf Honorar-Zeilen (BT 1): dann schreibt es `INVOICED`/`ADVANCE_INVOICED`
+  an Projekt und Struktur plus `PROJECT_PROGRESS` fort wie ein Storno, und die
+  „bisher abgerechnet"-Summen der Rechnungsvorschläge ziehen es ab
+  (`rebillableByStructure`). Ein Storno nimmt die Reste des Belegs mit
+  (`removeForCancelledDoc`); Zurücknehmen ist gesperrt, sobald danach wieder
+  abgerechnet wurde. UI: `pages/rechnungen/ZahlungDialog.tsx`. Analyse und
+  Rechtslage: `docs/RECHNUNGSKUERZUNGEN_ANALYSE.md`.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
 - **Umbuchen von Buchungen** (`rebookBuchungen` in `services/buchungen.js`,

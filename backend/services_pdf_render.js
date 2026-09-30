@@ -7,6 +7,7 @@ const { loadInvoiceData } = require('./services_einvoice_data');
 const angeboteSvc = require('./services/angebote');
 const nachtraegeSvc = require('./services/nachtraege');
 const monatsabschlussSvc = require('./services/monatsabschluss');
+const { openAmountsFor, withClaimCols } = require('./services/openAmount');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1245,11 +1246,28 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
   // Invoice details for the table
   const today = new Date().toISOString().slice(0, 10);
   const dueDate    = vm.inv.dueDate || '';
-  const totalGross = Number(vm.inv.totals?.grandTotal ?? 0);
   const daysOverdue = dueDate
     ? Math.max(0, Math.floor((new Date(today) - new Date(dueDate)) / 86400000))
     : 0;
-  const totalDue = Math.round((totalGross + feeAmount) * 100) / 100;
+
+  // Gefordert wird der OFFENE Betrag, nicht der Rechnungsbetrag. Vorher stand
+  // hier grandTotal + Gebuehr: wer 80 % gezahlt hatte, bekam eine Mahnung
+  // ueber 100 %. Dieselbe Rechnung wie Liste und Mahnwesen (openAmount.js).
+  const { data: claimDoc } = await supabase
+    .from(docType)
+    .select(withClaimCols(docType, 'ID'))
+    .eq('ID', docId)
+    .eq('TENANT_ID', tenantId)
+    .maybeSingle();
+  const o = claimDoc
+    ? (await openAmountsFor(supabase, { kind: docType, docs: [claimDoc], tenantId })).get(String(docId))
+    : null;
+  const totalGross    = o ? o.claim.gross : Number(vm.inv.totals?.grandTotal ?? 0);
+  const seHeld        = o ? o.claim.seHeld - o.claim.seRelease : 0;
+  const paidGross     = o ? o.paid : 0;
+  const adjustedGross = o ? o.adjusted : 0;
+  const openAmount    = o ? Math.max(0, o.open) : totalGross;
+  const totalDue = Math.round((openAmount + feeAmount) * 100) / 100;
 
   // Build mahnung-specific context
   const context = {
@@ -1267,6 +1285,10 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     dueDate,
     daysOverdue,
     totalGross,
+    seHeld,
+    paidGross,
+    adjustedGross,
+    openAmount,
     feeAmount,
     totalDue,
     headerText,

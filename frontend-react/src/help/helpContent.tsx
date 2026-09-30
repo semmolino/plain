@@ -549,6 +549,39 @@ export const HELP = {
       </>
     ),
   },
+  'invoice.rest_ausbuchen': {
+    title: 'Rest ausbuchen',
+    body: (
+      <>
+        Zahlt der Kunde weniger und du akzeptierst das, buchst du den Rest hier aus — statt die
+        Rechnung zu stornieren. Der Beleg gilt danach als erledigt: kein Mahnwesen, keine
+        Fälligkeitshinweise mehr.<br /><br />
+        Eine reine <strong>Minderung des Entgelts</strong> (Skonto, Nachlass wegen Mängeln, Kulanz)
+        braucht keine neue oder korrigierte Rechnung — auch nicht bei E-Rechnungen. Festgehalten
+        werden Datum, Betrag, Umsatzsteueranteil und Grund; die Steuer korrigiert deine Buchhaltung
+        im Monat der Minderung.<br /><br />
+        Hat sich dagegen die <strong>Leistung</strong> geändert (Aufmaß, Umfang), ist eine
+        Rechnungskorrektur nötig — dann über Storno und neue Rechnung.<br /><br />
+        Solange der Kunde den Rest noch zahlen soll, <strong>nichts ausbuchen</strong>: der Betrag
+        bleibt offen und wird mit der nächsten Rechnung nicht noch einmal abgerechnet.
+      </>
+    ),
+  },
+  'invoice.wieder_abrechenbar': {
+    title: 'Wieder abrechenbar',
+    body: (
+      <>
+        Für Kürzungen, bei denen der Kunde den <strong>Leistungsstand</strong> bestreitet: der
+        ausgebuchte Betrag gilt als <strong>nicht abgerechnet</strong>. Die nächste Abschlags- oder
+        Schlussrechnung schlägt ihn wieder vor, Reporting und „Teilfertige Leistungen" zählen ihn
+        wieder als unfertig.<br /><br />
+        Ohne Haken ist die Minderung <strong>endgültig</strong>: das Honorar ist um den Betrag
+        gesunken, er wird nie wieder vorgeschlagen.<br /><br />
+        Wirkt nur auf Leistungen nach Honorar — abgerechnete Stunden werden nicht erneut
+        vorgeschlagen. Nach einer Schlussrechnung gibt es nur noch die endgültige Minderung.
+      </>
+    ),
+  },
 
   // ── Verträge (Projekt-Reiter) ────────────────────────────────────────────
   'contract.defaults': {

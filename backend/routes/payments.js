@@ -1,6 +1,7 @@
 const express = require("express");
 const { insertProgressSnapshot } = require("../services/projectProgress");
 const { requirePermission } = require("../middleware/permissions");
+const adjustments = require("../services/receivableAdjustments");
 
 // Payment routes
 // Base path: /api/payments
@@ -261,6 +262,42 @@ module.exports = (supabase) => {
       });
     } catch (e) {
       return res.status(500).json({ error: e.message || String(e) });
+    }
+  });
+
+  // ── Rest ausbuchen (Forderungsminderung, Migration 0177) ──────────────────
+  // Gleiche Rechte wie die Zahlungen selbst: wer einen Zahlungseingang
+  // erfassen darf, darf auch den akzeptierten Rest ausbuchen.
+
+  // GET /api/payments/adjustments?invoice_id=X  or  ?advance_invoice_id=X
+  router.get("/adjustments", requirePermission("payments.view"), async (req, res) => {
+    try {
+      const data = await adjustments.listAdjustments(supabase, { tenantId: req.tenantId, query: req.query });
+      return res.json({ data });
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  // POST /api/payments/adjustments
+  router.post("/adjustments", requirePermission("payments.create"), async (req, res) => {
+    try {
+      const data = await adjustments.createAdjustment(supabase, {
+        tenantId: req.tenantId, employeeId: req.employeeId ?? null, body: req.body || {},
+      });
+      return res.json({ data });
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
+  // DELETE /api/payments/adjustments/:id
+  router.delete("/adjustments/:id", requirePermission("payments.delete"), async (req, res) => {
+    try {
+      const data = await adjustments.deleteAdjustment(supabase, { tenantId: req.tenantId, id: req.params.id });
+      return res.json(data);
+    } catch (e) {
+      return res.status(e?.status || 500).json({ error: e?.message || String(e) });
     }
   });
 

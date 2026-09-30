@@ -4,6 +4,7 @@ const express = require("express");
 const progressDay = (r) => (r.AS_OF_DATE ? String(r.AS_OF_DATE).slice(0, 10) : r.created_at ? String(r.created_at).substring(0, 10) : null);
 const { requirePermission } = require("../middleware/permissions");
 const wipSvc = require("../services/wipReport");
+const { openAmountsFor, withClaimCols } = require("../services/openAmount");
 const { loadParentSurchargesByProject: loadSurcharges } = require("../services/reportSurcharges");
 
 /**
@@ -1439,7 +1440,8 @@ module.exports = (supabase) => {
   });
 
   // Größte offene Posten: unbezahlte Rechnungen + Abschlagsrechnungen
-  // (finalisiert, nicht storniert, offener Brutto-Betrag = Brutto − Zahlungen > 0),
+  // (finalisiert, nicht storniert, offener Betrag > 0 — dieselbe Rechnung wie
+  // Rechnungsliste und Mahnwesen, services/openAmount.js),
   // absteigend nach offenem Betrag. Query: ?limit=10
   router.get("/dashboard/open-invoices", async (req, res) => {
     const tenantId = requireTenantId(req, res);
@@ -1449,35 +1451,24 @@ module.exports = (supabase) => {
     try {
       const [{ data: invs, error: ie }, { data: pps, error: pe }] = await Promise.all([
         supabase.from("INVOICE")
-          .select("ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
+          .select(withClaimCols("INVOICE", "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID"))
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .neq("INVOICE_TYPE", "stornorechnung").neq("INVOICE_TYPE", "storno_partial"),
         supabase.from("ADVANCE_INVOICE")
-          .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID")
+          .select(withClaimCols("ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1, PROJECT_ID"))
           .eq("TENANT_ID", tenantId).eq("STATUS_ID", 2)
           .is("CANCELS_ADVANCE_INVOICE_ID", null),
       ]);
       if (ie) throw ie;
       if (pe) throw pe;
 
-      const invIds = (invs || []).map(r => r.ID);
-      const ppIds  = (pps  || []).map(r => r.ID);
-      const invPay = {}, ppPay = {};
-      if (invIds.length) {
-        const { data: pays } = await supabase.from("PAYMENT")
-          .select("INVOICE_ID, AMOUNT_PAYED_GROSS").in("INVOICE_ID", invIds);
-        for (const p of (pays || [])) invPay[p.INVOICE_ID] = (invPay[p.INVOICE_ID] || 0) + parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      }
-      if (ppIds.length) {
-        const { data: pays } = await supabase.from("PAYMENT")
-          .select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", ppIds);
-        for (const p of (pays || [])) ppPay[p.ADVANCE_INVOICE_ID] = (ppPay[p.ADVANCE_INVOICE_ID] || 0) + parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      }
+      const invOpen = await openAmountsFor(supabase, { kind: "INVOICE", docs: invs || [], tenantId });
+      const ppOpen  = await openAmountsFor(supabase, { kind: "ADVANCE_INVOICE", docs: pps || [], tenantId });
 
       const daysOverdue = (due) => (due && due < today) ? Math.floor((new Date(today) - new Date(due)) / 86400000) : 0;
       const posten = [];
       for (const inv of (invs || [])) {
-        const open = round2(Math.max(0, Number(inv.TOTAL_AMOUNT_GROSS || 0) - (invPay[inv.ID] || 0)));
+        const open = round2(Math.max(0, invOpen.get(String(inv.ID))?.open ?? 0));
         if (open <= 0.005) continue;
         posten.push({
           sourceType: "invoice", sourceId: inv.ID, number: inv.INVOICE_NUMBER || `#${inv.ID}`,
@@ -1486,7 +1477,7 @@ module.exports = (supabase) => {
         });
       }
       for (const pp of (pps || [])) {
-        const open = round2(Math.max(0, Number(pp.TOTAL_AMOUNT_GROSS || 0) - (ppPay[pp.ID] || 0)));
+        const open = round2(Math.max(0, ppOpen.get(String(pp.ID))?.open ?? 0));
         if (open <= 0.005) continue;
         posten.push({
           sourceType: "pp", sourceId: pp.ID, number: pp.ADVANCE_INVOICE_NUMBER || `#${pp.ID}`,

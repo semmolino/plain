@@ -127,4 +127,24 @@ describe("dueDateChecker — bezahlte Rechnungen", () => {
     });
     expect(notifs).toHaveLength(0);
   });
+
+  // Seit services/openAmount.js: dieselbe Rechnung wie die Rechnungsliste.
+  test("Rechnung mit Nachlass ist mit dem Betrag NACH Nachlass bezahlt", async () => {
+    const notifs = await laufMit({
+      invoices: [rechnung(1, { DISCOUNT_1_PERCENT: 10 })],
+      payments: [{ ID: 1, INVOICE_ID: 1, AMOUNT_PAYED_GROSS: 1071 }],
+    });
+    expect(notifs).toHaveLength(0);
+  });
+
+  test("ausgebuchter Rest stellt die Erinnerung ab", async () => {
+    const db = makeFakeSupabase({
+      INVOICE: [rechnung(1)],
+      PAYMENT: [{ ID: 1, INVOICE_ID: 1, AMOUNT_PAYED_GROSS: 1000 }],
+      RECEIVABLE_ADJUSTMENT: [{ ID: 1, INVOICE_ID: 1, AMOUNT_GROSS: 190, AMOUNT_NET: 159.66, REBILLABLE: false }],
+      NOTIFICATION: [], NOTIFICATION_TYPE: [],
+    });
+    await checkDueDates(db);
+    expect(db._tables.NOTIFICATION).toHaveLength(0);
+  });
 });

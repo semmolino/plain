@@ -30,6 +30,12 @@ export interface Invoice {
   CONTACT_MAIL:         string | null
   ADDRESS_NAME_1:       string | null
   AMOUNT_PAYED_GROSS:   number | null
+  /** Summe der ausgebuchten Reste (Forderungsminderung, Migration 0177) */
+  AMOUNT_ADJUSTED_GROSS?: number | null
+  /** Offener Betrag, gerechnet am Server (services/openAmount.js) */
+  OPEN_AMOUNT_GROSS?:   number | null
+  /** Skontozahlung innerhalb der Frist hat den Beleg erledigt */
+  SKONTO_TAKEN?:        boolean
   COMMENT:              string | null
   INVOICE_TYPE:         InvoiceType | null
   CANCELS_INVOICE_ID:   number | null
@@ -81,6 +87,9 @@ export interface PartialPayment {
   AMOUNT_NET:                   number | null
   AMOUNT_EXTRAS_NET:            number | null
   AMOUNT_PAYED_GROSS:           number | null
+  AMOUNT_ADJUSTED_GROSS?:       number | null
+  OPEN_AMOUNT_GROSS?:           number | null
+  SKONTO_TAKEN?:                boolean
   STATUS_ID:                    number
   PROJECT_ID:                   number | null
   CONTRACT_ID:                  number | null
@@ -532,6 +541,52 @@ export const createPayment = (body: {
 
 export const deletePayment = (id: number) =>
   apiClient.delete<{ success: boolean }>(`/payments/${id}`)
+
+// ── Rest ausbuchen (Forderungsminderung, Migration 0177) ─────────────────────
+
+export type AdjustmentReason = 'skonto' | 'kuerzung' | 'kulanz' | 'ausfall' | 'rundung'
+
+/** Gleiche Reihenfolge und Texte wie REASONS in services/receivableAdjustments.js */
+export const ADJUSTMENT_REASONS: { id: AdjustmentReason; label: string }[] = [
+  { id: 'kuerzung', label: 'Kürzung / Mängelrüge' },
+  { id: 'skonto',   label: 'Skonto' },
+  { id: 'kulanz',   label: 'Kulanz / Nachlass' },
+  { id: 'ausfall',  label: 'Forderungsausfall' },
+  { id: 'rundung',  label: 'Rundungsdifferenz' },
+]
+
+export interface ReceivableAdjustment {
+  ID: number
+  INVOICE_ID: number | null
+  ADVANCE_INVOICE_ID: number | null
+  ADJUSTMENT_DATE: string
+  AMOUNT_GROSS: number
+  AMOUNT_NET: number
+  AMOUNT_VAT: number
+  REASON: AdjustmentReason
+  REBILLABLE: boolean
+  COMMENT: string | null
+}
+
+export const fetchAdjustments = (params: { invoice_id?: number; advance_invoice_id?: number }) => {
+  const q = params.invoice_id
+    ? `invoice_id=${params.invoice_id}`
+    : `advance_invoice_id=${params.advance_invoice_id}`
+  return apiClient.get<{ data: ReceivableAdjustment[] }>(`/payments/adjustments?${q}`)
+}
+
+export const createAdjustment = (body: {
+  invoice_id?: number
+  advance_invoice_id?: number
+  amount_gross: number
+  adjustment_date: string
+  reason: AdjustmentReason
+  rebillable: boolean
+  comment?: string
+}) => apiClient.post<{ data: ReceivableAdjustment }>('/payments/adjustments', body)
+
+export const deleteAdjustment = (id: number) =>
+  apiClient.delete<{ ok: boolean }>(`/payments/adjustments/${id}`)
 
 // ── Email ─────────────────────────────────────────────────────────────────────
 

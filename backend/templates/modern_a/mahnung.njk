@@ -208,9 +208,34 @@ body {
   {# Totals #}
   <table class="totals-table">
     <tbody>
+      {% if (paidGross and paidGross > 0) or (adjustedGross and adjustedGross > 0) or (seHeld and seHeld > 0) %}
+      <tr>
+        <td class="lbl">Rechnungsbetrag</td>
+        <td class="amt">{{ totalGross | money }}</td>
+      </tr>
+      {% if seHeld and seHeld > 0 %}
+      <tr>
+        <td class="lbl">abzgl. Sicherheitseinbehalt</td>
+        <td class="amt">&minus;&#8239;{{ seHeld | money }}</td>
+      </tr>
+      {% endif %}
+      {% if paidGross and paidGross > 0 %}
+      <tr>
+        <td class="lbl">abzgl. bereits eingegangener Zahlungen</td>
+        <td class="amt">&minus;&#8239;{{ paidGross | money }}</td>
+      </tr>
+      {% endif %}
+      {% if adjustedGross and adjustedGross > 0 %}
+      <tr>
+        <td class="lbl">abzgl. vereinbarter Minderung</td>
+        <td class="amt">&minus;&#8239;{{ adjustedGross | money }}</td>
+      </tr>
+      {% endif %}
+      <tr class="sep"><td class="line" colspan="2"></td></tr>
+      {% endif %}
       <tr>
         <td class="lbl">Offener Betrag</td>
-        <td class="amt">{{ totalGross | money }}</td>
+        <td class="amt">{{ openAmount | money }}</td>
       </tr>
       {% if feeAmount and feeAmount > 0 %}
       <tr class="fee-row">

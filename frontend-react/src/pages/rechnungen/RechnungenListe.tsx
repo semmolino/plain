@@ -23,6 +23,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { BatchEmailModal, type BatchEmailItem } from '@/components/ui/BatchEmailModal'
 import { useToast }     from '@/store/toastStore'
 import { AbrechenbareProjekte } from '@/pages/rechnungen/AbrechenbareProjekte'
+import { ZahlungDialog, type ZahlungZiel } from '@/pages/rechnungen/ZahlungDialog'
 import {
   fetchInvoices, fetchPartialPayments,
   openInvoicePdf, openPpPdf,
@@ -31,7 +32,7 @@ import {
   downloadInvoicePeppol, downloadPpPeppol,
   cancelInvoice, cancelPartialPayment,
   deleteInvoice, deletePartialPayment,
-  fetchPayments, createPayment, deletePayment,
+  fetchPayments,
   sendInvoiceEmail, sendPpEmail,
   fetchInvoiceEmailPreview, fetchPpEmailPreview,
   type Invoice, type PartialPayment, type Payment,
@@ -55,8 +56,6 @@ interface EditDraftPayload {
 }
 
 const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
-
-function todayIso() { return new Date().toISOString().slice(0, 10) }
 
 function capitalizeInvType(t: string | null | undefined): string {
   if (!t) return 'Rechnung'
@@ -97,6 +96,18 @@ interface UnifiedRow {
   raw:        Invoice | PartialPayment
 }
 
+/**
+ * Offener Betrag rechnet der Server (services/openAmount.js) — dieselbe Zahl
+ * wie Mahnwesen, Fälligkeitshinweise und Dashboard. Vorher rechnete die Liste
+ * selbst und als einzige mit Nachlass, Einbehalt und Skonto; die anderen
+ * mahnten, was hier als erledigt stand. Der Rückfall greift nur, wenn eine
+ * ältere Server-Version das Feld noch nicht liefert.
+ */
+function openFromServer(serverOpen: number | null | undefined, payable: number | null, paid: number | null): number | null {
+  if (serverOpen != null) return Number(serverOpen)
+  return payable != null ? Math.round((payable - (paid ?? 0)) * 100) / 100 : null
+}
+
 function effectiveDiscounts(rawNet: number, totalDiscounts: number | null, d1Pct: number, d2Pct: number): number {
   if (totalDiscounts != null && totalDiscounts > 0) return totalDiscounts
   const d1Amt = Math.round(rawNet * d1Pct / 100 * 100) / 100
@@ -132,16 +143,12 @@ function fromInvoice(inv: Invoice): UnifiedRow {
   const discountNet   = rawNet != null ? effectiveDiscounts(rawNet, inv.TOTAL_DISCOUNTS, Number(inv.DISCOUNT_1_PERCENT ?? 0), Number(inv.DISCOUNT_2_PERCENT ?? 0)) : 0
   const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
-  const cdPct         = Number(inv.CASH_DISCOUNT_PERCENT ?? 0)
   const seHeld        = inv.SE_AMOUNT != null ? Number(inv.SE_AMOUNT) : 0
   const seRelease     = inv.SE_RELEASE_TOTAL != null ? Number(inv.SE_RELEASE_TOTAL) : 0
   const payable       = adjustedGross != null
     ? Math.round((adjustedGross - seHeld + seRelease) * 100) / 100
     : null
-  const skontoBase    = payable ?? adjustedGross
-  const skontoGross   = cdPct > 0 && skontoBase != null ? Math.round(skontoBase * (1 - cdPct / 100) * 100) / 100 : null
-  const rawOpen       = payable != null ? Math.round((payable - (paid ?? 0)) * 100) / 100 : null
-  const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
+  const open          = openFromServer(inv.OPEN_AMOUNT_GROSS, payable, paid)
   const today = new Date().toISOString().slice(0, 10)
   const dueDate   = inv.DUE_DATE ?? null
   const isOverdue = statusClass === 'booked' && dueDate !== null && dueDate < today && (open ?? 0) > 0.005
@@ -187,15 +194,11 @@ function fromPp(pp: PartialPayment): UnifiedRow {
   const discountNet   = rawNet != null ? effectiveDiscounts(rawNet, pp.TOTAL_DISCOUNTS, Number(pp.DISCOUNT_1_PERCENT ?? 0), Number(pp.DISCOUNT_2_PERCENT ?? 0)) : 0
   const adjustedNet   = rawNet != null ? Math.round((rawNet - discountNet) * 100) / 100 : null
   const adjustedGross = adjustedNet != null ? Math.round(adjustedNet * (1 + vatPct / 100) * 100) / 100 : null
-  const cdPct         = Number(pp.CASH_DISCOUNT_PERCENT ?? 0)
   const seHeld        = pp.SE_AMOUNT != null ? Number(pp.SE_AMOUNT) : 0
   const payable       = adjustedGross != null
     ? Math.round((adjustedGross - seHeld) * 100) / 100
     : null
-  const skontoBase    = payable ?? adjustedGross
-  const skontoGross   = cdPct > 0 && skontoBase != null ? Math.round(skontoBase * (1 - cdPct / 100) * 100) / 100 : null
-  const rawOpen       = payable != null ? Math.round((payable - (paid ?? 0)) * 100) / 100 : null
-  const open          = skontoGross !== null && (paid ?? 0) >= skontoGross - 0.005 ? 0 : rawOpen
+  const open          = openFromServer(pp.OPEN_AMOUNT_GROSS, payable, paid)
   const today2   = new Date().toISOString().slice(0, 10)
   const dueDate2  = pp.DUE_DATE ?? null
   const isOverdue2 = statusClass === 'booked' && dueDate2 !== null && dueDate2 < today2 && (open ?? 0) > 0.005
@@ -281,18 +284,24 @@ type SortKey = 'number' | 'typ' | 'date' | 'project' | 'address' | 'net' | 'gros
 
 // ── Payment modal target ──────────────────────────────────────────────────────
 
-interface PaymentTarget {
-  source:           'invoice' | 'pp'
-  id:               number
-  label:            string
-  totalGross:       number | null
-  paidGross:        number | null
-  cashDiscountPct:  number
-  cashDiscountDays: number
-}
-
-function emptyPaymentForm() {
-  return { amount_payed_gross: '', payment_date: todayIso(), purpose_of_payment: '', comment: '' }
+/**
+ * Ziel des Zahlungsdialogs aus der aktuellen Listenzeile. Wird bei jedem
+ * Rendern neu abgeleitet: nach Speichern oder Löschen lädt die Liste neu, und
+ * der offene Betrag im Dialog folgt, statt auf dem Stand beim Öffnen zu bleiben.
+ */
+function zahlungZiel(row: UnifiedRow): ZahlungZiel {
+  const raw = row.raw as Invoice & PartialPayment
+  const typ = row.source === 'invoice' ? (raw as Invoice).INVOICE_TYPE ?? 'rechnung' : null
+  return {
+    source:            row.source,
+    id:                raw.ID,
+    label:             row.number ?? `#${raw.ID}`,
+    payable:           row.payable ?? row.gross ?? 0,
+    open:              row.open ?? row.payable ?? 0,
+    cashDiscountPct:   Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
+    cashDiscountDays:  Number(raw.CASH_DISCOUNT_DAYS ?? 0),
+    rebillableAllowed: row.source === 'pp' || typ === 'rechnung',
+  }
 }
 
 // ── Row overflow menu ─────────────────────────────────────────────────────────
@@ -462,11 +471,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   const [detailRow,     setDetailRow]     = useState<UnifiedRow | null>(null)
   const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [stornoState,   setStornoState]   = useState<{ label: string; hasPayments: boolean; payCount: number; payTotal: number; onStorno: (del: boolean) => Promise<void> } | null>(null)
-  const [payTarget,     setPayTarget]     = useState<PaymentTarget | null>(null)
-  const [payForm,     setPayForm]     = useState(emptyPaymentForm())
-  const [payMsg,      setPayMsg]      = useState<{ text: string; type: 'success' | 'error' } | null>(null)
-  const [existingPayments, setExistingPayments] = useState<Payment[]>([])
-  const [deletingPayId, setDeletingPayId] = useState<number | null>(null)
+  const [payKey,        setPayKey]        = useState<string | null>(null)
 
   // ── Multi-select + Email modal state ─────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -622,88 +627,11 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     [selectedSendable],
   )
 
-  const payMut = useMutation({
-    mutationFn: createPayment,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['invoices'] })
-      void qc.invalidateQueries({ queryKey: ['partial-payments'] })
-      setPayMsg({ text: 'Zahlung gespeichert ✅', type: 'success' })
-      setTimeout(() => { setPayTarget(null); setPayForm(emptyPaymentForm()); setPayMsg(null) }, 900)
-    },
-    onError: (e: Error) => setPayMsg({ text: e.message, type: 'error' }),
-  })
-
   function openPayment(row: UnifiedRow) {
-    setPayForm(emptyPaymentForm())
-    setPayMsg(null)
-    setExistingPayments([])
-    setDeletingPayId(null)
-    const id  = (row.raw as Invoice).ID ?? (row.raw as PartialPayment).ID
-    const raw = row.raw as Invoice & PartialPayment
-    // payable = Brutto − einbehaltener SEB + aufgelöster SEB.
-    // Wenn SE im Spiel ist, ist der Soll-Zahlbetrag genau payable, NICHT gross.
-    setPayTarget({
-      source:           row.source,
-      id,
-      label:            row.number ?? `#${id}`,
-      totalGross:       row.payable ?? row.gross,
-      paidGross:        row.paid,
-      cashDiscountPct:  Number(raw.CASH_DISCOUNT_PERCENT ?? 0),
-      cashDiscountDays: Number(raw.CASH_DISCOUNT_DAYS ?? 0),
-    })
-    const params = row.source === 'invoice' ? { invoice_id: id } : { advance_invoice_id: id }
-    fetchPayments(params).then(r => setExistingPayments(r.data ?? [])).catch(() => {})
+    setPayKey(row.key)
   }
-
-  function handleDeletePayment(payId: number) {
-    setConfirmState({
-      title: 'Zahlung löschen',
-      message: 'Diese Zahlung wirklich löschen?',
-      onConfirm: () => actuallyDeletePayment(payId),
-    })
-  }
-
-  async function actuallyDeletePayment(payId: number) {
-    setDeletingPayId(payId)
-    try {
-      await deletePayment(payId)
-      setExistingPayments(prev => prev.filter(p => p.ID !== payId))
-      void qc.invalidateQueries({ queryKey: ['invoices'] })
-      void qc.invalidateQueries({ queryKey: ['partial-payments'] })
-      setPayTarget(prev => {
-        if (!prev) return prev
-        const removed = existingPayments.find(p => p.ID === payId)
-        if (!removed) return prev
-        return { ...prev, paidGross: (prev.paidGross ?? 0) - removed.AMOUNT_PAYED_GROSS }
-      })
-    } catch (e: unknown) {
-      setPayMsg({ text: (e as { message?: string })?.message ?? 'Fehler beim Löschen', type: 'error' })
-    } finally {
-      setDeletingPayId(null)
-    }
-  }
-
-  function submitPayment(e: React.FormEvent) {
-    e.preventDefault()
-    setPayMsg(null)
-    const gross = parseFloat(payForm.amount_payed_gross)
-    if (!payForm.amount_payed_gross || !Number.isFinite(gross) || gross <= 0) {
-      setPayMsg({ text: 'Betrag (Brutto) ist erforderlich', type: 'error' }); return
-    }
-    if (!payForm.payment_date) {
-      setPayMsg({ text: 'Datum ist erforderlich', type: 'error' }); return
-    }
-    if (!payTarget) return
-    payMut.mutate({
-      ...(payTarget.source === 'invoice'
-        ? { invoice_id: payTarget.id }
-        : { advance_invoice_id: payTarget.id }),
-      amount_payed_gross: gross,
-      payment_date:       payForm.payment_date,
-      purpose_of_payment: payForm.purpose_of_payment || undefined,
-      comment:            payForm.comment || undefined,
-    })
-  }
+  const payRow  = payKey ? allRows.find(r => r.key === payKey) ?? null : null
+  const payZiel = payRow ? zahlungZiel(payRow) : null
 
   async function handleCancel(row: UnifiedRow) {
     const label = row.number ?? `#${(row.raw as Invoice).ID}`
@@ -878,7 +806,6 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   }
 
   const sp = { sortKey, dir: sortDir, onSort: toggleSort }
-  const remaining = payTarget ? (Math.round(((payTarget.totalGross ?? 0) - (payTarget.paidGross ?? 0)) * 100) / 100) : null
 
   return (
     <div>
@@ -1295,6 +1222,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
                     {detailRow.seRelease != null && detailRow.seRelease > 0 && amtRow('+ Auflösung Sicherheitseinbehalt', detailRow.seRelease, false, true)}
                     {(detailRow.seHeld != null || detailRow.seRelease != null) && detailRow.payable != null && amtRow('Zahlungsbetrag', detailRow.payable, true)}
                     {detailRow.paid != null && detailRow.paid > 0 && amtRow('Bezahlt', detailRow.paid, false, true, true)}
+                    {Number((inv ?? pp)?.AMOUNT_ADJUSTED_GROSS ?? 0) > 0 && amtRow('Ausgebucht (Minderung)', Number((inv ?? pp)?.AMOUNT_ADJUSTED_GROSS), false, true, true)}
                     {amtRow('Offene Posten', detailRow.open ?? detailRow.payable ?? adjGross, true)}
                     {cdPct > 0 && (
                       <tr>
@@ -1324,121 +1252,8 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         })()}
       </Modal>
 
-      {/* Payment modal */}
-      <Modal open={payTarget !== null} onClose={() => setPayTarget(null)} title={`Zahlung erfassen – ${payTarget?.label ?? ''}`}>
-        {payTarget && (
-          <form onSubmit={submitPayment} className="master-form">
-
-            {/* Existing payments list */}
-            {existingPayments.length > 0 && (
-              <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-3)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Bisherige Zahlungen
-                </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <tbody>
-                    {existingPayments.map(p => (
-                      <tr key={p.ID} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '4px 0', color: 'var(--text-3)' }}>{p.PAYMENT_DATE?.slice(0, 10)}</td>
-                        <td style={{ padding: '4px 6px', fontWeight: 500 }}>{money(p.AMOUNT_PAYED_GROSS)}</td>
-                        <td style={{ padding: '4px 0', color: 'var(--text-3)', flex: 1 }}>{p.PURPOSE_OF_PAYMENT ?? ''}</td>
-                        <td style={{ padding: '4px 0 4px 8px', textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            title="Zahlung löschen"
-                            disabled={deletingPayId === p.ID}
-                            onClick={() => handleDeletePayment(p.ID)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--danger)', fontWeight: 700, fontSize: 16, lineHeight: 1, padding: '0 2px' }}
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {payTarget.totalGross != null && (
-              <div style={{ marginBottom: 12, fontSize: 14, color: 'var(--text-3)', display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span>
-                  Rechnungsbetrag: <strong>{money(payTarget.totalGross)}</strong>
-                  {payTarget.paidGross != null && payTarget.paidGross > 0 && (
-                    <> · bereits bezahlt: <strong>{money(payTarget.paidGross)}</strong>
-                    · offen: <strong>{money(remaining)}</strong></>
-                  )}
-                </span>
-                <button
-                  type="button"
-                  className="btn-small"
-                  onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(remaining ?? payTarget.totalGross) }))}
-                >
-                  wie gefordert
-                </button>
-              </div>
-            )}
-            {payTarget.cashDiscountPct > 0 && payTarget.totalGross != null && (() => {
-              const skontoAmt = Math.round(payTarget.totalGross * (1 - payTarget.cashDiscountPct / 100) * 100) / 100
-              return (
-                <div style={{ marginBottom: 14, padding: '10px 14px', background: 'rgba(16,185,129,0.07)', borderRadius: 8, border: '1px solid rgba(16,185,129,0.25)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <span style={{ flex: 1, fontSize: 13, color: 'var(--text-2)' }}>
-                    <strong>{payTarget.cashDiscountPct} % Skonto</strong> verfügbar
-                    {payTarget.cashDiscountDays > 0 && ` (innerhalb von ${payTarget.cashDiscountDays} Tagen)`}
-                    {' – '}Betrag abzgl. Skonto: <strong>{money(skontoAmt)}</strong>
-                  </span>
-                  <button
-                    type="button"
-                    className="btn-small btn-save"
-                    onClick={() => setPayForm(f => ({ ...f, amount_payed_gross: String(skontoAmt) }))}
-                  >
-                    Zahlung abzgl. Skonto
-                  </button>
-                </div>
-              )
-            })()}
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="pay-amount">Betrag brutto (€)*</label>
-                <input
-                  id="pay-amount" type="number" step="0.01" min="0.01" required
-                  value={payForm.amount_payed_gross}
-                  onChange={e => setPayForm(f => ({ ...f, amount_payed_gross: e.target.value }))}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="pay-date">Datum*</label>
-                <input
-                  id="pay-date" type="date" required
-                  value={payForm.payment_date}
-                  onChange={e => setPayForm(f => ({ ...f, payment_date: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <label htmlFor="pay-purpose">Verwendungszweck</label>
-              <input id="pay-purpose" type="text"
-                value={payForm.purpose_of_payment}
-                onChange={e => setPayForm(f => ({ ...f, purpose_of_payment: e.target.value }))}
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="pay-comment">Kommentar</label>
-              <input id="pay-comment" type="text"
-                value={payForm.comment}
-                onChange={e => setPayForm(f => ({ ...f, comment: e.target.value }))}
-              />
-            </div>
-            <Message text={payMsg?.text ?? null} type={payMsg?.type} />
-            <DialogFooter>
-              <button type="button" className="btn-secondary" onClick={() => setPayTarget(null)}>Abbrechen</button>
-              <button className="btn-primary" type="submit" disabled={payMut.isPending}>
-                {payMut.isPending ? 'Speichert …' : 'Zahlung speichern'}
-              </button>
-            </DialogFooter>
-          </form>
-        )}
-      </Modal>
+      {/* Zahlung erfassen / Rest ausbuchen */}
+      <ZahlungDialog ziel={payZiel} onClose={() => setPayKey(null)} />
 
       {/* Email modal */}
       <Modal

@@ -6244,6 +6244,37 @@ fieldset:disabled .ws-check { cursor: default; }
   .sw-table input[type="checkbox"] { width: 22px; height: 22px; }
 }
 
+/* ── Zahlung erfassen / Rest ausbuchen (ZahlungDialog, .zd-*) ────────────── */
+.zd-summary {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-5);
+  margin: 0 0 var(--space-4); padding: var(--space-3);
+  background: var(--surface-2); border-radius: var(--radius-md);
+}
+.zd-summary div { display: flex; flex-direction: column; gap: 2px; }
+.zd-summary dt { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+.zd-summary dd { margin: 0; font-size: 14px; font-variant-numeric: tabular-nums; }
+.zd-section { margin-bottom: var(--space-4); }
+.zd-h { margin: 0 0 var(--space-1); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+.zd-list { list-style: none; margin: 0; padding: 0; }
+.zd-list li {
+  display: flex; align-items: center; gap: var(--space-2); min-height: 44px;
+  border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.zd-date { color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.zd-amt { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.zd-text { flex: 1 1 auto; min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
+.zd-sub { color: var(--text-3); }
+.zd-pill { margin-left: var(--space-2); }
+.zd-quick { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-2); }
+.zd-note { margin: 0 0 var(--space-3); font-size: 12px; color: var(--text-3); }
+.zd-rest {
+  margin: var(--space-2) 0 var(--space-3); padding: var(--space-3);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.zd-check { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; font-size: 13px; cursor: pointer; }
+.zd-check input[type="checkbox"] { width: 18px; height: 18px; flex: 0 0 auto; }
+.zd-rest-body { margin-top: var(--space-2); }
+
 /* ═══ Übersicht ═══════════════════════════════════════════════════════════ */
 
 /* ── Übersicht ───────────────────────────────────────────────────────────── */

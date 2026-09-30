@@ -3,6 +3,7 @@
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
 const { insertProgressSnapshot } = require("./projectProgress");
+const { rebillableByStructure } = require("./receivableAdjustments");
 const {
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
@@ -166,6 +167,12 @@ async function recomputeBilledByStructure(supabase, { contractId, excludeInvoice
           round2((recomputedPartial.get(sid) || 0) + toNum(r.AMOUNT_NET) + toNum(r.AMOUNT_EXTRAS_NET)));
       }
     }
+    // Wieder abrechenbar ausgebuchte Reste (Migration 0177) gelten als nicht
+    // abgerechnet — je Belegart von der passenden Summe abgezogen.
+    const backInv = await rebillableByStructure(supabase, { invoiceIds: otherInvIds });
+    for (const [sid, v] of backInv) recomputedInvoiced.set(sid, round2((recomputedInvoiced.get(sid) || 0) - v.net - v.extras));
+    const backPp = await rebillableByStructure(supabase, { advanceInvoiceIds: ppIds });
+    for (const [sid, v] of backPp) recomputedPartial.set(sid, round2((recomputedPartial.get(sid) || 0) - v.net - v.extras));
     return { ok: true, invoiced: recomputedInvoiced, partial: recomputedPartial };
   } catch (_) {
     return { ok: false, invoiced: recomputedInvoiced, partial: recomputedPartial };

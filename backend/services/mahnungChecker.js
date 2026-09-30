@@ -1,8 +1,28 @@
 "use strict";
 
 const { createNotification } = require("./notifications");
+const { openAmountsFor, withClaimCols } = require("./openAmount");
 
 const STUFE_LABELS = ['–', 'Zahlungserinnerung', '1. Mahnung', '2. Mahnung', '3. Mahnung'];
+
+/** IDs der Belege, deren offener Betrag erledigt ist (openAmount.js). */
+async function settledDocs(supabase, mahnungen) {
+  const out = { invoice: new Set(), pp: new Set() };
+  try {
+    for (const [kind, col, set] of [["INVOICE", "INVOICE_ID", out.invoice], ["ADVANCE_INVOICE", "PP_ID", out.pp]]) {
+      const ids = Array.from(new Set(mahnungen.map(m => m[col]).filter(Boolean)));
+      if (ids.length === 0) continue;
+      const { data: docs, error } = await supabase.from(kind).select(withClaimCols(kind, "ID")).in("ID", ids);
+      if (error) throw new Error(error.message);
+      const open = await openAmountsFor(supabase, { kind, docs: docs || [] });
+      for (const [id, o] of open) if (o.claim.payable > 0 && o.settled) set.add(id);
+    }
+  } catch (e) {
+    // Lieber einmal zu viel erinnern als eine offene Mahnung verschweigen.
+    console.error("[MAHNUNG_CHECKER] Offene Betraege nicht ladbar:", e?.message || e);
+  }
+  return out;
+}
 
 async function checkMahnungen(supabase) {
   const today = new Date().toISOString().slice(0, 10);
@@ -22,7 +42,14 @@ async function checkMahnungen(supabase) {
 
   let created = 0;
 
+  // Ist der Beleg inzwischen bezahlt oder der Rest ausgebucht, gibt es nichts
+  // mehr zu mahnen — vorher erinnerte der Checker trotzdem an die naechste
+  // Stufe, bis jemand die Mahnung von Hand schloss.
+  const settled = await settledDocs(supabase, mahnungen || []);
+
   for (const m of (mahnungen || [])) {
+    if ((m.INVOICE_ID && settled.invoice.has(String(m.INVOICE_ID)))
+      || (m.PP_ID && settled.pp.has(String(m.PP_ID)))) continue;
     const notifType = `mahnung_due`;
     const mahnungIdStr = String(m.ID);
 

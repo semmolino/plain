@@ -4,6 +4,7 @@
 const { sendMail }         = require("./emailService");
 const { renderMahnungPdf } = require("../services_pdf_render");
 const emailTemplates       = require("./emailTemplates");
+const { openAmountsFor, withClaimCols, TOL } = require("./openAmount");
 
 const DEFAULT_SETTINGS = [
   { mahnstufe: 1, label: "Zahlungserinnerung", days_after_due: 7,  days_after_prev: 0,  fee: 0  },
@@ -25,7 +26,7 @@ async function listMahnungen(supabase, { tenantId }) {
   ] = await Promise.all([
     supabase
       .from("INVOICE")
-      .select("ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID, INVOICE_TYPE")
+      .select(withClaimCols("INVOICE", "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID, INVOICE_TYPE"))
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -34,7 +35,7 @@ async function listMahnungen(supabase, { tenantId }) {
 
     supabase
       .from("ADVANCE_INVOICE")
-      .select("ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID")
+      .select(withClaimCols("ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER, ADVANCE_INVOICE_DATE, DUE_DATE, TOTAL_AMOUNT_GROSS, PROJECT_ID, CONTRACT_ID, ADDRESS_NAME_1, CONTACT, CONTACT_MAIL, EMPLOYEE_ID"))
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -53,25 +54,10 @@ async function listMahnungen(supabase, { tenantId }) {
       .order("DATE_ACTION", { ascending: false }),
   ]);
 
-  // Batch-fetch payments to compute open amounts
-  const allInvIds = (invoices || []).map(d => d.ID);
-  const allPpIds  = (pps     || []).map(d => d.ID);
-  const invPayMap = {};
-  const ppPayMap  = {};
-  if (allInvIds.length > 0) {
-    const { data: pays } = await supabase.from("PAYMENT").select("INVOICE_ID, AMOUNT_PAYED_GROSS").in("INVOICE_ID", allInvIds);
-    for (const p of (pays || [])) {
-      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      invPayMap[p.INVOICE_ID] = (invPayMap[p.INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
-    }
-  }
-  if (allPpIds.length > 0) {
-    const { data: pays } = await supabase.from("PAYMENT").select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", allPpIds);
-    for (const p of (pays || [])) {
-      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      ppPayMap[p.ADVANCE_INVOICE_ID] = (ppPayMap[p.ADVANCE_INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
-    }
-  }
+  // Offener Betrag wie in der Rechnungsliste (services/openAmount.js): nach
+  // Nachlass, Einbehalt, Zahlungen, ausgebuchten Resten und Skonto.
+  const invOpen = await openAmountsFor(supabase, { kind: "INVOICE", docs: invoices || [], tenantId });
+  const ppOpen  = await openAmountsFor(supabase, { kind: "ADVANCE_INVOICE", docs: pps || [], tenantId });
 
   // Batch-fetch project names
   const allDocs = [...(invoices || []), ...(pps || [])];
@@ -130,8 +116,7 @@ async function listMahnungen(supabase, { tenantId }) {
       number:       inv.INVOICE_NUMBER,
       invoiceDate:  inv.INVOICE_DATE,
       dueDate:      inv.DUE_DATE,
-      totalGross:      inv.TOTAL_AMOUNT_GROSS,
-      amountPaidGross: invPayMap[inv.ID] ?? 0,
+      ...openFields(invOpen.get(String(inv.ID)), inv.TOTAL_AMOUNT_GROSS),
       projectId:    inv.PROJECT_ID,
       contractId:   inv.CONTRACT_ID,
       addressName1: inv.ADDRESS_NAME_1,
@@ -151,8 +136,7 @@ async function listMahnungen(supabase, { tenantId }) {
       number:       pp.ADVANCE_INVOICE_NUMBER,
       invoiceDate:  pp.ADVANCE_INVOICE_DATE,
       dueDate:      pp.DUE_DATE,
-      totalGross:      pp.TOTAL_AMOUNT_GROSS,
-      amountPaidGross: ppPayMap[pp.ID] ?? 0,
+      ...openFields(ppOpen.get(String(pp.ID)), pp.TOTAL_AMOUNT_GROSS),
       projectId:    pp.PROJECT_ID,
       contractId:   pp.CONTRACT_ID,
       addressName1: pp.ADDRESS_NAME_1,
@@ -181,7 +165,7 @@ async function getMahnungStats(supabase, { tenantId }) {
   ] = await Promise.all([
     supabase
       .from("INVOICE")
-      .select("ID, INVOICE_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1")
+      .select(withClaimCols("INVOICE", "ID, INVOICE_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1"))
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -190,7 +174,7 @@ async function getMahnungStats(supabase, { tenantId }) {
 
     supabase
       .from("ADVANCE_INVOICE")
-      .select("ID, ADVANCE_INVOICE_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1")
+      .select(withClaimCols("ADVANCE_INVOICE", "ID, ADVANCE_INVOICE_NUMBER, DUE_DATE, TOTAL_AMOUNT_GROSS, ADDRESS_NAME_1"))
       .eq("TENANT_ID", tenantId)
       .eq("STATUS_ID", 2)
       .not("DUE_DATE", "is", null)
@@ -203,25 +187,8 @@ async function getMahnungStats(supabase, { tenantId }) {
       .eq("TENANT_ID", tenantId),
   ]);
 
-  // Batch-fetch payments for open amount
-  const allInvIds = (invoices || []).map(d => d.ID);
-  const allPpIds  = (pps     || []).map(d => d.ID);
-  const invPayMap = {};
-  const ppPayMap  = {};
-  if (allInvIds.length > 0) {
-    const { data: pays } = await supabase.from("PAYMENT").select("INVOICE_ID, AMOUNT_PAYED_GROSS").in("INVOICE_ID", allInvIds);
-    for (const p of (pays || [])) {
-      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      invPayMap[p.INVOICE_ID] = (invPayMap[p.INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
-    }
-  }
-  if (allPpIds.length > 0) {
-    const { data: pays } = await supabase.from("PAYMENT").select("ADVANCE_INVOICE_ID, AMOUNT_PAYED_GROSS").in("ADVANCE_INVOICE_ID", allPpIds);
-    for (const p of (pays || [])) {
-      const v = parseFloat(p.AMOUNT_PAYED_GROSS ?? "0");
-      ppPayMap[p.ADVANCE_INVOICE_ID] = (ppPayMap[p.ADVANCE_INVOICE_ID] || 0) + (Number.isFinite(v) ? v : 0);
-    }
-  }
+  const invOpen = await openAmountsFor(supabase, { kind: "INVOICE", docs: invoices || [], tenantId });
+  const ppOpen  = await openAmountsFor(supabase, { kind: "ADVANCE_INVOICE", docs: pps || [], tenantId });
 
   // Index MAHNUNG by source
   const mahnungByInvoice = {};
@@ -231,21 +198,23 @@ async function getMahnungStats(supabase, { tenantId }) {
     if (m.PP_ID)      mahnungByPp[m.PP_ID]           = m;
   }
 
-  // Build unified list of all overdue items
+  // Build unified list of all overdue items — nur, was noch offen ist. Vorher
+  // zaehlte jede ueberfaellige Rechnung, auch eine laengst bezahlte, als
+  // „braucht eine Aktion".
   const items = [];
   for (const inv of (invoices || [])) {
+    const o = invOpen.get(String(inv.ID));
+    if (!o || o.open <= TOL) continue;
     const m = mahnungByInvoice[inv.ID] || null;
     const daysOverdue = Math.floor((new Date(today) - new Date(inv.DUE_DATE)) / 86400000);
-    const totalGross  = parseFloat(inv.TOTAL_AMOUNT_GROSS ?? 0);
-    const openAmount  = Math.max(0, totalGross - (invPayMap[inv.ID] || 0));
-    items.push({ sourceType: "invoice", sourceId: inv.ID, number: inv.INVOICE_NUMBER, daysOverdue, openAmount, addressName1: inv.ADDRESS_NAME_1, mahnung: m });
+    items.push({ sourceType: "invoice", sourceId: inv.ID, number: inv.INVOICE_NUMBER, daysOverdue, openAmount: o.open, addressName1: inv.ADDRESS_NAME_1, mahnung: m });
   }
   for (const pp of (pps || [])) {
+    const o = ppOpen.get(String(pp.ID));
+    if (!o || o.open <= TOL) continue;
     const m = mahnungByPp[pp.ID] || null;
     const daysOverdue = Math.floor((new Date(today) - new Date(pp.DUE_DATE)) / 86400000);
-    const totalGross  = parseFloat(pp.TOTAL_AMOUNT_GROSS ?? 0);
-    const openAmount  = Math.max(0, totalGross - (ppPayMap[pp.ID] || 0));
-    items.push({ sourceType: "pp", sourceId: pp.ID, number: pp.ADVANCE_INVOICE_NUMBER, daysOverdue, openAmount, addressName1: pp.ADDRESS_NAME_1, mahnung: m });
+    items.push({ sourceType: "pp", sourceId: pp.ID, number: pp.ADVANCE_INVOICE_NUMBER, daysOverdue, openAmount: o.open, addressName1: pp.ADDRESS_NAME_1, mahnung: m });
   }
 
   // Compute byStufe for open (not closed) mahnungen
@@ -319,11 +288,19 @@ async function getMahnungStats(supabase, { tenantId }) {
   };
 }
 
+/** Betragsfelder einer Zeile aus dem gemeinsamen offenen Betrag. */
+function openFields(o, storedGross) {
+  if (!o) return { totalGross: storedGross, amountPaidGross: 0, amountAdjustedGross: 0, openAmount: null };
+  return { totalGross: o.claim.gross, amountPaidGross: o.paid, amountAdjustedGross: o.adjusted, openAmount: o.open };
+}
+
 function buildRow(sourceType, sourceId, src, m, historyByMahnung, today) {
   const daysOverdue     = Math.floor((new Date(today) - new Date(src.dueDate)) / 86400000);
   const totalGross      = parseFloat(src.totalGross ?? 0);
   const amountPaidGross = parseFloat(src.amountPaidGross ?? 0);
-  const openAmount      = Math.max(0, totalGross - amountPaidGross);
+  const openAmount      = src.openAmount != null
+    ? Math.max(0, src.openAmount)
+    : Math.max(0, totalGross - amountPaidGross);
   const hist = m ? (historyByMahnung[m.ID] || []) : [];
   return {
     sourceType,
@@ -334,6 +311,7 @@ function buildRow(sourceType, sourceId, src, m, historyByMahnung, today) {
     daysOverdue,
     totalGross,
     amountPaidGross,
+    amountAdjustedGross: src.amountAdjustedGross ?? 0,
     openAmount,
     projectId:     src.projectId,
     contractId:    src.contractId,

@@ -7,6 +7,8 @@ const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
 const { freezeCiiSnapshot } = require("./einvoiceSnapshot");
 const { suchwert } = require("./pgrestFilter");
+const { openAmountsFor } = require("./openAmount");
+const { rebillableByStructure, removeForCancelledDoc } = require("./receivableAdjustments");
 const { assertPaymentMeans, defaultPaymentMeansId } = require("./paymentMeans");
 const {
   streamPdfAsset,
@@ -172,8 +174,8 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
   else ppQ = ppQ.eq("PROJECT_ID", projectId);
 
   const { data: ppRows, error: ppErr } = await ppQ;
-  if (!ppErr && ppRows && ppRows.length > 0) {
-    const ppIds = ppRows.map((r) => r.ID);
+  const ppIds = !ppErr ? (ppRows || []).map((r) => r.ID) : [];
+  if (ppIds.length > 0) {
     for (const table of ["ADVANCE_INVOICE_STRUCTURE", "PARTIAL_PAYMENTS_STRUCTURE"]) {
       const { data: ppsRows, error: ppsErr } = await supabase
         .from(table)
@@ -192,7 +194,23 @@ async function loadPreviouslyBilledByStructure(supabase, { contractId, projectId
     }
   }
 
+  // Wieder abrechenbar ausgebuchte Reste (Migration 0177) gelten als nicht
+  // abgerechnet — der Vorschlag bietet sie erneut an.
+  await subtractRebillable(supabase, m, { invoiceIds, advanceInvoiceIds: ppIds, structureIds: ids });
+
   return m;
+}
+
+/** Zieht wieder abrechenbare Anteile (nur Honorar, ohne Nebenkosten) von einer „bisher abgerechnet"-Map ab. */
+async function subtractRebillable(supabase, billedMap, { invoiceIds, advanceInvoiceIds, structureIds, withExtras = false }) {
+  const wanted = new Set((structureIds || []).map(String));
+  const back = await rebillableByStructure(supabase, { invoiceIds, advanceInvoiceIds });
+  for (const [sid, v] of back) {
+    if (wanted.size > 0 && !wanted.has(sid)) continue;
+    const minus = withExtras ? v.net + v.extras : v.net;
+    billedMap.set(sid, round2((billedMap.get(sid) || 0) - minus));
+  }
+  return billedMap;
 }
 
 async function sumInvStructureForInvoice(supabase, { invoiceId, structureIds }) {
@@ -428,7 +446,7 @@ async function findTecIdsToAutoAssign(supabase, { invoiceId, structureIds }) {
 // ---------------------------------------------------------------------------
 
 async function listInvoices(supabase, { tenantId, limit, q }) {
-  const BASE_COLS = "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, INVOICE_TYPE, CANCELS_INVOICE_ID";
+  const BASE_COLS = "ID, INVOICE_NUMBER, INVOICE_DATE, DUE_DATE, BILLING_PERIOD_START, BILLING_PERIOD_FINISH, TOTAL_AMOUNT_NET, TAX_AMOUNT_NET, TOTAL_AMOUNT_GROSS, TOTAL_DISCOUNTS, DISCOUNT_1_PERCENT, DISCOUNT_2_PERCENT, DISCOUNT_1_REASON, DISCOUNT_2_REASON, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, CASH_DISCOUNT, STATUS_ID, PROJECT_ID, CONTRACT_ID, CONTACT, CONTACT_MAIL, ADDRESS_NAME_1, COMMENT, VAT_ID, VAT_PERCENT, VAT_CATEGORY, INVOICE_TYPE, CANCELS_INVOICE_ID";
   const SE_COLS = ", SE_AMOUNT, SE_PERCENT, SE_BASIS, SE_RELEASE_TOTAL";
   const buildQuery = (cols) => {
     let q1 = supabase
@@ -454,22 +472,9 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
 
   const invRows = Array.isArray(rows) ? rows : [];
 
-  const invIds = Array.from(new Set(invRows.map(r => r.ID).filter(Boolean)));
-  const payedGrossMap = {};
-  if (invIds.length > 0) {
-    const { data: pays, error: payErr } = await supabase
-      .from("PAYMENT")
-      .select("INVOICE_ID, AMOUNT_PAYED_GROSS")
-      .in("INVOICE_ID", invIds);
-    if (!payErr) {
-      (pays || []).forEach(p => {
-        const k = p.INVOICE_ID;
-        const v = typeof p.AMOUNT_PAYED_GROSS === "number" ? p.AMOUNT_PAYED_GROSS : parseFloat(String(p.AMOUNT_PAYED_GROSS ?? "0"));
-        if (!Number.isFinite(v)) return;
-        payedGrossMap[k] = (payedGrossMap[k] || 0) + v;
-      });
-    }
-  }
+  // Offener Betrag aus der einen Rechnung dafuer (services/openAmount.js) —
+  // die Liste rechnete ihn vorher selbst und anders als das Mahnwesen.
+  const openById = await openAmountsFor(supabase, { kind: "INVOICE", docs: invRows, tenantId });
 
   const projectIds = Array.from(new Set(invRows.map(r => r.PROJECT_ID).filter(Boolean)));
   const contractIds = Array.from(new Set(invRows.map(r => r.CONTRACT_ID).filter(Boolean)));
@@ -525,7 +530,10 @@ async function listInvoices(supabase, { tenantId, limit, q }) {
     CONTACT: r.CONTACT ?? "",
     CONTACT_MAIL: r.CONTACT_MAIL ?? null,
     ADDRESS_NAME_1: r.ADDRESS_NAME_1 ?? "",
-    AMOUNT_PAYED_GROSS: payedGrossMap[r.ID] ?? 0,
+    AMOUNT_PAYED_GROSS: openById.get(String(r.ID))?.paid ?? 0,
+    AMOUNT_ADJUSTED_GROSS: openById.get(String(r.ID))?.adjusted ?? 0,
+    OPEN_AMOUNT_GROSS: openById.get(String(r.ID))?.open ?? null,
+    SKONTO_TAKEN: openById.get(String(r.ID))?.skontoTaken ?? false,
     COMMENT: r.COMMENT ?? "",
     SE_AMOUNT:         r.SE_AMOUNT ?? null,
     SE_PERCENT:        r.SE_PERCENT ?? null,
@@ -1161,6 +1169,10 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
   }
 
   const isFinalInvoice = orig.INVOICE_TYPE === "schlussrechnung" || orig.INVOICE_TYPE === "teilschlussrechnung";
+
+  // Ausgebuchte Reste gehen mit dem Beleg — ein wieder abrechenbarer Anteil
+  // hat die Summen schon gemindert und wuerde sie sonst ein zweites Mal mindern.
+  await removeForCancelledDoc(supabase, { tenantId, kind: "INVOICE", id: parseInt(id, 10) });
 
   // ── Phase 5: Sicherheitseinbehalt-Reversal ───────────────────────────────
   // If this is a Schluss-/Teilschluss invoice that released SE from prior ARs,
