@@ -378,7 +378,11 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   `projects.edit` (keine eigene Permission). `copyProject` übernimmt die
   Zuordnung (Folgeprojekt). Listen lesen sie über
   `groupsByProjectIfMigrated` — der Web-Container startet vor dem
-  postdeploy-Hook.
+  postdeploy-Hook. Neue Projekte (Neuanlage, Beauftragen, Kopieren) gehen
+  **nur** über `newProjectGroupAndAbbr`: Gesamtprojekt prüfen und eine
+  vorgegebene (abgeleitete) Nummer auf Dubletten, **bevor** der Nummernkreis
+  gezogen wird; `PROJECT_GROUP_ID` nur in die Zeile, wenn gewählt.
+  Leistungsphasen je Gesamtprojekt: `/reports/phases/matrix?group_id=`.
 - **Adressen als Arbeitsbereich** (`/adressen/:id?tab=kontakte|daten|verwendung`,
   `pages/adressen/AddressDetailPage.tsx`): Kopf mit Anschrift/Telefon/E-Mail,
   Reiter Kontakte · Adressdaten · Verwendet in. Bearbeitet wird **nur** dort

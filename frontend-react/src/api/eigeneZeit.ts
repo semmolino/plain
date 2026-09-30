@@ -7,7 +7,7 @@ import type { StructureNode } from './projekte'
  * Honorare, Budgets oder Strukturwerte (Migration 0169).
  */
 export const fetchOwnProjects = () =>
-  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME: string }> }>('/buchungen/eigen/projekte')
+  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME: string; GROUP_NAME?: string | null }> }>('/buchungen/eigen/projekte')
 
 export type OwnLeaf = Pick<StructureNode, 'STRUCTURE_ID' | 'FATHER_ID' | 'ABBR' | 'NAME' | 'BILLING_TYPE_ID'>
 

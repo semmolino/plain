@@ -21,6 +21,7 @@ import {
 } from '@/api/mahnungen'
 import { fetchEmailTemplates } from '@/api/emailTemplates'
 import { fetchEmployeeList, type Employee } from '@/api/mitarbeiter'
+import { fetchProjectListFull } from '@/api/projekte'
 import {
   fetchPayments, createPayment, deletePayment,
   type Payment,
@@ -181,6 +182,7 @@ interface FilterState {
   search:     string     // unified text search
   onlyOpen:   boolean    // nur offene Posten
   showClosed: boolean
+  gruppen:    string[]   // Gesamtprojekte (Name)
 }
 
 const LS_KEY = 'mahnungen-filters-v3'
@@ -190,6 +192,7 @@ const defaultFilters = (): FilterState => ({
   search:     '',
   onlyOpen:   false,
   showClosed: false,
+  gruppen:    [],
 })
 
 function loadFilters(): FilterState {
@@ -286,16 +289,31 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
     '4': '3. Mahnung',
   }
 
+  // Gesamtprojekt je Projekt — aus der geteilten Projektliste. Ohne
+  // projects.view bleibt sie leer und der Filter erscheint nicht.
+  const projects$ = useQuery({ queryKey: ['projects-full'], queryFn: fetchProjectListFull, retry: false, staleTime: 60_000 })
+  const groupOfProject = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const p of projects$.data?.data ?? []) if (p.GROUP_NAME) m.set(p.ID, p.GROUP_NAME)
+    return m
+  }, [projects$.data])
+  const gruppenOptions = useMemo(() =>
+    [...new Set((rows$.data ?? []).map(r => (r.projectId != null ? groupOfProject.get(r.projectId) : undefined)).filter((g): g is string => !!g))].sort(),
+  [rows$.data, groupOfProject])
+
   const rows = useMemo(() => {
     const activeStufen = new Set(filters.mahnstufen)
+    const activeGruppen = new Set(filters.gruppen ?? [])
     let r = rawData.filter(row => {
+      const gruppe = row.projectId != null ? groupOfProject.get(row.projectId) ?? '' : ''
       if (!filters.showClosed && row.isClosed) return false
       if (filters.stichtag && row.dueDate > filters.stichtag) return false
       if (activeStufen.size > 0 && !activeStufen.has(String(row.mahnstufe))) return false
+      if (activeGruppen.size > 0 && !activeGruppen.has(gruppe)) return false
       if (filters.onlyOpen && row.openAmount <= 0) return false
       if (filters.search) {
         const q = filters.search.toLowerCase()
-        const hay = `${row.number} ${row.addressName1 ?? ''} ${row.projectNumber ?? ''} ${row.projectName ?? ''} ${row.contractName ?? ''} ${row.contact ?? ''}`
+        const hay = `${row.number} ${row.addressName1 ?? ''} ${row.projectNumber ?? ''} ${row.projectName ?? ''} ${row.contractName ?? ''} ${row.contact ?? ''} ${gruppe}`
           .toLowerCase()
         if (!hay.includes(q)) return false
       }
@@ -325,7 +343,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
     })
 
     return r
-  }, [rawData, filters, sortKey, sortDir])
+  }, [rawData, filters, sortKey, sortDir, groupOfProject])
 
   // Open detail modal when navigated from dashboard suggestion
   useEffect(() => {
@@ -648,7 +666,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
         />
         {/* Auf dem Handy hinter „Filter" eingeklappt (siehe FilterBar). */}
         <FilterBar
-          activeCount={filters.mahnstufen.length + (filters.onlyOpen ? 1 : 0) + (filters.stichtag ? 1 : 0)}
+          activeCount={filters.mahnstufen.length + (filters.gruppen?.length ?? 0) + (filters.onlyOpen ? 1 : 0) + (filters.stichtag ? 1 : 0)}
           onReset={() => setFilters(f => ({ ...defaultFilters(), showClosed: f.showClosed }))}
         >
           <FilterChip
@@ -663,6 +681,10 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
               }),
             }))}
           />
+          {gruppenOptions.length > 0 && (
+            <FilterChip label="Gesamtprojekt" options={gruppenOptions} active={new Set(filters.gruppen ?? [])}
+              onChange={v => setFilters(f => ({ ...f, gruppen: [...v] }))} />
+          )}
           <label className="list-checkbox-label" style={{ fontSize: 12 }}>
             <input type="checkbox" checked={filters.onlyOpen} onChange={e => setFilters(f => ({ ...f, onlyOpen: e.target.checked }))} />
             nur offen

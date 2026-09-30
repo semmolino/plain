@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { PROJECT_GROUP_QUERY_KEYS, type MovedProject } from '@/api/gesamtprojekte'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchGroupAbbrSuggestion, PROJECT_GROUP_QUERY_KEYS, type MovedProject } from '@/api/gesamtprojekte'
 import type { DateFilter } from '@/api/reports'
 import type { GroupTab } from '@/pages/projekte/projektUrlState'
 
@@ -32,4 +32,36 @@ export function movedNote(moved: MovedProject[] | undefined): string | null {
   const from = [...new Set(moved.map(m => m.FROM_GROUP_NAME).filter(Boolean))]
   const what = moved.length === 1 ? `${moved[0].ABBR} ist` : `${moved.length} Projekte sind`
   return `${what} aus ${from.length === 1 ? `„${from[0]}"` : 'anderen Gesamtprojekten'} hierher gewechselt.`
+}
+
+// ── Neues Projekt in einem Gesamtprojekt (Anlegen, Beauftragen, Kopieren) ────
+
+/** Auswahl beim Anlegen eines Projekts: Gesamtprojekt und Art der Nummer. */
+export interface GruppenWahl {
+  /** '' = keinem Gesamtprojekt */
+  groupId: string
+  /** abgeleitete Nummer ({Kürzel}-{NN}) statt der nächsten aus dem Nummernkreis */
+  derived: boolean
+}
+
+export const KEINE_GRUPPE: GruppenWahl = { groupId: '', derived: false }
+
+/** Vorschlag der abgeleiteten Nummer — null, wenn das Gesamtprojekt kein Kürzel hat. */
+export function useDerivedAbbr(groupId: string) {
+  const { data } = useQuery({
+    queryKey: ['project-group-number', groupId],
+    queryFn:  () => fetchGroupAbbrSuggestion(Number(groupId)),
+    enabled:  groupId !== '',
+    staleTime: 0,
+  })
+  return groupId !== '' ? data?.data.abbr ?? null : null
+}
+
+/** Nutzlast-Felder für Anlegen und Beauftragen (Server: newProjectGroupAndAbbr). */
+export function gruppenPayload(w: GruppenWahl, derivedAbbr: string | null): { project_group_id?: number; project_abbr?: string } {
+  if (!w.groupId) return {}
+  return {
+    project_group_id: Number(w.groupId),
+    ...(w.derived && derivedAbbr ? { project_abbr: derivedAbbr } : {}),
+  }
 }

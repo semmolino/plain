@@ -965,6 +965,20 @@ export const HELP = {
       </>
     ),
   },
+  'report.tfl.gesamtprojekt': {
+    title: 'Teilfertige Leistungen je Gesamtprojekt',
+    body: (
+      <>
+        Die Zwischensumme zeigt, was in einem Gesamtprojekt an teilfertigen Leistungen und an erhaltenen
+        Anzahlungen steckt — <strong>getrennt</strong>, wie in der Gesamtzeile. Bewertet wird weiterhin
+        jeder Vertrag (jedes Projekt) für sich: Ist die eine Stufe überzahlt und die andere im Rückstand,
+        wird das nicht gegeneinander verrechnet (§ 246 Abs. 2 HGB).
+        <br /><br />
+        Ob Stufenverträge desselben Auftraggebers bilanziell als ein Vertrag gelten, klärt der
+        Steuerberater — die Auswertung geht vom einzelnen Vertrag aus.
+      </>
+    ),
+  },
   'report.tfl.anzahlungen': {
     title: 'Erhaltene Anzahlungen',
     body: (
@@ -1892,8 +1906,12 @@ export const HELP = {
         Leistungen an einen anderen Rechnungsempfänger. Das Gesamtprojekt zeigt Honorar, Leistungsstand,
         Abrechnung und Verlauf über alle zusammen.<br /><br />
         Es ist nur eine Klammer: Vertrag, Rechnungen, Buchungen und Leistungsstände bleiben bei jedem
-        einzelnen Projekt. Ein Projekt gehört zu höchstens einem Gesamtprojekt. Wer ein Projekt
-        kopiert, bekommt die Kopie im selben Gesamtprojekt — praktisch für die nächste Stufe.
+        einzelnen Projekt. Ein Projekt gehört zu höchstens einem Gesamtprojekt.
+        <br /><br />
+        Die nächste Stufe lässt sich beim <strong>Beauftragen</strong> eines Angebots oder beim Anlegen
+        gleich zuordnen. Die Projektnummer kann dann vom Kürzel des Gesamtprojekts abgeleitet werden
+        (z. B. 2026-014-02) — der Nummernkreis bleibt unberührt. Eine Kopie bleibt im selben
+        Gesamtprojekt.
       </>
     ),
   },

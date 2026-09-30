@@ -3,6 +3,7 @@
 const { contractDefaults } = require('./contractDefaults');
 const { normalizeEffortLines, effortColumns, nodeEffortLines, lineAmount } = require('./effortLines');
 const { assertOwnAddress, assertContactOfAddress } = require('./adressen');
+const gesamtprojekte = require('./gesamtprojekte');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -1363,9 +1364,17 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   const companyId = offer.COMPANY_ID ? parseInt(String(offer.COMPANY_ID), 10) : null;
   if (!companyId) throw { status: 400, message: 'Angebot hat keine Firma' };
 
-  const { data: num, error: numErr } = await supabase.rpc('next_project_number', { p_company_id: companyId });
-  if (numErr || !num) {
-    throw { status: 500, message: 'Nummernkreis konnte nicht geladen werden: ' + (numErr?.message || 'kein Ergebnis') };
+  // Gesamtprojekt (z. B. die naechste Stufe eines Stufenvertrags) und ggf.
+  // die abgeleitete Nummer — vor dem Nummernkreis, damit eine abgelehnte
+  // Anfrage keine Nummer verbraucht.
+  const { groupId, abbr } = await gesamtprojekte.newProjectGroupAndAbbr(supabase, { tenantId, body: b });
+  let num = abbr;
+  if (!num) {
+    const { data: next, error: numErr } = await supabase.rpc('next_project_number', { p_company_id: companyId });
+    if (numErr || !next) {
+      throw { status: 500, message: 'Nummernkreis konnte nicht geladen werden: ' + (numErr?.message || 'kein Ergebnis') };
+    }
+    num = next;
   }
 
   // Insert PROJECT — also copy root-level (offer-level) surcharges
@@ -1394,6 +1403,8 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
     SURCHARGE_3_EUR:    offer.SURCHARGE_3_EUR   ?? 0,
     SURCHARGE_3_CUMUL:  offer.SURCHARGE_3_CUMUL ?? true,
     SURCHARGES_TOTAL:   offer.SURCHARGES_TOTAL  ?? 0,
+    // Nur wenn gewaehlt — im Deploy-Fenster kennt PostgREST die Spalte noch nicht.
+    ...(groupId ? { PROJECT_GROUP_ID: groupId } : {}),
   };
 
   let project = null;

@@ -4,6 +4,7 @@ import {
   convertOffer, fetchOfferStatuses, fetchOfferStructure, updateOffer,
   type ConvertOfferPayload,
 } from '@/api/angebote'
+import { PROJECT_GROUP_QUERY_KEYS } from '@/api/gesamtprojekte'
 import { BeauftragtModal } from './BeauftragtModal'
 
 /**
@@ -32,6 +33,8 @@ export function BeauftragtDialog({ offer, onClose, onDone }: {
     void qc.invalidateQueries({ queryKey: ['offers'] })
     void qc.invalidateQueries({ queryKey: ['offer', oid] })
     void qc.invalidateQueries({ queryKey: ['offer-detail', oid] })
+    // Das neue Projekt kann in einem Gesamtprojekt gelandet sein.
+    for (const k of PROJECT_GROUP_QUERY_KEYS) void qc.invalidateQueries({ queryKey: [...k] })
   }
 
   const convertMut = useMutation({

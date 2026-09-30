@@ -283,3 +283,179 @@ describe("Report: Gesamtverlauf beachtet den Reporting-Scope", () => {
     expect(honorarHeute(r.body)).toBe(1000);
   });
 });
+
+// ── Stufe 2: neue Projekte im Gesamtprojekt, abgeleitete Nummer ────────────
+
+describe("Abgeleitete Projektnummer", () => {
+  test("zählt nach der höchsten vergebenen weiter; das Projekt mit dem Kürzel selbst ist 01", async () => {
+    const db = welt();
+    db._tables.PROJECT.push({ ID: 20, TENANT_ID: T, ABBR: "2026-014-02", PROJECT_GROUP_ID: 1 });
+    expect(await svc.suggestMemberAbbr(db, { tenantId: T, groupId: 1 })).toBe("2026-014-03");
+  });
+
+  test("ohne Projekte mit dem Kürzel beginnt sie bei 01", async () => {
+    expect(await svc.suggestMemberAbbr(welt(), { tenantId: T, groupId: 2 })).toBe("2026-020-01");
+  });
+
+  test("Nummern fremder Mandanten zählen nicht, eigene Lücken werden nicht gefüllt", async () => {
+    const db = welt();
+    db._tables.PROJECT.push(
+      { ID: 60, TENANT_ID: F, ABBR: "2026-020-07" },
+      { ID: 21, TENANT_ID: T, ABBR: "2026-020-03" },
+    );
+    expect(await svc.suggestMemberAbbr(db, { tenantId: T, groupId: 2 })).toBe("2026-020-04");
+  });
+
+  test("ohne Kürzel kein Vorschlag, fremdes Gesamtprojekt 404", async () => {
+    const db = welt();
+    db._tables.PROJECT_GROUP.find((g) => g.ID === 2).ABBR = null;
+    expect(await svc.suggestMemberAbbr(db, { tenantId: T, groupId: 2 })).toBeNull();
+    expect((await fehler(svc.suggestMemberAbbr(db, { tenantId: T, groupId: 9 })))?.status).toBe(404);
+  });
+
+  test("Gesamtprojekt und Nummer für ein neues Projekt: fremd 400, vergeben 409", async () => {
+    const db = welt();
+    expect((await fehler(svc.newProjectGroupAndAbbr(db, { tenantId: T, body: { project_group_id: 9 } })))?.status).toBe(400);
+    expect((await fehler(svc.newProjectGroupAndAbbr(db, { tenantId: T, body: { project_abbr: "2026-031" } })))?.status).toBe(409);
+    // Dieselbe Nummer bei einem fremden Mandanten sperrt nicht
+    expect(await svc.newProjectGroupAndAbbr(db, { tenantId: T, body: { project_group_id: 1, project_abbr: " F-1 " } }))
+      .toEqual({ groupId: 1, abbr: "F-1" });
+    expect(await svc.newProjectGroupAndAbbr(db, { tenantId: T, body: {} })).toEqual({ groupId: null, abbr: null });
+  });
+});
+
+describe("Neues Projekt im Gesamtprojekt", () => {
+  const body = {
+    company_id: 1, name: "Schule Nord Außenanlagen", project_status_id: 1, project_manager_id: 5,
+    address_id: 3, contact_id: 4,
+  };
+
+  function mitRpc(db) {
+    const calls = [];
+    db.rpc = async (name) => { calls.push(name); return { data: "P-2026-099", error: null }; };
+    return calls;
+  }
+
+  test("abgeleitete Nummer: kein Griff in den Nummernkreis, Zuordnung gesetzt", async () => {
+    const db = welt();
+    const rpc = mitRpc(db);
+    await projekte.createProject(db, { tenantId: T, body: { ...body, project_group_id: 1, project_abbr: "2026-014-02" } });
+    const neu = db._tables.PROJECT.find((p) => p.NAME === "Schule Nord Außenanlagen");
+    expect(neu).toMatchObject({ ABBR: "2026-014-02", PROJECT_GROUP_ID: 1, TENANT_ID: T });
+    expect(rpc).toEqual([]);
+  });
+
+  test("ohne Nummer: Nummernkreis; ohne Gesamtprojekt keine Spalte in der Zeile", async () => {
+    const db = welt();
+    const rpc = mitRpc(db);
+    await projekte.createProject(db, { tenantId: T, body });
+    const neu = db._tables.PROJECT.find((p) => p.NAME === "Schule Nord Außenanlagen");
+    expect(neu.ABBR).toBe("P-2026-099");
+    // Im Deploy-Fenster kennt PostgREST die Spalte noch nicht — nur mitschicken, wenn gewählt.
+    expect("PROJECT_GROUP_ID" in neu).toBe(false);
+    expect(rpc).toEqual(["next_project_number"]);
+  });
+
+  test("fremdes Gesamtprojekt: 400, kein Projekt, keine verbrauchte Nummer", async () => {
+    const db = welt();
+    const rpc = mitRpc(db);
+    const e = await fehler(projekte.createProject(db, { tenantId: T, body: { ...body, project_group_id: 9 } }));
+    expect(e?.status).toBe(400);
+    expect(db._tables.PROJECT.some((p) => p.NAME === "Schule Nord Außenanlagen")).toBe(false);
+    expect(rpc).toEqual([]);
+  });
+
+  test("Folgeprojekt (Kopie) mit abgeleiteter Nummer bleibt im Gesamtprojekt der Vorlage", async () => {
+    const db = welt({ PROJECT_STRUCTURE: [], EMPLOYEE2PROJECT: [], CONTRACT: [] });
+    const rpc = mitRpc(db);
+    const r = await projekte.copyProject(db, { projectId: 10, tenantId: T, body: { project_abbr: "2026-014-02" } });
+    const neu = db._tables.PROJECT.find((p) => p.ID === r.project.ID);
+    expect(neu).toMatchObject({ ABBR: "2026-014-02", PROJECT_GROUP_ID: 1 });
+    expect(rpc).toEqual([]);
+  });
+});
+
+describe("Adresse: verwendet in Gesamtprojekten", () => {
+  const adressen = require("../services/adressen");
+
+  test("Auftraggeber-Gesamtprojekte und die Gesamtprojekte ihrer Projekte, je Projekt der Name", async () => {
+    const db = welt({ OFFER: [], CONTRACT: [], INVOICE: [], ADVANCE_INVOICE: [], NACHTRAG: [] });
+    // Adresse 3 ist Auftraggeber von Gruppe 1 und von Projekt 12 (Gruppe 2)
+    db._tables.PROJECT.find((p) => p.ID === 12).ADDRESS_ID = 3;
+    const links = await adressen.addressLinks(db, { tenantId: T, addressId: 3, can: () => true });
+    expect(links.groups.map((g) => g.NAME)).toEqual(["Rathaus", "Schule Nord"]);
+    expect(links.projects).toEqual([expect.objectContaining({ ID: 12, GROUP_NAME: "Rathaus" })]);
+  });
+
+  test("ohne projects.view keine Gesamtprojekte", async () => {
+    const db = welt({ OFFER: [], CONTRACT: [], INVOICE: [], ADVANCE_INVOICE: [], NACHTRAG: [] });
+    const links = await adressen.addressLinks(db, { tenantId: T, addressId: 3, can: (k) => k !== "projects.view" });
+    expect(links.groups).toEqual([]);
+  });
+});
+
+describe("Rechnungsempfänger je Projekt", () => {
+  test("nur mit Anfrage (Recht auf Verträge), aus dem Vertrag des Projekts", async () => {
+    const db = welt({
+      CONTRACT: [
+        { ID: 70, TENANT_ID: T, PROJECT_ID: 10, INVOICE_ADDRESS_ID: 3 },
+        { ID: 71, TENANT_ID: T, PROJECT_ID: 11, INVOICE_ADDRESS_ID: 8 },
+      ],
+      ADDRESS: [
+        { ID: 3, TENANT_ID: T, ADDRESS_NAME_1: "Stadt Musterstadt" },
+        { ID: 8, TENANT_ID: T, ADDRESS_NAME_1: "Förderverein Schule Nord" },
+      ],
+    });
+    const ohne = await svc.getGroup(db, { tenantId: T, id: 1 });
+    expect("INVOICE_ADDRESS_NAME" in ohne.PROJECTS[0]).toBe(false);
+    const mit = await svc.getGroup(db, { tenantId: T, id: 1, withInvoiceAddress: true });
+    expect(Object.fromEntries(mit.PROJECTS.map((p) => [p.ID, p.INVOICE_ADDRESS_NAME])))
+      .toEqual({ 10: "Stadt Musterstadt", 11: "Förderverein Schule Nord" });
+  });
+});
+
+describe("Report: Leistungsphasen über das Gesamtprojekt", () => {
+  // Stufenvertrag: LPH 1 im Projekt 10, LPH 5 im Projekt 11 (beide Gruppe 1),
+  // LPH 2 im Projekt 12 (Gruppe 2).
+  function lphWelt() {
+    const db = reportWelt();
+    db._tables.PROJECT_STRUCTURE = [
+      { ID: 100, TENANT_ID: T, PROJECT_ID: 10, FATHER_ID: null, ABBR: "LPH 1", FEE_CALC_PHASE_ID: 1 },
+      { ID: 101, TENANT_ID: T, PROJECT_ID: 10, FATHER_ID: 100, ABBR: "1.1" },
+      { ID: 110, TENANT_ID: T, PROJECT_ID: 11, FATHER_ID: null, ABBR: "LPH 5", FEE_CALC_PHASE_ID: 5 },
+      { ID: 111, TENANT_ID: T, PROJECT_ID: 11, FATHER_ID: 110, ABBR: "5.1" },
+      { ID: 120, TENANT_ID: T, PROJECT_ID: 12, FATHER_ID: null, ABBR: "LPH 2", FEE_CALC_PHASE_ID: 2 },
+      { ID: 121, TENANT_ID: T, PROJECT_ID: 12, FATHER_ID: 120, ABBR: "2.1" },
+    ];
+    db._tables.VW_REPORT_PROJECT_DETAIL_STRUCTURE = [
+      { TENANT_ID: T, PROJECT_ID: 10, STRUCTURE_ID: 101, IS_LEAF: true, HONORAR_NET: 20000, EARNED_VALUE_NET: 20000, HOURS_TOTAL: 100, COST_TOTAL: 9000 },
+      { TENANT_ID: T, PROJECT_ID: 11, STRUCTURE_ID: 111, IS_LEAF: true, HONORAR_NET: 80000, EARNED_VALUE_NET: 8000, HOURS_TOTAL: 40, COST_TOTAL: 3000 },
+      { TENANT_ID: T, PROJECT_ID: 12, STRUCTURE_ID: 121, IS_LEAF: true, HONORAR_NET: 5000, EARNED_VALUE_NET: 0, HOURS_TOTAL: 0, COST_TOTAL: 0 },
+    ];
+    return db;
+  }
+
+  test("ohne group_id: alle Projekte", async () => {
+    const r = await report(lphWelt(), "/reports/phases/matrix");
+    expect(r.body.data.phases.map((p) => p.num)).toEqual([1, 2, 5]);
+    expect(r.body.meta).toBeNull();
+  });
+
+  test("mit group_id: nur dessen Projekte — LPH 1 und 5 aus zwei Verträgen als ein Bild", async () => {
+    const r = await report(lphWelt(), "/reports/phases/matrix?group_id=1");
+    expect(r.status).toBe(200);
+    expect(r.body.data.projects.map((p) => p.PROJECT_ID)).toEqual([10, 11]);
+    expect(r.body.data.byPhase.map((p) => [p.num, p.HONORAR_NET])).toEqual([[1, 20000], [5, 80000]]);
+    expect(r.body.meta).toEqual({ members_total: 2, members_visible: 2 });
+  });
+
+  test("Reporting-Scope greift auch hier", async () => {
+    const r = await report(lphWelt(), "/reports/phases/matrix?group_id=1", { scopeAll: false });
+    expect(r.body.data.projects.map((p) => p.PROJECT_ID)).toEqual([10]);
+    expect(r.body.meta).toEqual({ members_total: 2, members_visible: 1 });
+  });
+
+  test("fremdes Gesamtprojekt: 404", async () => {
+    expect((await report(lphWelt(), "/reports/phases/matrix?group_id=9")).status).toBe(404);
+  });
+});

@@ -314,8 +314,11 @@ export interface PhaseMatrix {
   totals:   PhaseCell | null
 }
 
-export const fetchPhaseMatrix = () =>
-  apiClient.get<{ data: PhaseMatrix }>('/reports/phases/matrix')
+/** `groupId`: nur die Projekte dieses Gesamtprojekts (im Reporting-Scope); `meta` sagt dann „n von m". */
+export const fetchPhaseMatrix = (groupId?: number | null) =>
+  apiClient.get<{ data: PhaseMatrix; meta?: { members_total: number; members_visible: number } | null }>(
+    `/reports/phases/matrix${groupId ? `?group_id=${groupId}` : ''}`,
+  )
 
 // ── Project timeline (chart data) ─────────────────────────────────────────────
 

@@ -591,8 +591,19 @@ module.exports = (supabase) => {
       if (req.reportScopeProjectIds !== null) {
         projects = projects.filter((p) => req.reportScopeProjectIds.has(p.ID));
       }
+      // ?group_id= — Leistungsphasen ueber ein Gesamtprojekt: beim Stufen-
+      // vertrag liegen LPH 1–4 und 5–8 in zwei Projekten, hier stehen sie als
+      // ein Bild. Fremdes oder unbekanntes Gesamtprojekt → 404.
+      let groupMeta = null;
+      if (req.query.group_id !== undefined) {
+        const group = await gesamtprojekte.getGroup(supabase, { tenantId, id: req.query.group_id });
+        const members = new Set(group.PROJECT_IDS.map(String));
+        const visible = projects.filter((p) => members.has(String(p.ID)));
+        groupMeta = { members_total: group.PROJECT_COUNT, members_visible: visible.length };
+        projects = visible;
+      }
       if (projects.length === 0) {
-        return res.json({ data: { phases: [], projects: [], byPhase: [], totals: null } });
+        return res.json({ data: { phases: [], projects: [], byPhase: [], totals: null }, meta: groupMeta });
       }
       const projectIds = projects.map((p) => p.ID);
 
@@ -722,9 +733,9 @@ module.exports = (supabase) => {
         projects: projectRows,
         byPhase: byPhaseOut,
         totals: projectRows.length ? decorateCell(grandTot) : null,
-      }});
+      }, meta: groupMeta });
     } catch (e) {
-      res.status(500).json({ error: e.message || String(e) });
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
     }
   });
 

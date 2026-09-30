@@ -14,6 +14,10 @@ import { presetId, todayIso } from '@/utils/vorbelegung'
 import { fmtEur, money } from '@/utils/money'
 import { fmtHours } from '@/utils/zeit'
 import { linesFee, linesHours, nodeLines, type EffortLineEdit } from './struktur/offerStrukturCalc'
+import { GesamtprojektWahl } from '@/pages/projekte/gesamtprojekt/GesamtprojektWahl'
+import {
+  gruppenPayload, KEINE_GRUPPE, useDerivedAbbr, type GruppenWahl,
+} from '@/pages/projekte/gesamtprojekt/gesamtprojektUi'
 
 interface Props {
   open:        boolean
@@ -70,6 +74,8 @@ export function BeauftragtModal({ open, offerName, structNodes, presetManagerId,
   const [linkedProjectId,  setLinkedProjectId]  = useState('')
   const [transferPlan,     setTransferPlan]     = useState(true)
   const [employeeMap, setEmployeeMap] = useState<Record<string, string>>({})
+  const [gruppe,           setGruppe]           = useState<GruppenWahl>(KEINE_GRUPPE)
+  const derivedAbbr = useDerivedAbbr(gruppe.groupId)
 
   const { data: statusData  } = useQuery({ queryKey: ['project-statuses'],  queryFn: fetchProjectStatuses  })
   const { data: mgrData     } = useQuery({ queryKey: ['project-managers'],  queryFn: fetchProjectManagers  })
@@ -140,6 +146,7 @@ export function BeauftragtModal({ open, offerName, structNodes, presetManagerId,
       department_id:      departmentId  ? Number(departmentId)  : null,
       transfer_plan:      transferPlan,
       employee2project:   e2p,
+      ...gruppenPayload(gruppe, derivedAbbr),
     })
   }
 
@@ -197,6 +204,8 @@ export function BeauftragtModal({ open, offerName, structNodes, presetManagerId,
                 {depts.map(d => <option key={d.ID} value={d.ID}>{d.ABBR}</option>)}
               </select>
             </div>
+            {/* Nächste Stufe eines Stufenvertrags: gleich ins Gesamtprojekt der ersten */}
+            <GesamtprojektWahl value={gruppe} onChange={setGruppe} idPrefix="bw" />
 
             <section className="bw-section" aria-labelledby="bw-preview-title">
               <h3 className="bw-title" id="bw-preview-title">

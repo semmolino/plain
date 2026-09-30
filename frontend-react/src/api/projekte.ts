@@ -101,6 +101,10 @@ export interface CreateProjectPayload {
   employee2project?:   E2PRow[]
   project_structure?:  StructureDraftRow[]
   booking_prices?:     BookingPriceRow[]
+  /** Gleich in dieses Gesamtprojekt (Migration 0181) */
+  project_group_id?:   number
+  /** Statt der nächsten Nummer aus dem Nummernkreis — etwa die abgeleitete */
+  project_abbr?:       string
 }
 
 export interface BookingPriceRow {
@@ -125,7 +129,7 @@ export const fetchProjectListFull = () =>
   apiClient.get<{ data: Project[] }>('/projekte/list?limit=2000')
 
 export const fetchProjectsShort = () =>
-  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME: string }> }>('/projekte')
+  apiClient.get<{ data: Array<{ ID: number; ABBR: string; NAME: string; GROUP_NAME?: string | null }> }>('/projekte')
 
 export interface ProjectRootSurcharges {
   ID:                number
@@ -165,8 +169,11 @@ export const deleteProject = (id: number) =>
 export const cascadeProjectInternal = (projectId: number, isInternal: boolean) =>
   apiClient.patch<{ data: { updated: boolean } }>(`/projekte/${projectId}/internal-cascade`, { is_internal: isInternal })
 
-export const copyProject = (id: number) =>
-  apiClient.post<{ data: { project: { ID: number; ABBR: string }; projectName: string } }>(`/projekte/${id}/copy`, {})
+/** `projectAbbr`: Folgeprojekt mit abgeleiteter Nummer statt aus dem Nummernkreis. */
+export const copyProject = (id: number, projectAbbr?: string) =>
+  apiClient.post<{ data: { project: { ID: number; ABBR: string }; projectName: string } }>(
+    `/projekte/${id}/copy`, projectAbbr ? { project_abbr: projectAbbr } : {},
+  )
 
 export const updateProject = (id: number, body: Partial<{
   abbr: string; name: string

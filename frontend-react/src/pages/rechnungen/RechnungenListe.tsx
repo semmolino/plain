@@ -42,6 +42,7 @@ import {
   type Invoice, type PartialPayment, type Payment,
 } from '@/api/rechnungen'
 import { fetchEmailTemplates } from '@/api/emailTemplates'
+import { fetchProjectListFull } from '@/api/projekte'
 import { fmtEur, money } from '@/utils/money'
 
 interface EditDraftPayload {
@@ -235,9 +236,9 @@ function fromPp(pp: PartialPayment): UnifiedRow {
 
 // ── Filter chips ──────────────────────────────────────────────────────────────
 
-type FilterDim = 'status' | 'typ'
+type FilterDim = 'status' | 'typ' | 'gruppe'
 type ActiveFilters = Record<FilterDim, Set<string>>
-const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set() })
+const emptyFilters = (): ActiveFilters => ({ status: new Set(), typ: new Set(), gruppe: new Set() })
 
 
 // ── Column visibility ─────────────────────────────────────────────────────────
@@ -332,11 +333,12 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
   const [search,        setSearch]        = useState(initialSearch ?? '')
   const [onlyOpen,      setOnlyOpen]      = useStickyState<boolean>('rechnungen.onlyOpen', false)
   const [activeFilters, setActiveFilters] = useStickyState<ActiveFilters>('rechnungen.filters', emptyFilters, {
-    serialize:   f => ({ status: [...f.status], typ: [...f.typ] }),
+    serialize:   f => ({ status: [...f.status], typ: [...f.typ], gruppe: [...f.gruppe] }),
     deserialize: raw => {
       const r = emptyFilters(); const o = (raw ?? {}) as Record<string, unknown>
       if (Array.isArray(o.status)) r.status = new Set(o.status as string[])
       if (Array.isArray(o.typ))    r.typ    = new Set(o.typ as string[])
+      if (Array.isArray(o.gruppe)) r.gruppe = new Set(o.gruppe as string[])
       return r
     },
   })
@@ -571,20 +573,33 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     ...(ppData?.data  ?? []).map(fromPp),
   ], [invData, ppData])
 
+  // Gesamtprojekt je Projekt — aus der geteilten Projektliste. Ohne
+  // projects.view bleibt sie leer und der Filter erscheint nicht.
+  const { data: projectsFull } = useQuery({
+    queryKey: ['projects-full'], queryFn: fetchProjectListFull, retry: false, staleTime: 60_000,
+  })
+  const groupOfProject = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const p of projectsFull?.data ?? []) if (p.GROUP_NAME) m.set(p.ID, p.GROUP_NAME)
+    return m
+  }, [projectsFull])
+  const groupOf = useCallback((r: UnifiedRow) => (r.projectId != null ? groupOfProject.get(r.projectId) ?? '' : ''), [groupOfProject])
+
   const filterOptions = useMemo(() => {
     const uniq = (fn: (r: UnifiedRow) => string) =>
       [...new Set(allRows.map(fn).filter(v => v !== ''))].sort()
     return {
       status: uniq(r => r.statusLabel),
       typ:    uniq(r => r.typ),
+      gruppe: uniq(groupOf),
     }
-  }, [allRows])
+  }, [allRows, groupOf])
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase()
     let filtered = q
       ? allRows.filter(r =>
-          `${r.number ?? ''} ${r.typ} ${r.date ?? ''} ${r.project ?? ''} ${r.address ?? ''} ${r.statusLabel}`
+          `${r.number ?? ''} ${r.typ} ${r.date ?? ''} ${r.project ?? ''} ${r.address ?? ''} ${r.statusLabel} ${groupOf(r)}`
             .toLowerCase().includes(q)
         )
       : allRows
@@ -593,6 +608,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
     }
     if (activeFilters.status.size > 0) filtered = filtered.filter(r => activeFilters.status.has(r.statusLabel))
     if (activeFilters.typ.size    > 0) filtered = filtered.filter(r => activeFilters.typ.has(r.typ))
+    if (activeFilters.gruppe.size > 0) filtered = filtered.filter(r => activeFilters.gruppe.has(groupOf(r)))
     return [...filtered].sort((a, b) => {
       const av = a[sortKey] ?? ''
       const bv = b[sortKey] ?? ''
@@ -601,7 +617,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         : String(av).localeCompare(String(bv), 'de', { numeric: true })
       return sortDir === 'asc' ? cmp : -cmp
     })
-  }, [allRows, search, onlyOpen, sortKey, sortDir, activeFilters])
+  }, [allRows, search, onlyOpen, sortKey, sortDir, activeFilters, groupOf])
 
   const totals = useMemo(() => ({
     net:     rows.reduce((s, r) => s + (r.net     ?? 0), 0),
@@ -914,11 +930,14 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         {/* Auf dem Handy liegen die Chips hinter „Filter" (siehe FilterBar) —
             die Leiste brauchte dort sonst drei Zeilen. */}
         <FilterBar
-          activeCount={activeFilters.status.size + activeFilters.typ.size + (onlyOpen ? 1 : 0)}
+          activeCount={activeFilters.status.size + activeFilters.typ.size + activeFilters.gruppe.size + (onlyOpen ? 1 : 0)}
           onReset={() => { setActiveFilters(emptyFilters()); setOnlyOpen(false) }}
         >
           <FilterChip label="Status" options={filterOptions.status} active={activeFilters.status} onChange={v => setDimFilter('status', v)} />
           <FilterChip label="Typ"    options={filterOptions.typ}    active={activeFilters.typ}    onChange={v => setDimFilter('typ', v)}    />
+          {filterOptions.gruppe.length > 0 && (
+            <FilterChip label="Gesamtprojekt" options={filterOptions.gruppe} active={activeFilters.gruppe} onChange={v => setDimFilter('gruppe', v)} />
+          )}
           <label className="list-checkbox-label" style={{ fontSize: 12 }}>
             <input type="checkbox" checked={onlyOpen} onChange={e => setOnlyOpen(e.target.checked)} />
             nur offen
@@ -963,6 +982,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
         if (onlyOpen) chips.push('nur offen')
         activeFilters.status.forEach(v => chips.push(v))
         activeFilters.typ.forEach(v => chips.push(v))
+        activeFilters.gruppe.forEach(v => chips.push(v))
         return (
           <div className="filter-summary">
             <span className="filter-summary-count">{rows.length} von {allRows.length}</span>
@@ -1162,7 +1182,7 @@ export function RechnungenListe({ onEditDraft, onCreateInvoiceFromBilling, initi
               })}
               {!rows.length && (
                 <tr><td colSpan={spaltenZahl} className="empty-note">
-                  {(search.trim() || onlyOpen || activeFilters.status.size > 0 || activeFilters.typ.size > 0)
+                  {(search.trim() || onlyOpen || activeFilters.status.size > 0 || activeFilters.typ.size > 0 || activeFilters.gruppe.size > 0)
                     ? 'Keine Rechnungen für diese Filter.'
                     : 'Noch keine Rechnungen — erstelle sie über „Abschlagsrechnungen" / „Einzelrechnung" oder direkt aus „Abrechenbare Projekte".'}
                 </td></tr>

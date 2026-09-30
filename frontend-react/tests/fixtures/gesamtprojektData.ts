@@ -62,11 +62,34 @@ const TOTALS = {
   BILLED_NET_TOTAL: 210_000, OPEN_NET_TOTAL: 80_000, PAYED_NET_TOTAL: 210_000, SALES_TOTAL: 0, QTY_EXT_TOTAL: 0,
 }
 
-export interface Calls { patches: unknown[]; deletes: number; puts: unknown[]; posts: unknown[] }
+export interface Calls {
+  patches: unknown[]; deletes: number; puts: unknown[]; posts: unknown[]
+  /** Stufe 2: Beauftragen, Kopieren (Folgeprojekt), Neuanlage, Matrix-Abfragen */
+  converts: Record<string, unknown>[]; copies: Record<string, unknown>[]; creates: Record<string, unknown>[]; matrixUrls: string[]
+}
+
+/** Leistungsphasen der Gruppe: LPH 1–4 im ersten, LPH 5 im zweiten Vertrag. */
+const cell = (h: number, e: number, c: number) => ({
+  HONORAR_NET: h, EARNED_VALUE_NET: e, HOURS_TOTAL: c / 60, COST_TOTAL: c,
+  LEISTUNGSSTAND_PERCENT: h ? (e / h) * 100 : null, KOSTENQUOTE: e ? c / e : null, DB: e - c, ampel: 'gruen',
+})
+const MATRIX = {
+  phases: [{ num: 1, label: 'LPH 1' }, { num: 4, label: 'LPH 4' }, { num: 5, label: 'LPH 5' }],
+  projects: [
+    { PROJECT_ID: 1, ABBR: 'P-2024-001', NAME: 'Neubau Kita, LPH 1–4', cells: { 1: cell(20_000, 20_000, 9_000), 4: cell(30_000, 30_000, 12_000) }, total: cell(50_000, 50_000, 21_000) },
+    { PROJECT_ID: 2, ABBR: 'P-2024-002', NAME: 'Neubau Kita, LPH 5–8', cells: { 5: cell(80_000, 8_000, 3_000) }, total: cell(80_000, 8_000, 3_000) },
+  ],
+  byPhase: [
+    { num: 1, label: 'LPH 1', ...cell(20_000, 20_000, 9_000), HOURS_SHARE: 40, HONORAR_SHARE: 15 },
+    { num: 4, label: 'LPH 4', ...cell(30_000, 30_000, 12_000), HOURS_SHARE: 50, HONORAR_SHARE: 23 },
+    { num: 5, label: 'LPH 5', ...cell(80_000, 8_000, 3_000), HOURS_SHARE: 10, HONORAR_SHARE: 62 },
+  ],
+  totals: cell(130_000, 58_000, 24_000),
+}
 
 export async function mockGroups(page: Page, { partial = false, empty = false } = {}): Promise<Calls> {
   await mockPilot(page)
-  const calls: Calls = { patches: [], deletes: 0, puts: [], posts: [] }
+  const calls: Calls = { patches: [], deletes: 0, puts: [], posts: [], converts: [], copies: [], creates: [], matrixUrls: [] }
   const route = (re: string, h: (r: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
 
   await route('projekte/list', r => r.fulfill(json({ data: PROJECT_ROWS })))
@@ -103,5 +126,29 @@ export async function mockGroups(page: Page, { partial = false, empty = false } 
     meta: { members_total: 2, members_visible: partial ? 1 : 2, scope: partial ? 'permission' : null },
   })))
   await route('reports/projects/list', r => r.fulfill(json({ data: REPORT_ROWS, meta: { total: 3, scope: null } })))
+
+  // ── Stufe 2 ──
+  await route('projekte/gruppen/5/nummer', r => r.fulfill(json({ data: { abbr: 'GP-2024-01-03' } })))
+  await route('angebote/\\d+/convert', r => {
+    calls.converts.push(r.request().postDataJSON())
+    return r.fulfill(json({ data: { project: { ID: 9, ABBR: 'GP-2024-01-03' }, projectName: 'GP-2024-01-03' } }))
+  })
+  await route('projekte/\\d+/copy', r => {
+    calls.copies.push(r.request().postDataJSON() ?? {})
+    return r.fulfill(json({ data: { project: { ID: 9, ABBR: 'GP-2024-01-03' }, projectName: 'Neubau Kita (Kopie)' } }))
+  })
+  await route('projekte', r => {
+    if (r.request().method() === 'GET') {
+      // Kurzliste für die Projektwahl — mit Gesamtprojekt je Projekt
+      return r.fulfill(json({ data: PROJECT_ROWS.map(p => ({ ID: p.ID, ABBR: p.ABBR, NAME: p.NAME, GROUP_NAME: p.GROUP_NAME || null })) }))
+    }
+    calls.creates.push(r.request().postDataJSON())
+    return r.fulfill(json({ data: { ID: 9, ABBR: 'GP-2024-01-03' } }))
+  })
+  await route('reports/phases/matrix', r => {
+    calls.matrixUrls.push(r.request().url())
+    const grouped = r.request().url().includes('group_id=')
+    return r.fulfill(json({ data: MATRIX, meta: grouped ? { members_total: 2, members_visible: 2 } : null }))
+  })
   return calls
 }

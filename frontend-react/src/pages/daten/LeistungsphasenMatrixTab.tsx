@@ -6,6 +6,8 @@ import {
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
 import { fetchPhaseMatrix, type PhaseCell, type PhaseMatrixProject } from '@/api/reports'
+import { fetchProjectGroups } from '@/api/gesamtprojekte'
+import { groupLabel } from '@/pages/projekte/gesamtprojekt/gesamtprojektUi'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { useChartTheme } from '@/theme/chartTheme'
 import { fmtEur, fmtEur0, money } from '@/utils/money'
@@ -48,8 +50,8 @@ function cellTitle(c: PhaseCell): string {
   ].join('\n')
 }
 
-function PortfolioBarChart({ labels, honorar, leistung, kosten }: {
-  labels: string[]; honorar: number[]; leistung: number[]; kosten: number[]
+function PortfolioBarChart({ labels, honorar, leistung, kosten, scopeLabel }: {
+  labels: string[]; honorar: number[]; leistung: number[]; kosten: number[]; scopeLabel: string
 }) {
   const t = useChartTheme()
   const data = useMemo(() => ({
@@ -75,46 +77,87 @@ function PortfolioBarChart({ labels, honorar, leistung, kosten }: {
   }
   return (
     <div className="timeline-wrap">
-      <h3 className="timeline-title">Honorar · Leistung · Kosten je Leistungsphase (Portfolio)</h3>
+      <h3 className="timeline-title">Honorar · Leistung · Kosten je Leistungsphase ({scopeLabel})</h3>
       <div className="timeline-chart"><Bar data={data} options={options} /></div>
     </div>
   )
 }
 
-export function LeistungsphasenMatrixTab() {
+/**
+ * Leistungsphasen-Matrix: Projekte × LPH. Mit `fixedGroupId` (Reiter im
+ * Gesamtprojekt) nur dessen Projekte — beim Stufenvertrag stehen LPH 1–4 und
+ * 5–8 aus zwei Verträgen dann als ein Bild. Im Reporting lässt sich ein
+ * Gesamtprojekt wählen.
+ */
+export function LeistungsphasenMatrixTab({ fixedGroupId }: { fixedGroupId?: number } = {}) {
   const navigate = useNavigate()
   const [metric, setMetric] = useState<Metric>('kostenquote')
+  const [chosenGroup, setChosenGroup] = useState('')
+  const groupId = fixedGroupId ?? (chosenGroup ? Number(chosenGroup) : null)
+
+  // Auswahl nur im Reporting; ohne projects.view (403) entfällt sie.
+  const { data: groupsData } = useQuery({
+    queryKey: ['project-groups'], queryFn: fetchProjectGroups,
+    enabled: fixedGroupId == null, retry: false, staleTime: 60_000,
+  })
+  const groups = groupsData?.data ?? []
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['phase-matrix'],
-    queryFn:  fetchPhaseMatrix,
+    queryKey: ['phase-matrix', groupId],
+    queryFn:  () => fetchPhaseMatrix(groupId),
     staleTime: 300000,
   })
 
   const matrix   = data?.data
+  const meta     = data?.meta
   const phases   = matrix?.phases ?? []
   const projects = matrix?.projects ?? []
   const byPhase  = matrix?.byPhase ?? []
+  const scopeLabel = groupId ? 'Gesamtprojekt' : 'Portfolio'
 
   const goToProject = (p: PhaseMatrixProject) =>
     navigate('/daten', { state: { tab: 'einzelprojekt', projectId: p.PROJECT_ID } })
+
+  const groupPicker = fixedGroupId == null && groups.length > 0 && (
+    <label className="pg-matrix-pick">
+      <span>Gesamtprojekt</span>
+      <select value={chosenGroup} onChange={e => setChosenGroup(e.target.value)}>
+        <option value="">Alle Projekte</option>
+        {groups.map(g => <option key={g.ID} value={g.ID}>{groupLabel(g)}</option>)}
+      </select>
+    </label>
+  )
+  const partial = meta && meta.members_visible < meta.members_total && (
+    <p className="pg-scope-note">
+      {meta.members_visible} von {meta.members_total} Projekten des Gesamtprojekts liegen in deinem Reporting-Bereich.
+      <HelpHint id="report.gesamtprojekt" size={12} />
+    </p>
+  )
 
   if (isLoading) return <p className="empty-note">Laden …</p>
   if (isError)   return <p className="empty-note" style={{ color: 'var(--danger)' }}>Fehler beim Laden der Leistungsphasen-Matrix.</p>
   if (projects.length === 0) {
     return (
-      <p className="empty-note">
-        Keine Projekte mit Leistungsphasen-Struktur. Sobald Projekte aus einer HOAI-Honorarberechnung
-        erzeugt werden, erscheinen sie hier — mit Kennzahlen je Leistungsphase über das gesamte Portfolio.
-      </p>
+      <div>
+        {groupPicker}
+        {partial}
+        <p className="empty-note">
+          {groupId
+            ? 'Keines der Projekte dieses Gesamtprojekts hat eine Leistungsphasen-Struktur. Sie entsteht, wenn ein Projekt aus einer HOAI-Kalkulation erzeugt oder die Kalkulation in die Struktur übernommen wird.'
+            : 'Keine Projekte mit Leistungsphasen-Struktur. Sobald Projekte aus einer HOAI-Honorarberechnung erzeugt werden, erscheinen sie hier — mit Kennzahlen je Leistungsphase über das gesamte Portfolio.'}
+        </p>
+      </div>
     )
   }
 
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <h3 className="timeline-title" style={{ margin: 0 }}>Leistungsphasen über alle Projekte</h3>
+        <h3 className="timeline-title" style={{ margin: 0 }}>
+          {groupId ? 'Leistungsphasen im Gesamtprojekt' : 'Leistungsphasen über alle Projekte'}
+        </h3>
         <HelpHint id="report.lph_matrix" />
+        {groupPicker}
         <div className="daten-filter-modes" style={{ marginLeft: 'auto' }}>
           {METRICS.map(m => (
             <label key={m.id} className={`daten-filter-mode-btn${metric === m.id ? ' active' : ''}`}>
@@ -124,6 +167,7 @@ export function LeistungsphasenMatrixTab() {
           ))}
         </div>
       </div>
+      {partial}
 
       {/* Heatmap: Projekte × Leistungsphase */}
       <div className="list-section table-scroll">
@@ -210,6 +254,7 @@ export function LeistungsphasenMatrixTab() {
           honorar={byPhase.map(p => p.HONORAR_NET)}
           leistung={byPhase.map(p => p.EARNED_VALUE_NET)}
           kosten={byPhase.map(p => p.COST_TOTAL)}
+          scopeLabel={scopeLabel}
         />
       )}
     </div>

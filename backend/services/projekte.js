@@ -107,9 +107,16 @@ async function createProject(supabase, { body, tenantId }) {
     throw { status: 400, message: "Firma ist erforderlich" };
   }
 
-  const { data: num, error: numErr } = await supabase.rpc("next_project_number", { p_company_id: companyId });
-  if (numErr || !num) {
-    throw { status: 500, message: `Nummernkreis konnte nicht geladen werden: ${numErr?.message || "unknown error"}` };
+  // Gesamtprojekt und ggf. abgeleitete Nummer — vor dem Nummernkreis, damit
+  // eine abgelehnte Anfrage keine Nummer verbraucht.
+  const { groupId, abbr } = await gesamtprojekte.newProjectGroupAndAbbr(supabase, { tenantId, body: b });
+  let num = abbr;
+  if (!num) {
+    const { data: next, error: numErr } = await supabase.rpc("next_project_number", { p_company_id: companyId });
+    if (numErr || !next) {
+      throw { status: 500, message: `Nummernkreis konnte nicht geladen werden: ${numErr?.message || "unknown error"}` };
+    }
+    num = next;
   }
 
   const projectInsertBase = {
@@ -123,6 +130,9 @@ async function createProject(supabase, { body, tenantId }) {
     ADDRESS_ID: parsedAddressId,
     CONTACT_ID: parsedContactId,
     TENANT_ID: tenantId ?? null,
+    // Nur mitschicken, wenn gewaehlt: im Deploy-Fenster (Web-Container vor dem
+    // postdeploy-Hook) kennt PostgREST die Spalte noch nicht.
+    ...(groupId ? { PROJECT_GROUP_ID: groupId } : {}),
   };
 
   const tryInsertProject = async (row) => {
@@ -341,6 +351,7 @@ async function createProject(supabase, { body, tenantId }) {
 }
 
 async function listProjects(supabase, { tenantId }) {
+  let rows;
   try {
     const { data, error } = await supabase
       .from("PROJECT")
@@ -352,7 +363,7 @@ async function listProjects(supabase, { tenantId }) {
       `)
       .eq("TENANT_ID", tenantId);
     if (error) throw error;
-    return data;
+    rows = data;
   } catch (_) {
     const { data, error } = await supabase
       .from("PROJECT")
@@ -360,8 +371,12 @@ async function listProjects(supabase, { tenantId }) {
       .eq("TENANT_ID", tenantId)
       .order("ABBR", { ascending: true });
     if (error) throw error;
-    return data;
+    rows = data;
   }
+  // Gesamtprojekt je Projekt — die Projektwahl (Strg+K, Zeiterfassung) zeigt
+  // es an, damit man beim Buchen den richtigen Vertrag eines Vorhabens trifft.
+  const groups = await gesamtprojekte.groupsByProjectIfMigrated(supabase, { tenantId });
+  return (rows || []).map((p) => ({ ...p, GROUP_NAME: groups.get(String(p.ID))?.NAME ?? null }));
 }
 
 async function listProjectsFull(supabase, { tenantId, limit }) {
@@ -1908,15 +1923,25 @@ async function transferFatherToChild(supabase, { fatherId, childId }) {
   return { success: true };
 }
 
-async function copyProject(supabase, { projectId, tenantId }) {
+async function copyProject(supabase, { projectId, tenantId, body = {} }) {
   const { data: src, error: srcErr } = await supabase
     .from("PROJECT").select("*").eq("ID", projectId).eq("TENANT_ID", tenantId).maybeSingle();
   if (srcErr) throw srcErr;
   if (!src) throw { status: 404, message: "Projekt nicht gefunden" };
 
+  // `project_abbr`: Folgeprojekt mit abgeleiteter Nummer (Gesamtprojekt)
+  // statt der naechsten aus dem Nummernkreis. Das Gesamtprojekt selbst kommt
+  // von der Vorlage, nicht aus der Anfrage.
+  const { abbr } = await gesamtprojekte.newProjectGroupAndAbbr(supabase, {
+    tenantId, body: { project_abbr: body?.project_abbr },
+  });
   const companyId = src.COMPANY_ID;
-  const { data: num, error: numErr } = await supabase.rpc("next_project_number", { p_company_id: companyId });
-  if (numErr || !num) throw { status: 500, message: "Nummernkreis Fehler: " + (numErr?.message || "") };
+  let num = abbr;
+  if (!num) {
+    const { data: next, error: numErr } = await supabase.rpc("next_project_number", { p_company_id: companyId });
+    if (numErr || !next) throw { status: 500, message: "Nummernkreis Fehler: " + (numErr?.message || "") };
+    num = next;
+  }
 
   // Insert new project. PROJECT_GROUP_ID geht mit: die Kopie ist meist das
   // Folgeprojekt (naechste Stufe) und gehoert ins selbe Gesamtprojekt.

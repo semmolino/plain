@@ -25,6 +25,8 @@ export interface ProjectGroupMember {
   ADDRESS_ID:        number | null
   COMPANY_ID:        number | null
   IS_INTERNAL:       boolean
+  /** Rechnungsempfänger aus dem Vertrag — nur mit `projects.contracts.view` vorhanden. */
+  INVOICE_ADDRESS_NAME?: string | null
 }
 
 export interface ProjectGroupDetail extends ProjectGroup {
@@ -69,8 +71,12 @@ export const setProjectGroupMembers = (id: number, projectIds: number[]) =>
     `/projekte/gruppen/${id}/projekte`, { project_ids: projectIds },
   )
 
+/** Nächste abgeleitete Projektnummer ({Kürzel}-{NN}); null ohne Kürzel. */
+export const fetchGroupAbbrSuggestion = (id: number) =>
+  apiClient.get<{ data: { abbr: string | null } }>(`/projekte/gruppen/${id}/nummer`)
+
 /** Alles, was nach einer Änderung an Gesamtprojekten neu geladen werden muss. */
 export const PROJECT_GROUP_QUERY_KEYS = [
   ['project-groups'], ['project-group'], ['report-group'],
-  ['projects-full'], ['projects-short'], ['project-list'],
+  ['projects-full'], ['projects-short'], ['project-list'], ['project-group-number'],
 ] as const

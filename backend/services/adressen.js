@@ -12,6 +12,7 @@
 /** Verknuepfte Belege je Recht — was man nicht sehen darf, kommt nicht mit. */
 const LINK_PERMISSIONS = {
   projects:   "projects.view",
+  groups:     "projects.view",
   offers:     "offers.view",
   contracts:  "projects.contracts.view",
   invoices:   "invoices.view",
@@ -51,7 +52,56 @@ async function addressLinks(supabase, { tenantId, addressId, can }) {
     soft(q("nachtraege", () => supabase.from("NACHTRAG").select("ID, ABBR, NAME, PROJECT_ID")
       .eq("TENANT_ID", tenantId).eq("ADDRESS_ID", addressId).order("ABBR", { ascending: true }))),
   ]);
-  return { projects, offers, contracts, invoices, partials, nachtraege };
+  const { groups, groupOfProject } = can(LINK_PERMISSIONS.groups)
+    ? await groupsForAddress(supabase, { tenantId, addressId, projectIds: projects.map((p) => p.ID) })
+    : { groups: [], groupOfProject: new Map() };
+  return {
+    projects: projects.map((p) => ({ ...p, GROUP_NAME: groupOfProject.get(String(p.ID)) ?? null })),
+    groups, offers, contracts, invoices, partials, nachtraege,
+  };
+}
+
+/**
+ * Gesamtprojekte zu einer Adresse: die, deren Auftraggeber sie ist, und die,
+ * zu denen ihre Projekte gehoeren — beim Stufenvertrag steht der Bauherr oft
+ * nur an den Projekten. Dazu je Projekt der Name seines Gesamtprojekts.
+ *
+ * Im Deploy-Fenster (Migration 0181 noch nicht eingespielt) leer statt
+ * Fehler — die Adressseite soll daran nicht scheitern. Jeder andere Fehler
+ * bleibt ein Fehler.
+ */
+async function groupsForAddress(supabase, { tenantId, addressId, projectIds }) {
+  const hard = async (p) => {
+    const r = await p;
+    if (r.error) throw r.error;
+    return r.data || [];
+  };
+  try {
+    const [own, links] = await Promise.all([
+      hard(supabase.from("PROJECT_GROUP").select("ID, ABBR, NAME")
+        .eq("TENANT_ID", tenantId).eq("ADDRESS_ID", addressId)),
+      projectIds.length
+        ? hard(supabase.from("PROJECT").select("ID, PROJECT_GROUP_ID")
+          .eq("TENANT_ID", tenantId).in("ID", projectIds).not("PROJECT_GROUP_ID", "is", null))
+        : Promise.resolve([]),
+    ]);
+    const byId = new Map(own.map((g) => [String(g.ID), g]));
+    const missing = [...new Set(links.map((l) => l.PROJECT_GROUP_ID))].filter((id) => !byId.has(String(id)));
+    if (missing.length) {
+      for (const g of await hard(supabase.from("PROJECT_GROUP").select("ID, ABBR, NAME")
+        .eq("TENANT_ID", tenantId).in("ID", missing))) byId.set(String(g.ID), g);
+    }
+    const groupOfProject = new Map();
+    for (const l of links) {
+      const g = byId.get(String(l.PROJECT_GROUP_ID));
+      if (g) groupOfProject.set(String(l.ID), g.NAME);
+    }
+    const groups = [...byId.values()].sort((a, b) => String(a.NAME).localeCompare(String(b.NAME), "de"));
+    return { groups, groupOfProject };
+  } catch (e) {
+    if (/PROJECT_GROUP/.test(String(e?.message || ""))) return { groups: [], groupOfProject: new Map() };
+    throw e;
+  }
 }
 
 /**

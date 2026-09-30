@@ -423,7 +423,7 @@ async function copyProject(req, res, supabase) {
   try {
     const id = Number(req.params.id);
     if (!id) return res.status(400).json({ error: 'ID fehlt' });
-    const result = await svc.copyProject(supabase, { projectId: id, tenantId: req.tenantId });
+    const result = await svc.copyProject(supabase, { projectId: id, tenantId: req.tenantId, body: req.body });
     res.json({ data: result });
   } catch (err) {
     const status = err.status || 500;

@@ -43,6 +43,7 @@ module.exports = (supabase) => {
   router.get("/gruppen",                               (req, res) => groups.listGroups(req, res, supabase));
   router.post("/gruppen",                              requirePermission("projects.edit"), (req, res) => groups.createGroup(req, res, supabase));
   router.get("/gruppen/:id",                           (req, res) => groups.getGroup(req, res, supabase));
+  router.get("/gruppen/:id/nummer",                    (req, res) => groups.suggestAbbr(req, res, supabase));
   router.patch("/gruppen/:id",                         requirePermission("projects.edit"), (req, res) => groups.patchGroup(req, res, supabase));
   router.delete("/gruppen/:id",                        requirePermission("projects.edit"), (req, res) => groups.deleteGroup(req, res, supabase));
   router.put("/gruppen/:id/projekte",                  requirePermission("projects.edit"), (req, res) => groups.setMembers(req, res, supabase));

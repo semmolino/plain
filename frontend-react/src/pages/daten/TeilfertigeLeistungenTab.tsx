@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, FileText, Lock, SlidersHorizontal, Table2, Trash2 } from 'lucide-react'
+import { AlertTriangle, FileText, Layers, Lock, SlidersHorizontal, Table2, Trash2 } from 'lucide-react'
+import { fetchProjectListFull } from '@/api/projekte'
 import { ListLoading } from '@/components/ui/Skeleton'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { FilterChip } from '@/components/ui/FilterChip'
@@ -210,10 +211,10 @@ function SortTh({ label, field, current, dir, onSort, numeric, help }: {
 
 // ── Hauptkomponente ───────────────────────────────────────────────────────────
 
-type FilterDimension = 'status' | 'manager' | 'typ' | 'abteilung'
+type FilterDimension = 'status' | 'manager' | 'typ' | 'abteilung' | 'gesamtprojekt'
 type ActiveFilters = Record<FilterDimension, Set<string>>
 const emptyFilters = (): ActiveFilters =>
-  ({ status: new Set(), manager: new Set(), typ: new Set(), abteilung: new Set() })
+  ({ status: new Set(), manager: new Set(), typ: new Set(), abteilung: new Set(), gesamtprojekt: new Set() })
 
 export function TeilfertigeLeistungenTab() {
   const qc = useQueryClient()
@@ -294,7 +295,20 @@ export function TeilfertigeLeistungenTab() {
   const effectiveMethod: WipMethod = method || report?.method || 'hk'
   const methodLabel = effectiveMethod === 'erloes' ? 'Leistungswert (Controlling)' : 'Herstellkosten (HGB)'
 
-  const allRows = report?.rows ?? []
+  const allRows = useMemo(() => report?.rows ?? [], [report])
+
+  // Gesamtprojekt je Projekt — aus der geteilten Projektliste (ohne
+  // projects.view leer, dann entfallen Filter und Gruppierung).
+  const { data: projectsFull } = useQuery({
+    queryKey: ['projects-full'], queryFn: fetchProjectListFull, retry: false, staleTime: 60_000,
+  })
+  const groupOfProject = useMemo(() => {
+    const m = new Map<number, { id: number; name: string }>()
+    for (const p of projectsFull?.data ?? []) {
+      if (p.PROJECT_GROUP_ID != null && p.GROUP_NAME) m.set(p.ID, { id: p.PROJECT_GROUP_ID, name: p.GROUP_NAME })
+    }
+    return m
+  }, [projectsFull])
 
   const filterOptions: Record<FilterDimension, string[]> = useMemo(() => {
     const uniq = (fn: (r: WipRow) => string | null | undefined) =>
@@ -304,8 +318,9 @@ export function TeilfertigeLeistungenTab() {
       manager:   uniq(r => r.PROJECT_MANAGER_DISPLAY),
       typ:       uniq(r => r.PROJECT_TYPE_NAME_SHORT),
       abteilung: uniq(r => r.DEPARTMENT_NAME),
+      gesamtprojekt: uniq(r => groupOfProject.get(r.PROJECT_ID)?.name),
     }
-  }, [allRows])
+  }, [allRows, groupOfProject])
 
   const filtered = useMemo(() => {
     let rows = allRows
@@ -315,7 +330,8 @@ export function TeilfertigeLeistungenTab() {
         (r.ABBR ?? '').toLowerCase().includes(q) ||
         (r.NAME  ?? '').toLowerCase().includes(q) ||
         (r.PROJECT_MANAGER_DISPLAY ?? '').toLowerCase().includes(q) ||
-        (r.ADDRESS_NAME ?? '').toLowerCase().includes(q)
+        (r.ADDRESS_NAME ?? '').toLowerCase().includes(q) ||
+        (groupOfProject.get(r.PROJECT_ID)?.name ?? '').toLowerCase().includes(q)
       )
     }
     const dimMap: [FilterDimension, (r: WipRow) => string | null | undefined][] = [
@@ -323,6 +339,7 @@ export function TeilfertigeLeistungenTab() {
       ['manager',   r => r.PROJECT_MANAGER_DISPLAY],
       ['typ',       r => r.PROJECT_TYPE_NAME_SHORT],
       ['abteilung', r => r.DEPARTMENT_NAME],
+      ['gesamtprojekt', r => groupOfProject.get(r.PROJECT_ID)?.name],
     ]
     for (const [dim, getter] of dimMap) {
       if (activeFilters[dim].size === 0) continue
@@ -332,7 +349,7 @@ export function TeilfertigeLeistungenTab() {
       })
     }
     return rows
-  }, [allRows, search, activeFilters])
+  }, [allRows, search, activeFilters, groupOfProject])
 
   // Spalten, deren Grundlage nicht gepflegt ist, werden gar nicht erst gezeigt:
   // eine leere Spalte erklaert sich nicht von selbst.
@@ -372,6 +389,53 @@ export function TeilfertigeLeistungenTab() {
   const activeFilterCount = Object.values(activeFilters).reduce((n, s) => n + s.size, 0)
   const isFiltered = activeFilterCount > 0 || search.trim() !== ''
 
+  // „Nach Gesamtprojekt zusammenfassen": Zwischensummen über dieselben
+  // Spaltensummen wie die Gesamtzeile. Jede Spalte summiert für sich —
+  // Teilfertige Leistungen und erhaltene Anzahlungen bleiben also auch im
+  // Gesamtprojekt getrennt; saldiert wird nicht (§ 246 Abs. 2 HGB), die
+  // Bewertungseinheit bleibt der einzelne Vertrag.
+  const hasGroups = filterOptions.gesamtprojekt.length > 0
+  const [groupBy, setGroupBy] = useStickyState<boolean>('report.tfl.groupBy', false)
+  const sections = useMemo(() => {
+    if (!groupBy || !hasGroups) return null
+    const byGroup = new Map<number, { id: number | null; name: string; rows: WipRow[] }>()
+    const ohne: WipRow[] = []
+    for (const r of sorted) {
+      const g = groupOfProject.get(r.PROJECT_ID)
+      if (!g) { ohne.push(r); continue }
+      const s = byGroup.get(g.id) ?? { id: g.id, name: g.name, rows: [] }
+      s.rows.push(r)
+      byGroup.set(g.id, s)
+    }
+    const list = [...byGroup.values()].sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }))
+    if (ohne.length) list.push({ id: null, name: 'Ohne Gesamtprojekt', rows: ohne })
+    return list
+  }, [groupBy, hasGroups, sorted, groupOfProject])
+
+  const projectRow = (r: WipRow, inGroup = false) => (
+    <tr key={r.PROJECT_ID} className={inGroup ? 'pg-member-row' : undefined}>
+      <td>
+        <strong>{r.ABBR}</strong>
+        {r.NAME && <span className="tree-name-long"> – {r.NAME}</span>}
+        {(r.flags ?? []).length > 0 && (
+          <span className="tfl-flags">
+            {r.flags.map(f => (
+              <span key={f} className="tfl-flag" title={FLAG_LABEL[f] ?? f}>
+                <AlertTriangle size={11} strokeWidth={2} />
+                {FLAG_LABEL[f] ?? f}
+              </span>
+            ))}
+          </span>
+        )}
+      </td>
+      {visibleCols.map(c => (
+        <td key={c.key} className={c.numeric ? 'num' : undefined}>
+          {c.render(r, effectiveMethod)}
+        </td>
+      ))}
+    </tr>
+  )
+
   function toggleSort(f: SortField) {
     if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortField(f); setSortDir('asc') }
@@ -386,7 +450,7 @@ export function TeilfertigeLeistungenTab() {
 
   function exportCsv() {
     const headers = [
-      'Projekt-Nr', 'Projekt', 'Status', 'Projektleiter',
+      'Projekt-Nr', 'Projekt', 'Gesamtprojekt', 'Status', 'Projektleiter',
       'Auftragswert', 'Leistungswert', 'Leistungsstand %', 'Abgerechnet',
       'Unfertig', 'Kosten', 'Kosten unfertig',
       'Teilfertig (HGB)', 'Teilfertig (Leistungswert)', 'Teilfertig (Steuerbilanz)',
@@ -395,7 +459,7 @@ export function TeilfertigeLeistungenTab() {
       'Stunden', 'Snapshot', 'Hinweise',
     ]
     const rows = sorted.map(r => [
-      r.ABBR, r.NAME, r.PROJECT_STATUS_NAME_SHORT, r.PROJECT_MANAGER_DISPLAY,
+      r.ABBR, r.NAME, groupOfProject.get(r.PROJECT_ID)?.name ?? '', r.PROJECT_STATUS_NAME_SHORT, r.PROJECT_MANAGER_DISPLAY,
       csvNum(r.ORDER_VALUE_NET), csvNum(r.PERFORMANCE_NET), csvNum(r.PERFORMANCE_PERCENT), csvNum(r.BILLED_NET),
       csvNum(r.UNBILLED_NET), csvNum(r.COST_NET), csvNum(r.COST_UNBILLED_NET),
       csvNum(r.WIP_HK_NET), csvNum(r.WIP_REVENUE_NET), csvNum(r.WIP_TAX_NET),
@@ -565,7 +629,18 @@ export function TeilfertigeLeistungenTab() {
               <FilterChip label="Projektleiter" options={filterOptions.manager}   active={activeFilters.manager}   onChange={v => setActiveFilters(p => ({ ...p, manager: v }))} />
               <FilterChip label="Typ"           options={filterOptions.typ}       active={activeFilters.typ}       onChange={v => setActiveFilters(p => ({ ...p, typ: v }))} />
               <FilterChip label="Abteilung"     options={filterOptions.abteilung} active={activeFilters.abteilung} onChange={v => setActiveFilters(p => ({ ...p, abteilung: v }))} />
+              {hasGroups && (
+                <FilterChip label="Gesamtprojekt" options={filterOptions.gesamtprojekt} active={activeFilters.gesamtprojekt} onChange={v => setActiveFilters(p => ({ ...p, gesamtprojekt: v }))} />
+              )}
             </FilterBar>
+
+            {hasGroups && (
+              <label className="pg-group-toggle">
+                <input type="checkbox" checked={groupBy} onChange={e => setGroupBy(e.target.checked)} />
+                Nach Gesamtprojekt zusammenfassen
+                <HelpHint id="report.tfl.gesamtprojekt" size={12} />
+              </label>
+            )}
 
             <div ref={colPanelRef} className="pl-col-wrap">
               <button type="button" className="pl-col-btn" onClick={() => setColPanelOpen(o => !o)}
@@ -634,31 +709,26 @@ export function TeilfertigeLeistungenTab() {
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {sorted.map(r => (
-                    <tr key={r.PROJECT_ID}>
-                      <td>
-                        <strong>{r.ABBR}</strong>
-                        {r.NAME && <span className="tree-name-long"> – {r.NAME}</span>}
-                        {(r.flags ?? []).length > 0 && (
-                          <span className="tfl-flags">
-                            {r.flags.map(f => (
-                              <span key={f} className="tfl-flag" title={FLAG_LABEL[f] ?? f}>
-                                <AlertTriangle size={11} strokeWidth={2} />
-                                {FLAG_LABEL[f] ?? f}
-                              </span>
-                            ))}
-                          </span>
-                        )}
-                      </td>
+                {sections ? sections.map(s => (
+                  <tbody key={s.id ?? 'ohne'}>
+                    <tr className="pg-group-row">
+                      <th scope="rowgroup">
+                        {s.id != null && <Layers size={13} strokeWidth={2} aria-hidden="true" style={{ marginRight: 4, verticalAlign: -2 }} />}
+                        {s.name}<span className="pg-group-count"> ({s.rows.length})</span>
+                      </th>
                       {visibleCols.map(c => (
                         <td key={c.key} className={c.numeric ? 'num' : undefined}>
-                          {c.render(r, effectiveMethod)}
+                          {c.total ? c.total(s.rows, effectiveMethod) : ''}
                         </td>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
+                    {s.rows.map(r => projectRow(r, true))}
+                  </tbody>
+                )) : (
+                  <tbody>
+                    {sorted.map(r => projectRow(r))}
+                  </tbody>
+                )}
                 {sorted.length > 1 && (
                   <tfoot>
                     <tr className="sum-row">

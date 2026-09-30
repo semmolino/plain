@@ -131,8 +131,38 @@ async function listGroups(supabase, { tenantId }) {
   return decorate(supabase, { tenantId, groups });
 }
 
-/** Ein Gesamtprojekt samt seiner Projekte (ohne Betraege — die kommen aus dem Report). */
-async function getGroup(supabase, { tenantId, id }) {
+/**
+ * Rechnungsempfaenger je Projekt — er steht im Vertrag, nicht am Projekt.
+ * Gerade er unterscheidet oft die Vertraege eines Vorhabens (Bauherr und
+ * Nutzer, zwei Aemter). Map<projectId(String), Name>.
+ */
+async function invoiceAddressByProject(supabase, { tenantId, projectIds }) {
+  if (!projectIds.length) return new Map();
+  const { data: contracts, error } = await supabase.from("CONTRACT")
+    .select("PROJECT_ID, INVOICE_ADDRESS_ID").eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds);
+  if (error) throw error;
+  const addrIds = [...new Set((contracts || []).map((c) => c.INVOICE_ADDRESS_ID).filter(Boolean))];
+  let names = new Map();
+  if (addrIds.length) {
+    const { data: addrs, error: aErr } = await supabase.from("ADDRESS")
+      .select("ID, ADDRESS_NAME_1").eq("TENANT_ID", tenantId).in("ID", addrIds);
+    if (aErr) throw aErr;
+    names = new Map((addrs || []).map((a) => [String(a.ID), a.ADDRESS_NAME_1 || ""]));
+  }
+  const out = new Map();
+  for (const c of contracts || []) {
+    if (c.INVOICE_ADDRESS_ID && !out.has(String(c.PROJECT_ID))) {
+      out.set(String(c.PROJECT_ID), names.get(String(c.INVOICE_ADDRESS_ID)) || "");
+    }
+  }
+  return out;
+}
+
+/**
+ * Ein Gesamtprojekt samt seiner Projekte (ohne Betraege — die kommen aus dem
+ * Report). `withInvoiceAddress` nur mit Recht auf Vertraege.
+ */
+async function getGroup(supabase, { tenantId, id, withInvoiceAddress = false }) {
   const own = await assertOwnGroup(supabase, { tenantId, groupId: id, status: 404 });
   const [gRes, pRes] = await Promise.all([
     supabase.from("PROJECT_GROUP").select(GROUP_COLS).eq("ID", own.ID).eq("TENANT_ID", tenantId).maybeSingle(),
@@ -142,7 +172,11 @@ async function getGroup(supabase, { tenantId, id }) {
   ]);
   if (gRes.error) throw gRes.error;
   if (pRes.error) throw pRes.error;
-  const projects = pRes.data || [];
+  let projects = pRes.data || [];
+  if (withInvoiceAddress) {
+    const inv = await invoiceAddressByProject(supabase, { tenantId, projectIds: projects.map((p) => p.ID) });
+    projects = projects.map((p) => ({ ...p, INVOICE_ADDRESS_NAME: inv.get(String(p.ID)) ?? null }));
+  }
   const [group] = await decorate(supabase, { tenantId, groups: [gRes.data] });
   return {
     ...group,
@@ -276,6 +310,70 @@ async function groupsByProject(supabase, { tenantId, projectIds = null }) {
   return out;
 }
 
+// ── Neue Projekte in einem Gesamtprojekt ─────────────────────────────────────
+
+/**
+ * Naechste abgeleitete Nummer: `{Kuerzel}-{NN}`, zweistellig, erste freie
+ * nach der hoechsten schon vergebenen. Traegt ein Projekt das Kuerzel selbst
+ * (typisch: das erste Projekt „2026-014", nach dem das Gesamtprojekt benannt
+ * ist), zaehlt es als 01 und der Vorschlag beginnt bei 02. Ohne Kuerzel kein
+ * Vorschlag — dann bleibt nur der Nummernkreis.
+ */
+async function suggestMemberAbbr(supabase, { tenantId, groupId }) {
+  const own = await assertOwnGroup(supabase, { tenantId, groupId, status: 404 });
+  const { data: g, error: gErr } = await supabase.from("PROJECT_GROUP")
+    .select("ABBR").eq("ID", own.ID).eq("TENANT_ID", tenantId).maybeSingle();
+  if (gErr) throw gErr;
+  const base = String(g?.ABBR || "").trim();
+  if (!base) return null;
+
+  const { data: rows, error } = await supabase.from("PROJECT").select("ABBR").eq("TENANT_ID", tenantId);
+  if (error) throw error;
+  const taken = new Set((rows || []).map((r) => String(r.ABBR || "").trim()));
+  const esc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`^${esc}-(\\d+)$`);
+  let max = taken.has(base) ? 1 : 0;
+  for (const a of taken) {
+    const m = re.exec(a);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  for (let n = max + 1; n < max + 1000; n++) {
+    const candidate = `${base}-${String(n).padStart(2, "0")}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Gesamtprojekt und Projektnummer fuer ein NEUES Projekt — an einer Stelle,
+ * weil drei Wege Projekte anlegen (Neuanlage, Beauftragen, Kopieren).
+ *
+ *   project_group_id  optional, muss dem Mandanten gehoeren (400 sonst)
+ *   project_abbr      optional; gesetzt heisst: diese Nummer statt der
+ *                     naechsten aus dem Nummernkreis (etwa die abgeleitete).
+ *                     Belegt → 409, statt eine zweite gleiche Nummer anzulegen.
+ *
+ * Rueckgabe { groupId, abbr } — abbr = null heisst „aus dem Nummernkreis
+ * ziehen"; das tut der Aufrufer, weil nur er die Firma kennt.
+ */
+async function newProjectGroupAndAbbr(supabase, { tenantId, body }) {
+  const b = body || {};
+  let groupId = null;
+  if (b.project_group_id !== undefined && b.project_group_id !== null && b.project_group_id !== "") {
+    groupId = (await assertOwnGroup(supabase, { tenantId, groupId: b.project_group_id })).ID;
+  }
+  let abbr = null;
+  if (b.project_abbr !== undefined && b.project_abbr !== null && String(b.project_abbr).trim()) {
+    abbr = String(b.project_abbr).trim();
+    if (abbr.length > 80) throw { status: 400, message: "Die Projektnummer darf höchstens 80 Zeichen lang sein." };
+    const { data: dup, error } = await supabase.from("PROJECT").select("ID")
+      .eq("TENANT_ID", tenantId).eq("ABBR", abbr).limit(1);
+    if (error) throw error;
+    if ((dup || []).length) throw { status: 409, message: `Die Projektnummer ${abbr} ist schon vergeben.` };
+  }
+  return { groupId, abbr };
+}
+
 /**
  * Wie groupsByProject, aber fuer Listen, die auch ohne Gesamtprojekte
  * funktionieren muessen: der Web-Container startet VOR dem postdeploy-Hook,
@@ -339,5 +437,7 @@ module.exports = {
   setMembers,
   groupsByProject,
   groupsByProjectIfMigrated,
+  suggestMemberAbbr,
+  newProjectGroupAndAbbr,
   aggregateKpis,
 };

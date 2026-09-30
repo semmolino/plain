@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, Layers, Trash2, Users } from 'lucide-react'
+import { ChevronRight, CopyPlus, Layers, Plus, Trash2, Users } from 'lucide-react'
+import { Modal } from '@/components/ui/Modal'
+import { ProjekteAnlegen } from '@/pages/projekte/ProjekteAnlegen'
+import { FolgeprojektDialog } from './FolgeprojektDialog'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Tabs } from '@/components/ui/Tabs'
 import { RowMenu } from '@/components/ui/RowMenu'
@@ -33,6 +36,9 @@ import {
   type ProjectGroupDetail,
 } from '@/api/gesamtprojekte'
 import { ProjectsTimeline } from '@/pages/daten/ProjektlisteTab'
+import { LeistungsphasenMatrixTab } from '@/pages/daten/LeistungsphasenMatrixTab'
+import { useFilterTabs } from '@/store/permissionsStore'
+import { useLicenseFilterTabs } from '@/store/licenseStore'
 import type { GroupTab } from '@/pages/projekte/projektUrlState'
 import { ProjekteZuordnenDialog } from './ProjekteZuordnenDialog'
 import { NOW_FILTER, useInvalidateGroups } from './gesamtprojektUi'
@@ -40,14 +46,17 @@ import { NOW_FILTER, useInvalidateGroups } from './gesamtprojektUi'
 const FMT_PCT = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 1 })
 const fmtPct  = (v: number | null | undefined) => v == null ? NO_VALUE : `${FMT_PCT.format(v)} %`
 
-const TABS: { id: GroupTab; label: string }[] = [
-  { id: 'uebersicht', label: 'Übersicht' },
-  { id: 'daten',      label: 'Daten' },
+// Leistungsphasen wie im Reporting: Recht reports.view, Tarif reports.advanced.
+const TABS: { id: GroupTab; label: string; permissions?: string[]; feature?: string }[] = [
+  { id: 'uebersicht',      label: 'Übersicht' },
+  { id: 'leistungsphasen', label: 'Leistungsphasen', permissions: ['reports.view'], feature: 'reports.advanced' },
+  { id: 'daten',           label: 'Daten' },
 ]
 
 /**
  * Ein Gesamtprojekt: Kopf mit den Summen, Reiter „Übersicht" (Projekte,
- * Summenzeile, Verlauf) und „Daten" (Name, Kürzel, Auftraggeber, Notizen).
+ * Summenzeile, Verlauf), „Leistungsphasen" (Matrix über seine Projekte) und
+ * „Daten" (Name, Kürzel, Auftraggeber, Notizen).
  *
  * Kennzahlen kommen aus `/reports/groups/:id/summary` und brauchen
  * `reports.view`. Ohne das Recht entfällt die Leiste, statt Nullen zu zeigen
@@ -61,6 +70,9 @@ export function GesamtprojektAnsicht({ groupId, tab, onTab, onBack, onOpenProjec
   onOpenProject: (id: number) => void
 }) {
   const canReports = usePermission('reports.view')
+  const tabs = useLicenseFilterTabs(useFilterTabs(TABS))
+  // Ein Reiter, der nicht erlaubt ist (Link von jemand anderem), zeigt die Übersicht.
+  const activeTab: GroupTab = tabs.some(t => t.id === tab) ? tab : 'uebersicht'
   const { data, isLoading, error } = useQuery({
     queryKey: ['project-group', groupId],
     queryFn:  () => fetchProjectGroup(groupId),
@@ -92,12 +104,13 @@ export function GesamtprojektAnsicht({ groupId, tab, onTab, onBack, onOpenProjec
   return (
     <div className="master-page pw-root">
       <GesamtprojektKopf group={group} totals={summary?.totals} meta={meta} onBack={onBack} />
-      <Tabs tabs={TABS} active={tab} onChange={id => onTab(id as GroupTab)} />
+      <Tabs tabs={tabs} active={activeTab} onChange={id => onTab(id as GroupTab)} />
       <div className="master-tab-content">
-        {tab === 'uebersicht' && (
+        {activeTab === 'uebersicht' && (
           <Uebersicht group={group} reportRows={summary?.members} totals={summary?.totals} onOpenProject={onOpenProject} />
         )}
-        {tab === 'daten' && <GesamtprojektDaten key={group.ID} group={group} />}
+        {activeTab === 'leistungsphasen' && <LeistungsphasenMatrixTab fixedGroupId={group.ID} />}
+        {activeTab === 'daten' && <GesamtprojektDaten key={group.ID} group={group} />}
       </div>
     </div>
   )
@@ -231,6 +244,18 @@ function Uebersicht({ group, reportRows, totals, onOpenProject }: {
   const showMoney = canReports && !!reportRows
   const visibleIds = useMemo(() => (reportRows ?? []).map(r => r.PROJECT_ID).sort((a, b) => a - b), [reportRows])
 
+  // Rechnungsempfänger (aus dem Vertrag) — liefert der Server nur mit
+  // projects.contracts.view; sonst bleibt die Spalte beim Auftraggeber.
+  const invoiceTo = useMemo(() => {
+    const m = new Map<number, string>()
+    for (const p of group.PROJECTS ?? []) if (p.INVOICE_ADDRESS_NAME !== undefined) m.set(p.ID, p.INVOICE_ADDRESS_NAME ?? '')
+    return m
+  }, [group.PROJECTS])
+  const showInvoiceTo = invoiceTo.size > 0
+  const canCreate = usePermission('projects.create')
+  const [creating, setCreating] = useState(false)
+  const [folgeVon, setFolgeVon] = useState<Project | null>(null)
+
   const cell = (r: ProjectListRow | undefined, render: (r: ProjectListRow) => React.ReactNode, cls = 'num') =>
     <td className={cls}>{r ? render(r) : <span className="pg-muted" title="Außerhalb deines Reporting-Bereichs">—</span>}</td>
 
@@ -238,11 +263,18 @@ function Uebersicht({ group, reportRows, totals, onOpenProject }: {
     <div className="pg-overview">
       <div className="list-toolbar">
         <h2 className="pg-section-title">Projekte</h2>
-        <Can permission="projects.edit">
-          <button type="button" className="btn-secondary btn-small pl-toolbar-actions pg-icon-btn" onClick={() => setAssigning(true)}>
-            <Users size={13} strokeWidth={2} aria-hidden="true" />Projekte zuordnen
-          </button>
-        </Can>
+        <div className="pl-toolbar-actions pg-toolbar-btns">
+          <Can permission="projects.create">
+            <button type="button" className="btn-secondary btn-small pg-icon-btn" onClick={() => setCreating(true)}>
+              <Plus size={13} strokeWidth={2} aria-hidden="true" />Neues Projekt
+            </button>
+          </Can>
+          <Can permission="projects.edit">
+            <button type="button" className="btn-secondary btn-small pg-icon-btn" onClick={() => setAssigning(true)}>
+              <Users size={13} strokeWidth={2} aria-hidden="true" />Projekte zuordnen
+            </button>
+          </Can>
+        </div>
       </div>
 
       {/* Solange die Projektliste lädt, ist „keine Projekte" nicht wahr —
@@ -301,13 +333,14 @@ function Uebersicht({ group, reportRows, totals, onOpenProject }: {
                 <th scope="col">Kürzel</th>
                 <th scope="col">Name</th>
                 <th scope="col" className="pg-col-wide">Status</th>
-                <th scope="col" className="pg-col-wide">Auftraggeber</th>
+                <th scope="col" className="pg-col-wide">{showInvoiceTo ? 'Rechnungsempfänger' : 'Auftraggeber'}</th>
                 {showMoney && <>
                   <th scope="col" className="num">Honorar</th>
                   <th scope="col" className="num">Lst. %</th>
                   <th scope="col" className="num pg-col-wide">Abgerechnet</th>
                   <th scope="col" className="num pg-col-wide">Abrechenbar <HelpHint id="report.abrechenbar" align="right" size={12} /></th>
                 </>}
+                {canCreate && <th scope="col" className="doc-actions"><span className="sr-only">Aktionen</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -320,13 +353,24 @@ function Uebersicht({ group, reportRows, totals, onOpenProject }: {
                     </td>
                     <td><span className="cell-clamp" title={p.NAME}>{p.NAME}</span></td>
                     <td className="pg-col-wide">{p.STATUS_NAME || '—'}</td>
-                    <td className="pg-col-wide"><span className="cell-clamp" title={p.ADDRESS_NAME}>{p.ADDRESS_NAME || '—'}</span></td>
+                    {(() => {
+                      const to = showInvoiceTo ? (invoiceTo.get(p.ID) || '') : p.ADDRESS_NAME
+                      return <td className="pg-col-wide"><span className="cell-clamp" title={to}>{to || '—'}</span></td>
+                    })()}
                     {showMoney && <>
                       {cell(r, x => money(x.BUDGET_TOTAL_NET))}
                       {cell(r, x => fmtPct(x.LEISTUNGSSTAND_PERCENT))}
                       {cell(r, x => money(x.BILLED_NET_TOTAL), 'num pg-col-wide')}
                       {cell(r, x => moneyOr(x.OPEN_NET_TOTAL, 'var(--accent)'), 'num pg-col-wide')}
                     </>}
+                    {canCreate && (
+                      <td className="doc-actions">
+                        <button type="button" className="row-action-btn" onClick={() => setFolgeVon(p)}
+                          title="Folgeprojekt anlegen (Kopie)" aria-label={`Folgeprojekt aus ${p.ABBR} anlegen`}>
+                          <CopyPlus size={14} strokeWidth={2} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
@@ -341,6 +385,7 @@ function Uebersicht({ group, reportRows, totals, onOpenProject }: {
                   <td className="num"><strong>{fmtPct(totals.LEISTUNGSSTAND_PERCENT)}</strong></td>
                   <td className="num pg-col-wide"><strong>{money(totals.BILLED_NET_TOTAL)}</strong></td>
                   <td className="num pg-col-wide"><strong>{moneyOr(totals.OPEN_NET_TOTAL, 'var(--accent)')}</strong></td>
+                  {canCreate && <td className="doc-actions" />}
                 </tr>
               </tfoot>
             )}
@@ -353,6 +398,12 @@ function Uebersicht({ group, reportRows, totals, onOpenProject }: {
       )}
 
       <ProjekteZuordnenDialog group={group} open={assigning} onClose={() => setAssigning(false)} />
+      <FolgeprojektDialog source={folgeVon} groupId={group.ID} onClose={() => setFolgeVon(null)}
+        onCreated={id => { setFolgeVon(null); onOpenProject(id) }} />
+      <Modal open={creating} onClose={() => setCreating(false)} title={`Neues Projekt in „${group.NAME}"`} className="modal-wide">
+        <ProjekteAnlegen presetGroupId={group.ID}
+          onProjectCreated={id => { setCreating(false); onOpenProject(id) }} />
+      </Modal>
     </div>
   )
 }

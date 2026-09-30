@@ -1,6 +1,7 @@
 # Gesamtprojekte — mehrere Projekte als eine Einheit
 
-Stand 2026-09-30. Stufe 1 ist umgesetzt (Migration `0181`), Stufe 2 und 3 sind hier beschrieben.
+Stand 2026-09-30. Stufe 1 und Stufe 2 sind umgesetzt (Migration `0181`), Stufe 3 ist hier beschrieben.
+Offen aus Stufe 2 ist nur der optionale Teil „Angebot merkt sich das Gesamtprojekt" (Auftragsbestand).
 
 ## 1. Anforderung
 
@@ -83,21 +84,24 @@ PROJECT.PROJECT_GROUP_ID → PROJECT_GROUP ON DELETE SET NULL
 | Reporting → **Alle Projekte** | Filter „Gesamtprojekt". Mit „Nach Gesamtprojekt zusammenfassen" bekommt jedes Gesamtprojekt eine Kopfzeile mit Zwischensumme, danach folgt „Ohne Gesamtprojekt". |
 | **Hilfe** | `projects.gesamtprojekt`, `report.gesamtprojekt` (`helpContent.tsx`). |
 
-Die Übersicht zeigt je Projekt den **Auftraggeber**, nicht den Rechnungsempfänger. Der steht im Vertrag des Projekts, und eine Spalte dafür bräuchte je Projekt eine Vertragsabfrage. Sie ist für Stufe 2 vorgemerkt.
+In Stufe 1 zeigte die Übersicht je Projekt den Auftraggeber. Seit Stufe 2 steht dort der **Rechnungsempfänger** aus dem Vertrag, sofern der Nutzer Verträge sehen darf (siehe Abschnitt 8); sonst bleibt es beim Auftraggeber.
 
 Nebenbei geschlossen: `GET /reports/projects/timeline` beachtete den Reporting-Scope nicht. Ohne `project_ids` lieferte er den Verlauf des ganzen Mandanten, mit `project_ids` den beliebiger Projekte. Der Verlauf des Gesamtprojekts benutzt genau diesen Endpunkt, deshalb schneidet er jetzt mit dem Scope.
 
-## 8. Stufe 2
+## 8. Stufe 2 (umgesetzt)
 
-- **Beauftragen in ein Gesamtprojekt.** `convertOfferToProject` bekommt `project_group_id`, und `BeauftragtDialog` fragt „zu Gesamtprojekt hinzufügen". Das ist der Normalfall beim Stufenvertrag. Optional merkt sich schon das Angebot das Ziel (`OFFER.PROJECT_GROUP_ID`), dann zeigt das Gesamtprojekt offene Angebote als Auftragsbestand.
-- **„Folgeprojekt anlegen"** im Gesamtprojekt: auf Basis von `copyProject` oder leer mit Auftraggeber, Leitung und Team.
-- **Nummern ableiten.** Beim Anlegen in einem Gesamtprojekt wird `{Kürzel}-{NN}` vorgeschlagen und bleibt änderbar. Die Projektnummer ist in den Projektdaten ohnehin editierbar, und der Nummernkreis bleibt unberührt.
-- **Adressen, „Verwendet in"**: Gesamtprojekte mit dieser Adresse als Auftraggeber, dazu an jedem Projekt der Name seines Gesamtprojekts (`addressLinks`).
-- **Rechnungen, Mahnwesen und Offene Posten**: Filter „Gesamtprojekt".
-- **Leistungsphasen über das Gesamtprojekt** (Matrix und Report „Projekt"): Ein Stufenvertrag zeigt LPH 1–9 als eine Einheit. Das ist der eigentliche fachliche Mehrwert.
-- **Teilfertige Leistungen** gruppiert, mit getrennten Zwischensummen für Aktiv- und Passivseite (Regel 3).
-- **Rechnungsempfänger** je Projekt in der Übersicht.
-- **Strg+K, „Zuletzt verwendet" und die Projektwahl in der Zeiterfassung** zeigen das Gesamtprojekt als Präfix. Das hilft beim Buchen auf den richtigen Vertrag.
+- **Neue Projekte gleich im Gesamtprojekt.** Drei Wege legen Projekte an: Neuanlage (`createProject`), Beauftragen (`convertOfferToProject`) und Kopieren (`copyProject`). Alle gehen durch **einen** Helfer, `newProjectGroupAndAbbr` in `services/gesamtprojekte.js`. Er prüft das Gesamtprojekt (fremd → 400) und eine vorgegebene Nummer (vergeben → 409), und zwar bevor der Nummernkreis gezogen wird, damit eine abgelehnte Anfrage keine Nummer verbraucht. `PROJECT_GROUP_ID` geht nur mit in die Zeile, wenn gewählt, damit die Neuanlage im Deploy-Fenster nicht scheitert.
+  - **Beauftragen:** Der Dialog hat den Abschnitt „Gesamtprojekt". Das ist der Normalfall beim Stufenvertrag.
+  - **Neuanlage:** Der Assistent bietet dasselbe an. Aus der Gesamtprojekt-Ansicht („Neues Projekt") ist das Gesamtprojekt vorgewählt und sein Auftraggeber samt Hauptansprechpartner vorbelegt.
+  - **Folgeprojekt:** Eine Kopie eines Projekts (Struktur, Team, Vertrag), je Zeile in der Übersicht. Sie bleibt im Gesamtprojekt der Vorlage.
+- **Nummern ableiten.** `GET /projekte/gruppen/:id/nummer` schlägt `{Kürzel}-{NN}` vor: zweistellig, die erste Nummer nach der höchsten vergebenen. Das Projekt, das das Kürzel selbst trägt, zählt als 01. Ohne Kürzel gibt es keinen Vorschlag. Der Nutzer wählt zwischen Nummernkreis und abgeleiteter Nummer (`GesamtprojektWahl.tsx`). Der Nummernkreis bleibt bei der abgeleiteten Nummer unberührt.
+- **Adressen, „Verwendet in":** Gesamtprojekte mit dieser Adresse als Auftraggeber oder mit einem ihrer Projekte, dazu an jedem Projekt „Teil von …" (`addressLinks`). Im Deploy-Fenster bleibt die Liste leer, statt einen Fehler zu liefern.
+- **Rechnungen und Mahnwesen:** Filter „Gesamtprojekt". Die Zuordnung kommt aus der geteilten Projektliste (`['projects-full']`); ohne `projects.view` entfällt der Filter. „Offene Posten" ist dort der Schalter „nur offen".
+- **Leistungsphasen über das Gesamtprojekt:** Die Matrix `GET /reports/phases/matrix?group_id=…` rechnet nur über die Projekte des Gesamtprojekts im Reporting-Scope und meldet „n von m". Im Gesamtprojekt ist das ein eigener Reiter (Recht `reports.view`, Tarif `reports.advanced`), im Reporting eine Auswahl. Ein Stufenvertrag zeigt damit LPH 1–4 und 5–8 als ein Bild.
+- **Teilfertige Leistungen:** Filter und „Nach Gesamtprojekt zusammenfassen". Die Zwischensummen entstehen aus denselben Spaltensummen wie die Gesamtzeile, Teilfertig und Anzahlungen bleiben also getrennt (Regel 3). Der CSV-Export hat eine Spalte „Gesamtprojekt".
+- **Rechnungsempfänger** je Projekt in der Übersicht, aus dem Vertrag. Er kommt nur mit `projects.contracts.view` mit (`getGroup(…, withInvoiceAddress)`).
+- **Projektwahl** (Strg+K im Projektkopf, Zeiterfassung, „Eigene Zeit"): Unter jedem Projekt steht das Gesamtprojekt, und die Suche findet es auch darüber. Das hilft beim Buchen auf den richtigen Vertrag. Die Liste für „Eigene Zeit" bleibt ohne Beträge.
+- **Nicht gebaut:** Dass sich schon das Angebot das Gesamtprojekt merkt (`OFFER.PROJECT_GROUP_ID`, offene Angebote als Auftragsbestand), ist bewusst ausgelassen. Es wäre eine weitere Spalte mit eigener Pflege, und beim Beauftragen wählt man das Gesamtprojekt ohnehin.
 
 ## 9. Stufe 3 (optional)
 

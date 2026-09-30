@@ -124,7 +124,9 @@ describe("Auswahlliste", () => {
   it("zeigt nur laufende Projekte", async () => {
     const r = res();
     await ctrl.listOwnProjects(req(), r, welt());
-    expect(r.body.data).toEqual([{ ID: 1, ABBR: "P-26-001", NAME: "Kita" }]);
+    // Genau diese Felder — keine Betraege. Das Gesamtprojekt (Name) ist
+    // Orientierung beim Buchen, kein Wert (0181).
+    expect(r.body.data).toEqual([{ ID: 1, ABBR: "P-26-001", NAME: "Kita", GROUP_NAME: null }]);
   });
 
   it("liefert Leistungen ohne Beträge", async () => {

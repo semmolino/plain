@@ -49,6 +49,10 @@ export interface ConvertOfferPayload {
   department_id?:     number | null
   /** Schätzung der Elemente nach Aufwand als Plan übernehmen (Standard: ja) */
   transfer_plan?:     boolean
+  /** Neues Projekt gleich in dieses Gesamtprojekt (z. B. nächste Stufe) */
+  project_group_id?:  number
+  /** Statt der nächsten Nummer aus dem Nummernkreis — etwa die abgeleitete */
+  project_abbr?:      string
   employee2project?:  Array<{
     employee_id:      number
     role_id?:         number | null

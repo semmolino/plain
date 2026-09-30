@@ -3,7 +3,11 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight } from 'lucide-react'
 import { fetchRecents } from '@/api/recents'
 
-export interface ProjectOption { ID: number; ABBR: string; NAME: string }
+export interface ProjectOption {
+  ID: number; ABBR: string; NAME: string
+  /** Gesamtprojekt — hilft, unter mehreren Verträgen eines Vorhabens den richtigen zu treffen. */
+  GROUP_NAME?: string | null
+}
 
 interface Props {
   projects:    ProjectOption[]
@@ -74,7 +78,8 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
   const filtered = useMemo(() => {
     if (!isFiltering) return projects
     return projects.filter(p =>
-      p.ABBR.toLowerCase().includes(query) || (p.NAME?.toLowerCase().includes(query) ?? false),
+      p.ABBR.toLowerCase().includes(query) || (p.NAME?.toLowerCase().includes(query) ?? false)
+      || (p.GROUP_NAME?.toLowerCase().includes(query) ?? false),
     )
   }, [projects, query, isFiltering])
 
@@ -130,6 +135,7 @@ export function ProjectPicker({ projects, selectedId, onSelect, onGoToList, plac
       onMouseDown={ev => { ev.preventDefault(); pick(p.ID) }}>
       <span className="project-ac-short">{p.ABBR}{p.ID === selectedId && <span className="project-ac-current"> · aktuell</span>}</span>
       {p.NAME && <span className="project-ac-long">{p.NAME}</span>}
+      {p.GROUP_NAME && <span className="project-ac-group"><span className="sr-only">Gesamtprojekt: </span>{p.GROUP_NAME}</span>}
     </button>
   )
 

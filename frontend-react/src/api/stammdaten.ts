@@ -105,7 +105,9 @@ export const addressTypeLabel = (id: number | null | undefined): string =>
 export interface AddressDetail {
   address:    Address
   contacts:   Contact[]
-  projects:   Array<{ ID: number; ABBR: string | null; NAME: string | null }>
+  projects:   Array<{ ID: number; ABBR: string | null; NAME: string | null; GROUP_NAME?: string | null }>
+  /** Gesamtprojekte: Auftraggeber ist diese Adresse oder eines ihrer Projekte gehört dazu (0181). */
+  groups?:    Array<{ ID: number; ABBR: string | null; NAME: string }>
   offers:     Array<{ ID: number; ABBR: string | null; NAME?: string | null }>
   /** Verträge mit dieser Adresse als Rechnungsempfänger (Runde 8) */
   contracts?: Array<{ ID: number; ABBR: string | null; NAME: string | null; PROJECT_ID: number | null }>
@@ -113,7 +115,7 @@ export interface AddressDetail {
   partials:   Array<{ ID: number; ADVANCE_INVOICE_NUMBER: string | null; ADVANCE_INVOICE_DATE?: string | null; PROJECT_ID?: number | null }>
   nachtraege?: Array<{ ID: number; ABBR: string | null; NAME: string | null; PROJECT_ID: number | null }>
   /** Was der Aufrufer sehen darf (fehlt bei älteren Servern → alles) */
-  visible?:   Partial<Record<'contacts' | 'projects' | 'offers' | 'contracts' | 'invoices' | 'partials' | 'nachtraege', boolean>>
+  visible?:   Partial<Record<'contacts' | 'projects' | 'groups' | 'offers' | 'contracts' | 'invoices' | 'partials' | 'nachtraege', boolean>>
 }
 
 export const fetchAddressDetail = (id: number) =>

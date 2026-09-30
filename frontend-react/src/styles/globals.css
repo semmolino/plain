@@ -2388,6 +2388,11 @@ th.doc-actions, td.doc-actions {
 .project-ac-option.active { background: var(--surface-2); }
 .project-ac-short { font-size: 13px; font-weight: 600; color: var(--text); }
 .project-ac-long  { font-size: 11px; color: var(--text-3); }
+/* Gesamtprojekt als dritte Zeile — gleiche Schrift wie der Name, eigene Plakette */
+.project-ac-group {
+  font-size: 11px; font-weight: 600; color: var(--text-2);
+  padding: 0 6px; border-radius: var(--radius-pill); background: var(--accent-bg);
+}
 
 /* Zentrale Projekt-Suchbox */
 .project-picker { position: relative; flex: 1 1 320px; min-width: 220px; max-width: 460px; }
@@ -5201,6 +5206,24 @@ fieldset:disabled .ws-check { cursor: default; }
 /* Übersicht und Liste */
 .pg-section-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
 .pg-icon-btn { display: inline-flex; align-items: center; gap: 6px; }
+.pg-toolbar-btns { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Leistungsphasen-Matrix im Reporting: Auswahl „Gesamtprojekt" */
+.pg-matrix-pick { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--text-2); }
+.pg-matrix-pick select { height: 36px; max-width: 260px; }
+@media (max-width: 640px) {
+  .pg-matrix-pick { width: 100%; }
+  .pg-matrix-pick select { flex: 1; max-width: none; height: 44px; }
+}
+/* Anlegen/Beauftragen: Gesamtprojekt + Art der Projektnummer */
+.pg-wahl { display: grid; gap: var(--space-2); }
+.pg-wahl .form-group { margin: 0; }
+.pg-wahl-nummer { display: grid; gap: 2px; }
+.pg-radio {
+  display: flex; align-items: center; gap: var(--space-2); min-height: 40px;
+  font-size: 13px; color: var(--text); cursor: pointer;
+}
+.pg-radio input { width: 18px; height: 18px; margin: 0; flex: none; }
+.pg-radio:has(input:disabled) { color: var(--text-3); cursor: default; }
 .pg-muted { color: var(--text-3); }
 .pg-partial { font-size: 12px; font-weight: 400; color: var(--text-3); }
 .pg-overview .timeline-wrap { margin-top: var(--space-6); }

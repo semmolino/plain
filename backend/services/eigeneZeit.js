@@ -7,13 +7,14 @@
  * gerade laufen, und welche Leistungen darin buchbar sind. Beides gab es nur
  * ueber die Projekt-Endpunkte hinter `projects.view` — und die zeigen
  * Honorare, Budgets und Strukturwerte aller Projekte. Hier stehen nur Nummer,
- * Name und Kuerzel.
+ * Name und Kuerzel — dazu der Name des Gesamtprojekts, keine Betraege.
  *
  * „Laufend" = die Status aus Einstellungen → Monatsabschluss
  * (TENANT_SETTINGS monatsabschluss_statuses). Nicht gesetzt: alle Projekte.
  */
 
 const { assertProjectInTenant } = require("./tenantGuard");
+const gesamtprojekte = require("./gesamtprojekte");
 
 async function runningStatusIds(supabase, tenantId) {
   const { data } = await supabase
@@ -40,7 +41,11 @@ async function listOwnProjects(supabase, { tenantId }) {
   if (statusIds.length) q = q.in("PROJECT_STATUS_ID", statusIds);
   const { data, error } = await q;
   if (error) throw error;
-  return (data || []).map(p => ({ ID: p.ID, ABBR: p.ABBR, NAME: p.NAME }));
+  // Gesamtprojekt als Orientierung beim Buchen (welcher Vertrag des Vorhabens?)
+  const groups = await gesamtprojekte.groupsByProjectIfMigrated(supabase, {
+    tenantId, projectIds: (data || []).map(p => p.ID),
+  });
+  return (data || []).map(p => ({ ID: p.ID, ABBR: p.ABBR, NAME: p.NAME, GROUP_NAME: groups.get(String(p.ID))?.NAME ?? null }));
 }
 
 /** 403, wenn auf das Projekt mit „Eigene Zeit" nicht gebucht werden darf. */

@@ -96,6 +96,16 @@ describe('Gesamtprojekte', () => {
     expect(r.canonical).toBeNull()
   })
 
+  it('?groupId&tab=leistungsphasen: Leistungsphasen über das Gesamtprojekt', () => {
+    expect(resolveProjektView(p('groupId=3&tab=leistungsphasen'), null, null).view)
+      .toEqual({ view: 'group', groupId: 3, tab: 'leistungsphasen' })
+  })
+
+  it('Reiter eines Projekts gilt im Gesamtprojekt nicht — Übersicht', () => {
+    expect(resolveProjektView(p('groupId=3&tab=buchungen'), null, null).view)
+      .toEqual({ view: 'group', groupId: 3, tab: 'uebersicht' })
+  })
+
   // Ein Projekt ist das genauere Ziel — wer beides verlinkt, meint das Projekt.
   it('Projekt gewinnt gegen Gesamtprojekt', () => {
     expect(resolveProjektView(p('groupId=3&projectId=12&tab=daten'), null, null).view)

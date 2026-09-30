@@ -3,8 +3,9 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Pencil, Trash2, Plus, Download, Star, Mail, Phone, Globe,
-  FolderOpen, FileSignature, Receipt, Banknote, FileText, FilePlus2,
+  FolderOpen, FileSignature, Receipt, Banknote, FileText, FilePlus2, Layers,
 } from 'lucide-react'
+import { groupHref } from '@/pages/projekte/gesamtprojekt/gesamtprojektUi'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Tabs } from '@/components/ui/Tabs'
 import { RowMenu } from '@/components/ui/RowMenu'
@@ -413,8 +414,13 @@ function DatenTab({ address }: { address: Address }) {
 function VerwendungTab({ detail }: { detail: AddressDetail }) {
   const v = detail.visible ?? {}
   const groups: { key: string; title: string; icon: typeof FolderOpen; items: { id: number; to: string; state?: unknown; label: string; sub?: string | null }[] }[] = [
+    { key: 'groups', title: 'Gesamtprojekte', icon: Layers,
+      items: (detail.groups ?? []).map(g => ({ id: g.ID, to: groupHref(g.ID), label: g.ABBR || g.NAME, sub: g.ABBR ? g.NAME : null })) },
     { key: 'projects', title: 'Projekte (Auftraggeber)', icon: FolderOpen,
-      items: detail.projects.map(p => ({ id: p.ID, to: `/projekte?projectId=${p.ID}&tab=struktur`, label: p.ABBR || `#${p.ID}`, sub: p.NAME })) },
+      items: detail.projects.map(p => ({
+        id: p.ID, to: `/projekte?projectId=${p.ID}&tab=struktur`, label: p.ABBR || `#${p.ID}`,
+        sub: [p.NAME, p.GROUP_NAME && `Teil von ${p.GROUP_NAME}`].filter(Boolean).join(' · ') || null,
+      })) },
     { key: 'contracts', title: 'Verträge (Rechnungsempfänger)', icon: FileText,
       items: (detail.contracts ?? []).map(c => ({ id: c.ID, to: c.PROJECT_ID ? `/projekte?projectId=${c.PROJECT_ID}&tab=vertraege` : '/projekte', label: c.ABBR || `#${c.ID}`, sub: c.NAME })) },
     { key: 'offers', title: 'Angebote', icon: FileSignature,

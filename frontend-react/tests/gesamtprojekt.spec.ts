@@ -134,3 +134,82 @@ test.describe('Gesamtprojekte', () => {
     await expect(page.locator('.pg-group-row').nth(1)).toContainText('Ohne Gesamtprojekt')
   })
 })
+
+test.describe('Gesamtprojekte — Stufe 2', () => {
+  test('Beauftragen: gleich ins Gesamtprojekt, Nummer abgeleitet', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Kopf-Aktion am Desktop')
+    const calls = await mockGroups(page)
+    await page.goto('/angebote?offerId=1&tab=struktur')
+    await page.getByRole('button', { name: /Beauftragt/ }).click()
+    const dialog = page.getByRole('dialog', { name: /Beauftragt/ })
+    await dialog.getByLabel('Projektstatus*').selectOption({ label: 'Laufend' })
+    await dialog.getByLabel(/^Gesamtprojekt/).selectOption('5')
+    const derived = dialog.getByRole('radio', { name: /Abgeleitet: GP-2024-01-03/ })
+    await expect(derived).toBeEnabled()
+    await derived.check()
+    await dialog.getByRole('button', { name: 'Projekt anlegen' }).last().click()
+    await expect.poll(() => calls.converts.length).toBe(1)
+    expect(calls.converts[0]).toMatchObject({ project_group_id: 5, project_abbr: 'GP-2024-01-03' })
+  })
+
+  test('Beauftragen ohne Gesamtprojekt schickt keine Gruppenfelder', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Kopf-Aktion am Desktop')
+    const calls = await mockGroups(page)
+    await page.goto('/angebote?offerId=1&tab=struktur')
+    await page.getByRole('button', { name: /Beauftragt/ }).click()
+    const dialog = page.getByRole('dialog', { name: /Beauftragt/ })
+    await dialog.getByLabel('Projektstatus*').selectOption({ label: 'Laufend' })
+    await expect(dialog.getByRole('radio', { name: /Abgeleitet/ })).toHaveCount(0)
+    await dialog.getByRole('button', { name: 'Projekt anlegen' }).last().click()
+    await expect.poll(() => calls.converts.length).toBe(1)
+    expect(calls.converts[0]).not.toHaveProperty('project_group_id')
+    expect(calls.converts[0]).not.toHaveProperty('project_abbr')
+  })
+
+  test('Neues Projekt aus dem Gesamtprojekt: vorgewählt, Auftraggeber übernommen', async ({ page }) => {
+    await mockGroups(page)
+    await page.goto('/projekte?groupId=5&tab=uebersicht')
+    await page.getByRole('button', { name: 'Neues Projekt' }).click()
+    const dialog = page.getByRole('dialog', { name: /Neues Projekt in/ })
+    await expect(dialog.getByLabel(/^Gesamtprojekt/)).toHaveValue('5')
+    await expect(dialog.getByLabel('Rechnungsadresse*')).toHaveValue('Stadt Ravensburg')
+  })
+
+  test('Folgeprojekt: Kopie mit abgeleiteter Nummer, danach im neuen Projekt', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Zeilenaktion am Desktop')
+    const calls = await mockGroups(page)
+    await page.goto('/projekte?groupId=5&tab=uebersicht')
+    await page.getByRole('button', { name: 'Folgeprojekt aus P-2024-001 anlegen' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Folgeprojekt anlegen' })
+    await expect(dialog.getByRole('radio', { name: /Abgeleitet: GP-2024-01-03/ })).toBeChecked()
+    await dialog.getByRole('button', { name: 'Folgeprojekt anlegen', exact: true }).click()
+    await expect.poll(() => calls.copies.length).toBe(1)
+    expect(calls.copies[0]).toEqual({ project_abbr: 'GP-2024-01-03' })
+    await expect(page).toHaveURL(/projectId=9/)
+  })
+
+  test('Reiter Leistungsphasen: Matrix über die Projekte des Gesamtprojekts', async ({ page }) => {
+    const calls = await mockGroups(page)
+    await page.goto('/projekte?groupId=5&tab=leistungsphasen')
+    await expect(page.getByRole('heading', { name: 'Leistungsphasen im Gesamtprojekt' })).toBeVisible()
+    expect(calls.matrixUrls.some(u => u.includes('group_id=5'))).toBe(true)
+    await expect(page.getByRole('row', { name: /^LPH 5/ })).toContainText('80.000')
+    expect(await noHorizontalScroll(page)).toBe(true)
+  })
+
+  test('Rechnungen: Filter „Gesamtprojekt"', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Chips liegen am Handy hinter „Filter"')
+    await mockGroups(page)
+    await page.goto('/rechnungen')
+    await expect(page.getByRole('button', { name: /^Gesamtprojekt/ })).toBeVisible()
+  })
+
+  test('Projektwahl (Strg+K) zeigt das Gesamtprojekt', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop', 'Umschalter als Aufklapper am Desktop')
+    await mockGroups(page)
+    await page.goto('/projekte?projectId=3&tab=struktur')
+    await page.getByRole('button', { name: /Projekt wechseln/ }).click()
+    const option = page.getByRole('option', { name: /P-2024-002/ }).last()
+    await expect(option).toContainText(GROUP.NAME)
+  })
+})

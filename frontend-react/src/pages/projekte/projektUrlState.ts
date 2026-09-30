@@ -14,7 +14,7 @@
  *   /projekte?projectId=12&tab=buchungen    → Arbeitsbereich, Tab Buchungen
  *   /projekte?projectId=12&tab=daten        → Projektdaten (Runde 8, vorher Dialog in der Liste)
  *   /projekte?tab=gesamtprojekte            → Liste der Gesamtprojekte
- *   /projekte?groupId=3[&tab=daten]         → ein Gesamtprojekt (Übersicht bzw. Daten)
+ *   /projekte?groupId=3[&tab=…]             → ein Gesamtprojekt (Übersicht, Leistungsphasen, Daten)
  *
  * Die alten Einstiege funktionieren weiter: `location.state` mit tab/projectId
  * (sieben Stellen im Code) wird in die URL uebersetzt, ein Arbeitsbereich-Tab
@@ -29,7 +29,8 @@ export type ProjektTab =
 export type ListTab = 'liste' | 'gesamtprojekte' | 'honorar' | 'leistungsstaende'
 
 /** Reiter eines Gesamtprojekts. */
-export type GroupTab = 'uebersicht' | 'daten'
+export type GroupTab = 'uebersicht' | 'leistungsphasen' | 'daten'
+const GROUP_TABS: GroupTab[] = ['uebersicht', 'leistungsphasen', 'daten']
 
 export const WORKSPACE_TABS: ProjektTab[] = [
   'struktur', 'leistungsstand', 'buchungen', 'nachtraege',
@@ -80,7 +81,7 @@ export function resolveProjektView(
   if (roundLink) {
     view = { view: 'list', listTab: 'leistungsstaende', pendingTab: null }
   } else if (gid != null && pid == null) {
-    view = { view: 'group', groupId: gid, tab: tabRaw === 'daten' ? 'daten' : 'uebersicht' }
+    view = { view: 'group', groupId: gid, tab: (GROUP_TABS as string[]).includes(tabRaw ?? '') ? tabRaw as GroupTab : 'uebersicht' }
   } else if (tabRaw === 'gesamtprojekte' && pid == null) {
     view = { view: 'list', listTab: 'gesamtprojekte', pendingTab: null }
   } else if (pid != null && tabRaw !== 'liste') {

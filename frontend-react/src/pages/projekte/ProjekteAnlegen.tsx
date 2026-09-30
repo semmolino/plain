@@ -16,6 +16,11 @@ import { useTenantDefaults } from '@/hooks/useTenantDefaults'
 import { presetNote, useContactPreset } from '@/hooks/useContactPreset'
 import { presetId } from '@/utils/vorbelegung'
 import { useFeature } from '@/store/licenseStore'
+import { fetchProjectGroup, PROJECT_GROUP_QUERY_KEYS } from '@/api/gesamtprojekte'
+import { GesamtprojektWahl } from '@/pages/projekte/gesamtprojekt/GesamtprojektWahl'
+import {
+  gruppenPayload, KEINE_GRUPPE, useDerivedAbbr, type GruppenWahl,
+} from '@/pages/projekte/gesamtprojekt/gesamtprojektUi'
 
 // ── Wizard state ──────────────────────────────────────────────────────────────
 
@@ -44,11 +49,23 @@ function emptyBasic(): BasicForm {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: number) => void }) {
+export function ProjekteAnlegen({ onProjectCreated, presetGroupId }: {
+  onProjectCreated?: (id: number) => void
+  /** Aus einem Gesamtprojekt heraus: vorgewählt, Auftraggeber von dort. */
+  presetGroupId?: number
+}) {
   const qc = useQueryClient()
   const [step, setStep]           = useState(1)
   const [basic, setBasic]         = useState<BasicForm>(emptyBasic)
   const [addrText, setAddrText]   = useState('')
+  const [gruppe, setGruppe]       = useState<GruppenWahl>(() =>
+    presetGroupId ? { groupId: String(presetGroupId), derived: false } : KEINE_GRUPPE)
+  const derivedAbbr = useDerivedAbbr(gruppe.groupId)
+  const { data: presetGroupData } = useQuery({
+    queryKey: ['project-group', presetGroupId],
+    queryFn:  () => fetchProjectGroup(presetGroupId!),
+    enabled:  presetGroupId != null,
+  })
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<number>>(new Set())
   const [e2p, setE2p]             = useState<E2PState>({})
   const [bookingPrices, setBookingPrices] = useState<{ [typeId: number]: { sp: string; cp: string } }>({})
@@ -80,6 +97,19 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
   // Kontakt nach der Adresswahl vorbelegen (Runde 9)
   const applyContact = useCallback((id: number) => setBasic(f => ({ ...f, contact_id: String(id) })), [])
   const contactPreset = useContactPreset(addressId, addressId ? contactData?.data : [], applyContact)
+  // Aus einem Gesamtprojekt heraus: dessen Auftraggeber vorbelegen — einmal,
+  // und nur, solange noch keine Adresse gewählt ist. Der Kontakt folgt wie
+  // bei einer Auswahl im Adressfeld (Hauptansprechpartner). Beim Rendern wie
+  // die Vorbelegung der Firma oben, nicht in einem Effekt.
+  const [groupAddrApplied, setGroupAddrApplied] = useState(false)
+  const presetGroup = presetGroupData?.data
+  if (!groupAddrApplied && presetGroup?.ADDRESS_ID && !basic.address_id) {
+    setGroupAddrApplied(true)
+    setAddrText(presetGroup.ADDRESS_NAME)
+    setBasic(f => ({ ...f, address_id: String(presetGroup.ADDRESS_ID), contact_id: '' }))
+    contactPreset.arm(presetGroup.ADDRESS_ID)
+  }
+
   // Nur globale Buchungsarten lassen sich vor der Anlage projektbezogen bepreisen.
   const bookingTypes = (bookingTypeData?.data ?? []).filter((t: BookingType) => t.SCOPE === 'global')
 
@@ -110,6 +140,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['projects-full'] })
       void qc.invalidateQueries({ queryKey: ['projects-short'] })
+      if (gruppe.groupId) for (const k of PROJECT_GROUP_QUERY_KEYS) void qc.invalidateQueries({ queryKey: [...k] })
       setMsg({ text: `Projekt "${res.data.ABBR}" wurde angelegt.`, type: 'success' })
       if (onProjectCreated) {
         onProjectCreated(res.data.ID)
@@ -204,6 +235,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
       contact_id:         Number(basic.contact_id),
       employee2project:   e2pRows.length ? e2pRows : undefined,
       booking_prices:     priceRows.length ? priceRows : undefined,
+      ...gruppenPayload(gruppe, derivedAbbr),
     })
   }
 
@@ -306,6 +338,7 @@ export function ProjekteAnlegen({ onProjectCreated }: { onProjectCreated?: (id: 
               <p className="form-field-hint">{presetNote(contactPreset.preset, basic.contact_id)}</p>
             )}
           </div>
+          <GesamtprojektWahl value={gruppe} onChange={setGruppe} idPrefix="prj" />
         </div>
       )}
 
