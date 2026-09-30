@@ -4,10 +4,15 @@ import type { StructureNode, patchStructureNode } from '@/api/projekte'
  * Rechenlogik der Projektstruktur (UI-Pilot Runde 2) — aus ProjektStruktur.tsx
  * unveraendert herausgezogen, damit sie getestet werden kann
  * (strukturCalc.test.ts haelt das Verhalten fest) und die Angebotsstruktur
- * (AngeboteStruktur.tsx, bisher eine Kopie) sie spaeter uebernehmen kann.
+ * (AngeboteStruktur.tsx, bisher eine Kopie) sie teilt. Seit Runde 3 liegt
+ * hier der gemeinsame Kern (aggregateTree, treeRootTotals); was nur das
+ * Angebot betrifft, steht in pages/angebote/struktur/offerStrukturCalc.ts.
  */
 
 export type PatchBody = Parameters<typeof patchStructureNode>[1]
+
+const num = (v: unknown) => Number(v ?? 0) || 0
+const r2  = (n: number) => Math.round(n * 100) / 100
 
 export type SurchargeEdit = {
   s1Label: string; s1Pct: string; s1Cumul: boolean
@@ -48,7 +53,6 @@ export function surchargeBody(s: SurchargeEdit) {
 }
 
 export function computeSurcharges(base: number, s: SurchargeEdit) {
-  const r2 = (n: number) => Math.round(n * 100) / 100
   const s1Active = !!s.s1Label && s.s1Pct !== '' && Number(s.s1Pct) !== 0
   const s1Eur    = s1Active ? r2(base * Number(s.s1Pct) / 100) : 0
   const s1Sub    = base + s1Eur
@@ -82,67 +86,207 @@ export function rowChanges(node: StructureNode, e: RowEdit | undefined): PatchBo
 export interface Agg { extras: number; surcharges: number; revenueBasis: number }
 
 /**
+ * Was Projekt- und Angebotsstruktur zum Rechnen brauchen. Beide Tabellen
+ * haben dieselben Spalten, nur der Schluessel heisst anders (STRUCTURE_ID
+ * bzw. ID) und das Blatt nimmt seine Honorar-Basis aus einer anderen Quelle.
+ */
+export interface CalcNode {
+  FATHER_ID:         number | string | null
+  REVENUE?:          number | null
+  REVENUE_BASIS?:    number | null
+  EXTRAS?:           number | null
+  EXTRAS_PERCENT?:   number | null
+  SURCHARGES_TOTAL?: number | null
+}
+
+/**
  * Summen von unten nach oben: Nebenkosten, Zuschlaege und Honorar-Basis
- * (Summe der Blatt-REVENUE_BASIS). Vater-NK = Summe der Kinder-NK + eigene
+ * (Summe der Blatt-Basen). Vater-NK = Summe der Kinder-NK + eigene
  * Zuschlaege × eigene NK % — NK wirken also auch auf die Zuschlaege.
  */
-export function aggregateStructure(structure: StructureNode[]): Map<string, Agg> {
+export function aggregateTree<T extends CalcNode>(nodes: T[], idOf: (n: T) => number, leafBasis: (n: T) => number): Map<string, Agg> {
   const childrenOf = new Map<string, string[]>()
-  for (const n of structure) {
+  for (const n of nodes) {
     if (n.FATHER_ID != null) {
       const fid = String(n.FATHER_ID)
       const arr = childrenOf.get(fid) ?? []
-      arr.push(String(n.STRUCTURE_ID))
+      arr.push(String(idOf(n)))
       childrenOf.set(fid, arr)
     }
   }
-  const nodeMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n]))
-  const r2 = (n: number) => Math.round(n * 100) / 100
+  const nodeMap = new Map(nodes.map(n => [String(idOf(n)), n]))
   const cache = new Map<string, Agg>()
-  function agg(id: string): { extras: number; surcharges: number; revenueBasis: number } {
+  function agg(id: string): Agg {
     if (cache.has(id)) return cache.get(id)!
     const children = childrenOf.get(id) ?? []
+    const own = nodeMap.get(id)
     if (children.length === 0) {
-      const n = nodeMap.get(id)!
-      // Bei Nachweis ist die Basis die Summe der Buchungen (TEC_SP_TOT_SUM).
-      // REVENUE_BASIS pflegt dort nur patchStructure — bei importierten und
-      // bei frisch gebuchten Zeilen steht es nicht drin, und REVENUE traegt
-      // bereits die Zuschlaege, gehoert also nicht in eine Basis.
-      const revenueBasis = Number(n?.BILLING_TYPE_ID) === 2
-        ? (n?.TEC_SP_TOT_SUM ?? 0)
-        : (n?.REVENUE_BASIS ?? n?.REVENUE ?? 0)
-      const r = { extras: n?.EXTRAS ?? 0, surcharges: n?.SURCHARGES_TOTAL ?? 0, revenueBasis }
+      const r = { extras: num(own?.EXTRAS), surcharges: num(own?.SURCHARGES_TOTAL), revenueBasis: own ? leafBasis(own) : 0 }
       cache.set(id, r); return r
     }
     let extras = 0, surcharges = 0, revenueBasis = 0
     for (const cid of children) { const c = agg(cid); extras += c.extras; surcharges += c.surcharges; revenueBasis += c.revenueBasis }
-    const ownNode = nodeMap.get(id)
-    const ownSurcharges = ownNode?.SURCHARGES_TOTAL ?? 0
-    const ownNk         = Number(ownNode?.EXTRAS_PERCENT ?? 0)
-    surcharges += ownSurcharges  // parent's own surcharges on top
-    extras = r2(extras + ownSurcharges * ownNk / 100)  // NK applies to own surcharges too
-    cache.set(id, { extras, surcharges, revenueBasis }); return { extras, surcharges, revenueBasis }
+    const ownSurcharges = num(own?.SURCHARGES_TOTAL)
+    surcharges += ownSurcharges                                // Zuschlaege des Vaters kommen obendrauf
+    extras = r2(extras + ownSurcharges * num(own?.EXTRAS_PERCENT) / 100)  // NK gelten auch fuer sie
+    const r = { extras, surcharges, revenueBasis }
+    cache.set(id, r); return r
   }
-  for (const n of structure) agg(String(n.STRUCTURE_ID))
+  for (const n of nodes) agg(String(idOf(n)))
   return cache
+}
+
+/**
+ * Summen der Gesamtzeile („Projekt gesamt" / „Angebot gesamt").
+ * Wurzel ist, was die Baumansicht oben zeigt: kein Vater, oder einer, den es
+ * nicht mehr gibt (buildStructureTree haengt solche Waisen an die Wurzel).
+ */
+export function treeRootTotals<T extends CalcNode>(nodes: T[], idOf: (n: T) => number, aggMap: Map<string, Agg>, levelSurchargesTotal: number) {
+  const ids = new Set(nodes.map(n => String(idOf(n))))
+  const parentIds = new Set(nodes.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
+  const roots = nodes.filter(n => n.FATHER_ID == null || !ids.has(String(n.FATHER_ID)))
+  const aggOf = (n: T) => aggMap.get(String(idOf(n)))
+  // Honorar = reine Summe der Basen, vor allen Zuschlaegen auf jeder Ebene
+  const rootRevenue = roots.reduce((s, n) =>
+    s + (parentIds.has(String(idOf(n))) ? (aggOf(n)?.revenueBasis ?? 0) : num(n.REVENUE_BASIS ?? n.REVENUE)), 0)
+  const structureSurcharges     = roots.reduce((s, n) => s + (aggOf(n)?.surcharges ?? 0), 0)
+  const rootSurcharges          = structureSurcharges + levelSurchargesTotal
+  const rootStructureRevenueSum = roots.reduce((s, n) => s + num(n.REVENUE), 0)
+  const rootRevenueFinal        = rootStructureRevenueSum + levelSurchargesTotal
+  const rootExtras              = roots.reduce((s, n) => s + (aggOf(n)?.extras ?? 0), 0)
+  // Gesamt-Spalte: Honorar + Zuschlaege (REVENUE) + Nebenkosten (EXTRAS)
+  const rootGesamt = rootRevenueFinal + rootExtras
+  return { rootRevenue, rootSurcharges, rootStructureRevenueSum, rootRevenueFinal, rootExtras, rootGesamt }
+}
+
+// ── Offene Eingaben in den Summen (Runde 6) ────────────────────────────────
+
+/** Was eine offene Eingabe an einem Element fuer die Summen aendert. */
+export interface PendingCalc {
+  /** Blatt: Honorar vor Zuschlaegen, wie es nach dem Speichern waere. */
+  basis?:     number
+  nkPct?:     number
+  surcharge?: SurchargeEdit
+}
+
+/**
+ * Die Tabelle, wie sie nach „Speichern" stuende — gerechnet wie der Server
+ * (Projekt: patchStructure + recalcParent, Angebot: updateOfferStructureNode
+ * + recalcOfferParent). Blatt: Honorar = Basis + Zuschlaege, NK = Honorar ×
+ * NK %. Vater: Basis = Summe der Kinder-Honorare, eigene Zuschlaege darauf,
+ * NK = Summe der Kinder-NK + eigene Zuschlaege × NK %.
+ *
+ * Neu gerechnet werden nur Elemente mit Eingaben und ihre Vorfahren; alles
+ * andere behaelt die gespeicherten Werte, damit keine Rundungsdifferenz aus
+ * dem Nachrechnen auftaucht. Vorher zeigten Nebenkosten, Gesamt und die
+ * Vatersummen bis „Speichern" den alten Stand, waehrend das Eingabefeld
+ * daneben schon den neuen trug — bei „Aufwand nach Rollen" stand in der
+ * Zelle 2.960 €, im Gesamt noch 2.280 €.
+ */
+export function withPending<T extends CalcNode>(
+  nodes: T[], idOf: (n: T) => number, leafBasis: (n: T) => number, pendingOf: (n: T) => PendingCalc | null,
+): { nodes: T[]; pending: Set<string> } {
+  const byId = new Map(nodes.map(n => [String(idOf(n)), n]))
+  const fatherOf = (n: T) => n.FATHER_ID != null && byId.has(String(n.FATHER_ID)) ? String(n.FATHER_ID) : null
+  const childrenOf = new Map<string, T[]>()
+  for (const n of nodes) {
+    const f = fatherOf(n)
+    if (f) childrenOf.set(f, [...(childrenOf.get(f) ?? []), n])
+  }
+  const own = new Map<string, PendingCalc>()
+  const pending = new Set<string>()
+  for (const n of nodes) {
+    const p = pendingOf(n)
+    if (!p) continue
+    own.set(String(idOf(n)), p)
+    for (let id: string | null = String(idOf(n)); id && !pending.has(id); id = fatherOf(byId.get(id)!)) pending.add(id)
+  }
+  if (pending.size === 0) return { nodes, pending }
+
+  const done = new Map<string, T>()
+  function calc(n: T): T {
+    const id = String(idOf(n))
+    if (!pending.has(id)) return n
+    const hit = done.get(id)
+    if (hit) return hit
+    const p     = own.get(id) ?? {}
+    const s     = p.surcharge ?? surchargeDefault(n)
+    const nkPct = p.nkPct ?? num(n.EXTRAS_PERCENT)
+    const kids  = (childrenOf.get(id) ?? []).map(calc)
+    let res: T
+    if (kids.length === 0) {
+      const basis   = p.basis ?? leafBasis(n)
+      const sur     = computeSurcharges(basis, s).total
+      const revenue = r2(basis + sur)
+      res = { ...n, REVENUE_BASIS: basis, SURCHARGES_TOTAL: sur, REVENUE: revenue, EXTRAS_PERCENT: nkPct, EXTRAS: r2(revenue * nkPct / 100) }
+    } else {
+      const basis   = r2(kids.reduce((a, k) => a + num(k.REVENUE), 0))
+      const sur     = computeSurcharges(basis, s).total
+      const revenue = r2(basis + sur)
+      const extras  = r2(kids.reduce((a, k) => a + num(k.EXTRAS), 0) + r2(sur * nkPct / 100))
+      res = { ...n, REVENUE_BASIS: basis, SURCHARGES_TOTAL: sur, REVENUE: revenue, EXTRAS_PERCENT: nkPct, EXTRAS: extras }
+    }
+    done.set(id, res)
+    return res
+  }
+  return { nodes: nodes.map(calc), pending }
+}
+
+/** Weicht ein angezeigter Wert vom gespeicherten ab? (Cent-genau) */
+export const differs = (a: number | null | undefined, b: number | null | undefined) => Math.abs(num(a) - num(b)) >= 0.005
+
+// ── Projektstruktur ──────────────────────────────────────────────────────────
+
+/**
+ * Blatt-Basis der Projektstruktur. Bei Nachweis ist das die Summe der
+ * Buchungen (TEC_SP_TOT_SUM). REVENUE_BASIS pflegt dort nur patchStructure —
+ * bei importierten und bei frisch gebuchten Zeilen steht es nicht drin, und
+ * REVENUE traegt bereits die Zuschlaege, gehoert also nicht in eine Basis.
+ */
+export function projectLeafBasis(n: StructureNode): number {
+  return Number(n.BILLING_TYPE_ID) === 2 ? num(n.TEC_SP_TOT_SUM) : num(n.REVENUE_BASIS ?? n.REVENUE)
+}
+
+export function aggregateStructure(structure: StructureNode[]): Map<string, Agg> {
+  return aggregateTree(structure, n => n.STRUCTURE_ID, projectLeafBasis)
+}
+
+/** Offene Eingaben eines Projekt-Elements, soweit sie in Summen eingehen. */
+export function projectPending(node: StructureNode, e: RowEdit | undefined): PendingCalc | null {
+  if (!e) return null
+  const ch = rowChanges(node, e)
+  const surcharge = ch.SURCHARGE_1_CUMUL !== undefined ? e.surcharge : undefined
+  if (ch.REVENUE === undefined && ch.EXTRAS_PERCENT === undefined && ch.BILLING_TYPE_ID === undefined && !surcharge) return null
+  const bt = Number(e.billingTypeId ?? node.BILLING_TYPE_ID)
+  return {
+    // Nach Aufwand zaehlen die Buchungen, nicht ein eingetippter Betrag (wie im Server)
+    basis: bt === 2 ? num(node.TEC_SP_TOT_SUM) : (ch.REVENUE ?? num(node.REVENUE_BASIS ?? node.REVENUE)),
+    nkPct: ch.EXTRAS_PERCENT, surcharge,
+  }
+}
+
+/** Projektstruktur mit den offenen Eingaben (siehe withPending). */
+export function pendingStructure(structure: StructureNode[], edits: Record<number, RowEdit>) {
+  return withPending(structure, n => n.STRUCTURE_ID, projectLeafBasis, n => projectPending(n, edits[n.STRUCTURE_ID]))
 }
 
 /** Summen der Projektzeile („Projekt gesamt"). */
 export function rootTotals(structure: StructureNode[], aggMap: Map<string, Agg>, projectSurchargesTotal: number) {
-  const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
-  const roots = structure.filter(n => n.FATHER_ID == null)
-  // rootRevenue = pure sum of leaf REVENUE_BASIS values (before any surcharges at any level)
-  const rootRevenue = roots.reduce((s, n) => {
-    const isP = parentIds.has(String(n.STRUCTURE_ID))
-    return s + (isP ? (aggMap.get(String(n.STRUCTURE_ID))?.revenueBasis ?? 0) : (n.REVENUE_BASIS ?? n.REVENUE ?? 0))
-  }, 0)
-  // Sum surcharges from structure subtree + project-level (root) surcharges
-  const structureSurcharges = roots.reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.surcharges ?? 0), 0)
-  const rootSurcharges = structureSurcharges + projectSurchargesTotal
-  const rootStructureRevenueSum = roots.reduce((s, n) => s + (n.REVENUE ?? 0), 0)
-  const rootRevenueFinal = rootStructureRevenueSum + projectSurchargesTotal
-  const rootExtras = roots.reduce((s, n) => s + (aggMap.get(String(n.STRUCTURE_ID))?.extras ?? 0), 0)
-  // Gesamt-Spalte: Summe aus Honorar + Zuschläge (REVENUE) + Nebenkosten (EXTRAS).
-  const rootGesamt = rootRevenueFinal + rootExtras
-  return { rootRevenue, rootSurcharges, rootStructureRevenueSum, rootRevenueFinal, rootExtras, rootGesamt }
+  return treeRootTotals(structure, n => n.STRUCTURE_ID, aggMap, projectSurchargesTotal)
+}
+
+/**
+ * Plan eines Elements nach Aufwand (Runde 5) gegen das Gebuchte — fuer die
+ * Anzeige in Tabelle und Blatt. null = kein Plan.
+ */
+export function planStatus(n: StructureNode) {
+  if (Number(n.BILLING_TYPE_ID) !== 2 || n.PLAN_REVENUE == null) return null
+  const plan   = Number(n.PLAN_REVENUE) || 0
+  const booked = Number(n.TEC_SP_TOT_SUM ?? 0) || 0
+  return {
+    plan, booked,
+    hours: n.PLAN_HOURS != null ? Number(n.PLAN_HOURS) : null,
+    pct:   plan > 0 ? Math.round(booked / plan * 100) : null,
+    over:  plan > 0 && booked > plan,
+  }
 }

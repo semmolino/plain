@@ -47,6 +47,8 @@ export interface ConvertOfferPayload {
   project_manager_id: number
   project_type_id?:   number | null
   department_id?:     number | null
+  /** Schätzung der Elemente nach Aufwand als Plan übernehmen (Standard: ja) */
+  transfer_plan?:     boolean
   employee2project?:  Array<{
     employee_id:      number
     role_id?:         number | null
@@ -67,11 +69,28 @@ export interface OfferListItem {
   TOTAL_AMOUNT:    number | null
   STATUS_NAME:     string | null
   OFFER_STATUS_ID: number | null
+  /** Zustaendige Person — Vorschlag fuer die Projektleitung beim Beauftragen */
+  EMPLOYEE_ID?:    number | null
   EMPLOYEE_NAME:   string | null
   ADDRESS_NAME:    string | null
   CONTACT_NAME:    string | null
   PROJECT_ID:      number | null
   PROJECT_NAME:    string | null
+}
+
+/**
+ * Eine Aufwandszeile eines Angebotselements nach Aufwand (Migration 0173).
+ * Das Honorar des Elements ist die Summe der Zeilen; QUANTITY/HOURLY_RATE/
+ * ROLE_* leitet der Server daraus ab (Satz und Rolle nur bei genau einer
+ * Zeile). NULL an EFFORT_LINES ist Altbestand: dann gilt QUANTITY ×
+ * HOURLY_RATE als die eine Zeile.
+ */
+export interface EffortLine {
+  role_id:   number | null
+  role_abbr: string | null
+  role_name: string | null
+  hours:     number
+  rate:      number
 }
 
 export interface OfferStructureNode {
@@ -91,6 +110,9 @@ export interface OfferStructureNode {
   ROLE_ABBR: string | null
   ROLE_NAME:  string | null
   ROLE_ID:         number | null
+  EFFORT_LINES?:   EffortLine[] | null
+  /** Kalkulation, aus der das Element stammt (Migration 0174, „Angebot aktualisieren“). */
+  FEE_CALC_MASTER_ID?: number | null
   TENANT_ID:       number | null
   SURCHARGE_1_LABEL: string | null
   SURCHARGE_1_PCT:   number | null
@@ -129,10 +151,10 @@ export interface CreateOfferPayload {
   employee_id:      string | number
   address_id:       string | number
   contact_id:       string | number
-  probability?:     string | number
-  offer_text_1?:    string
-  offer_text_2?:    string
-  offer_date?:      string
+  probability?:     string | number | null
+  offer_text_1?:    string | null
+  offer_text_2?:    string | null
+  offer_date?:      string | null
   valid_until?:     string | null
   offer_structure?: OfferStructureDraftRow[]
 }
@@ -165,6 +187,7 @@ export interface AddStructureNodePayload {
   role_id?:          string | number
   role_abbr?:  string
   role_name?:   string
+  effort_lines?:     EffortLine[]
   father_id?:        string | number | null
 }
 
@@ -179,6 +202,7 @@ export interface UpdateStructureNodePayload {
   role_id?:          string | number | null
   role_abbr?:  string
   role_name?:   string
+  effort_lines?:     EffortLine[]
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────
@@ -207,7 +231,9 @@ export const fetchOfferStructure = (offerId: number) =>
 export const addOfferStructureNode = (offerId: number, body: AddStructureNodePayload) =>
   apiClient.post<{ data: OfferStructureNode }>(`/angebote/${offerId}/structure`, body)
 
-export const updateOfferStructureNode = (offerId: number, nodeId: number, body: UpdateStructureNodePayload) =>
+// Derselbe Endpunkt nimmt Felder und Zuschlaege in einem Aufruf — die
+// Angebotsstruktur speichert ein geaendertes Element deshalb mit genau einem PUT.
+export const updateOfferStructureNode = (offerId: number, nodeId: number, body: UpdateStructureNodePayload & Partial<UpdateOfferSurchargesPayload>) =>
   apiClient.put<{ data: OfferStructureNode }>(`/angebote/${offerId}/structure/${nodeId}`, body)
 
 export const deleteOfferStructureNode = (offerId: number, nodeId: number) =>

@@ -558,13 +558,15 @@ export function ImportSection() {
                   <td style={{ padding: '5px 8px 5px 0' }}>
                     {b.status === 'committed'
                       ? <span style={{ color: 'var(--success-strong)' }}>aktiv</span>
-                      : <span style={{ color: 'var(--text-3)' }}>zurückgesetzt</span>}
+                      : b.status === 'rollback_partial'
+                        ? <span style={{ color: 'var(--warning-strong)' }} title="Das Zurücksetzen brach unterwegs ab. Ein erneuter Versuch setzt dort fort.">teilweise zurückgesetzt</span>
+                        : <span style={{ color: 'var(--text-3)' }}>zurückgesetzt</span>}
                   </td>
                   <td style={{ padding: '5px 0', textAlign: 'right' }}>
-                    {b.status === 'committed' && (
+                    {(b.status === 'committed' || b.status === 'rollback_partial') && (
                       <button type="button" className="btn-small btn-danger" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                         onClick={() => setConfirmRollback(b)} disabled={rollbackMut.isPending}>
-                        <RotateCcw size={12} strokeWidth={2} /> Zurücksetzen
+                        <RotateCcw size={12} strokeWidth={2} /> {b.status === 'rollback_partial' ? 'Erneut zurücksetzen' : 'Zurücksetzen'}
                       </button>
                     )}
                   </td>

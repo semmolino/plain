@@ -10,7 +10,7 @@ plan&simple is a **multi-tenant business management tool** for architects and pl
 
 | Layer | Technology |
 |---|---|
-| Backend | Node.js 20 + Express, `@supabase/supabase-js` (service-role client) |
+| Backend | Node.js 22 + Express, `@supabase/supabase-js` (service-role client) |
 | Database | **Scalingo PostgreSQL** über lokales PostgREST (`127.0.0.1:3001`), angesprochen mit dem supabase-js-Client — kein rohes SQL im App-Code. RLS ist aktiv und erzwungen (`is_system_request()` / `current_tenant_id()`). Das alte Supabase-Projekt hängt nur noch als Altbestand in den Variablen und enthält einen **veralteten Datenstand** — nicht dorthin schreiben. |
 | Auth | Custom JWT (`jsonwebtoken` + `bcryptjs`), 8h expiry, secret from `JWT_SECRET` env var |
 | Frontend | React 18, TypeScript, Vite, Tanstack Query v5, Zustand, React Router v6 |
@@ -285,7 +285,9 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
 
 ## Key business domain patterns
 
-- **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0.
+- **Offer → Project conversion** (`POST /angebote/:id/convert`): creates PROJECT + PROJECT_STRUCTURE + EMPLOYEE2PROJECT + CONTRACT from OFFER data. REVENUE/EXTRAS only copied to PROJECT_STRUCTURE if `BILLING_TYPE_ID = 1`; BT=2 nodes start at 0 — ihre Schätzung geht als **Plan** mit (`PLAN_HOURS`/`PLAN_REVENUE`, Migration `0173`, abwählbar mit `transfer_plan: false`).
+- **Aufwandszeilen** (Migration `0173`): ein Angebotselement nach Aufwand trägt `EFFORT_LINES` (Rolle · Stunden · Satz, beliebig viele), das Honorar ist die Summe. `QUANTITY`/`HOURLY_RATE`/`ROLE_*` werden daraus abgeleitet (Satz und Rolle nur bei genau einer Zeile); `EFFORT_LINES = NULL` ist Altbestand und gilt als eine Zeile. Prüfen, ableiten und lesen **nur** über `services/effortLines.js` (`normalizeEffortLines`, `effortColumns`, `nodeEffortLines`) — Speichern, PDF, Auftragsbestätigung und Beauftragen gehen alle hindurch. Im Frontend dasselbe über `nodeLines`/`effectiveLines` in `offerStrukturCalc.ts`.
+- **Plan am Projekt-Element**: ein Blatt nach Aufwand mit `PLAN_REVENUE` rechnet in der Budgetwarnung mit dem Plan als Budget und dem **gebuchten Honorar** (Σ `HOURLY_RATE_TOTAL` bestätigter Buchungen) als Verbrauch (`services/budgetWarnings.js`). Ohne Plan bliebe das Budget die Summe der Buchungen selbst und könnte nie warnen. Geändert wird der Plan über `PATCH /projekte/structure/:id/plan` (`projects.structure.edit`) — **nicht** über `patchStructure`, das bei jedem Aufruf einen Leistungsstand-Snapshot schreibt.
 - **Invoice wizard**: draft invoice → assign performance amount + bookings → generate line items → finalize.
   Abschlag, Einzelrechnung und Gutschrift laufen durch **einen** Assistenten
   (`pages/rechnungen/InvoiceWizard.tsx`); was sich je Belegart unterscheidet
@@ -297,6 +299,130 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Auswahl der aufzulösenden Sicherheitseinbehalte einer Schlussrechnung merkt
   sich der Entwurf in `INVOICE.SE_RELEASE_ADVANCE_IDS` (Migration `0171`);
   maßgeblich beim Buchen bleibt, was der Buchungsaufruf mitschickt.
+- **Projekt- und Angebotsstruktur** teilen Bedienung und Rechnung: Summen
+  (Honorar-Basis, Zuschlaege, NK je Vater) rechnet **nur**
+  `pages/projekte/struktur/strukturCalc.ts` (`aggregateTree`,
+  `treeRootTotals`); `pages/angebote/struktur/offerStrukturCalc.ts` legt nur
+  fest, was beim Angebot anders ist (Blatt-Basis ohne Buchungen, Aufwand =
+  Stunden × Satz, Speicher-Nutzlast kleingeschrieben plus `SURCHARGE_*` in
+  einem PUT). Beide Tabellen puffern Eingaben bis „Speichern" (ActionBar,
+  `useRegisterDirty`); Anlegen, Loeschen, Verschieben wirken sofort. Beide
+  sind immer luftig (keine Dichte-Umschaltung); welche Spalten sichtbar sind,
+  waehlt jeder ueber „Spalten" (`struktur/strukturSpalten.ts`, je Mitarbeiter
+  gemerkt). Ein
+  Angebotselement mit Unterelementen loescht das Backend nicht
+  (`dependencyCheck.checkOfferStructure`, 409) — die Oberflaeche sagt das
+  vorher, statt es „samt Unterelementen" zu versprechen.
+- **Angebote als Arbeitsbereich** (wie die Projekte): `/angebote` ist die
+  Liste, `/angebote?offerId=…&tab=struktur|kalkulationen|daten` das Angebot
+  mit Kopf (`AngebotHeader.tsx`: Name als Umschalter, Strg+K) und Reitern.
+  Der Zustand steht in der URL (`angebote/angebotUrlState.ts`); Links von
+  anderen Seiten bauen `angebotHref(id, tab)`, alte `state: { offerId }`-
+  Einstiege werden umgeschrieben. „Als beauftragt markieren" laeuft in Liste
+  und Kopf ueber denselben `BeauftragtDialog`.
+  Reiter „Angebotsdaten" (`Angebotsdaten.tsx`, lesbar mit `offers.view`,
+  änderbar mit `offers.edit`) und „Neues Angebot" (`AngebotAnlegenDialog.tsx`)
+  teilen die Felder aus `OfferFields.tsx` samt `missingOfferFields`/
+  `offerPayload`. Die Person im Büro heißt dort „Zuständig" (im PDF
+  „Ansprechpartner"), die beim Kunden „Kontakt". Der Server prüft beim Anlegen
+  und Ändern, dass die Adresse dem Mandanten und der Kontakt genau dieser
+  Adresse gehört (`assertOwnAddress`/`assertContactOfAddress`,
+  `services/adressen.js`); Pflichtfelder dürfen sich ändern, aber nicht leeren.
+  Kopf- und Fußtext bleiben beim Anlegen leer: das PDF nimmt dann den
+  Standardtext aus `TEXT_TEMPLATE` (`offer_angebot`, Einstellungen →
+  Dokumentvorlagen), das Formular zeigt ihn grau im Feld. Eine zweite
+  Vorlage unter den Vorbelegungen gibt es bewusst nicht.
+- **Kalkulationen (HOAI-Assistent)** (`pages/projekte/HonorarWizard.tsx`, Liste
+  `HonorarTab.tsx`, im Angebot `angebote/AngeboteHoai.tsx`): im Muster der
+  Rechnungsassistenten — sprechende Schritte, ActionBar (im Dialog am unteren
+  Rand), „Weiter" **und** „Zurück" speichern den Schritt. Eine neue Kalkulation
+  gilt erst mit „Übernehmen" als angelegt; wer vorher geht, verwirft sie
+  (Unmount-Cleanup), und die Rückfrage sagt genau das. Dialoge mit dem
+  Assistenten schließen über `guarded(close, [HONORAR_WIZARD_GUARD])` — `only`
+  beschränkt die Rückfrage auf den Assistenten statt auf die Tabelle dahinter.
+  Im Angebot ohne gewähltes Element legt `addFeeCalcToOffer` ein eigenes auf
+  oberster Ebene an: `ATTACH_TO_OFFER_STRUCTURE_ID` ist der Anker, an dem das
+  Beauftragen erkennt, dass die Phasen schon in der Struktur stehen — direkt an
+  der Wurzel legte es sie ein zweites Mal an. Elemente aus einer Kalkulation
+  tragen `FEE_CALC_MASTER_ID` + `FEE_CALC_PHASE_ID`/`FEE_CALC_BL_ID` — im
+  Projekt seit 0041/0043, im Angebot seit `0174`; beim Beauftragen geht die
+  Verknüpfung mit. Daran hängen „Struktur aktualisieren" bzw. „Angebot
+  aktualisieren" (`POST …/sync-to-structure`, Ziel je nachdem, ob die
+  Kalkulation schon am Projekt hängt). Beide rechnen über
+  `services/feeAllocation.js` (`computeSurchargeAllocations`, `leafValues`):
+  Phase + Zuschlagsanteil, darauf die **eigenen** Zuschläge und NK des
+  Elements, `REVENUE_BASIS` zieht mit.
+  Die Rechnung des Assistenten (Kx, Phasenhonorar, Besondere Leistungen,
+  Zuschläge) steht **nur** in `pages/projekte/kalkCalc.ts`. Am Handy zeigen
+  Leistungsphasen, Besondere Leistungen und Zuschläge eine Liste, ein Tipp
+  öffnet die Zeile als Blatt (`KalkMobile.tsx`); „Übernehmen" schreibt in den
+  Stand des Assistenten, gespeichert wird wie am Desktop mit Weiter/Zurück.
+- **Projektdaten** (`/projekte?projectId=…&tab=daten`, `Projektdaten.tsx`):
+  Name, Nummer, Status, Leitung, Auftraggeber, „intern" im Arbeitsbereich-
+  Muster. Der Stift der Projektliste führt dorthin — einen Bearbeiten-Dialog
+  in der Liste gibt es nicht mehr. Die Folgefragen (Auftraggeber auch in den
+  Vertrag, „intern" an die Elemente) kommen **nach** dem Speichern und nur,
+  wenn sie etwas ändern. Das Kennzeichen „intern" am Projekt wirkt auf die
+  Produktivität; Rechnungen lassen nur **Elemente** aus, die selbst intern sind.
+- **Adressen als Arbeitsbereich** (`/adressen/:id?tab=kontakte|daten|verwendung`,
+  `pages/adressen/AddressDetailPage.tsx`): Kopf mit Anschrift/Telefon/E-Mail,
+  Reiter Kontakte · Adressdaten · Verwendet in. Bearbeitet wird **nur** dort
+  (Stift, „Zuletzt verwendet" und alte `state.openAddressId`-Einstiege führen
+  hin); Felder einmal in `AddressFields.tsx`, Kontakte über `ContactDialog.tsx`
+  (Liste und Seite), Neuanlage über `AddressCreateDialog.tsx` mit Rückfrage bei
+  gleichem Namen (seit `0164` keine UNIQUE-Regel mehr). Welche Belege an einer
+  Adresse hängen, rechnet `services/adressen.js` (`addressLinks`, je Recht des
+  Moduls); die Löschprüfung steht in `dependencyCheck.js` und wird von
+  `tests/dependencyCheck.columns.test.js` gegen das Schema gehalten.
+  Rechnungen führen die Adresse als `INVOICE_ADDRESS_ID`, Abschläge als
+  `ADVANCE_INVOICE_ADDRESS_ID` — nicht `ADDRESS_ID`. Je Adresse gibt es einen
+  Hauptansprechpartner (`ensureSinglePrimary`). Wer in Projekt, Angebot oder
+  Vertrag eine Adresse **wählt**, bekommt ihn als Kontakt vorbelegt (sonst den
+  einzigen Kontakt der Adresse) — über `useContactPreset`, nie beim Laden
+  eines gespeicherten Stands; `GET /stammdaten/contacts/by-address` liefert
+  dafür `IS_PRIMARY` und stellt ihn nach vorn.
+- **Mitarbeiter als Arbeitsbereich** (`/mitarbeiter/:id?tab=stammdaten|arbeitszeit|kostensatz|zeitkonto|abwesenheit|projekte|rollen|zugang`,
+  `pages/mitarbeiter/MitarbeiterDetailPage.tsx`, UI-Pilot Runde 10): Kopf mit Kontakt, Kostensatz
+  (nur `employees.salary.view` + Tarif) und Saldo (nur `employees.bookings.view_all`), Reiter je Recht.
+  Einen Bearbeiten-Dialog gibt es nicht mehr; Liste, Rollen-Abzeichen und Neuanlage führen hin
+  (`mitarbeiterHref`). Einen Einzelabruf gibt es am Server nicht — die Seite liest aus der Liste
+  (`['employees']`). `PATCH /mitarbeiter/:id` ist ein **Teil-Update**: Stammdaten und die
+  Direktbearbeitung der Liste schicken nur geänderte Felder. Datierte Verläufe (Arbeitszeitmodell,
+  Kostensatz) laufen über eine Tabelle (`EmployeeHistory.tsx`); je Tag gibt es höchstens einen
+  Eintrag (409). Das Zeitkonto ändert eine Buchung nur mit `projects.bookings.edit/delete`, nie eine
+  abgerechnete, und zieht `QUANTITY_EXT` nur mit, solange es `QUANTITY_INT` entsprach.
+  Stundencontrolling zeigt Auswertung und Einzelansicht nur mit `employees.bookings.view_all`; wer
+  nur `employees.month_close.edit` hat, sieht den Monatsabschluss.
+- **Abwesenheiten und Stundencontrolling** (Modul Mitarbeiter, UI-Pilot Runde 11):
+  Unterreiter in der URL — `?tab=abwesenheiten&sub=inbox|calendar|my|entitlements`
+  (`pages/mitarbeiter/AbwesenheitenTab.tsx`, Benachrichtigungen verlinken mit `&absence=…`) und
+  `?tab=zeitwirtschaft&sub=single&emp=…` (`Stundencontrolling.tsx`). Beantragen, Bearbeiten und
+  Erfassen laufen durch **einen** Dialog (`AbsenceDialog.tsx`); was ein Antrag kostet, rechnet
+  `GET /abwesenheit/preview` am Server wie das Speichern (Modell, Feiertage, je Jahr, Resturlaub
+  danach samt offener Anträge, Überschneidungen mit eigenen Einträgen) — nie im Browser nachbauen.
+  Eine Überschneidung mit einem eigenen beantragten oder genehmigten Eintrag lehnt der Server beim
+  eigenen Antrag ab (`findOverlaps`, 409 bei POST und PATCH; die Vorschau meldet `overlap_blocks`);
+  mit `absence.manage` bleibt es eine Warnung — etwa für eine Krankmeldung mitten im Urlaub.
+  Genehmigen, Ablehnen (mit Begründung → `DECISION_NOTE`) und Rückfrage über `AbsenceDecision.tsx`;
+  Status, Zeitraum, Tage und Verlauf über `absenceUi.tsx`. Den Resturlaub liefert
+  `vacationBalanceFor` in `routes/abwesenheit.js` (auch `pending` = offen beantragt). Die Seite hat
+  einen DirtyGuard: offene Urlaubsansprüche fragen beim Wechsel von Reiter oder Unterreiter.
+- **Einstellungen** (`/admin?tab=…&sub=…`, UI-Pilot Runde 12): Reiter und Unterreiter stehen in der URL,
+  die Seite hat einen DirtyGuard. Vorbelegungen (`pages/admin/VorbelegungenPage.tsx`) im Muster der
+  Seitenformulare: Eingaben über dem geladenen Stand, gespeichert werden **nur geänderte** Schlüssel in
+  einem `PUT /stammdaten/defaults` mit `{ values }`; Zahlen nehmen „2,5". Stammdaten
+  (`pages/admin/StammdatenPage.tsx`) je Katalog ein Unterreiter (am Handy eine Auswahl); Löschen fragt
+  nach, und die 409 der Löschprüfung bleibt als Meldung stehen. Bearbeiten je Katalog mit dessen Recht
+  (`settings.basedata.edit`, `settings.booking_types.edit`, `settings.booking_text_templates.edit`,
+  `absence.manage`, `settings.work_time.edit`) — ohne Recht nur lesen.
+- **Nachträge** (`services/nachtraege.js`, Liste `pages/nachtraege/NachtraegeListe.tsx` im Modul und im
+  Projekt-Reiter, Detail `NachtragDetail.tsx`): Positionen werden je Blatt ins Projekt **freigegeben**
+  (Knoten unter „Nachträge" in `PROJECT_STRUCTURE`). Eine freigegebene Position — `APPROVED`, auch
+  gekürzt `PARTIAL`, bzw. mit `RELEASED_STRUCTURE_ID` — ist erledigt: nicht erneut freigebbar, im
+  Nachtrag nicht mehr änderbar oder löschbar (409), Korrekturen laufen im Projekt. Dieselbe Regel
+  steht einmal im Backend (`isReleased`) und einmal im Frontend (`nachtragStatus.ts`). Positionen
+  nach Aufwand starten im Projekt bei 0 und bringen ihre Schätzung als Plan mit (wie beim
+  Beauftragen); Rollen gehen **nicht** in die Projektstruktur, die hat keine Rollenspalten.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Number ranges**: auto-incremented per company via `next_offer_number()` and `next_project_number()` RPCs.
 - **PDF rendering**: `renderDocumentPdf` / `renderOfferPdf` in `services_pdf_render.js` → Nunjucks → Playwright → Buffer. The view model is built first, then passed to the template.
@@ -535,12 +661,31 @@ Windows): `owner-console/README.md`.
 - Buchungen: eine abgerechnete Buchung (`INVOICE_ID`/`ADVANCE_INVOICE_ID`) ist auch für `PATCH` gesperrt, und der Monatsabschluss gilt beim Ändern für den alten und den neuen Monat (`patchBuchung`). Timer-Entwürfe liest und bestätigt man nur für sich selbst; fremde nur mit `employees.bookings.view_all` (`controllers/buchungen.js`). Beides war bis Runde 2 des UI-Pilots offen.
 - „Eigene Zeit buchen" (`projects.bookings.own`, Migration `0169`): bucht nur für sich selbst (Mitarbeiter aus der Sitzung, Sätze vom Server), ändert/löscht nur eigene, offene Buchungen ohne Projektwechsel, und sieht Projekte/Leistungen nur über die Listen ohne Beträge (`/buchungen/eigen/*`, `services/eigeneZeit.js`). „Meine Zeit" (`GET /buchungen/mine`) braucht kein Recht, weil der Mitarbeiter nie aus der Anfrage kommt. Die Antwort von `PATCH /buchungen/:id` geht durch `stripBookingMoney` wie die Liste — vorher lieferte sie die ganze Zeile samt Sätzen.
 
+- Rechnungsentwürfe (`middleware/draftEdit.js`, UI-Pilot Runde 3): die Speicherschritte der Assistenten (PATCH, Leistungsbetrag, Buchungsauswahl, Positionen/Abzüge, Anlagen) verlangen `invoices.edit` **oder** das Anlege-Recht der Belegart (`invoices.create_partial/_single/_final/_credit`) — Letzteres nur, solange der Beleg ein Entwurf ist (`STATUS_ID = 1`). Die Belegart kommt aus der Datenbank, nie aus der Anfrage; ein fremder oder unbekannter Beleg bekommt dieselbe 403 wie ein fehlendes Recht. Buchen bleibt `invoices.book`, Löschen `invoices.delete`.
+
 - Drosselung teurer Endpunkte (PDF, Reports) **pro Konto, nicht pro IP** (`middleware/rateLimit.js`) — ein Büro hinter einer NAT-Adresse darf sich nicht selbst aussperren. Die Limiter hängen deshalb hinter `authMiddleware`.
 - Progressive Verzögerung bei Fehlversuchen **je Konto** (`middleware/loginAttempts.js`) — bewusst keine Sperre: die wäre ein Weg, einen bekannten Nutzer gezielt auszusperren.
 - **Registrierung neuer Mandanten braucht zwei Tore** (`services/signupApproval.js`, Migration 0135): E-Mail-Bestätigung des Anmelders, dann Freigabe in der Owner-Konsole (Tab „Registrierungen"). Bis dahin ist die Anmeldung gesperrt — geprüft **nach** der Passwortprüfung, damit der Zustand eines Mandanten nichts über ihn verrät. Ablehnen löscht den Antrag, aber **nur** im Zustand pending. Der Spaltenstandard von `SIGNUP_STATE` ist `active`: Import, Demo-Daten und manuelles SQL sollen weiterhin benutzbare Mandanten erzeugen.
 - Serverfehler tragen nach außen eine allgemeine Meldung plus Fehlerkennung (`middleware/errorSanitizer.js`); das Original steht im Protokoll. Fachfehler mit `status < 500` bleiben unberührt. Ein 500er, dessen Meldung der Nutzer braucht, kennzeichnet sich mit `userFacing: true`.
 
-**Offen (Stand 2026-09-04):**
+- **Mitarbeiter-Modul (UI-Pilot Runde 10, `tests/mitarbeiter.security.test.js`):**
+  - Rechte laden ist **fail-closed**: ein Ladefehler ist eine 503, nicht „alle Rechte". Nur eine fehlende RBAC-Migration bleibt unrestricted (`middleware/permissions.js`, `LOAD_FAILED`).
+  - Der Gehalts-Guard vergleicht den Pfad wie Express 5 (klein, ohne abschließenden Schrägstrich) und hängt zusätzlich an den Routen — `/5/cp-rates/` lief vorher vorbei.
+  - Die E-Mail eines **fremden** Kontos ändert nur, wer `employees.password.set` hat (sonst Übernahme über „Passwort vergessen"); danach enden dessen Sitzungen. `PATCH /mitarbeiter/:id` ist ein Teil-Update.
+  - „Nicht mehr vergeben, als man selbst hat" (`keysBeyondCaller`): Passwort setzen und Rollen zuweisen nur für Konten und Rollen, deren Rechte der Aufrufer selbst hat. Passwort setzen beendet Sitzungen. Der Import prüft dieselben Rechte je Inhalt (Kostensatz, Rolle, E-Mail beim Zusammenführen) und die Platzgrenze (`authorizeEmployeeCommit`).
+  - Das eigene Konto und der letzte Administrator lassen sich weder löschen noch deaktivieren; inaktive Admins zählen nicht. Die Löschprüfung kennt Angebote, Rechnungen, Abschläge, Mahnungen, Nachträge und Abwesenheiten und schluckt keine Fehler mehr (`safeReferences`).
+  - Arbeitszeitmodell zuordnen nur mit einem Modell des eigenen Büros, gültigem Datum und für einen eigenen Mitarbeiter; Neuanlage prüft den Vorgesetzten wie das Ändern und legt leere Angaben als `null` ab; das eigene Passwort lässt sich nicht löschen (Selbstaussperrung); Urlaubsansprüche je Jahr (`PUT /abwesenheit/entitlements/bulk`) nehmen keine leeren oder ungültigen Tage mehr als 0 und melden Teilfehler statt Erfolg.
+  - Profilfoto nur aus einem `AVATAR`-Bild; ArbZG-Audit/Export/Grenzen nur eigene oder mit Recht; Stundensätze der Team-Zuordnung nur mit `projects.hourly_rates.view`; Kosten im Stundencontrolling nur mit `employees.salary.view`; fremde Salden nur mit `employees.bookings.view_all`; Kostensatzrechner-Gehaltsdaten nur mit den Gehaltsrechten.
+
+- **Aus dem Mitarbeiter-Audit, Runde 11 geschlossen:**
+  - Urlaubstage zählen nach dem am Tag gültigen Arbeitszeitmodell (Tage ohne Soll sind frei) und je Kalenderjahr getrennt (`workdaysByYear`, `takenVacationByYear` in `routes/abwesenheit.js`); ohne Modell weiter Mo–Fr.
+  - Kostensatz-Übernahme (`importCostRates`, `services/costRateCalc.js`): je Mitarbeiter und Tag ein Satz; „Buchungen neu rechnen" nur für Stundenbuchungen bis zum nächsten Satz, nie in abgeschlossenen Monaten, Projektkosten werden nachgerechnet; bewusst `update` statt `upsert` (der INSERT-Teil scheitert an Pflichtspalten).
+  - Import-Rücknahme prüft alle Blocker **vor** der ersten Änderung, schluckt keine Fehler und steht nach einem Abbruch auf `rollback_partial` — ein erneuter Versuch setzt fort (`rollback`, `services/importService.js`).
+  - Der Einladungslink verlässt den Server nicht mehr: ohne Mailversand kam er in der Antwort der Neuanlage und von „Einladung senden" zurück.
+  - Eine eigene genehmigte Abwesenheit storniert man selbst nur, solange sie nicht begonnen hat (`POST /abwesenheit/:id/cancel`, sonst 409; mit `absence.manage` immer). Vorher ließ sich genommener Urlaub hinterher stornieren — die Tage kamen auf den Resturlaub zurück. Abgelehnte und stornierte Einträge lassen sich nicht erneut stornieren.
+- **Einstellungen (UI-Pilot Runde 12):** `PUT /stammdaten/defaults` nahm jeden Schlüssel ungeprüft an — wer Vorbelegungen pflegen durfte, überschrieb damit Firmenlogo (`co_<id>_logo_data_uri`), Monatsabschluss, Arbeitszeitregeln und Urlaubsverfall. Jetzt feste Liste mit Recht je Schlüssel (`settings.defaults.edit` bzw. `settings.company.edit` fürs Branding), Wertprüfung, Firma/Anmeldebild nur aus dem eigenen Büro (`services/tenantDefaults.js`). `GET /defaults` lieferte allen Angemeldeten sämtliche Einstellungen samt gespeichertem Monatsabschluss-Bericht — jetzt nur die Liste. `POST /stammdaten/status` ist entfernt: es schrieb in den **globalen** Katalog `PROJECT_STATUS`, ein Büro legte so einen Status für alle an. Arbeitszeitmodelle nahmen jedes Soll an (−8 h, 30 h), jedes Land und eine Pausenregel eines fremden Büros — jetzt 0–24 h je Tag, Land/Bundesland aus der festen Liste, Pausenregel nur aus dem eigenen Büro, fremde oder unbekannte Modelle 404 statt 500 (`services/workingTimeModels.js`).
+
+**Offen (Stand 2026-09-29):**
 - Klartext-Passwörter aus der Frühphase weiterhin login-fähig (M7) — vor dem Entfernen des Zweigs muss die Anzahl betroffener Konten bekannt sein, Befehl im Bericht
 - CSP bewusst abgeschaltet (SPA-Bundles, PDF) — erhöht die Wirkung jeder Datei-Auslieferungslücke (N2)
 
@@ -613,8 +758,11 @@ Alle Tokens stehen in `frontend-react/src/styles/globals.css` (`:root` + je ein 
 - Buttons sind standardmäßig flach; Erhebung nur bewusst über `.btn-elevated`.
 - Dialoge: `Modal`/`ConfirmModal` benutzen (bringen Escape, Fokus-Falle, Fokus-Rückgabe, `role="dialog"` mit). Kein eigenes Overlay bauen.
 - Dialog-Fußzeile: **immer `<DialogFooter>`** aus `components/ui/`, nie ein eigenes `flex-end`-`<div>` und nie `.modal-actions` direkt. Reihenfolge ist verbindlich: **Abbrechen links, Hauptaktion rechts** (13 Dialoge hatten es umgekehrt — dieselbe Position, gegenteilige Wirkung). Abbrechen trägt `.btn-secondary`, jeder Knopf ein `type="button"`. Ein Löschen-Knopf gehört in die `secondary`-Zone, nicht gleichrangig neben „Speichern". Geprüft von `tests/dialogs.spec.ts`.
+- Modulseiten (Übersicht, Adressen, Projekte, Rechnungen, Angebote, …) zeigen **keinen sichtbaren Seitentitel** — welches Modul offen ist, sagt die Seitennavigation. Die `<h1>` bleibt für Screenreader: `<PageHeader title="…" srTitle />` bzw. `<h1 className="sr-only">`. Eine Hauptaktion ohne Kopf steht rechts neben den Reitern (`.module-tabs-row`). Sichtbar bleiben Titel, die ein **Objekt** benennen (Projektkopf, Adresse, Nachtrag, Assistent).
+- Seitenformulare im Arbeitsbereich (Vertrag, Preislisten, Budget): `.ws-form` mit `<FormSection>` aus `components/ui/` — Überschrift als `<h3>`, ab 900px zwei Spalten, `layout="block"` für Tabellen. Eingaben liegen als Änderungen über dem geladenen Stand, gespeichert wird über die ActionBar mit `useRegisterDirty`; keine eigenen Kästen mit `--dim`/Rahmen mehr.
 - Navigation: Einträge **nur** in `components/layout/navItems.ts` pflegen — Seiten- und Bottom-Nav speisen sich daraus. `mobileRank` entscheidet, was auf dem Handy in der Leiste landet (max. 5 + „Mehr").
 - Regressionstests für diese Punkte: `frontend-react/tests/a11y.spec.ts`.
+- Stile für Bausteine (PageHeader, ActionBar, Disclosure …) und die Arbeitsbereiche stehen in `globals.css` im Abschnitt „Arbeitsbereiche und gemeinsame Bausteine“, **gegliedert nach Baustein, nicht nach Runde**. Ein Nachtrag gehört an die bestehende Regel, nicht als zweite Regel ans Dateiende: genau so standen `max-width` des Titel-Knopfs und die Breite des Umschalters zweimal da, und die zweite Regel gewann still.
 
 **Keine hartkodierten Farben — geprüft, nicht erhofft.** `npm run check:design`
 lässt jede Hex-Farbe im TSX fehlschlagen. Es gibt genau drei legitime Ausnahmen,
@@ -724,7 +872,7 @@ den man die Regel hätte schreiben können.
 These rules apply to every feature. Playwright smoke tests in `frontend-react/tests/` enforce them automatically in CI.
 
 **Layout**
-- No horizontal scroll at any viewport width (test: `document.body.scrollWidth ≤ viewport.width + 2`)
+- No horizontal scroll at any viewport width (test: `document.documentElement.scrollWidth ≤ viewport.width + 2` — **nicht** nur `body`: ein absolut positioniertes Kind am Seitenrand, etwa ein `.sr-only` im Tabellenkopf, verbreitert die Seite, ohne dass `body.scrollWidth` es zeigt. So waren Angebots- und Projektliste am Handy 1111 px breit, samt jedem Dialog darüber. Am Handy ist deshalb `.master-table` selbst der Bezug für solche Kinder.)
 - Bottom nav (`.bottom-nav`) must always be visible and reachable — never obscured by modals or sticky headers
 - Page content must not be hidden behind the fixed bottom nav — keep `padding-bottom` ≥ 64px on all page roots
 - Sticky table headers (`position: sticky`) are **desktop only** — disabled via `@media (max-width: 1023px)` in globals.css to prevent layout issues on small viewports
@@ -806,8 +954,15 @@ Choose dimensions meaningful to the data — typical examples: Projekt, Mitarbei
   `default_offer_status_id`, `offer_valid_days`, `default_cash_discount_percent`,
   `default_cash_discount_days`, `default_se_enabled`, `default_se_percent`,
   `default_se_basis`, `default_se_legal_reference`, `default_payment_term_days`.
-  Eine neue Vorbelegung braucht **keine Migration** — Feld in `VorbelegungenSection`
-  (AdminPage) ergänzen und am Verwendungsort lesen. Frontend-Zugriff über
+  Eine neue Vorbelegung braucht **keine Migration**, aber einen Eintrag in `SPEC`
+  (`backend/services/tenantDefaults.js`: Recht, Art, Grenzen) — `PUT /defaults` nimmt
+  nur Schlüssel dieser Liste an, `GET /defaults` liefert nur sie. Dann das Feld in
+  der Vorbelegungen-Seite ergänzen und am Verwendungsort lesen. **Eine leere
+  Vorbelegung ist keine Zeile**: Entfernen löscht sie, statt `VALUE = null` zu
+  schreiben — Leser, die `{ ...DEFAULTS, ...gespeichert }` bilden, verloren sonst
+  ihren Standard (so waren die Budget-Warnungen nach jedem Speichern aus), und
+  `Number(null)` ist 0, nicht „nicht gesetzt" (so rechnete „Teilfertige Leistungen"
+  mit 0 % statt 100 %). Frontend-Zugriff über
   `useTenantDefaults` / `presetId` (`hooks/useTenantDefaults.ts`,
   `utils/vorbelegung.ts`), damit alle Formulare denselben Query-Key `['defaults']`
   teilen. Vertragsspalten werden **ausschließlich** in

@@ -201,11 +201,13 @@ function RechnungenSeite() {
   // ── Listen ────────────────────────────────────────────────────────────────
   return (
     <div className="master-page">
-      <PageHeader
-        title="Rechnungen"
-        actions={<NewInvoiceMenu primary onPick={kind => goWizard(kind)} />}
-      />
-      {listTabs.length > 1 && <Tabs tabs={listTabs} active={listTab} onChange={id => goList(id as ListTab)} />}
+      <PageHeader title="Rechnungen" srTitle />
+      {/* Ohne sichtbaren Seitentitel steht „Neue Rechnung" rechts neben den
+          Reitern, statt allein eine eigene Zeile zu belegen. */}
+      <div className="module-tabs-row">
+        {listTabs.length > 1 && <Tabs tabs={listTabs} active={listTab} onChange={id => goList(id as ListTab)} />}
+        <div className="module-tabs-action"><NewInvoiceMenu primary onPick={kind => goWizard(kind)} /></div>
+      </div>
       <div className="master-tab-content">
         {listTab === 'liste'     && <RechnungenListe onEditDraft={handleEditDraft} onCreateInvoiceFromBilling={handleCreateInvoiceFromBilling} initialSearch={initSearch} backProject={backProject} onClearBack={() => { setInitSearch(undefined); setBackProject(undefined) }} />}
         {listTab === 'mahnungen' && <MahnungenListe openMahnung={openMahnung} />}

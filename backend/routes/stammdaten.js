@@ -11,7 +11,8 @@ const { requirePermission, requireAnyPermission } = require("../middleware/permi
 module.exports = (supabase) => {
   const router = express.Router();
 
-  router.post("/status",                                             requirePermission("settings.basedata.edit"), (req, res) => ctrl.postStatus(req, res, supabase));
+  // POST /status gibt es nicht mehr (Runde 12): PROJECT_STATUS ist ein globaler
+  // Katalog — ein Büro legte dort einen Status an, der bei allen Büros erschien.
   router.post("/typ",                                                requirePermission("settings.basedata.edit"), (req, res) => ctrl.postTyp(req, res, supabase));
   router.patch("/typ/:id",                                           requirePermission("settings.basedata.edit"), (req, res) => ctrl.patchTyp(req, res, supabase));
   router.delete("/typ/:id",                                          requirePermission("settings.basedata.edit"), (req, res) => ctrl.deleteTyp(req, res, supabase));
@@ -101,7 +102,8 @@ module.exports = (supabase) => {
   router.get("/vat",                                                 (req, res) => ctrl.getVat(req, res, supabase));
   router.get("/currencies",                                          (req, res) => ctrl.getCurrencies(req, res, supabase));
   router.get("/defaults",                                            (req, res) => ctrl.getDefaults(req, res, supabase));
-  router.put("/defaults",                                            requirePermission("settings.defaults.edit"), (req, res) => ctrl.putDefault(req, res, supabase));
+  // Recht je Schlüssel im Controller (Vorbelegungen: settings.defaults.edit, Branding: settings.company.edit)
+  router.put("/defaults",                                            requireAnyPermission("settings.defaults.edit", "settings.company.edit"), (req, res) => ctrl.putDefault(req, res, supabase));
   router.get("/payment-means",                                       (req, res) => ctrl.getPaymentMeans(req, res, supabase));
   router.get("/payment-means/search",                                (req, res) => ctrl.searchPaymentMeans(req, res, supabase));
 

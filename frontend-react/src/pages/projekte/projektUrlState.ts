@@ -12,6 +12,7 @@
  *   /projekte?tab=leistungsstaende          → Monatsrunde Leistungsstände (Runde 2)
  *   /projekte?projectId=12                  → Arbeitsbereich, Tab Struktur
  *   /projekte?projectId=12&tab=buchungen    → Arbeitsbereich, Tab Buchungen
+ *   /projekte?projectId=12&tab=daten        → Projektdaten (Runde 8, vorher Dialog in der Liste)
  *
  * Die alten Einstiege funktionieren weiter: `location.state` mit tab/projectId
  * (sieben Stellen im Code) wird in die URL uebersetzt, ein Arbeitsbereich-Tab
@@ -21,13 +22,13 @@
 
 export type ProjektTab =
   | 'struktur' | 'leistungsstand' | 'buchungen' | 'nachtraege'
-  | 'vertraege' | 'honorar' | 'mitarbeiter' | 'budget'
+  | 'daten' | 'vertraege' | 'honorar' | 'mitarbeiter' | 'budget'
 
 export type ListTab = 'liste' | 'honorar' | 'leistungsstaende'
 
 export const WORKSPACE_TABS: ProjektTab[] = [
   'struktur', 'leistungsstand', 'buchungen', 'nachtraege',
-  'vertraege', 'honorar', 'mitarbeiter', 'budget',
+  'daten', 'vertraege', 'honorar', 'mitarbeiter', 'budget',
 ]
 
 export const SELECTED_PID_KEY = 'projekte-selected-pid'

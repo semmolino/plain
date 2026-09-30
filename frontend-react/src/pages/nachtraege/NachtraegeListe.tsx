@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { FileDiff, Plus } from 'lucide-react'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { FilterChip } from '@/components/ui/FilterChip'
-import { useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { FileDiff } from 'lucide-react'
+import { FormField } from '@/components/ui/FormField'
 import { Can } from '@/components/ui/Can'
 import { Modal } from '@/components/ui/Modal'
 import { Message } from '@/components/ui/Message'
@@ -13,27 +14,18 @@ import {
   fetchNachtraege, createNachtrag, CATEGORY_LABELS,
   type NachtragCategory, type CreateNachtragPayload,
 } from '@/api/nachtraege'
-import { fmtEur, money } from '@/utils/money'
+import { money, NO_VALUE } from '@/utils/money'
+import { statusTone } from './nachtragStatus'
 
-const fmtDate = (v: string | null | undefined) => v ? new Date(v).toLocaleDateString('de-DE') : '—'
-
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: 'var(--text-3)', ANNOUNCED: 'var(--info)', SUBMITTED: 'var(--accent)', IN_REVIEW: 'var(--warning)',
-  PARTIALLY_COMMISSIONED: 'var(--accent2)', COMMISSIONED: 'var(--success)', REJECTED: 'var(--danger)',
-  WITHDRAWN: 'var(--text-4)', DISPUTED: 'var(--danger-strong)',
-}
+const fmtDate = (v: string | null | undefined) => v ? new Date(v).toLocaleDateString('de-DE') : NO_VALUE
 
 const CATEGORY_ENTRIES = Object.entries(CATEGORY_LABELS) as [NachtragCategory, string][]
 
+/** Woher die Detailseite zurückführt — aus dem Projekt zurück ins Projekt (Runde 7). */
+export interface NachtragFrom { from: string; fromLabel: string }
 
-function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div style={{ flex: '1 1 130px', minWidth: 130, border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px', background: 'var(--surface-3)' }}>
-      <div style={{ fontSize: 11, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.3 }}>{label}</div>
-      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>{sub}</div>}
-    </div>
-  )
+export function StatusPill({ code, label }: { code: string | null | undefined; label: string | null | undefined }) {
+  return <span className={`nt-status nt-status--${statusTone(code)}`}>{label ?? NO_VALUE}</span>
 }
 
 export function NachtraegeListe({ projectId }: { projectId?: number }) {
@@ -43,14 +35,20 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
   const [statusFilter, setStatus]   = useState<Set<string>>(new Set())
   const [catFilter, setCat]         = useState<Set<string>>(new Set())
   const [projFilter, setProj]       = useState<Set<string>>(new Set())
-  const [msg, setMsg]               = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  // Aus dem Projekt geöffnet, führt die Detailseite dorthin zurück — vorher
+  // landete man im Modul „Nachträge" und hatte das Projekt verloren.
+  const from: NachtragFrom = projectId
+    ? { from: `/projekte?projectId=${projectId}&tab=nachtraege`, fromLabel: 'Projekt' }
+    : { from: '/nachtraege', fromLabel: 'Nachträge' }
+  const open = (id: number) => navigate(`/nachtraege/${id}`, { state: from })
+
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['nachtraege', projectId ?? 'all'],
     queryFn:  () => fetchNachtraege(projectId),
   })
-  const rows = data?.data ?? []
+  const rows = useMemo(() => data?.data ?? [], [data])
 
   const projectOptions = useMemo(() => {
     const seen = new Map<number, string>()
@@ -80,101 +78,124 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
 
   const kpi = useMemo(() => {
     const terminal = new Set(['COMMISSIONED', 'REJECTED', 'WITHDRAWN'])
-    const open         = filtered.filter(r => !r.STATUS_CODE || !terminal.has(r.STATUS_CODE)).length
+    const openCount    = filtered.filter(r => !r.STATUS_CODE || !terminal.has(r.STATUS_CODE)).length
     const commissioned = filtered.filter(r => r.STATUS_CODE === 'COMMISSIONED' || r.STATUS_CODE === 'PARTIALLY_COMMISSIONED').length
     const rejected     = filtered.filter(r => r.STATUS_CODE === 'REJECTED').length
     const quote        = claimedSum > 0 ? Math.round(approvedSum / claimedSum * 100) : null
-    return { open, commissioned, rejected, quote }
+    return { open: openCount, commissioned, rejected, quote }
   }, [filtered, claimedSum, approvedSum])
 
-  const hasFilter = search.trim() !== '' || statusFilter.size > 0 || catFilter.size > 0 || projFilter.size > 0
 
   const createMut = useMutation({
     mutationFn: (body: CreateNachtragPayload) => createNachtrag(body),
     onSuccess: (res) => {
       setCreateOpen(false)
       void qc.invalidateQueries({ queryKey: ['nachtraege'] })
-      navigate(`/nachtraege/${res.data.ID}`)
+      open(res.data.ID)
     },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
-  return (
-    <div>
-      {msg && <Message text={msg.text} type={msg.type} />}
+  const createButton = (label: string) => (
+    <Can permission="nachtraege.create">
+      <button type="button" className="btn-primary nt-new" onClick={() => { createMut.reset(); setCreateOpen(true) }}>
+        <Plus size={14} strokeWidth={2} aria-hidden="true" /> {label}
+      </button>
+    </Can>
+  )
 
+  return (
+    <div className="nt-list">
       {rows.length > 0 && (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-          <StatTile label="Nachträge"     value={String(filtered.length)} sub={`${kpi.open} offen`} />
-          <StatTile label="Gefordert"     value={fmtEur(claimedSum)} />
-          <StatTile label="Freigegeben"   value={fmtEur(approvedSum)} sub={`${kpi.commissioned} beauftragt`} />
-          <StatTile label="Freigabequote" value={kpi.quote != null ? `${kpi.quote} %` : '—'} sub={kpi.rejected > 0 ? `${kpi.rejected} abgelehnt` : undefined} />
+        <div className="ws-tiles">
+          <div className="ws-tile">
+            <div className="ws-tile-label">Nachträge</div>
+            <div className="ws-tile-value">{filtered.length}</div>
+            <div className="ws-tile-sub">{kpi.open} offen</div>
+          </div>
+          <div className="ws-tile">
+            <div className="ws-tile-label">Gefordert</div>
+            <div className="ws-tile-value">{money(claimedSum)}</div>
+          </div>
+          <div className="ws-tile">
+            <div className="ws-tile-label">Freigegeben</div>
+            <div className="ws-tile-value">{money(approvedSum)}</div>
+            <div className="ws-tile-sub">{kpi.commissioned} beauftragt</div>
+          </div>
+          <div className="ws-tile">
+            <div className="ws-tile-label">Freigabequote</div>
+            <div className="ws-tile-value">{kpi.quote != null ? `${kpi.quote} %` : NO_VALUE}</div>
+            {kpi.rejected > 0 && <div className="ws-tile-sub">{kpi.rejected} abgelehnt</div>}
+          </div>
         </div>
       )}
 
       <div className="list-toolbar">
-        <input type="search" className="list-search" placeholder="Nachträge suchen …" value={search} onChange={e => setSearch(e.target.value)} />
+        <input type="search" className="list-search" placeholder="Nachträge suchen …" aria-label="Nachträge suchen"
+          value={search} onChange={e => setSearch(e.target.value)} />
         {!projectId && projectOptions.length > 0 && (
           <FilterChip label="Projekt" options={projectOptions} active={projFilter} onChange={setProj} />
         )}
         <FilterChip label="Status"    options={statusOptions}   active={statusFilter} onChange={setStatus} />
         <FilterChip label="Kategorie" options={CATEGORY_ENTRIES.map(([value, label]) => ({ value, label }))} active={catFilter} onChange={setCat} />
-        <Can permission="nachtraege.create">
-          <button className="btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setCreateOpen(true)}>+ Nachtrag</button>
-        </Can>
+        <HelpHint id="nachtrag.overview" />
+        {rows.length > 0 && createButton('Nachtrag')}
       </div>
 
       {isLoading ? (
-        <p style={{ color: 'var(--text-3)', padding: '1rem' }}>Laden …</p>
-      ) : filtered.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-3)' }}>
-          {hasFilter ? (
-            <p>Kein Nachtrag passt zu Suche/Filter.</p>
-          ) : (
-            <>
-              <FileDiff size={28} strokeWidth={1.5} style={{ opacity: 0.5 }} />
-              <p style={{ marginTop: 8 }}>Noch keine Nachträge.</p>
-              <p style={{ fontSize: 13 }}>Nachträge halten Mehr-/Änderungsleistungen fest, geben sie ins Projekt frei und machen sie abrechenbar.</p>
-              <Can permission="nachtraege.create">
-                <button className="btn-primary" style={{ marginTop: 8 }} onClick={() => setCreateOpen(true)}>+ Ersten Nachtrag anlegen</button>
-              </Can>
-            </>
-          )}
+        <p className="ls-empty">Lädt …</p>
+      ) : isError ? (
+        <Message type="error" text="Die Nachträge konnten nicht geladen werden." />
+      ) : rows.length === 0 ? (
+        <div className="empty-block">
+          <FileDiff size={28} strokeWidth={1.5} aria-hidden="true" className="nt-empty-icon" />
+          <p className="empty-note">{projectId ? 'Zu diesem Projekt gibt es noch keine Nachträge.' : 'Noch keine Nachträge.'}</p>
+          <p className="empty-block-why">
+            Ein Nachtrag hält eine Mehr- oder Änderungsleistung fest. Er wird geprüft, ganz oder teilweise ins
+            Projekt freigegeben und ist danach buch- und abrechenbar.
+          </p>
+          {createButton('Ersten Nachtrag anlegen')}
         </div>
+      ) : filtered.length === 0 ? (
+        <p className="ls-empty">Kein Nachtrag passt zu Suche und Filter.</p>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div className="table-scroll">
           <table className="master-table">
             <thead>
               <tr>
-                <th scope="col">Nr.</th><th scope="col">Betreff</th>{!projectId && <th scope="col">Projekt</th>}<th scope="col">Kategorie</th>
-                <th scope="col">Status</th><th scope="col" style={{ textAlign: 'right' }}>Gefordert</th>
-                <th scope="col" style={{ textAlign: 'right' }}>Freigegeben</th><th scope="col">Prüffrist</th>
+                <th scope="col">Nachtrag</th>
+                {!projectId && <th scope="col">Projekt</th>}
+                <th scope="col">Kategorie</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="num">Gefordert</th>
+                <th scope="col" className="num">Freigegeben</th>
+                <th scope="col">Prüffrist <HelpHint id="nachtrag.fristen" size={12} /></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.ID} style={{ cursor: 'pointer' }} onClick={() => navigate(`/nachtraege/${r.ID}`)}>
-                  <td>{r.ABBR ?? `#${r.ID}`}</td>
-                  <td>{r.NAME}</td>
-                  {!projectId && <td>{r.PROJECT_NAME ?? '—'}</td>}
-                  <td>{r.CATEGORY ? CATEGORY_LABELS[r.CATEGORY] : '—'}</td>
+                <tr key={r.ID} className="nt-row" onClick={() => open(r.ID)}>
                   <td>
-                    <span style={{
-                      display: 'inline-block', padding: '2px 8px', borderRadius: 999, fontSize: 11, color: '#fff',
-                      background: STATUS_COLORS[r.STATUS_CODE ?? ''] ?? 'var(--text-3)',
-                    }}>{r.STATUS_NAME ?? '—'}</span>
+                    {/* Der Link macht die Zeile per Tastatur erreichbar — vorher ging
+                        sie nur per Klick auf die Zeile. */}
+                    <Link to={`/nachtraege/${r.ID}`} state={from} className="nt-link" onClick={e => e.stopPropagation()}>
+                      <span className="nt-abbr">{r.ABBR ?? `#${r.ID}`}</span>
+                      <span className="nt-name">{r.NAME}</span>
+                    </Link>
                   </td>
-                  <td style={{ textAlign: 'right' }}>{money(r.AMOUNT_CLAIMED_NET)}</td>
-                  <td style={{ textAlign: 'right' }}>{money(r.AMOUNT_APPROVED_NET)}</td>
+                  {!projectId && <td>{r.PROJECT_NAME ?? NO_VALUE}</td>}
+                  <td>{r.CATEGORY ? CATEGORY_LABELS[r.CATEGORY] : NO_VALUE}</td>
+                  <td><StatusPill code={r.STATUS_CODE} label={r.STATUS_NAME} /></td>
+                  <td className="num">{money(r.AMOUNT_CLAIMED_NET)}</td>
+                  <td className="num">{money(r.AMOUNT_APPROVED_NET)}</td>
                   <td>{fmtDate(r.REVIEW_DUE_DATE)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr style={{ fontWeight: 600 }}>
-                <td colSpan={projectId ? 4 : 5} style={{ textAlign: 'right' }}>Summe ({filtered.length}):</td>
-                <td style={{ textAlign: 'right' }}>{money(claimedSum)}</td>
-                <td style={{ textAlign: 'right' }}>{money(approvedSum)}</td>
+              <tr className="nt-sum">
+                <td colSpan={projectId ? 3 : 4}>Summe ({filtered.length})</td>
+                <td className="num">{money(claimedSum)}</td>
+                <td className="num">{money(approvedSum)}</td>
                 <td />
               </tr>
             </tfoot>
@@ -182,24 +203,30 @@ export function NachtraegeListe({ projectId }: { projectId?: number }) {
         </div>
       )}
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Nachtrag anlegen">
-        <NachtragCreateForm
-          projectId={projectId}
-          submitting={createMut.isPending}
-          onSubmit={(body) => createMut.mutate(body)}
-        />
-      </Modal>
+      {createOpen && (
+        <Modal open onClose={() => setCreateOpen(false)} title="Nachtrag anlegen">
+          <NachtragCreateForm
+            projectId={projectId}
+            submitting={createMut.isPending}
+            error={createMut.error ? (createMut.error as Error).message : null}
+            onCancel={() => setCreateOpen(false)}
+            onSubmit={(body) => createMut.mutate(body)}
+          />
+        </Modal>
+      )}
     </div>
   )
 }
 
-function NachtragCreateForm({ projectId, submitting, onSubmit }: {
+function NachtragCreateForm({ projectId, submitting, error, onCancel, onSubmit }: {
   projectId?: number
   submitting: boolean
-  onSubmit: (body: CreateNachtragPayload) => void
+  error:      string | null
+  onCancel:   () => void
+  onSubmit:   (body: CreateNachtragPayload) => void
 }) {
   const [proj, setProj]     = useState<string>(projectId ? String(projectId) : '')
-  const [nameLong, setName] = useState('')
+  const [name, setName]     = useState('')
   const [category, setCat]  = useState<string>('')
   const [claim, setClaim]   = useState('')
   const [err, setErr]       = useState<string | null>(null)
@@ -207,42 +234,48 @@ function NachtragCreateForm({ projectId, submitting, onSubmit }: {
   const { data: projData } = useQuery({ queryKey: ['projects-short'], queryFn: fetchProjectsShort, enabled: !projectId })
 
   function submit() {
-    if (!proj)          { setErr('Bitte ein Projekt wählen.'); return }
-    if (!nameLong.trim()) { setErr('Bitte einen Betreff angeben.'); return }
+    if (!proj)        { setErr('Bitte ein Projekt wählen.'); return }
+    if (!name.trim()) { setErr('Bitte einen Betreff angeben.'); return }
+    setErr(null)
     onSubmit({
-      project_id: Number(proj),
-      name:  nameLong.trim(),
-      category:   category ? (category as NachtragCategory) : null,
+      project_id:  Number(proj),
+      name:        name.trim(),
+      category:    category ? (category as NachtragCategory) : null,
       claim_basis: claim.trim() || undefined,
     })
   }
 
   return (
-    <div className="form-grid" style={{ display: 'grid', gap: 12 }}>
-      {err && <Message text={err} type="error" />}
+    <div className="master-form nt-dialog">
       {!projectId && (
-        <label>Projekt *
-          <select value={proj} onChange={e => setProj(e.target.value)}>
+        <div className="form-group">
+          <label htmlFor="nt-new-project">Projekt</label>
+          <select id="nt-new-project" value={proj} onChange={e => setProj(e.target.value)}>
             <option value="">— wählen —</option>
             {(projData?.data ?? []).map(p => <option key={p.ID} value={p.ID}>{p.ABBR} — {p.NAME}</option>)}
           </select>
-        </label>
+        </div>
       )}
-      <label>Betreff *
-        <input type="text" value={nameLong} onChange={e => setName(e.target.value)} placeholder="z. B. Zusätzliche Tiefgaragenebene" />
-      </label>
-      <label>Kategorie <HelpHint id="nachtrag.kategorie" />
-        <select value={category} onChange={e => setCat(e.target.value)}>
+      <FormField label="Betreff" id="nt-new-name" value={name} data-autofocus required
+        onChange={e => setName(e.target.value)} placeholder="z. B. Zusätzliche Tiefgaragenebene" />
+      <div className="form-group">
+        <label htmlFor="nt-new-cat" className="ws-label-help">Kategorie <HelpHint id="nachtrag.kategorie" size={13} /></label>
+        <select id="nt-new-cat" value={category} onChange={e => setCat(e.target.value)}>
           <option value="">— optional —</option>
           {CATEGORY_ENTRIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
         </select>
-      </label>
-      <label>Anspruchsgrundlage <HelpHint id="nachtrag.anspruchsgrundlage" />
-        <input type="text" value={claim} onChange={e => setClaim(e.target.value)} placeholder="z. B. § 650b BGB / § 10 HOAI" />
-      </label>
+      </div>
+      <div className="form-group">
+        <label htmlFor="nt-new-claim" className="ws-label-help">Anspruchsgrundlage <HelpHint id="nachtrag.anspruchsgrundlage" size={13} /></label>
+        <input id="nt-new-claim" type="text" value={claim} onChange={e => setClaim(e.target.value)} placeholder="z. B. § 650b BGB / § 10 HOAI" />
+      </div>
+      <Message text={err ?? error} type="error" />
+      <p className="form-field-hint">Positionen und Beträge folgen im Nachtrag selbst.</p>
       <DialogFooter>
-        <button type="button" className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Anlegen …' : 'Anlegen'}</button>
+        <button type="button" className="btn-secondary" onClick={onCancel}>Abbrechen</button>
+        <button type="button" className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Legt an …' : 'Anlegen'}</button>
       </DialogFooter>
     </div>
   )
 }
+

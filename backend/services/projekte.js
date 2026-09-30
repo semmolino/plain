@@ -577,6 +577,45 @@ async function getProjectStructure(supabase, { projectId, tenantId }) {
   }));
 }
 
+/**
+ * Plan eines Elements nach Aufwand (Migration 0173): angebotene Stunden und
+ * angebotenes Honorar, beim Beauftragen aus den Aufwandszeilen uebernommen.
+ * Eigener, schmaler Weg: patchStructure schreibt bei jedem Aufruf einen
+ * Leistungsstand-Snapshot — eine Planaenderung ist kein neuer Stand.
+ * Leer (null) heisst: kein Plan, die Budgetwarnung rechnet wie bisher.
+ */
+async function patchStructurePlan(supabase, { structureId, tenantId, planHours, planRevenue }) {
+  structureId = await assertStructureInTenant(supabase, structureId, tenantId);
+  const toNum = (v, label) => {
+    if (v === undefined || v === null || v === "") return null;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 0) throw { status: 400, message: `${label} muss eine Zahl ≥ 0 sein` };
+    return Math.round(n * 100) / 100;
+  };
+  const { data: cur, error: curErr } = await supabase
+    .from("PROJECT_STRUCTURE")
+    .select("ID, PROJECT_ID, BILLING_TYPE_ID")
+    .eq("ID", structureId)
+    .eq("TENANT_ID", tenantId)
+    .maybeSingle();
+  if (curErr) throw curErr;
+  if (!cur) throw { status: 404, message: "PROJECT_STRUCTURE nicht gefunden" };
+  if (Number(cur.BILLING_TYPE_ID) !== 2) {
+    throw { status: 400, message: "Einen Plan gibt es nur bei Abrechnung nach Aufwand" };
+  }
+  const patch = { PLAN_HOURS: toNum(planHours, "Plan-Stunden"), PLAN_REVENUE: toNum(planRevenue, "Plan-Honorar") };
+  const { error } = await supabase.from("PROJECT_STRUCTURE").update(patch).eq("ID", structureId).eq("TENANT_ID", tenantId);
+  if (error) throw error;
+  // Der Plan ist das Budget dieses Elements — Warnregeln neu bewerten.
+  try {
+    const { evaluateAfterTecChange } = require("./budgetWarnings");
+    await evaluateAfterTecChange(supabase, { tenantId, projectId: cur.PROJECT_ID, structureIds: new Set([Number(structureId)]) });
+  } catch (e) {
+    console.warn("[PLAN] Budgetwarnung nicht neu bewertet:", e?.message || e);
+  }
+  return patch;
+}
+
 async function patchStructureCompletionPercents(supabase, { structureId, revPct, exPct, tenantId }) {
   structureId = await assertStructureInTenant(supabase, structureId, tenantId);
   const { error } = await supabase
@@ -1444,13 +1483,25 @@ async function getContractByProject(supabase, { projectId, tenantId }) {
       .from(table)
       .select(columns)
       .eq("PROJECT_ID", projectId)
+      .eq("TENANT_ID", tenantId)
+      .order("ID", { ascending: true })
       .limit(1)
       .maybeSingle();
 
-  const fullCols = "ID, ABBR, NAME, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, VAT_ID, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE";
   const basicCols = "ID, ABBR, NAME, INVOICE_ADDRESS_ID, INVOICE_CONTACT_ID, PROJECT_ID, CASH_DISCOUNT_PERCENT, CASH_DISCOUNT_DAYS, VAT_ID";
+  const seCols    = `${basicCols}, SE_ENABLED, SE_PERCENT, SE_BASIS, SE_LEGAL_REFERENCE`;
+  // Die USt-Kategorie fehlte hier (Runde 6). Der Reiter „Verträge" zeigte
+  // deshalb immer „Standard" und schickte das beim naechsten Speichern mit —
+  // ein Vertrag nach §13b wurde still zum Regelsatz, und jede neue Rechnung
+  // daraus (invoices.js / partialPayments.js lesen die Kategorie vom Vertrag)
+  // wies Umsatzsteuer aus.
+  const fullCols  = `${seCols}, VAT_CATEGORY, VAT_EXEMPTION_REASON_CODE, VAT_EXEMPTION_REASON_TEXT`;
 
   let { data, error } = await query("CONTRACT", fullCols);
+  if (error && String(error.message || "").includes("VAT_")) {
+    // Migration 0059 not yet run — retry without the VAT category
+    ({ data, error } = await query("CONTRACT", seCols));
+  }
   if (error && String(error.message || "").includes("SE_")) {
     // Migration 0047 not yet run — retry with basic columns
     ({ data, error } = await query("CONTRACT", basicCols));
@@ -1990,10 +2041,12 @@ module.exports = {
   progressSnapshot,
   recalcParent,
   propagateUpwards,
+  computeSurchargesNode,
   getTecSum,
   checkParentForChild,
   createStructureNode,
   patchStructure,
+  patchStructurePlan,
   inheritStructure,
   moveStructure,
   deleteStructure,

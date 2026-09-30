@@ -14,12 +14,15 @@ export interface GuardEntry {
   count?: number
   /** Speichert alles Offene; wirft bei Fehler. Ohne `save` gibt es nur „Verwerfen". */
   save?:  () => Promise<unknown>
+  /** Eigener Text der Rueckfrage, wenn „nicht gespeichert" nicht stimmt —
+   *  z. B. eine angefangene Kalkulation, die beim Verlassen verworfen wird. */
+  note?:  string
 }
 
 export interface GuardCtx {
   register:   (key: string, entry: { current: GuardEntry }) => void
   unregister: (key: string) => void
-  request:    (action: () => void) => void
+  request:    (action: () => void, only?: string[]) => void
 }
 
 export const GuardContext = createContext<GuardCtx | null>(null)
@@ -41,8 +44,10 @@ export function useRegisterDirty(key: string, entry: GuardEntry) {
 /**
  * Liefert eine Funktion, die eine Aktion ausfuehrt — bei offenen Aenderungen
  * erst nach Rueckfrage. Ohne Provider wird die Aktion direkt ausgefuehrt.
+ * Mit `only` zaehlen nur diese Bereiche (Schluessel aus useRegisterDirty),
+ * z. B. beim Schliessen eines Dialogs nur dessen Inhalt.
  */
-export function useGuardedAction(): (action: () => void) => void {
+export function useGuardedAction(): (action: () => void, only?: string[]) => void {
   const ctx = useContext(GuardContext)
   return ctx?.request ?? ((action: () => void) => action())
 }

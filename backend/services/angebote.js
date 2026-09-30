@@ -1,6 +1,8 @@
 'use strict';
 
 const { contractDefaults } = require('./contractDefaults');
+const { normalizeEffortLines, effortColumns, nodeEffortLines, lineAmount } = require('./effortLines');
+const { assertOwnAddress, assertContactOfAddress } = require('./adressen');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -73,10 +75,23 @@ async function getOfferStatuses(supabase) {
 
 // ── offers ────────────────────────────────────────────────────────────────────
 
+/**
+ * Netto-Angebotssumme wie im Angebots-PDF: Wurzel-Honorar (REVENUE traegt die
+ * Zuschlaege seines Teilbaums) + Angebotszuschlaege + Wurzel-Nebenkosten.
+ * Liste und PDF rechnen damit dasselbe. Vorher summierte die Liste nur die
+ * Blaetter — Zuschlaege auf Vaetern und am Angebot fehlten dort.
+ */
+function offerNetTotal(structRows, offerSurchargesTotal) {
+  const roots = (structRows || []).filter(r => r.FATHER_ID == null);
+  const revenue = roots.reduce((s, r) => s + (Number(r.REVENUE) || 0), 0);
+  const extras  = roots.reduce((s, r) => s + (Number(r.EXTRAS)  || 0), 0);
+  return fmt2(revenue + (Number(offerSurchargesTotal) || 0) + extras);
+}
+
 async function listOffers(supabase, { tenantId }) {
   const { data, error } = await supabase
     .from('OFFER')
-    .select('ID, ABBR, NAME, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID')
+    .select('ID, ABBR, NAME, PROBABILITY, CREATED_AT, OFFER_DATE, VALID_UNTIL, OFFER_STATUS_ID, EMPLOYEE_ID, ADDRESS_ID, CONTACT_ID, PROJECT_ID, SURCHARGES_TOTAL')
     .eq('TENANT_ID', tenantId)
     .order('ID', { ascending: false });
   if (error) throw error;
@@ -94,7 +109,9 @@ async function listOffers(supabase, { tenantId }) {
     statusIds.length  ? supabase.from('OFFER_STATUS').select('ID, ABBR').in('ID', statusIds) : Promise.resolve({ data: [] }),
     empIds.length     ? supabase.from('EMPLOYEE').select('ID, ABBR, FIRST_NAME, LAST_NAME').in('ID', empIds) : Promise.resolve({ data: [] }),
     addrIds.length    ? supabase.from('ADDRESS').select('ID, ADDRESS_NAME_1').in('ID', addrIds) : Promise.resolve({ data: [] }),
-    contactIds.length ? supabase.from('CONTACT').select('ID, FIRST_NAME, LAST_NAME').in('ID', contactIds) : Promise.resolve({ data: [] }),
+    // CONTACTS — die Tabelle heisst im Plural. Mit „CONTACT" lief die Abfrage
+    // ins Leere, und die Angebotsliste zeigte nie einen Ansprechpartner.
+    contactIds.length ? supabase.from('CONTACTS').select('ID, FIRST_NAME, LAST_NAME').eq('TENANT_ID', tenantId).in('ID', contactIds) : Promise.resolve({ data: [] }),
     supabase.from('OFFER_STRUCTURE').select('OFFER_ID, ID, FATHER_ID, REVENUE, EXTRAS').in('OFFER_ID', offerIds),
     projectIds.length ? supabase.from('PROJECT').select('ID, ABBR').in('ID', projectIds) : Promise.resolve({ data: [] }),
   ]);
@@ -105,7 +122,7 @@ async function listOffers(supabase, { tenantId }) {
   const contactMap = new Map((contactRes.data  || []).map(r => [r.ID, r]));
   const projectMap = new Map((projectRes.data  || []).map(r => [r.ID, r]));
 
-  // Leaf-based totals per offer
+  // Summe je Angebot — dieselbe Rechnung wie im PDF (offerNetTotal)
   const totalMap = new Map();
   if (structRes.data?.length) {
     const byOffer = new Map();
@@ -113,18 +130,13 @@ async function listOffers(supabase, { tenantId }) {
       if (!byOffer.has(s.OFFER_ID)) byOffer.set(s.OFFER_ID, []);
       byOffer.get(s.OFFER_ID).push(s);
     }
-    for (const [oId, sRows] of byOffer) {
-      const withChildren = new Set(sRows.map(r => r.FATHER_ID).filter(Boolean));
-      const leaves = sRows.filter(r => !withChildren.has(r.ID));
-      const rev  = leaves.reduce((s, r) => s + (Number(r.REVENUE) || 0), 0);
-      const ext  = leaves.reduce((s, r) => s + (Number(r.EXTRAS)  || 0), 0);
-      totalMap.set(oId, fmt2(rev + ext));
-    }
+    const offerSur = new Map(rows.map(r => [r.ID, r.SURCHARGES_TOTAL]));
+    for (const [oId, sRows] of byOffer) totalMap.set(oId, offerNetTotal(sRows, offerSur.get(oId)));
   }
 
   // NB: HOAI fee-calculations attached to an offer are materialised as
   // OFFER_STRUCTURE rows (siehe attachFeeCalcToOfferStructure), d. h. ihre
-  // Leistungsphasen sind bereits in der Leaf-Summe oben enthalten. Sie hier
+  // Leistungsphasen sind bereits in der Summe oben enthalten. Sie hier
   // zusätzlich direkt aus FEE_CALCULATION_PHASE/BL/SURCHARGES aufzusummieren
   // zählte die Honorare doppelt. Die Angebotssumme entspricht jetzt – wie im
   // Angebots-PDF – ausschließlich der OFFER_STRUCTURE.
@@ -143,6 +155,7 @@ async function listOffers(supabase, { tenantId }) {
       TOTAL_AMOUNT:    totalMap.get(r.ID) ?? null,
       STATUS_NAME:     statusMap.get(r.OFFER_STATUS_ID)?.ABBR ?? null,
       OFFER_STATUS_ID: r.OFFER_STATUS_ID,
+      EMPLOYEE_ID:     r.EMPLOYEE_ID ?? null,
       EMPLOYEE_NAME:   emp
         ? `${emp.ABBR ? emp.ABBR + ': ' : ''}${emp.FIRST_NAME ?? ''} ${emp.LAST_NAME ?? ''}`.trim()
         : null,
@@ -188,6 +201,8 @@ async function createOffer(supabase, { tenantId, body }) {
   if (!b.address_id)      throw { status: 400, message: 'Adresse ist erforderlich' };
   if (!b.contact_id)      throw { status: 400, message: 'Kontakt ist erforderlich' };
   if (!b.company_id)      throw { status: 400, message: 'Firma ist erforderlich' };
+  const createProbability = probabilityOrNull(b.probability);
+  await assertRecipient(supabase, { tenantId, addressId: b.address_id, contactId: b.contact_id });
 
   // Resolve offer number via RPC
   const { data: numData, error: numErr } = await supabase.rpc('next_offer_number', {
@@ -211,7 +226,7 @@ async function createOffer(supabase, { tenantId, body }) {
       ABBR:      numData,
       NAME:       String(b.name).trim(),
       EMPLOYEE_ID:     parseInt(String(b.employee_id), 10),
-      PROBABILITY:     b.probability != null && b.probability !== '' ? Number(b.probability) : null,
+      PROBABILITY:     createProbability,
       OFFER_TEXT_1:    b.offer_text_1 ? String(b.offer_text_1) : null,
       OFFER_TEXT_2:    b.offer_text_2 ? String(b.offer_text_2) : null,
       ADDRESS_ID:      parseInt(String(b.address_id), 10),
@@ -240,9 +255,11 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
   const insertRows = draft.map((n, i) => {
     const btId     = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
     const isHourly = btId === 2;
-    const quantity    = isHourly ? (Number(n.QUANTITY)   || 0) : null;
-    const spRate      = isHourly ? (Number(n.HOURLY_RATE)     || 0) : null;
-    const revenue     = isHourly ? fmt2((quantity || 0) * (spRate || 0)) : fmt2(Number(n.REVENUE) || 0);
+    // Aufwand: eine Zeile aus den Einzelfeldern der Vorlage (Migration 0173)
+    const eff = isHourly ? effortColumns(normalizeEffortLines(Array.isArray(n.effort_lines) ? n.effort_lines : [{
+      role_id: n.ROLE_ID || null, role_abbr: n.ROLE_ABBR, role_name: n.ROLE_NAME, hours: n.QUANTITY, rate: n.HOURLY_RATE,
+    }])) : null;
+    const revenue     = isHourly ? eff.basis : fmt2(Number(n.REVENUE) || 0);
     const extPct      = Number(n.EXTRAS_PERCENT) || 0;
     const extras      = fmt2(revenue * extPct / 100);
 
@@ -256,11 +273,12 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
       EXTRAS_PERCENT:  extPct,
       EXTRAS:          extras,
       SORT_ORDER:      i * 10,
-      QUANTITY:        quantity,
-      HOURLY_RATE:         spRate,
-      ROLE_ABBR: n.ROLE_ABBR ? String(n.ROLE_ABBR) : null,
-      ROLE_NAME:  n.ROLE_NAME  ? String(n.ROLE_NAME)  : null,
-      ROLE_ID:         n.ROLE_ID ? parseInt(String(n.ROLE_ID), 10) : null,
+      QUANTITY:        isHourly ? eff.QUANTITY    : null,
+      HOURLY_RATE:     isHourly ? eff.HOURLY_RATE : null,
+      ROLE_ABBR:       isHourly ? eff.ROLE_ABBR   : null,
+      ROLE_NAME:       isHourly ? eff.ROLE_NAME   : null,
+      ROLE_ID:         isHourly ? eff.ROLE_ID     : null,
+      EFFORT_LINES:    isHourly ? eff.EFFORT_LINES : null,
       TENANT_ID:       tenantId,
     };
   });
@@ -289,18 +307,72 @@ async function insertOfferStructure(supabase, { offer, draft, tenantId }) {
   }
 }
 
+/** Ganze Zahl > 0 oder null — `parseInt('')` ist NaN und landete als NULL in der Zeile. */
+function positiveId(v) {
+  const n = parseInt(String(v ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Leer heisst „keine Angabe"; sonst 0–100. Vorher ging jede Zahl durch, auch 250. */
+function probabilityOrNull(v) {
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0 || n > 100) {
+    throw { status: 400, message: 'Die Wahrscheinlichkeit liegt zwischen 0 und 100 %.' };
+  }
+  return n;
+}
+
+/**
+ * Empfaenger eines Angebots: die Adresse gehoert dem Mandanten, der Kontakt
+ * zu genau dieser Adresse. Ein Fremdschluessel prueft beides nicht.
+ */
+async function assertRecipient(supabase, { tenantId, addressId, contactId }) {
+  const a = positiveId(addressId);
+  if (!a) throw { status: 400, message: 'Adresse ist erforderlich' };
+  await assertOwnAddress(supabase, { tenantId, addressId: a });
+  const c = positiveId(contactId);
+  if (!c) throw { status: 400, message: 'Kontakt ist erforderlich' };
+  await assertContactOfAddress(supabase, { tenantId, addressId: a, contactId: c });
+}
+
 async function updateOffer(supabase, { tenantId, offerId, body }) {
   const b = body || {};
   const patch = {};
-  if (b.name       !== undefined) patch.NAME       = String(b.name).trim();
-  if (b.employee_id     !== undefined) patch.EMPLOYEE_ID     = parseInt(String(b.employee_id), 10);
-  if (b.probability     !== undefined) patch.PROBABILITY     = b.probability !== '' && b.probability !== null ? Number(b.probability) : null;
+  // Pflichtfelder duerfen sich aendern, aber nicht leeren: vorher wurde ein
+  // leerer Titel gespeichert, ein leerer Kontakt kam als 0 an und endete als
+  // Serverfehler (Fremdschluessel).
+  const required = (key, label) => {
+    const id = positiveId(b[key]);
+    if (!id) throw { status: 400, message: `${label} ist erforderlich` };
+    return id;
+  };
+  if (b.name !== undefined) {
+    const name = String(b.name ?? '').trim();
+    if (!name) throw { status: 400, message: 'Angebotstitel ist erforderlich' };
+    patch.NAME = name;
+  }
+  if (b.employee_id     !== undefined) patch.EMPLOYEE_ID     = required('employee_id', 'Zuständig');
+  if (b.probability     !== undefined) patch.PROBABILITY     = probabilityOrNull(b.probability);
   if (b.offer_text_1    !== undefined) patch.OFFER_TEXT_1    = b.offer_text_1 || null;
   if (b.offer_text_2    !== undefined) patch.OFFER_TEXT_2    = b.offer_text_2 || null;
-  if (b.address_id      !== undefined) patch.ADDRESS_ID      = parseInt(String(b.address_id), 10);
-  if (b.contact_id      !== undefined) patch.CONTACT_ID      = parseInt(String(b.contact_id), 10);
-  if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = parseInt(String(b.offer_status_id), 10);
-  if (b.company_id      !== undefined) patch.COMPANY_ID      = parseInt(String(b.company_id), 10);
+  if (b.address_id      !== undefined) patch.ADDRESS_ID      = required('address_id', 'Adresse');
+  if (b.contact_id      !== undefined) patch.CONTACT_ID      = required('contact_id', 'Kontakt');
+  if (b.offer_status_id !== undefined) patch.OFFER_STATUS_ID = required('offer_status_id', 'Angebotsstatus');
+  if (b.company_id      !== undefined) patch.COMPANY_ID      = required('company_id', 'Firma');
+  if (patch.ADDRESS_ID !== undefined || patch.CONTACT_ID !== undefined) {
+    // Nur eine Seite geaendert: die andere kommt aus dem gespeicherten Angebot.
+    let { ADDRESS_ID: addressId, CONTACT_ID: contactId } = patch;
+    if (addressId === undefined || contactId === undefined) {
+      const { data: cur, error: curErr } = await supabase.from('OFFER').select('ADDRESS_ID, CONTACT_ID')
+        .eq('ID', offerId).eq('TENANT_ID', tenantId).maybeSingle();
+      if (curErr) throw curErr;
+      if (!cur) throw { status: 404, message: 'Angebot nicht gefunden' };
+      if (addressId === undefined) addressId = cur.ADDRESS_ID;
+      if (contactId === undefined) contactId = cur.CONTACT_ID;
+    }
+    await assertRecipient(supabase, { tenantId, addressId, contactId });
+  }
   if (b.offer_date      !== undefined) patch.OFFER_DATE      = b.offer_date    || null;
   if (b.valid_until     !== undefined) patch.VALID_UNTIL     = b.valid_until   || null;
   if (b.refusal_date    !== undefined) patch.REFUSAL_DATE    = b.refusal_date  || null;
@@ -329,46 +401,51 @@ async function updateOffer(supabase, { tenantId, offerId, body }) {
     .eq('ID', offerId)
     .eq('TENANT_ID', tenantId)
     .select('*')
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  // Vorher .single(): ein fremdes oder geloeschtes Angebot endete als 500.
+  if (!data) throw { status: 404, message: 'Angebot nicht gefunden' };
 
   if (hasSurchargeChange) {
-    await recalcOfferRootSurcharges(supabase, { offerId });
+    await recalcOfferRootSurcharges(supabase, { offerId, tenantId });
     const { data: refreshed } = await supabase.from('OFFER').select('*').eq('ID', offerId).eq('TENANT_ID', tenantId).maybeSingle();
     return refreshed || data;
   }
   return data;
 }
 
-async function recalcOfferRootSurcharges(supabase, { offerId }) {
-  const { data: roots } = await supabase
+async function recalcOfferRootSurcharges(supabase, { offerId, tenantId = null }) {
+  // Mandantenfilter, wo der Aufrufer ihn kennt; die Strukturwege
+  // (propagateUpwardsOffer) haben ihn noch nicht und verlassen sich auf RLS.
+  const scoped = (q) => (tenantId != null ? q.eq('TENANT_ID', tenantId) : q);
+  const { data: roots } = await scoped(supabase
     .from('OFFER_STRUCTURE')
     .select('REVENUE')
     .eq('OFFER_ID', offerId)
-    .is('FATHER_ID', null);
+    .is('FATHER_ID', null));
   const basis = (roots || []).reduce((s, r) => s + Number(r.REVENUE || 0), 0);
 
-  const { data: settings } = await supabase
+  const { data: settings } = await scoped(supabase
     .from('OFFER')
     .select('SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
-    .eq('ID', offerId)
+    .eq('ID', offerId))
     .maybeSingle();
   if (!settings) return;
 
   const r2 = (n) => Math.round(n * 100) / 100;
   const { s1Eur, s2Eur, s3Eur, surchargesTotal } = computeSurchargesOffer(basis, settings);
 
-  await supabase.from('OFFER').update({
+  await scoped(supabase.from('OFFER').update({
     SURCHARGE_1_EUR:  r2(s1Eur),
     SURCHARGE_2_EUR:  r2(s2Eur),
     SURCHARGE_3_EUR:  r2(s3Eur),
     SURCHARGES_TOTAL: surchargesTotal,
-  }).eq('ID', offerId);
+  }).eq('ID', offerId));
 }
 
 async function deleteOffer(supabase, { tenantId, offerId }) {
   // Delete structure first
-  await supabase.from('OFFER_STRUCTURE').delete().eq('OFFER_ID', offerId);
+  await supabase.from('OFFER_STRUCTURE').delete().eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId);
   const { error } = await supabase
     .from('OFFER')
     .delete()
@@ -397,9 +474,11 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
   if (!btId) throw { status: 400, message: 'billing_type_id ist erforderlich' };
 
   const isHourly  = btId === 2;
-  const quantity  = isHourly ? (Number(b.quantity)  || 0) : null;
-  const spRate    = isHourly ? (Number(b.hourly_rate)    || 0) : null;
-  const revenue   = isHourly ? fmt2((quantity || 0) * (spRate || 0)) : fmt2(Number(b.revenue) || 0);
+  // Aufwand: Zeilen aus effort_lines, sonst eine Zeile aus den Einzelfeldern
+  const eff = isHourly ? effortColumns(normalizeEffortLines(b.effort_lines !== undefined ? b.effort_lines : [{
+    role_id: b.role_id, role_abbr: b.role_abbr, role_name: b.role_name, hours: b.quantity, rate: b.hourly_rate,
+  }])) : null;
+  const revenue   = isHourly ? eff.basis : fmt2(Number(b.revenue) || 0);
   const extPct    = Number(b.extras_percent) || 0;
   const extras    = fmt2(revenue * extPct / 100);
   const fatherId  = b.father_id ? parseInt(String(b.father_id), 10) : null;
@@ -427,11 +506,12 @@ async function addOfferStructureNode(supabase, { tenantId, offerId, body }) {
       EXTRAS_PERCENT:  extPct,
       EXTRAS:          extras,
       SORT_ORDER:      maxSort + 10,
-      QUANTITY:        quantity,
-      HOURLY_RATE:         spRate,
-      ROLE_ABBR: b.role_abbr || null,
-      ROLE_NAME:  b.role_name  || null,
-      ROLE_ID:         b.role_id ? parseInt(String(b.role_id), 10) : null,
+      QUANTITY:        isHourly ? eff.QUANTITY    : null,
+      HOURLY_RATE:     isHourly ? eff.HOURLY_RATE : null,
+      ROLE_ABBR:       isHourly ? eff.ROLE_ABBR   : null,
+      ROLE_NAME:       isHourly ? eff.ROLE_NAME   : null,
+      ROLE_ID:         isHourly ? eff.ROLE_ID     : null,
+      EFFORT_LINES:    isHourly ? eff.EFFORT_LINES : null,
       TENANT_ID:       tenantId,
     }])
     .select('*')
@@ -470,22 +550,56 @@ async function updateOfferStructureNode(supabase, { tenantId, nodeId, body }) {
   const hasSurchargeChange = b.SURCHARGE_1_LABEL !== undefined || b.SURCHARGE_1_PCT !== undefined ||
     b.SURCHARGE_2_LABEL !== undefined || b.SURCHARGE_2_PCT !== undefined ||
     b.SURCHARGE_3_LABEL !== undefined || b.SURCHARGE_3_PCT !== undefined;
-  const hasRevenueChange = isHourly || b.quantity !== undefined || b.hourly_rate !== undefined || b.revenue !== undefined;
+  // Einzelfelder (Altweg) oder Aufwandszeilen (Migration 0173)
+  const singleEffortChange = b.quantity !== undefined || b.hourly_rate !== undefined ||
+    b.role_id !== undefined || b.role_abbr !== undefined || b.role_name !== undefined;
+  const effortChange = b.effort_lines !== undefined || singleEffortChange;
+  const hasRevenueChange = isHourly || effortChange || b.revenue !== undefined;
+
+  // Wechsel weg von „nach Aufwand": die Zeilen gehoeren nicht mehr dazu.
+  if (btId !== undefined && btId !== 2) patch.EFFORT_LINES = null;
 
   if (hasRevenueChange || hasSurchargeChange || patch.EXTRAS_PERCENT !== undefined) {
     const { data: cur } = await supabase
       .from('OFFER_STRUCTURE')
-      .select('REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, HOURLY_RATE, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
+      .select('BILLING_TYPE_ID, REVENUE_BASIS, REVENUE, EXTRAS_PERCENT, QUANTITY, HOURLY_RATE, ROLE_ID, ROLE_ABBR, ROLE_NAME, EFFORT_LINES, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL')
       .eq('ID', nodeId)
+      .eq('TENANT_ID', tenantId)
       .maybeSingle();
 
+    const effectiveBt = btId !== undefined ? btId : Number(cur?.BILLING_TYPE_ID);
+    const lineCount = Array.isArray(b.effort_lines) ? b.effort_lines.length : 0;
+    if (effectiveBt !== 2 && b.effort_lines !== undefined && lineCount > 0) {
+      throw { status: 400, message: 'Aufwandszeilen gibt es nur bei Abrechnung nach Aufwand' };
+    }
+
     let revenueBasis;
-    if (isHourly || b.quantity !== undefined || b.hourly_rate !== undefined) {
-      const q = Number(b.quantity ?? cur?.QUANTITY ?? 0);
-      const s = Number(b.hourly_rate  ?? cur?.HOURLY_RATE  ?? 0);
-      if (b.quantity !== undefined) patch.QUANTITY = q;
-      if (b.hourly_rate  !== undefined) patch.HOURLY_RATE  = s;
-      revenueBasis = r2(q * s);
+    if (effectiveBt === 2 && (isHourly || effortChange)) {
+      let lines;
+      if (b.effort_lines !== undefined) {
+        lines = normalizeEffortLines(b.effort_lines);
+      } else {
+        const curLines = nodeEffortLines(cur);
+        if (singleEffortChange && curLines.length > 1) {
+          throw { status: 409, message: 'Dieses Element hat mehrere Aufwandszeilen – bitte die Zeilen bearbeiten.' };
+        }
+        const base = curLines[0] || { role_id: null, role_abbr: null, role_name: null, hours: 0, rate: 0 };
+        lines = singleEffortChange ? normalizeEffortLines([{
+          role_id:   b.role_id   !== undefined ? b.role_id   : base.role_id,
+          role_abbr: b.role_abbr !== undefined ? b.role_abbr : base.role_abbr,
+          role_name: b.role_name !== undefined ? b.role_name : base.role_name,
+          hours:     b.quantity    !== undefined ? b.quantity    : base.hours,
+          rate:      b.hourly_rate !== undefined ? b.hourly_rate : base.rate,
+        }]) : curLines;
+      }
+      const eff = effortColumns(lines);
+      patch.EFFORT_LINES = eff.EFFORT_LINES;
+      patch.QUANTITY     = eff.QUANTITY;
+      patch.HOURLY_RATE  = eff.HOURLY_RATE;
+      patch.ROLE_ID      = eff.ROLE_ID;
+      patch.ROLE_ABBR    = eff.ROLE_ABBR;
+      patch.ROLE_NAME    = eff.ROLE_NAME;
+      revenueBasis = eff.basis;
     } else if (b.revenue !== undefined) {
       revenueBasis = r2(Number(b.revenue));
     } else {
@@ -675,9 +789,10 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
 
   // Load buyer contact
   const { data: contact } = await supabase
-    .from('CONTACT')
+    .from('CONTACTS')   // Plural — mit „CONTACT" fehlte der Ansprechpartner im PDF
     .select('FIRST_NAME, LAST_NAME, EMAIL, MOBILE')
     .eq('ID', offer.CONTACT_ID)
+    .eq('TENANT_ID', tenantId)
     .maybeSingle();
 
   // Load employee (Ansprechpartner)
@@ -705,7 +820,7 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
   // Offer-level (root) surcharges — Option A
   const offerLevelSurcharges = Number(offer.SURCHARGES_TOTAL || 0);
   const totalRevenue = structureRevenueSum + offerLevelSurcharges;
-  const totalNet     = fmt2(totalRevenue + totalExtras);
+  const totalNet     = offerNetTotal(structRows, offerLevelSurcharges);
 
   const hasExtras = (structRows || []).some(r => Number(r.EXTRAS || 0) > 0 || Number(r.EXTRAS_PERCENT || 0) > 0);
   const hasSurcharges = (structRows || []).some(r => Number(r.SURCHARGES_TOTAL || 0) > 0) || offerLevelSurcharges > 0;
@@ -782,6 +897,13 @@ async function buildOfferPdfViewModel(supabase, { offerId, tenantId }) {
       extras:          Number(n.EXTRAS         || 0),
       total:           fmt2(Number(n.REVENUE || 0) + Number(n.EXTRAS || 0)),
       roleName:        n.ROLE_NAME || n.ROLE_ABBR || '',
+      // Aufwandszeilen einzeln unter dem Element (Runde 5, Entscheidung „einzeln")
+      effortLines:     Number(n.BILLING_TYPE_ID) === 2
+        ? nodeEffortLines(n).filter(l => l.hours > 0).map(l => ({
+            hours: l.hours, rate: l.rate, amount: lineAmount(l),
+            roleName: l.role_name || l.role_abbr || '',
+          }))
+        : [],
       surchargesTotal: Number(n.SURCHARGES_TOTAL || 0),
     })),
     hasExtras,
@@ -975,7 +1097,7 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
   // EXTRAS_PERCENT from parent node
   let extrasPercent = 0;
   if (fatherId) {
-    const { data: father } = await supabase.from('OFFER_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).single();
+    const { data: father } = await supabase.from('OFFER_STRUCTURE').select('EXTRAS_PERCENT').eq('ID', fatherId).eq('TENANT_ID', tenantId).single();
     extrasPercent = Number(father?.EXTRAS_PERCENT ?? 0) || 0;
   }
 
@@ -1005,11 +1127,11 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
   } catch (_) { /* soft-fail */ }
 
   // Determine SORT_ORDER start (append after existing children)
+  // Auf oberster Ebene zaehlen die anderen Wurzeln des Angebots als Geschwister.
   let sortBase = 0;
-  if (fatherId) {
-    const { data: siblings } = await supabase.from('OFFER_STRUCTURE').select('SORT_ORDER').eq('FATHER_ID', fatherId);
-    if (siblings && siblings.length > 0) sortBase = Math.max(...siblings.map(s => Number(s.SORT_ORDER ?? 0))) + 10;
-  }
+  const sibQ = supabase.from('OFFER_STRUCTURE').select('SORT_ORDER').eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId);
+  const { data: siblings } = await (fatherId ? sibQ.eq('FATHER_ID', fatherId) : sibQ.is('FATHER_ID', null));
+  if (siblings && siblings.length > 0) sortBase = Math.max(...siblings.map(s => Number(s.SORT_ORDER ?? 0))) + 10;
 
   // Insert LPH rows
   if (activePhases.length) {
@@ -1024,9 +1146,11 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
         REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
         SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + i * 10,
         TENANT_ID: tenantId,
+        // Verknuepfung (Migration 0174): „Angebot aktualisieren" gleicht daran ab
+        FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_PHASE_ID: r.ID,
       };
     });
-    await supabase.from('OFFER_STRUCTURE').insert(insertRows);
+    await insertOfferRowsLinked(supabase, insertRows);
   }
 
   // Insert BL rows
@@ -1042,13 +1166,164 @@ async function attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId,
         REVENUE_BASIS: rev, REVENUE: rev, EXTRAS: fmt2(rev * extrasPercent / 100),
         SURCHARGES_TOTAL: 0, SORT_ORDER: sortBase + (lphCount + i) * 10,
         TENANT_ID: tenantId,
+        FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_BL_ID: b.ID,
       };
     });
-    await supabase.from('OFFER_STRUCTURE').insert(blRows);
+    await insertOfferRowsLinked(supabase, blRows);
   }
 
-  // Recalculate parent
-  if (fatherId) await recalcOfferParent(supabase, { parentId: fatherId });
+  // Vater und die Kette darueber samt Angebotszuschlaegen — vorher nur der
+  // direkte Vater, die Angebotssumme stand bis zur naechsten Aenderung alt da.
+  if (fatherId) {
+    await recalcOfferParent(supabase, { parentId: fatherId });
+    await propagateUpwardsOffer(supabase, { structureId: fatherId });
+  }
+}
+
+/**
+ * Elemente samt Verknuepfung zur Kalkulation einfuegen. Kennt das Schema die
+ * Spalten noch nicht (PostgREST-Cache direkt nach dem Deploy, siehe CLAUDE.md
+ * „PostgREST kennt eine neue Spalte nicht von selbst"), ohne sie — lieber ein
+ * Element ohne Verknuepfung als gar keins.
+ */
+async function insertOfferRowsLinked(supabase, rows) {
+  const { error } = await supabase.from('OFFER_STRUCTURE').insert(rows);
+  if (!error) return;
+  if (!/FEE_CALC/.test(String(error.message || ''))) throw error;
+  console.warn('[attachFeeCalcToOfferStructure] ohne Verknuepfung eingefuegt:', error.message);
+  const plain = rows.map(({ FEE_CALC_MASTER_ID, FEE_CALC_PHASE_ID, FEE_CALC_BL_ID, ...rest }) => rest);
+  const { error: e2 } = await supabase.from('OFFER_STRUCTURE').insert(plain);
+  if (e2) throw e2;
+}
+
+/**
+ * „Angebot aktualisieren" (Runde 6): die Elemente einer Kalkulation im Angebot
+ * auf den Stand der Kalkulation bringen — dasselbe wie „Struktur
+ * aktualisieren" im Projekt. Je Element Honorar der Leistungsphase bzw.
+ * Besonderen Leistung samt Zuschlagsanteil (feeAllocation), darauf die
+ * eigenen Zuschlaege und NK des Elements. Neue Besondere Leistungen bekommen
+ * ein Element neben den vorhandenen. Danach Vaeter und Angebotszuschlaege.
+ *
+ * Verknuepft sind nur Elemente, die seit Migration 0174 uebernommen wurden;
+ * aeltere zaehlt `synced` nicht mit, und der Assistent sagt das vorher.
+ */
+async function syncFeeCalcToOfferStructure(supabase, { calcMasterId, tenantId }) {
+  const { computeSurchargeAllocations, leafValues } = require('./feeAllocation');
+  const { data: calc, error: cErr } = await supabase.from('FEE_CALCULATION_MASTER')
+    .select('ID, OFFER_ID').eq('ID', calcMasterId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (cErr) throw cErr;
+  if (!calc) throw { status: 404, message: 'Kalkulation nicht gefunden' };
+
+  const [{ data: rows, error: rErr }, { data: phases }, { data: blItems }, { data: surRows }] = await Promise.all([
+    supabase.from('OFFER_STRUCTURE').select('*').eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId),
+    supabase.from('FEE_CALCULATION_PHASE').select('ID, PHASE_REVENUE').eq('FEE_MASTER_ID', calcMasterId),
+    supabase.from('FEE_CALCULATION_BL').select('ID, ABBR, NAME, AMOUNT, SORT_ORDER').eq('FEE_CALC_MASTER_ID', calcMasterId).order('SORT_ORDER', { ascending: true }),
+    supabase.from('FEE_CALCULATION_SURCHARGES').select('AMOUNT, LPH_FILTER, BL_FILTER')
+      .eq('FEE_CALC_MASTER_ID', calcMasterId).eq('TENANT_ID', tenantId).order('SORT_ORDER', { ascending: true }),
+  ]);
+  if (rErr) throw rErr;
+  const linked = rows || [];
+  if (!linked.length) return { synced: 0, offerId: calc.OFFER_ID };
+
+  const { lphAlloc, blAlloc } = computeSurchargeAllocations(phases || [], surRows || [], blItems || []);
+  const phaseById = new Map((phases || []).map(p => [p.ID, p]));
+  const blById    = new Map((blItems || []).map(b => [b.ID, b]));
+  let synced = 0;
+  for (const row of linked) {
+    let basis = null;
+    if (row.FEE_CALC_PHASE_ID != null && phaseById.has(row.FEE_CALC_PHASE_ID)) {
+      basis = (Number(phaseById.get(row.FEE_CALC_PHASE_ID).PHASE_REVENUE) || 0) + (lphAlloc[row.FEE_CALC_PHASE_ID] || 0);
+    } else if (row.FEE_CALC_BL_ID != null && blById.has(row.FEE_CALC_BL_ID)) {
+      basis = (Number(blById.get(row.FEE_CALC_BL_ID).AMOUNT) || 0) + (blAlloc[row.FEE_CALC_BL_ID] || 0);
+    }
+    if (basis == null) continue;
+    const { error } = await supabase.from('OFFER_STRUCTURE')
+      .update(leafValues(basis, row, computeSurchargesOffer)).eq('ID', row.ID).eq('TENANT_ID', tenantId);
+    if (error) throw error;
+    synced++;
+  }
+
+  // Neue Besondere Leistungen: Element neben den vorhandenen, wie im Projekt
+  const withBl  = new Set(linked.map(r => r.FEE_CALC_BL_ID).filter(v => v != null));
+  const missing = (blItems || []).filter(b => !withBl.has(b.ID));
+  const anchor  = linked[0];
+  if (missing.length) {
+    const sortBase = Math.max(0, ...linked.map(r => Number(r.SORT_ORDER ?? 0))) + 10;
+    await supabase.from('OFFER_STRUCTURE').insert(missing.map((b, i) => ({
+      ABBR: b.NAME || b.ABBR || 'BL', NAME: b.NAME || null,
+      OFFER_ID: anchor.OFFER_ID, FATHER_ID: anchor.FATHER_ID ?? null,
+      BILLING_TYPE_ID: 1, EXTRAS_PERCENT: Number(anchor.EXTRAS_PERCENT ?? 0) || 0,
+      ...leafValues((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0), { EXTRAS_PERCENT: anchor.EXTRAS_PERCENT }, computeSurchargesOffer),
+      SORT_ORDER: sortBase + i * 10, TENANT_ID: tenantId,
+      FEE_CALC_MASTER_ID: calcMasterId, FEE_CALC_BL_ID: b.ID,
+    })));
+    synced += missing.length;
+  }
+
+  const fathers = new Set(linked.map(r => r.FATHER_ID).filter(f => f != null));
+  for (const f of fathers) {
+    await recalcOfferParent(supabase, { parentId: f });
+    await propagateUpwardsOffer(supabase, { structureId: f });
+  }
+  if (!fathers.size && calc.OFFER_ID) await recalcOfferRootSurcharges(supabase, { offerId: calc.OFFER_ID });
+  return { synced, offerId: calc.OFFER_ID };
+}
+
+/**
+ * Kalkulation ins Angebot uebernehmen (POST …/add-to-offer-structure).
+ *
+ * Ohne Element legt sie ein eigenes auf oberster Ebene an (Kuerzel/Name der
+ * Kalkulation) und haengt die Leistungsphasen darunter — der Assistent bot
+ * „Keine Zuordnung" an, die Route wies sie aber ab, und ein frisch
+ * angelegtes Angebot hat noch gar kein Element (UI-Pilot Runde 5). Direkt auf
+ * die Wurzel geht es bewusst nicht: beim Beauftragen erkennt die Umwandlung
+ * nur ueber ATTACH_TO_OFFER_STRUCTURE_ID, dass die Phasen schon in der
+ * Struktur stehen — ohne diesen Anker legte sie sie ein zweites Mal an.
+ *
+ * Das Element muss zum Angebot der Kalkulation gehoeren; vorher bestimmte es
+ * allein, in welches Angebot geschrieben wurde.
+ */
+async function addFeeCalcToOffer(supabase, { calcMasterId, fatherRaw, tenantId }) {
+  const noFather = fatherRaw == null || String(fatherRaw).trim() === '';
+  let fatherId   = noFather ? null : parseInt(fatherRaw, 10);
+  if (!noFather && !fatherId) throw { status: 400, message: 'father_id ist ungültig' };
+
+  const { data: calc, error: calcErr } = await supabase
+    .from('FEE_CALCULATION_MASTER').select('ID, OFFER_ID, ABBR, NAME')
+    .eq('ID', calcMasterId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (calcErr) throw calcErr;
+  if (!calc) throw { status: 404, message: 'Kalkulation nicht gefunden' };
+  if (!calc.OFFER_ID) throw { status: 400, message: 'Diese Kalkulation gehört zu keinem Angebot.' };
+  const offerId = calc.OFFER_ID;
+
+  if (fatherId) {
+    const { data: father, error: fatherErr } = await supabase
+      .from('OFFER_STRUCTURE').select('ID, OFFER_ID').eq('ID', fatherId).eq('TENANT_ID', tenantId).maybeSingle();
+    if (fatherErr) throw fatherErr;
+    if (!father) throw { status: 404, message: 'Übergeordnetes Angebotselement nicht gefunden' };
+    if (String(father.OFFER_ID) !== String(offerId)) {
+      throw { status: 400, message: 'Das Element gehört nicht zum Angebot dieser Kalkulation.' };
+    }
+  } else {
+    const { data: roots } = await supabase.from('OFFER_STRUCTURE').select('SORT_ORDER')
+      .eq('OFFER_ID', offerId).eq('TENANT_ID', tenantId).is('FATHER_ID', null);
+    const sortOrder = roots && roots.length ? Math.max(...roots.map(r => Number(r.SORT_ORDER ?? 0))) + 10 : 0;
+    const { data: wrapper, error: wErr } = await supabase.from('OFFER_STRUCTURE').insert([{
+      ABBR: calc.ABBR || 'Honorar', NAME: calc.NAME || null,
+      OFFER_ID: offerId, FATHER_ID: null, BILLING_TYPE_ID: 1, EXTRAS_PERCENT: 0,
+      REVENUE_BASIS: 0, REVENUE: 0, EXTRAS: 0, SURCHARGES_TOTAL: 0,
+      SORT_ORDER: sortOrder, TENANT_ID: tenantId,
+    }]).select('ID').single();
+    if (wErr) throw wErr;
+    fatherId = wrapper.ID;
+  }
+
+  await attachFeeCalcToOfferStructure(supabase, { calcMasterId, fatherId, offerId, tenantId });
+  const { error: aErr } = await supabase.from('FEE_CALCULATION_MASTER')
+    .update({ ATTACH_TO_OFFER_STRUCTURE_ID: fatherId })
+    .eq('ID', calcMasterId).eq('TENANT_ID', tenantId);
+  if (aErr) throw aErr;
+  return { fatherId };
 }
 
 // ── offer → project conversion ────────────────────────────────────────────────
@@ -1176,11 +1451,25 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
   // PROJECT_STRUCTURE — 2-pass to set FATHER_ID
   // Declared here so it's also accessible in the HOAI attachment block below
   const offerIdToNew = new Map();
+  // Plan (Migration 0173): ein Blatt nach Aufwand startet im Projekt bei 0 —
+  // gebucht wird, was anfaellt. Die Schaetzung aus den Aufwandszeilen geht als
+  // Plan mit (Stunden, Honorar vor Zuschlaegen), die Budgetwarnung vergleicht
+  // das Gebuchte damit. `transfer_plan: false` laesst ihn weg.
+  const transferPlan = b.transfer_plan !== false;
+  const hasChildren = new Set(offerStruct.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)));
+  const planOf = (n) => {
+    if (!transferPlan || Number(n.BILLING_TYPE_ID) !== 2 || hasChildren.has(String(n.ID))) return null;
+    const lines = nodeEffortLines(n);
+    const hours = fmt2(lines.reduce((sum, l) => sum + Number(l.hours || 0), 0));
+    const revenue = fmt2(lines.reduce((sum, l) => sum + lineAmount(l), 0));
+    return hours > 0 || revenue > 0 ? { PLAN_HOURS: hours, PLAN_REVENUE: revenue } : null;
+  };
   if (offerStruct.length) {
     const insertRows = offerStruct.map(n => {
       const btId  = n.BILLING_TYPE_ID ? parseInt(String(n.BILLING_TYPE_ID), 10) : null;
       const isBt1 = btId === 1;
       return {
+      ...(planOf(n) || {}),
       ABBR:       String(n.ABBR || '').trim(),
       NAME:        String(n.NAME  || '').trim(),
       PROJECT_ID:       project.ID,
@@ -1210,6 +1499,11 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       SURCHARGE_3_EUR:   n.SURCHARGE_3_EUR   ?? 0,
       SURCHARGE_3_CUMUL: n.SURCHARGE_3_CUMUL ?? true,
       SURCHARGES_TOTAL:  n.SURCHARGES_TOTAL  ?? 0,
+      // Verknuepfung zur Kalkulation (0174) geht mit — sonst hat
+      // „Struktur aktualisieren" im Projekt nichts, woran es abgleichen kann
+      FEE_CALC_MASTER_ID: n.FEE_CALC_MASTER_ID ?? null,
+      FEE_CALC_PHASE_ID:  n.FEE_CALC_PHASE_ID  ?? null,
+      FEE_CALC_BL_ID:     n.FEE_CALC_BL_ID     ?? null,
     }; });
 
     let createdNodes;
@@ -1218,10 +1512,12 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
       if (r.error) {
         const msg = String(r.error.message || '');
         // Fallback: schema may be missing surcharge columns
-        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS')) {
+        if (msg.includes('SURCHARGE') || msg.includes('REVENUE_BASIS') || msg.includes('PLAN_') || msg.includes('FEE_CALC')) {
           const stripped = insertRows.map(row => {
             const c = { ...row };
             delete c.REVENUE_BASIS;
+            delete c.PLAN_HOURS; delete c.PLAN_REVENUE;
+            delete c.FEE_CALC_MASTER_ID; delete c.FEE_CALC_PHASE_ID; delete c.FEE_CALC_BL_ID;
             delete c.SURCHARGE_1_LABEL; delete c.SURCHARGE_1_PCT; delete c.SURCHARGE_1_EUR; delete c.SURCHARGE_1_CUMUL;
             delete c.SURCHARGE_2_LABEL; delete c.SURCHARGE_2_PCT; delete c.SURCHARGE_2_EUR; delete c.SURCHARGE_2_CUMUL;
             delete c.SURCHARGE_3_LABEL; delete c.SURCHARGE_3_PCT; delete c.SURCHARGE_3_EUR; delete c.SURCHARGE_3_CUMUL;
@@ -1517,9 +1813,12 @@ module.exports = {
   addOfferStructureNode,
   updateOfferStructureNode,
   deleteOfferStructureNode,
+  offerNetTotal,
   moveOfferStructureNode,
   recalcOfferRootSurcharges,
   attachFeeCalcToOfferStructure,
+  addFeeCalcToOffer,
+  syncFeeCalcToOfferStructure,
   buildOfferPdfViewModel,
   convertOfferToProject,
   copyOffer,

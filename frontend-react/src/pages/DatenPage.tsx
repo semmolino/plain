@@ -42,7 +42,7 @@ export function DatenPage() {
 
   return (
     <div className="master-page">
-      <h1 className="master-title">Projektdaten</h1>
+      <h1 className="sr-only">Projektdaten</h1>
       <Tabs tabs={useLicenseFilterTabs(useFilterTabs(TABS))} active={tab} onChange={handleTabChange} />
       <div className="master-tab-content">
         {tab === 'projektliste'    && <ProjektlisteTab />}

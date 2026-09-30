@@ -531,9 +531,9 @@ export function Buchungen({ initialProjectId }: Props = {}) {
               )}
 
               {buchungen.length === 0 ? (
-                <div className="bk-empty">
+                <div className="empty-block">
                   <p className="empty-note">In diesem Projekt ist noch keine Zeit gebucht.</p>
-                  <p className="bk-empty-why">Gebuchte Stunden fließen in die Projektkosten, das Zeitkonto und – je nach Abrechnungsart – in die nächste Rechnung.</p>
+                  <p className="empty-block-why">Gebuchte Stunden fließen in die Projektkosten, das Zeitkonto und – je nach Abrechnungsart – in die nächste Rechnung.</p>
                   {canCreate && (
                     <button type="button" className="btn-secondary" onClick={() => openQuickBooking({ projectId: pid, allowOtherEmployee: true })}>
                       <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Erste Stunden buchen
@@ -751,7 +751,6 @@ export function Buchungen({ initialProjectId }: Props = {}) {
         title={confirmState?.title ?? ''}
         message={confirmState?.message ?? ''}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />

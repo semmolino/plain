@@ -54,18 +54,28 @@ export function RowMenu({ children, label = 'Weitere Aktionen', triggerClassName
       setOpen(false)
       triggerRef.current?.focus()
     }
-    // Beim Scrollen schliessen: die Position ist einmalig berechnet und
-    // wandert sonst vom Ausloeser weg.
+    // Beim Scrollen dem Ausloeser folgen, geschlossen wird erst, wenn er aus
+    // dem Bild ist. Vorher schloss jedes Scrollen — auch das, das der Browser
+    // beim Klick selbst ausloest, wenn der Knopf knapp ueber der festen
+    // Aktionsleiste liegt: das Menue ging auf und im selben Moment wieder zu
+    // (Angebotsstruktur, Runde 5).
+    const follow = () => {
+      const t = triggerRef.current
+      if (!t) { setOpen(false); return }
+      const r = t.getBoundingClientRect()
+      if (r.bottom < 0 || r.top > window.innerHeight) { setOpen(false); return }
+      setPos({ top: r.bottom + 4, right: window.innerWidth - r.right })
+    }
     const close = () => setOpen(false)
 
     document.addEventListener('mousedown', onPointerDown)
     document.addEventListener('keydown', onKeyDown, true)
-    window.addEventListener('scroll', close, true)
+    window.addEventListener('scroll', follow, true)
     window.addEventListener('resize', close)
     return () => {
       document.removeEventListener('mousedown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown, true)
-      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('scroll', follow, true)
       window.removeEventListener('resize', close)
     }
   }, [open])
@@ -79,6 +89,11 @@ export function RowMenu({ children, label = 'Weitere Aktionen', triggerClassName
     const el = dropdownRef.current
     const trigger = triggerRef.current
     if (!el || !trigger) return
+    // Von der berechneten Lage aus neu pruefen — beim Mitwandern (Scrollen)
+    // koennte sonst eine fruehere Korrektur haengen bleiben.
+    el.style.left  = ''
+    el.style.right = `${pos.right}px`
+    el.style.top   = `${pos.top}px`
     const M  = 8
     const t  = trigger.getBoundingClientRect()
     const d  = el.getBoundingClientRect()

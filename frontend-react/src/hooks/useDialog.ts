@@ -47,12 +47,20 @@ export function useDialog(open: boolean, onClose: () => void) {
         .filter(el => el.offsetParent !== null || el === document.activeElement)
 
     // Fokus auf das erste Bedienelement, das KEIN Schliessen-Button ist —
-    // sonst landet man immer auf dem "X" statt im Formular.
-    const initial = focusable().find(el => !el.hasAttribute('data-dialog-dismiss')) ?? focusable()[0]
+    // sonst landet man immer auf dem "X" statt im Formular. `data-autofocus`
+    // geht vor: in einer Rueckfrage stuende sonst „Verwerfen" im Fokus, und
+    // Enter verwarf die Eingaben (Runde 5).
+    const items   = focusable()
+    const initial = items.find(el => el.hasAttribute('data-autofocus'))
+      ?? items.find(el => !el.hasAttribute('data-dialog-dismiss')) ?? items[0]
     initial?.focus()
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
+        // Eine offene Trefferliste (Adresssuche, role=combobox) schliesst
+        // Escape zuerst selbst — sonst ging mit der Liste das ganze Fenster zu.
+        const t = e.target as HTMLElement | null
+        if (t?.getAttribute?.('role') === 'combobox' && t.getAttribute('aria-expanded') === 'true') return
         e.stopPropagation()
         closeRef.current()
         return

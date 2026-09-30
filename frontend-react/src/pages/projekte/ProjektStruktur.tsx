@@ -12,12 +12,16 @@ import { DialogFooter }  from '@/components/ui/DialogFooter'
 import { ActionBar }     from '@/components/ui/ActionBar'
 import { RowMenu }       from '@/components/ui/RowMenu'
 import { AmountInput }   from '@/components/ui/AmountInput'
-import { DensityToggle } from '@/components/ui/DensityToggle'
-import { useDensity } from '@/hooks/useDensity'
+import { ColumnChooser } from '@/components/ui/ColumnChooser'
 import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { StrukturMobile } from '@/pages/projekte/struktur/StrukturMobile'
-import { useRegisterDirty } from '@/hooks/useDirtyGuard'
-import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { PlanDialog } from '@/pages/projekte/struktur/PlanDialog'
+import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
+import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
+import { PendingValue }   from '@/pages/projekte/struktur/PendingValue'
+import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
+import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
+import { HonorarWizard, HONORAR_WIZARD_GUARD } from '@/pages/projekte/HonorarWizard'
 import {
   fetchProjectsShort, fetchProjectStructure, fetchBillingTypes,
   inheritStructureExtras, patchStructureNode,
@@ -29,8 +33,9 @@ import {
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
 import {
   surchargeDefault, sameSurcharge, surchargeBody, computeSurcharges, rowChanges,
-  aggregateStructure, rootTotals, type SurchargeEdit, type RowEdit, type PatchBody,
+  aggregateStructure, rootTotals, planStatus, pendingStructure, type SurchargeEdit, type RowEdit, type PatchBody,
 } from '@/pages/projekte/struktur/strukturCalc'
+import { fmtHours } from '@/utils/zeit'
 import { fmtEur, money } from '@/utils/money'
 import { usePermission } from '@/store/permissionsStore'
 import { useFeature, useLicenseReadOnly } from '@/store/licenseStore'
@@ -87,7 +92,8 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const canEdit         = permStructure && !readOnlyLicense
   const canEditProject  = permProject && !readOnlyLicense
   const canCalc         = permCalc && featureCalc && !readOnlyLicense
-  const [density, setDensity] = useDensity()
+  // Immer luftig (Rueckmeldung Runde 3); welche Spalten, waehlt jeder selbst.
+  const cols = useStrukturSpalten('struktur.spalten')
   const narrow = useIsNarrow()
 
   const [edits, setEdits]               = useState<Record<number, RowEdit>>({})
@@ -107,6 +113,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const [addError, setAddError]         = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
   const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
+  const [planNode, setPlanNode] = useState<StructureNode | null>(null)
   const [kalkFatherId, setKalkFatherId]     = useState<number | null>(null)
   const [projectSurchargePanel, setProjectSurchargePanel] = useState<boolean>(false)
   const [elementSearch, setElementSearch]         = useState('')
@@ -147,9 +154,15 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
   const parentMap = new Map(structure.map(n => [String(n.STRUCTURE_ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
 
-  const aggMap = aggregateStructure(structure)
+  // Mit den offenen Eingaben gerechnet (Runde 6): Nebenkosten, Gesamt und die
+  // Vatersummen stehen schon vor „Speichern" auf dem neuen Stand und tragen
+  // die Marke „noch nicht gespeichert" (PendingValue).
+  const view     = pendingStructure(structure, edits)
+  const savedAgg = aggregateStructure(structure)
+  const aggMap   = view.pending.size ? aggregateStructure(view.nodes) : savedAgg
+  const viewById = new Map(view.nodes.map(n => [n.STRUCTURE_ID, n]))
 
-  const showInklCol = density === 'compact'
+  const showInklCol = cols.show('inkl')
   const hasParents  = parentIds.size > 0
   const allCollapsed = hasParents && [...parentIds].every(id => collapsed.has(Number(id)))
   function toggleCollapsed(id: number) {
@@ -275,6 +288,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     }
   }, [dirty, selectedPid, pendingRows, rootChanged, rootEdit]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  const guarded = useGuardedAction()
   useRegisterDirty('struktur', {
     dirty, count: dirtyCount, label: 'Struktur',
     save: () => saveAll(),
@@ -548,9 +562,15 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
 
   // ── Root row totals ───────────────────────────────────────────────────────
   const currentProject = projects.find(p => p.ID === selectedPid)
-  const projectLevelSurcharges = Number((projectRow as Record<string, unknown> | null)?.SURCHARGES_TOTAL || 0)
+  const savedProjectSurcharges = Number((projectRow as Record<string, unknown> | null)?.SURCHARGES_TOTAL || 0)
+  const savedRoot = rootTotals(structure, savedAgg, savedProjectSurcharges)
+  // Projektzuschlaege rechnen auf die Summe der Wurzel-Honorare — mit
+  // offenen Eingaben also neu, wie recalcProjectRootSurcharges im Server.
+  const projectLevelSurcharges = view.pending.size || rootChanged
+    ? computeSurcharges(rootTotals(view.nodes, aggMap, 0).rootStructureRevenueSum, rootEdit ?? surchargeDefault(projectRow)).total
+    : savedProjectSurcharges
   const { rootRevenue, rootSurcharges, rootStructureRevenueSum, rootRevenueFinal, rootExtras, rootGesamt } =
-    rootTotals(structure, aggMap, projectLevelSurcharges)
+    rootTotals(view.nodes, aggMap, projectLevelSurcharges)
 
   // ── Select helpers ────────────────────────────────────────────────────────
 
@@ -570,7 +590,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   }
 
   const addParent = addForm?.FATHER_ID ? nodeById.get(Number(addForm.FATHER_ID)) : undefined
-  const COLS = showInklCol ? 11 : 10
+  const COLS = cols.colCount
 
   // Zeilenmenue und Rechtsklick teilen sich dieselben Befehle.
   function rowCommands(node: StructureNode, isParent: boolean) {
@@ -579,6 +599,10 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
     return [
       canEdit && { key: 'add',  label: 'Unterelement anlegen', run: () => openAdd(node.STRUCTURE_ID) },
       canEdit && { key: 'sur',  label: 'Zuschläge bearbeiten', run: () => setSurchargePanel(node.STRUCTURE_ID) },
+      canEdit && !isParent && Number(edits[node.STRUCTURE_ID]?.billingTypeId ?? node.BILLING_TYPE_ID) === 2 && {
+        key: 'plan', label: node.PLAN_REVENUE != null || node.PLAN_HOURS != null ? 'Plan bearbeiten …' : 'Plan festlegen …',
+        run: () => setPlanNode(node),
+      },
       canEdit && isParent && { key: 'inh', label: nkDirty ? 'NK vererben (erst speichern)' : 'NK % an Unterelemente vererben', disabled: nkDirty || inheritMut.isPending, run: () => void askInherit(node) },
       canCalc && { key: 'kalk', label: 'Kalkulation anlegen', run: () => setKalkFatherId(node.STRUCTURE_ID) },
       canEdit && { key: 'int',  label: internal ? 'Intern aufheben' : 'Als intern markieren', run: () => editRow(node.STRUCTURE_ID, { internal: !internal }) },
@@ -589,7 +613,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="sx-root" data-density={density}>
+    <div className="sx-root">
       {selectedPid === null && <p className="empty-note">Kein Projekt gewählt.</p>}
 
       {selectedPid !== null && (
@@ -628,7 +652,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                   />
                 )}
                 <div className="sx-toolbar-right">
-                  {!narrow && <DensityToggle value={density} onChange={setDensity} />}
+                  {!narrow && flatTree.length > 0 && <ColumnChooser columns={STRUKTUR_SPALTEN} hidden={cols.hidden} onToggle={cols.toggle} />}
                   {canEdit && (
                     <button className="btn-secondary" type="button" onClick={() => openAdd(null)}>
                       <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Neues Element
@@ -643,7 +667,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                 <StrukturMobile projectId={selectedPid} flat={filteredFlatTree} parentIds={parentIds} aggMap={aggMap}
                   billingTypes={btypes} canEdit={canEdit}
                   root={currentProject ? { label: currentProject.ABBR, revenue: rootRevenueFinal, total: rootGesamt } : null}
-                  onAdd={openAdd} onDelete={askDelete} />
+                  onAdd={openAdd} onDelete={askDelete} onPlan={setPlanNode} />
               )}
               {flatTree.length > 0 && !narrow && (
                 <div className="list-section">
@@ -667,13 +691,13 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             )}
                           </span>
                         </th>
-                        <th scope="col">Abrechnung</th>
+                        {cols.show('bt') && <th scope="col">Abrechnung</th>}
                         <th scope="col" className="num">Honorar €</th>
-                        <th scope="col" className="num">Zuschläge €</th>
+                        {cols.show('sur') && <th scope="col" className="num">Zuschläge €</th>}
                         {showInklCol && <th scope="col" className="num" title="Honorar einschließlich Zuschlägen">inkl. Zuschl. €</th>}
-                        <th scope="col">NK %</th>
-                        <th scope="col" className="num">Nebenkosten €</th>
-                        <th scope="col" className="num">Gesamt €</th>
+                        {cols.show('nkpct') && <th scope="col">NK %</th>}
+                        {cols.show('nk') && <th scope="col" className="num">Nebenkosten €</th>}
+                        {cols.show('total') && <th scope="col" className="num">Gesamt €</th>}
                         <th scope="col" className="sx-col-menu">
                           <span className="sr-only">Aktionen</span>
                           <HelpHint id="structure.contextmenu" align="right" size={13} />
@@ -693,13 +717,13 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                             <span className="sx-root-abbr">{currentProject.ABBR}</span>
                             <span className="sx-root-name">Projekt gesamt</span>
                           </td>
-                          <td className="sx-muted">—</td>
-                          <td className="num sx-muted">{money(rootRevenue)}</td>
-                          <td className="num">{rootSurcharges !== 0 ? money(rootSurcharges) : <span className="sx-muted">—</span>}</td>
-                          {showInklCol && <td className="num">{money(rootRevenueFinal)}</td>}
-                          <td className="sx-muted">—</td>
-                          <td className="num sx-muted">{money(rootExtras)}</td>
-                          <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}>{money(rootGesamt)}</td>
+                          {cols.show('bt') && <td className="sx-muted">—</td>}
+                          <td className="num sx-muted"><PendingValue now={rootRevenue} saved={savedRoot.rootRevenue}>{money(rootRevenue)}</PendingValue></td>
+                          {cols.show('sur') && <td className="num"><span className="sx-surcharge-static"><PendingValue now={rootSurcharges} saved={savedRoot.rootSurcharges}><SurchargeAmount value={rootSurcharges} /></PendingValue></span></td>}
+                          {showInklCol && <td className="num"><PendingValue now={rootRevenueFinal} saved={savedRoot.rootRevenueFinal}>{money(rootRevenueFinal)}</PendingValue></td>}
+                          {cols.show('nkpct') && <td className="sx-muted">—</td>}
+                          {cols.show('nk') && <td className="num sx-muted"><PendingValue now={rootExtras} saved={savedRoot.rootExtras}>{money(rootExtras)}</PendingValue></td>}
+                          {cols.show('total') && <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}><PendingValue now={rootGesamt} saved={savedRoot.rootGesamt}>{money(rootGesamt)}</PendingValue></td>}
                           <td className="sx-col-menu">
                             {canEditProject && (
                               <RowMenu label="Aktionen zum Projekt" triggerClassName="row-action-btn">
@@ -740,10 +764,14 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                         const isDragOver = dragOverId === node.STRUCTURE_ID
 
                         const sEdit = edit?.surcharge ?? surchargeDefault(node)
+                        // Stand mit offenen Eingaben (Runde 6) und der gespeicherte zum Vergleich
+                        const vnode    = viewById.get(node.STRUCTURE_ID) ?? node
+                        const agg      = aggMap.get(String(node.STRUCTURE_ID))
+                        const savedA   = savedAgg.get(String(node.STRUCTURE_ID))
                         // Surcharge base = REVENUE_BASIS only (for leaf) or sum of children's REVENUE (for parent)
                         const surchargeBase = isParent
-                          ? (node.REVENUE_BASIS ?? 0)
-                          : (isTec ? (node.TEC_SP_TOT_SUM ?? 0) : (node.REVENUE_BASIS ?? node.REVENUE ?? 0))
+                          ? (vnode.REVENUE_BASIS ?? 0)
+                          : (isTec ? (node.TEC_SP_TOT_SUM ?? 0) : (vnode.REVENUE_BASIS ?? vnode.REVENUE ?? 0))
                         const computed = computeSurcharges(surchargeBase, sEdit)
                         const surchargeChanged = changes.SURCHARGE_1_CUMUL !== undefined
                         const hasSurcharges = (node.SURCHARGES_TOTAL ?? 0) !== 0
@@ -813,6 +841,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                 {internal && <span className={`status-pill sx-internal-pill${ch('IS_INTERNAL')}`}>Intern</span>}
                               </div>
                             </td>
+                            {cols.show('bt') && (
                             <td>
                               {canEdit ? (
                                 <select className={`tbl-select sx-input sx-input-bt${ch('BILLING_TYPE_ID')}`} aria-label="Abrechnungsart" value={btId}
@@ -821,15 +850,26 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                 </select>
                               ) : btypes.find(b => String(b.ID) === btId)?.ABBR ?? '—'}
                             </td>
+                            )}
                             <td className="num">
                               {/* Honorar € = pure leaf sum (REVENUE_BASIS) so it never includes surcharges */}
-                              {isParent || isTec || !canEdit ? (
+                              {isTec && !isParent && planStatus(node) ? (() => {
+                                // Plan aus dem Angebot (Runde 5): gebucht, darunter der Plan
+                                const p = planStatus(node)!
+                                return (
+                                  <span className="sx-tec-plan"
+                                    title={`Plan: ${p.hours != null ? `${fmtHours(p.hours)} h · ` : ''}${fmtEur(p.plan)} · gebucht ${fmtEur(p.booked)}${p.pct != null ? ` (${p.pct} %)` : ''}`}>
+                                    <span className="sx-muted">{money(p.booked)}</span>
+                                    <span className={`sx-plan-note${p.over ? ' sx-plan-over' : ''}`}>{p.over ? 'über Plan ' : 'Plan '}{fmtEur(p.plan)}</span>
+                                  </span>
+                                )
+                              })() : isParent || isTec || !canEdit ? (
                                 <span className="sx-muted">
                                   {/* Ein Vater zeigt IMMER die Summe seines Teilbaums — auch wenn er
                                       selbst auf Nachweis steht. */}
-                                  {money(isParent
-                                    ? (aggMap.get(String(node.STRUCTURE_ID))?.revenueBasis ?? 0)
-                                    : isTec ? (node.TEC_SP_TOT_SUM ?? 0) : Number(budgetVal))}
+                                  {isParent
+                                    ? <PendingValue now={agg?.revenueBasis} saved={savedA?.revenueBasis}>{money(agg?.revenueBasis ?? 0)}</PendingValue>
+                                    : money(isTec ? (node.TEC_SP_TOT_SUM ?? 0) : Number(budgetVal))}
                                 </span>
                               ) : (
                                 <AmountInput className={`tbl-input sx-input sx-input-num${ch('REVENUE')}`}
@@ -838,26 +878,31 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                   onChange={v => editRow(node.STRUCTURE_ID, { budget: v })} />
                               )}
                             </td>
+                            {cols.show('sur') && (
                             <td className="num">
                               {(() => {
-                                const sv = surchargeChanged ? computed.total
-                                  : isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
-                                const label = sv !== 0 ? money(sv) : '—'
+                                const sv = isParent ? (agg?.surcharges ?? 0) : (vnode.SURCHARGES_TOTAL ?? 0)
+                                const svSaved = isParent ? (savedA?.surcharges ?? 0) : (node.SURCHARGES_TOTAL ?? 0)
+                                // Selbst geaenderte Zuschlaege traegt schon sx-changed am Knopf
+                                const amount = surchargeChanged ? <SurchargeAmount value={sv} />
+                                  : <PendingValue now={sv} saved={svSaved}><SurchargeAmount value={sv} /></PendingValue>
                                 return canEdit ? (
                                   <button type="button" className={`sx-surcharge-btn${surchargeChanged ? ' sx-changed' : ''}`}
                                     aria-label={`Zuschläge von ${nameShort} bearbeiten`}
                                     onClick={() => setSurchargePanel(p => p === node.STRUCTURE_ID ? null : node.STRUCTURE_ID)}>
-                                    {label}
+                                    {amount}
                                   </button>
-                                ) : <span className={sv === 0 ? 'sx-muted' : undefined}>{label}</span>
+                                ) : <span className="sx-surcharge-static">{amount}</span>
                               })()}
                             </td>
+                            )}
                             {showInklCol && (
                               <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>
                                 {/* Honorar + Zuschläge = REVENUE (final, all surcharges included) */}
-                                {money(node.REVENUE ?? 0)}
+                                <PendingValue now={vnode.REVENUE} saved={node.REVENUE}>{money(vnode.REVENUE ?? 0)}</PendingValue>
                               </td>
                             )}
+                            {cols.show('nkpct') && (
                             <td>
                               {canEdit ? (
                                 <input className={`tbl-input sx-input sx-input-pct${ch('EXTRAS_PERCENT')}`} type="text" inputMode="decimal"
@@ -866,15 +911,23 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                                   onChange={e => editRow(node.STRUCTURE_ID, { nk: e.target.value.replace(',', '.') })} />
                               ) : `${nkVal} %`}
                             </td>
-                            <td className="num">{money(isParent ? aggMap.get(String(node.STRUCTURE_ID))?.extras : node.EXTRAS)}</td>
-                            {(() => {
-                              const rev = Number(node.REVENUE ?? 0)
-                              const ext = isParent ? (aggMap.get(String(node.STRUCTURE_ID))?.extras ?? 0) : Number(node.EXTRAS ?? 0)
+                            )}
+                            {cols.show('nk') && (
+                              <td className="num">
+                                <PendingValue now={isParent ? agg?.extras : vnode.EXTRAS} saved={isParent ? savedA?.extras : node.EXTRAS}>
+                                  {money(isParent ? agg?.extras : vnode.EXTRAS)}
+                                </PendingValue>
+                              </td>
+                            )}
+                            {cols.show('total') && (() => {
+                              const rev = Number(vnode.REVENUE ?? 0)
+                              const ext = isParent ? (agg?.extras ?? 0) : Number(vnode.EXTRAS ?? 0)
+                              const savedTotal = Number(node.REVENUE ?? 0) + (isParent ? (savedA?.extras ?? 0) : Number(node.EXTRAS ?? 0))
                               // In der luftigen Dichte entfaellt „inkl. Zuschl." — die Aufteilung
                               // steht dann im Tooltip der Gesamtsumme.
                               return (
                                 <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rev)} + Nebenkosten ${fmtEur(ext)}`}>
-                                  {fmtEur(rev + ext)}
+                                  <PendingValue now={rev + ext} saved={savedTotal}>{fmtEur(rev + ext)}</PendingValue>
                                 </td>
                               )
                             })()}
@@ -908,9 +961,9 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
               )}
 
               {flatTree.length === 0 && !addForm && (
-                <div className="sx-empty">
+                <div className="empty-block">
                   <p className="empty-note">Dieses Projekt hat noch keine Struktur.</p>
-                  <p className="sx-empty-why">Die Struktur gliedert Honorar und Leistungen (z. B. Leistungsphasen). Auf ihre Elemente werden Stunden gebucht und Leistungsstände gemeldet.</p>
+                  <p className="empty-block-why">Die Struktur gliedert Honorar und Leistungen (z. B. Leistungsphasen). Auf ihre Elemente werden Stunden gebucht und Leistungsstände gemeldet.</p>
                   {canEdit && (
                     <button type="button" className="btn-secondary" onClick={() => openAdd(null)}>
                       <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Erstes Element anlegen
@@ -924,7 +977,7 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
                   dirty={dirty}
                   quiet={!dirty}
                   status={saving ? 'Speichert …' : dirty
-                    ? `${dirtyCount} ${dirtyCount === 1 ? 'Element' : 'Elemente'} geändert`
+                    ? `${dirtyCount} ${dirtyCount === 1 ? 'Element' : 'Elemente'} geändert${view.pending.size || rootChanged ? ' · Summen vorläufig' : ''}`
                     : 'Alle Änderungen gespeichert'}
                   secondary={dirty ? (
                     <button type="button" className="btn-secondary" onClick={() => void confirmDiscard()} disabled={saving}>Verwerfen</button>
@@ -1018,11 +1071,10 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       title={confirmState?.title ?? ''}
       message={confirmState?.message ?? ''}
       confirmLabel="Löschen"
-      confirmClass="danger"
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />
-    <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
+    <Modal open={kalkFatherId !== null} onClose={() => guarded(() => setKalkFatherId(null), [HONORAR_WIZARD_GUARD])} title="HOAI-Kalkulation anlegen" className="modal-xl">
       {kalkFatherId !== null && selectedPid && (
         <HonorarWizard
           initialProjectId={selectedPid}
@@ -1074,67 +1126,9 @@ export function ProjektStruktur({ initialProjectId }: { initialProjectId?: numbe
       )
     })()}
     {confirmDialog}
+    {planNode && selectedPid != null && (
+      <PlanDialog node={planNode} projectId={selectedPid} onClose={() => setPlanNode(null)} />
+    )}
     </div>
-  )
-}
-
-// ── Zuschlags-Panel (eine Tabellenzeile unter dem Element) ────────────────────
-
-function SurchargePanelRow({ colSpan, title, basis, edit, computed, onChange, onDone, readOnly }: {
-  colSpan:  number
-  title:    string
-  basis:    number
-  edit:     SurchargeEdit
-  computed: ReturnType<typeof computeSurcharges>
-  onChange: (f: Partial<SurchargeEdit>) => void
-  onDone:   () => void
-  readOnly: boolean
-}) {
-  const rows = [
-    { label: edit.s1Label, pct: edit.s1Pct, cumul: edit.s1Cumul, eur: computed.s1Eur, disableCumul: true,  placeholder: 'z. B. Umbauzuschlag', labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const },
-    { label: edit.s2Label, pct: edit.s2Pct, cumul: edit.s2Cumul, eur: computed.s2Eur, disableCumul: false, placeholder: '(leer = inaktiv)',    labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const },
-    { label: edit.s3Label, pct: edit.s3Pct, cumul: edit.s3Cumul, eur: computed.s3Eur, disableCumul: false, placeholder: '(leer = inaktiv)',    labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const },
-  ]
-  return (
-    <tr className="surcharge-panel-row">
-      <td colSpan={colSpan}>
-        <div className="surcharge-panel">
-          <div className="surcharge-panel-basis">
-            {title}: <strong>{money(basis)}</strong>
-          </div>
-          <div className="surcharge-grid">
-            <div className="surcharge-grid-header">
-              <span>Kumul.</span>
-              <span>Bezeichnung</span>
-              <span style={{ textAlign: 'right' }}>%</span>
-              <span style={{ textAlign: 'right' }}>Betrag</span>
-            </div>
-            {rows.map((row, i) => (
-              <div className="surcharge-grid-row" key={i}>
-                <input type="checkbox" checked={row.cumul} disabled={row.disableCumul || readOnly}
-                  aria-label={`Zuschlag ${i + 1} kumulativ`}
-                  title={row.disableCumul ? 'Erster Zuschlag bezieht sich immer auf die Basis' : 'Kumulativ (auf laufende Zwischensumme)'}
-                  onChange={e => onChange({ [row.cumulKey]: e.target.checked })} />
-                <input className="tbl-input" placeholder={row.placeholder} value={row.label} disabled={readOnly}
-                  aria-label={`Zuschlag ${i + 1} Bezeichnung`}
-                  onChange={e => onChange({ [row.labelKey]: e.target.value })} />
-                <input className="tbl-input" type="text" inputMode="decimal" disabled={readOnly}
-                  aria-label={`Zuschlag ${i + 1} Prozent`}
-                  style={{ width: 64, textAlign: 'right' }} value={row.pct}
-                  onChange={e => onChange({ [row.pctKey]: e.target.value.replace(',', '.') })} />
-                <span className="surcharge-eur">{row.label || row.pct ? fmtEur(row.eur) : '—'}</span>
-              </div>
-            ))}
-            <div className="surcharge-grid-total">
-              Gesamt Zuschläge: <strong>{money(computed.total)}</strong>
-            </div>
-          </div>
-          <div className="surcharge-panel-actions">
-            <span className="sx-panel-note">Wird mit „Speichern" übernommen.</span>
-            <button type="button" className="btn-secondary" onClick={onDone}>Fertig</button>
-          </div>
-        </div>
-      </td>
-    </tr>
   )
 }

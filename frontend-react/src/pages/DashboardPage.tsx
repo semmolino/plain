@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, Children, type ReactNode } from 'react'
+import { angebotHref } from '@/pages/angebote/angebotUrlState'
 import { DashboardLoading } from '@/components/ui/Skeleton'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import {
@@ -914,7 +915,7 @@ function AbsenceOverviewCard() {
   return (
     <div className="dash-card">
       <CardTitle style={{ cursor: 'pointer' }}>
-        <span onClick={() => navigate('/mitarbeiter?tab=abwesenheiten')} title="Zu Abwesenheiten">Wer ist abwesend</span>
+        <span onClick={() => navigate('/mitarbeiter?tab=abwesenheiten&sub=calendar')} title="Zum Abwesenheitskalender">Wer ist abwesend</span>
       </CardTitle>
       {rows.length === 0 && <p className="empty-note">Niemand ist in den nächsten 14 Tagen abwesend.</p>}
       {heute.length > 0 && (
@@ -1428,7 +1429,7 @@ function TopOpenOffersCard() {
               </thead>
               <tbody>
                 {open.map(o => (
-                  <tr key={o.ID} className="clickable-row" onClick={() => navigate('/angebote')} title="Zu den Angeboten">
+                  <tr key={o.ID} className="clickable-row" onClick={() => navigate(angebotHref(o.ID))} title="Angebot öffnen">
                     <td>{o.ABBR || o.NAME || '—'}</td>
                     <td className="col-hide-mobile" style={{ color: 'var(--text-3)' }}>{o.ADDRESS_NAME || '—'}</td>
                     <td className="num">{money(o.TOTAL_AMOUNT)}</td>
@@ -1902,6 +1903,7 @@ export function DashboardPage() {
     <div className="dash-page">
       <PageHeader
         title="Übersicht"
+        srTitle
         meta={<span>{todayLabel}{companyName ? ` · ${companyName}` : ''}</span>}
         actions={<>
           {dashboardRole && canSwitchView && (

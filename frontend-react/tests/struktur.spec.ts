@@ -2,8 +2,9 @@ import { test, expect, type Page } from '@playwright/test'
 import { mockPilot } from './fixtures/pilotData'
 
 /**
- * Projektstruktur, Runde 2: eine Spalte „Element" mit Auf-/Zuklappen, beide
- * Dichten ohne Querscrollen bei 1280 px, am Handy Baumliste + Blatt.
+ * Projektstruktur, Runde 2: eine Spalte „Element" mit Auf-/Zuklappen, ohne
+ * Querscrollen bei 1280 px, am Handy Baumliste + Blatt. Seit der Rueckmeldung
+ * zu Runde 3 immer luftig, mit Spaltenauswahl statt Dichte-Umschalter.
  */
 
 async function open(page: Page, density?: 'compact' | 'comfortable') {
@@ -15,21 +16,75 @@ async function open(page: Page, density?: 'compact' | 'comfortable') {
 test.describe('Struktur am Desktop', () => {
   test.skip(({ viewport }) => (viewport?.width ?? 0) < 1024, 'Tabelle nur am Desktop')
 
-  for (const d of ['comfortable', 'compact'] as const) {
-    test(`Dichte ${d}: kein Querscrollen bei 1280 px`, async ({ page }) => {
-      await page.setViewportSize({ width: 1280, height: 800 })
-      await open(page, d)
-      await page.locator('.sx-table').waitFor()
-      const { table, box } = await page.evaluate(() => {
-        const t = document.querySelector('.sx-table') as HTMLElement
-        return { table: t.scrollWidth, box: (t.closest('.list-section') as HTMLElement).clientWidth }
-      })
-      expect(table).toBeLessThanOrEqual(box + 1)
-      // „inkl. Zuschl." nur kompakt; luftig steht die Aufteilung im Tooltip
-      const inkl = page.getByRole('columnheader', { name: /inkl\. Zuschl/ })
-      await expect(inkl).toHaveCount(d === 'compact' ? 1 : 0)
+  // Rueckmeldung Runde 3: immer luftig, dafuer eine Spaltenauswahl.
+  test('luftig, kein Querscrollen bei 1280 px, keine Dichte-Umschaltung', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 })
+    // Eine frueher gewaehlte kompakte Dichte darf die Struktur nicht mehr aendern.
+    await open(page, 'compact')
+    await page.locator('.sx-table').waitFor()
+    // Luftig heisst 48 px je Zeile (--sx-row-h), kompakt waren es 34 px.
+    const rowH = await page.locator('.sx-table tbody tr').first().evaluate(r => r.getBoundingClientRect().height)
+    expect(rowH).toBeGreaterThanOrEqual(47)
+    await expect(page.getByRole('button', { name: 'Kompakt' })).toHaveCount(0)
+    const { table, box } = await page.evaluate(() => {
+      const t = document.querySelector('.sx-table') as HTMLElement
+      return { table: t.scrollWidth, box: (t.closest('.list-section') as HTMLElement).clientWidth }
     })
-  }
+    expect(table).toBeLessThanOrEqual(box + 1)
+    await expect(page.getByRole('columnheader', { name: /inkl\. Zuschl/ })).toHaveCount(0)
+  })
+
+  test('Spaltenauswahl blendet ein und aus und merkt sich die Wahl', async ({ page }) => {
+    await open(page)
+    await page.locator('.sx-table').waitFor()
+    const chooser = page.getByRole('button', { name: 'Spalten' })
+    await chooser.click()
+    await expect(chooser).toHaveAttribute('aria-expanded', 'true')
+    await page.getByRole('checkbox', { name: 'inkl. Zuschläge €' }).check()
+    await page.getByRole('checkbox', { name: 'Abrechnung' }).uncheck()
+    await expect(page.getByRole('columnheader', { name: /inkl\. Zuschl/ })).toHaveCount(1)
+    await expect(page.getByRole('columnheader', { name: 'Abrechnung' })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(chooser).toHaveAttribute('aria-expanded', 'false')
+    await page.reload()
+    await page.locator('.sx-table').waitFor()
+    await expect(page.getByRole('columnheader', { name: /inkl\. Zuschl/ })).toHaveCount(1)
+    await expect(page.getByRole('columnheader', { name: 'Abrechnung' })).toHaveCount(0)
+  })
+
+  test('Zuschläge farbig und bündig mit der Gesamtzeile', async ({ page }) => {
+    await open(page)
+    await page.locator('.sx-table').waitFor()
+    // LP5.2 (Umbauzuschlag +20 %) gruen, BL3 (Nachlass −3 %) rot
+    await expect(page.locator('tr[data-struct-id="108"] .sx-surcharge-btn .sx-sur-pos')).toBeVisible()
+    await expect(page.locator('tr[data-struct-id="120"] .sx-surcharge-btn .sx-sur-neg')).toBeVisible()
+    const right = (sel: string) => page.locator(sel).first().evaluate(el => {
+      const r = el.getBoundingClientRect(); const st = getComputedStyle(el)
+      return Math.round(r.right - parseFloat(st.paddingRight) - parseFloat(st.borderRightWidth))
+    })
+    expect(await right('.sx-root-row .sx-surcharge-static')).toBe(await right('tr[data-struct-id="108"] .sx-surcharge-btn'))
+  })
+
+  // Runde 6: Summen warten nicht mehr auf „Speichern"
+  test('Summen rechnen offene Eingaben mit und sind als vorläufig markiert; Verwerfen nimmt sie zurück', async ({ page }) => {
+    await open(page)
+    const lp2 = page.locator('tr[data-struct-id="103"]')
+    const fee = lp2.getByRole('textbox', { name: 'Honorar' })
+    await fee.click()
+    await fee.fill('300000')
+    await fee.press('Tab')
+    const total = lp2.locator('td.num.sx-strong').last()
+    await expect(total).toHaveText('315.000,00 € (noch nicht gespeichert)')
+    await expect(total.locator('.sx-pending')).toHaveAttribute('title', /Noch nicht gespeichert – gespeichert: 294\.920,34/)
+    // Vater und Gesamtzeile ziehen mit, ein Nachbar nicht
+    await expect(page.locator('tr[data-struct-id="101"] td.num.sx-strong').last().locator('.sx-pending')).toBeVisible()
+    await expect(page.locator('tr.sx-root-row td.num.sx-strong').last().locator('.sx-pending')).toBeVisible()
+    await expect(page.locator('tr[data-struct-id="104"] .sx-pending')).toHaveCount(0)
+    await expect(page.locator('.action-bar')).toContainText('1 Element geändert · Summen vorläufig')
+    await page.locator('.action-bar').getByRole('button', { name: 'Verwerfen' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: /Verwerfen/ }).click()
+    await expect(page.locator('.sx-pending')).toHaveCount(0)
+  })
 
   test('Kürzel und Bezeichnung in einer Spalte, Zuklappen blendet Unterelemente aus', async ({ page }) => {
     await open(page)

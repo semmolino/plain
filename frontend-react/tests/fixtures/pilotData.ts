@@ -1,5 +1,5 @@
 import type { Page, Route } from '@playwright/test'
-import { mockDemo, type DemoOptions } from './demoData'
+import { mockDemo, offers as DEMO_OFFERS, addresses as DEMO_ADDRESSES, type DemoOptions } from './demoData'
 
 /**
  * Zusatzdaten fuer die Pilot-Ansichten (UI-Pilot 2026-09): Projekt-
@@ -30,6 +30,7 @@ type NodeSpec = {
   bt: 1 | 2; nk: number
   basis?: number            // Pauschal-Blatt: Honorar vor Zuschlaegen
   tec?: number              // Nachweis-Blatt: Summe der Buchungen
+  plan?: { hours: number; revenue: number }   // Nachweis-Blatt: Plan aus dem Angebot (Runde 5)
   surcharges?: Surcharge[]
   internal?: boolean
 }
@@ -62,8 +63,9 @@ const SPECS: NodeSpec[] = [
     surcharges: [{ label: 'Nachlass Rahmenvertrag', pct: -3 }] },
   { id: 121, father: 117,  abbr: 'BL4',   name: 'Farb- und Materialkonzept',           bt: 1, nk: 0, basis: 9_750 },
   { id: 122, father: null, abbr: 'NA',    name: 'Leistungen nach Aufwand',             bt: 2, nk: 0 },
-  { id: 123, father: 122,  abbr: 'NA1',   name: 'Planungsänderungen auf Wunsch des Bauherrn', bt: 2, nk: 0, tec: 18_420.5 },
-  { id: 124, father: 122,  abbr: 'NA2',   name: 'Zusätzliche Baubesprechungen',        bt: 2, nk: 0, tec: 7_860 },
+  // NA1 liegt ueber dem Plan, NA2 bei 79 % — beide Faelle der Anzeige
+  { id: 123, father: 122,  abbr: 'NA1',   name: 'Planungsänderungen auf Wunsch des Bauherrn', bt: 2, nk: 0, tec: 18_420.5, plan: { hours: 180, revenue: 17_100 } },
+  { id: 124, father: 122,  abbr: 'NA2',   name: 'Zusätzliche Baubesprechungen',        bt: 2, nk: 0, tec: 7_860, plan: { hours: 104, revenue: 9_880 } },
 ]
 
 function buildStructure() {
@@ -108,6 +110,9 @@ function buildStructure() {
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0,
       REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
       TEC_SP_TOT_SUM: tec, IS_INTERNAL: !!s.internal,
+      PLAN_HOURS: s.plan?.hours ?? null, PLAN_REVENUE: s.plan?.revenue ?? null,
+      // LP1–LP9 stammen aus der Kalkulation § 34 (Runde 5: „Struktur aktualisieren")
+      FEE_CALC_MASTER_ID: !children.length && s.id >= 102 && s.id <= 116 ? 71 : null,
       ...sur.fields, SURCHARGES_TOTAL: sur.total,
     })
     return { revenue, basis, tec }
@@ -119,6 +124,102 @@ function buildStructure() {
 export const STRUCTURE = buildStructure()
 const STRUCT_BY_ID = new Map(STRUCTURE.map(n => [n.STRUCTURE_ID as number, n]))
 const PROJECT_TOTAL = r2(STRUCTURE.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE as number), 0))
+
+// ── Angebotsstruktur (Runde 3) ───────────────────────────────────────────────
+
+type OfferSpec = {
+  id: number; father: number | null; abbr: string; name: string
+  bt: 1 | 2; nk: number
+  basis?: number                                  // Pauschal-Blatt
+  hours?: number; rate?: number; role?: string    // Aufwand-Blatt: Stunden × Satz
+  surcharges?: Surcharge[]
+}
+
+// Angebot A-2025-014 (Neubau Kita, LP1–5) — Werte wie aus dem Backend
+// (recalcOfferParent): Vater-Basis = Summe der Kinder-REVENUE, Zuschlaege
+// darauf, NK = REVENUE × eigene NK %. Der Aufwand-Block traegt Stunden × Satz.
+const OFFER_SPECS: OfferSpec[] = [
+  { id: 201, father: null, abbr: 'LPH',  name: 'Leistungsphasen 1–5 HOAI § 34 Gebäude', bt: 1, nk: 5 },
+  { id: 202, father: 201,  abbr: 'LP1',  name: 'Grundlagenermittlung',        bt: 1, nk: 5, basis: 4_150.2 },
+  { id: 203, father: 201,  abbr: 'LP2',  name: 'Vorplanung',                  bt: 1, nk: 5, basis: 14_525.7 },
+  { id: 204, father: 201,  abbr: 'LP3',  name: 'Entwurfsplanung',             bt: 1, nk: 5, basis: 31_127.35 },
+  { id: 205, father: 201,  abbr: 'LP4',  name: 'Genehmigungsplanung',         bt: 1, nk: 5, basis: 6_225.47 },
+  { id: 206, father: 201,  abbr: 'LP5',  name: 'Ausführungsplanung inkl. Detailplanung Fassade und Sonnenschutz', bt: 1, nk: 5, basis: 51_878.91,
+    surcharges: [{ label: 'Erhöhter Detaillierungsgrad', pct: 10 }] },
+  { id: 210, father: null, abbr: 'BL',   name: 'Besondere Leistungen nach Aufwand', bt: 2, nk: 0 },
+  { id: 211, father: 210,  abbr: 'BL1',  name: 'Bestandsaufnahme Nachbarbebauung', bt: 2, nk: 0, hours: 24, rate: 95, role: 'PL' },
+  { id: 212, father: 210,  abbr: 'BL2',  name: 'Abstimmung Fördermittelgeber KfW-Effizienzhaus 40', bt: 2, nk: 0, hours: 16, rate: 78.5, role: 'AR' },
+  { id: 213, father: 210,  abbr: 'BL3',  name: 'Zusätzliche Varianten Freianlagen', bt: 2, nk: 0, hours: 12, rate: 68, role: 'TZ' },
+]
+const OFFER_SURCHARGE: Surcharge = { label: 'Nachlass Rahmenvertrag', pct: -3 }
+
+function offerSurchargeFields(list: Surcharge[] | undefined, base: number) {
+  const f: Record<string, unknown> = {}
+  let run = base, total = 0
+  for (let i = 0; i < 3; i++) {
+    const s = list?.[i]
+    const eur = s ? r2((s.cumul === false ? base : run) * s.pct / 100) : null
+    if (eur != null) { run += eur; total += eur }
+    f[`SURCHARGE_${i + 1}_LABEL`] = s?.label ?? null
+    f[`SURCHARGE_${i + 1}_PCT`]   = s?.pct ?? null
+    f[`SURCHARGE_${i + 1}_EUR`]   = eur
+    f[`SURCHARGE_${i + 1}_CUMUL`] = s?.cumul ?? true
+  }
+  return { fields: f, total: r2(total) }
+}
+
+function buildOfferStructure() {
+  const kids = new Map<number, OfferSpec[]>()
+  for (const s of OFFER_SPECS) if (s.father != null) kids.set(s.father, [...(kids.get(s.father) ?? []), s])
+  const out = new Map<number, Record<string, unknown>>()
+  function visit(s: OfferSpec, sort: number): number {
+    const children = kids.get(s.id) ?? []
+    const basis = children.length
+      ? r2(children.reduce((sum, c, i) => sum + visit(c, i + 1), 0))
+      : s.bt === 2 ? r2((s.hours ?? 0) * (s.rate ?? 0)) : (s.basis ?? 0)
+    const sur = offerSurchargeFields(s.surcharges, basis)
+    const revenue = r2(basis + sur.total)
+    out.set(s.id, {
+      ID: s.id, OFFER_ID: 1, TENANT_ID: 1, FATHER_ID: s.father, SORT_ORDER: sort * 10,
+      ABBR: s.abbr, NAME: s.name, BILLING_TYPE_ID: s.bt,
+      REVENUE_BASIS: basis, REVENUE: revenue,
+      EXTRAS_PERCENT: s.nk, EXTRAS: r2(revenue * s.nk / 100),
+      QUANTITY: s.hours ?? null, HOURLY_RATE: s.rate ?? null,
+      ROLE_ID: s.role ? { PL: 2, AR: 3, TZ: 4 }[s.role] : null, ROLE_ABBR: s.role ?? null,
+      ROLE_NAME: s.role ? { PL: 'Projektleitung', AR: 'Architekt/in', TZ: 'Technische/r Zeichner/in' }[s.role] : null,
+      // LP1–LP5 stammen aus der Kalkulation § 34 im Angebot (Runde 6: „Angebot aktualisieren")
+      FEE_CALC_MASTER_ID: !children.length && s.id >= 202 && s.id <= 206 ? 74 : null,
+      ...sur.fields, SURCHARGES_TOTAL: sur.total,
+    })
+    return revenue
+  }
+  OFFER_SPECS.filter(s => s.father == null).forEach((s, i) => visit(s, i + 1))
+  return OFFER_SPECS.map(s => out.get(s.id)!)
+}
+
+export const OFFER_STRUCTURE = buildOfferStructure()
+const OFFER_ROOT_SUM = r2(OFFER_STRUCTURE.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.REVENUE as number), 0))
+const offerSur = offerSurchargeFields([OFFER_SURCHARGE], OFFER_ROOT_SUM)
+export const OFFER_DETAIL = {
+  ID: 1, ABBR: 'A-2025-014', NAME: 'Neubau Kindertagesstätte Sonnenblume — Leistungsphasen 1–5',
+  EMPLOYEE_ID: 1, PROBABILITY: 78, OFFER_STATUS_ID: 2, COMPANY_ID: 1, ADDRESS_ID: 1, CONTACT_ID: 1, TENANT_ID: 1,
+  OFFER_DATE: '2025-07-01', VALID_UNTIL: '2025-09-01', PROJECT_ID: null,
+  // Angebotsdaten (Runde 9): Empfänger und Texte wie im PDF
+  ADDRESS_NAME: 'Stadt Ravensburg', CREATED_AT: '2025-06-24T09:12:00Z',
+  OFFER_TEXT_1: 'Sehr geehrte Damen und Herren,\nvielen Dank für Ihre Anfrage. Gerne bieten wir Ihnen die folgenden Leistungen an:',
+  OFFER_TEXT_2: 'Das Angebot gilt bis zum genannten Datum. Die Abrechnung erfolgt nach HOAI 2021.\nMit freundlichen Grüßen',
+  ...offerSur.fields, SURCHARGES_TOTAL: offerSur.total,
+}
+// Angebotssumme wie im Backend (services/angebote.js, offerNetTotal): Wurzel-
+// Honorar + Angebotszuschlaege + Wurzel-NK — damit Liste, Kopf und Struktur
+// in den Bildern dieselbe Zahl zeigen.
+const OFFER_TOTAL = r2(OFFER_ROOT_SUM + offerSur.total
+  + OFFER_STRUCTURE.filter(n => n.FATHER_ID == null).reduce((s, n) => s + (n.EXTRAS as number), 0))
+export const ROLES = [
+  { ID: 2, ABBR: 'PL', NAME: 'Projektleitung', HOURLY_RATE: 95 },
+  { ID: 3, ABBR: 'AR', NAME: 'Architekt/in', HOURLY_RATE: 78.5 },
+  { ID: 4, ABBR: 'TZ', NAME: 'Technische/r Zeichner/in', HOURLY_RATE: 68 },
+]
 
 // ── Mitarbeiter ──────────────────────────────────────────────────────────────
 
@@ -250,7 +351,7 @@ function monthBalance() {
       date, weekday: wd, required: work ? 8 : 0, actual, balance: work && (past || date === PILOT_TODAY) ? r2(actual - 8) : 0,
       isHoliday: false,
       bookings: actual > 0 ? [
-        { id: day * 10, hours: r2(actual * 0.6), description: TEXTS[day % TEXTS.length], project: 'P-2024-001 Neubau Kindertagesstätte Sonnenblume', structure: 'LP5.2 Ausführungsplanung Ausbau', time_start: '08:00', time_finish: null, project_id: 1, structure_id: 108 },
+        { id: day * 10, hours: r2(actual * 0.6), hours_ext: r2(actual * 0.6), billed: day < 8, description: TEXTS[day % TEXTS.length], project: 'P-2024-001 Neubau Kindertagesstätte Sonnenblume', structure: 'LP5.2 Ausführungsplanung Ausbau', time_start: '08:00', time_finish: null, project_id: 1, structure_id: 108 },
         { id: day * 10 + 1, hours: r2(actual * 0.4), description: TEXTS[(day + 3) % TEXTS.length], project: 'P-2024-004 Erweiterung Produktionshalle Werk II', structure: 'LP8 Objektüberwachung', time_start: null, time_finish: null, project_id: 4, structure_id: 408 },
       ] : [],
     })
@@ -307,7 +408,9 @@ const OPEN_SE = [
 
 const CONTRACTS = [
   { ID: 11, ABBR: 'V-2024-001', NAME: 'Generalplanervertrag Kita Sonnenblume – Objektplanung Gebäude LP1–9', PROJECT_ID: 1,
-    CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14, SE_ENABLED: true, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', SE_LEGAL_REFERENCE: '§ 17 VOB/B' },
+    CASH_DISCOUNT_PERCENT: 2, CASH_DISCOUNT_DAYS: 14, SE_ENABLED: true, SE_PERCENT: 5, SE_BASIS: 'BRUTTO', SE_LEGAL_REFERENCE: '§ 17 VOB/B',
+    INVOICE_ADDRESS_ID: 1, INVOICE_ADDRESS_NAME: 'Stadt Musterstadt – Hochbauamt', INVOICE_CONTACT_ID: 2, VAT_ID: 1,
+    VAT_CATEGORY: 'S', VAT_EXEMPTION_REASON_CODE: null, VAT_EXEMPTION_REASON_TEXT: null },
 ]
 
 // ── Registrierung ────────────────────────────────────────────────────────────
@@ -358,6 +461,7 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     ID: 1, ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1',
     PROJECT_STATUS_ID: 2, PROJECT_TYPE_ID: 1, PROJECT_MANAGER_ID: 1, DEPARTMENT_ID: 1,
     ADDRESS_ID: 1, CONTACT_ID: 1, IS_INTERNAL: false,
+    created_at: '2024-03-12T09:14:00Z', OFFER_ID: 1, COMPANY_ID: 1,
     SURCHARGE_1_LABEL: null, SURCHARGE_1_PCT: null, SURCHARGE_1_EUR: null, SURCHARGE_1_CUMUL: true,
     SURCHARGE_2_LABEL: null, SURCHARGE_2_PCT: null, SURCHARGE_2_EUR: null, SURCHARGE_2_CUMUL: true,
     SURCHARGE_3_LABEL: null, SURCHARGE_3_PCT: null, SURCHARGE_3_EUR: null, SURCHARGE_3_CUMUL: true,
@@ -648,6 +752,147 @@ export async function mockPilot(page: Page, opts: PilotOptions = {}) {
     PATCH:  r => r.fulfill(json({ data: { ID: Number(r.request().url().match(/buchungen\/(\d+)/)?.[1]) } })),
     DELETE: r => r.fulfill(json({ success: true })),
   })
+
+  // Angebotsstruktur (Runde 3). Gilt fuer jedes Angebot — die Bilder und
+  // Tests oeffnen A-2025-014.
+  const offerNode = (r: Route) => OFFER_STRUCTURE.find(n => n.ID === Number(r.request().url().match(/structure\/(\d+)/)?.[1])) ?? {}
+  await byMethod('angebote/\\d+', {
+    GET: r => r.fulfill(json({ data: OFFER_DETAIL })),
+    PUT: r => r.fulfill(json({ data: { ...OFFER_DETAIL, ...(r.request().postDataJSON() ?? {}) } })),
+  })
+  await byMethod('angebote/\\d+/structure', {
+    GET:  r => r.fulfill(json({ data: OFFER_STRUCTURE })),
+    POST: r => r.fulfill(json({ data: { ID: 299, ...(r.request().postDataJSON() ?? {}) } })),
+  })
+  await byMethod('angebote/\\d+/structure/\\d+', {
+    PUT:    r => r.fulfill(json({ data: offerNode(r) })),
+    DELETE: r => r.fulfill(json({ ok: true })),
+  })
+  await byMethod('angebote/\\d+/structure/\\d+/move', { PUT: r => r.fulfill(json({ ok: true })) })
+  // Beauftragen (Runde 5): legt „P-2026-009" an
+  await byMethod('angebote/\\d+/convert', {
+    POST: r => r.fulfill(json({ data: { projectId: 9, projectName: 'P-2026-009' } })),
+  })
+  await byMethod('projekte/structure/\\d+/plan', {
+    PATCH: r => { const b = r.request().postDataJSON() ?? {}; return r.fulfill(json({ data: { PLAN_HOURS: b.plan_hours ?? null, PLAN_REVENUE: b.plan_revenue ?? null } })) },
+  })
+  await get('projekte/roles/active', { data: ROLES })
+  await get('angebote', { data: DEMO_OFFERS.map(o => o.ID === 1 ? { ...o, TOTAL_AMOUNT: OFFER_TOTAL } : o) })
+  await mockKalkulationen(page)
+  await mockVertragPreiseBudget(page)
+  await mockAdressen(page)
+  await mockNachtraege(page)
+  await mockMitarbeiter(page)
+}
+
+// ── Kalkulationen (HOAI-Assistent, Runde 5) ─────────────────────────────────
+
+// § 34 HOAI 2021, Honorarzone III, anrechenbare Kosten 2.450.000 € — der
+// Tafelwert steht fest im Mock (REVENUE_K0), die Phasen rechnet der Assistent
+// selbst daraus. Prozentsaetze nach § 34 Abs. 3.
+const FEE_K0_REVENUE = 262_418.4
+const FEE_PHASES = [
+  ['LPH 1: Grundlagenermittlung', 2], ['LPH 2: Vorplanung', 7], ['LPH 3: Entwurfsplanung', 15],
+  ['LPH 4: Genehmigungsplanung', 3], ['LPH 5: Ausführungsplanung', 25], ['LPH 6: Vorbereitung der Vergabe', 10],
+  ['LPH 7: Mitwirkung bei der Vergabe', 4], ['LPH 8: Objektüberwachung', 32], ['LPH 9: Objektbetreuung', 2],
+] as const
+const feePhases = (calcId: number, upto = 9) => FEE_PHASES.map(([label, pct], i) => ({
+  ID: calcId * 100 + i + 1, PHASE_LABEL: label, FEE_PERCENT_BASE: pct,
+  FEE_PERCENT: i < upto ? pct : 0, KX: 'K0', REVENUE_BASE: FEE_K0_REVENUE,
+  PHASE_REVENUE: i < upto ? r2(FEE_K0_REVENUE * pct / 100) : 0,
+}))
+const feeCalc = (over: Record<string, unknown>) => ({
+  ID: 77, ABBR: '§ 34', NAME: 'Gebäude und Innenräume', PROJECT_ID: null, OFFER_ID: null,
+  ATTACH_TO_OFFER_STRUCTURE_ID: null, FEE_MASTER_ID: 10, ZONE_ID: 3, ZONE_PERCENT: 50,
+  CONSTRUCTION_COSTS_K0: 2_450_000, CONSTRUCTION_COSTS_K1: null, CONSTRUCTION_COSTS_K2: null,
+  CONSTRUCTION_COSTS_K3: null, CONSTRUCTION_COSTS_K4: null,
+  REVENUE_K0: FEE_K0_REVENUE, REVENUE_K1: null, REVENUE_K2: null, REVENUE_K3: null, REVENUE_K4: null,
+  BASE_TYPE: 'cost_eur', SUPPORTS_ZONE_SPLIT: false, ...over,
+})
+export const FEE_CALCS = [
+  { ...feeCalc({ ID: 71, PROJECT_ID: 1 }), projectLabel: 'P-2024-001 – Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1',
+    grundhonorar: 262_418.4, zuschlaegeSum: 52_483.68, gesamthonorar: 314_902.08 },
+  { ...feeCalc({ ID: 72, PROJECT_ID: 1, ABBR: '§ 51', NAME: 'Tragwerksplanung', FEE_MASTER_ID: 11 }),
+    projectLabel: 'P-2024-001 – Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', grundhonorar: 84_220.1, zuschlaegeSum: 0, gesamthonorar: 84_220.1 },
+  { ...feeCalc({ ID: 73, PROJECT_ID: 4, ABBR: '§ 55', NAME: 'Technische Ausrüstung, Anlagengruppen 1–3', FEE_MASTER_ID: 12 }),
+    projectLabel: 'P-2024-004 – Erweiterung Produktionshalle Werk II', grundhonorar: 118_934.55, zuschlaegeSum: -3_568.04, gesamthonorar: 115_366.51 },
+  { ...feeCalc({ ID: 74, OFFER_ID: 1 }), offerLabel: 'A-2025-014 – Neubau Kita Sonnenblume',
+    grundhonorar: 149_578.49, zuschlaegeSum: 0, gesamthonorar: 149_578.49 },
+]
+
+async function mockKalkulationen(page: Page) {
+  const route = (re: string, h: (r: Route) => unknown) => page.route(new RegExp(`/api/v1/stammdaten/${re}(\\?|$)`), h)
+  const id = (r: Route) => Number(r.request().url().match(/fee-calculation-masters\/(\d+)/)?.[1])
+  // Der Assistent legt die neue Kalkulation 77 an; ihr Stand lebt hier.
+  let draft: Record<string, unknown> = feeCalc({})
+  const calcOf = (cid: number) => cid === 77 ? draft : (FEE_CALCS.find(c => c.ID === cid) ?? feeCalc({ ID: cid }))
+
+  await route('fee-groups', r => r.fulfill(json({ data: [
+    { ID: 1, ABBR: 'HOAI 2021', NAME: 'Honorarordnung für Architekten und Ingenieure' },
+    { ID: 2, ABBR: 'AHO', NAME: 'AHO-Schriftenreihe (Heft 9, 17)' },
+  ] })))
+  await route('fee-masters', r => r.fulfill(json({ data: [
+    { ID: 10, ABBR: '§ 34', NAME: 'Gebäude und Innenräume', BASE_TYPE: 'cost_eur' },
+    { ID: 11, ABBR: '§ 51', NAME: 'Tragwerksplanung', BASE_TYPE: 'cost_eur' },
+    { ID: 12, ABBR: '§ 55', NAME: 'Technische Ausrüstung', BASE_TYPE: 'cost_eur', SUPPORTS_ZONE_SPLIT: true },
+  ] })))
+  await route('fee-zones', r => r.fulfill(json({ data: ['I', 'II', 'III', 'IV', 'V'].map((z, i) => ({
+    ID: i + 1, ABBR: `Zone ${z}`, NAME: ['sehr geringe', 'geringe', 'durchschnittliche', 'hohe', 'sehr hohe'][i] + ' Planungsanforderungen',
+  })) })))
+  await route('fee-surcharges-global', r => r.fulfill(json({ data: [
+    { ID: 1, ABBR: 'Umbauzuschlag', NAME: 'Zuschlag für Umbauten und Modernisierungen', DEFAULT_PERCENT: 20, MAX_PERCENT: 33, LEGAL_REF: '§ 6 Abs. 2, § 36 Abs. 1' },
+    { ID: 2, ABBR: 'Instandsetzung', NAME: 'Zuschlag für Instandhaltungen und Instandsetzungen', DEFAULT_PERCENT: 20, MAX_PERCENT: 20, LEGAL_REF: '§ 12 Abs. 2' },
+    { ID: 3, ABBR: 'Wiederholung', NAME: 'Minderung bei Wiederholungen', DEFAULT_PERCENT: -50, LEGAL_REF: '§ 11 Abs. 3' },
+  ] })))
+  await route('fee-calculation-masters', r => {
+    const offer = new URL(r.request().url()).searchParams.get('offer_id')
+    return r.fulfill(json({ data: offer ? FEE_CALCS.filter(c => String(c.OFFER_ID) === offer) : FEE_CALCS }))
+  })
+  await route('fee-calculation-masters/init', r => {
+    const b = r.request().postDataJSON() ?? {}
+    draft = feeCalc({ PROJECT_ID: b.project_id ?? null, OFFER_ID: b.offer_id ?? null,
+      ZONE_ID: null, ZONE_PERCENT: null, CONSTRUCTION_COSTS_K0: null, REVENUE_K0: null })
+    return r.fulfill(json({ data: draft }))
+  })
+  await page.route(/\/api\/v1\/stammdaten\/fee-calculation-masters\/\d+(\?|$)/, r => {
+    if (r.request().method() === 'DELETE') return r.fulfill(json({ success: true }))
+    return r.fulfill(json({ data: calcOf(id(r)) }))
+  })
+  await route('fee-calculation-masters/\\d+/basis', r => {
+    const b = r.request().postDataJSON() ?? {}
+    const cur = calcOf(id(r))
+    const next = { ...cur, ...b }
+    next.REVENUE_K0 = next.CONSTRUCTION_COSTS_K0 ? FEE_K0_REVENUE : null
+    if (id(r) === 77) draft = next
+    return r.fulfill(json({ data: next }))
+  })
+  await route('fee-calculation-masters/\\d+/phases/(init|save)', r => {
+    const cid = id(r)
+    const rows = feePhases(cid, cid === 74 ? 5 : 9)
+    const saved = (r.request().postDataJSON()?.rows ?? []) as { ID: number; KX: string; FEE_PERCENT: number | null }[]
+    return r.fulfill(json({ data: rows.map(p => {
+      const s2 = saved.find(x => x.ID === p.ID)
+      return s2 ? { ...p, KX: s2.KX, FEE_PERCENT: s2.FEE_PERCENT } : p
+    }) }))
+  })
+  await route('fee-calculation-masters/\\d+/bl', r => r.fulfill(json({ data: id(r) === 71 ? [
+    { ID: 7101, FEE_CALC_MASTER_ID: 71, ABBR: 'BL1', NAME: 'Brandschutzkonzept, Abstimmung mit Prüfsachverständigem',
+      LPH_REF: null, LPH_PHASE_ID: null, AMOUNT_TYPE: 'fixed', PERCENT: null, KX_REF: null, AMOUNT: 24_800, SORT_ORDER: 0 },
+  ] : [] })))
+  await route('fee-calculation-masters/\\d+/bl/save', r => {
+    const rows = (r.request().postDataJSON()?.rows ?? []) as Record<string, unknown>[]
+    return r.fulfill(json({ data: rows.map((x, i) => ({ ...x, ID: x.ID ?? 9000 + i })) }))
+  })
+  await route('fee-calculation-masters/\\d+/surcharges', r => r.fulfill(json({ data: id(r) === 71 ? [
+    { ID: 7111, FEE_CALC_MASTER_ID: 71, FEE_SURCHARGE_ID: 1, ABBR: 'Umbauzuschlag', NAME: 'Zuschlag für Umbauten und Modernisierungen',
+      PERCENT: 20, BASE_AMOUNT: null, AMOUNT: null, SORT_ORDER: 0, LPH_FILTER: null, CALC_MODE: 'parallel', INCLUDE_BL: false, BL_FILTER: null },
+  ] : [] })))
+  await route('fee-calculation-masters/\\d+/surcharges/save', r => r.fulfill(json({ data: r.request().postDataJSON()?.rows ?? [] })))
+  await route('fee-calculation-masters/\\d+/add-to-offer-structure', r => r.fulfill(json({ success: true, fatherId: 299, message: 'Kalkulation ins Angebot übernommen' })))
+  await route('fee-calculation-masters/\\d+/add-to-project-structure', r => r.fulfill(json({ message: 'ok' })))
+  await route('fee-calculation-masters/\\d+/sync-to-structure', r => r.fulfill(json(id(r) === 74
+    ? { synced: 5, projectId: null, offerId: 1, message: '5 Angebotselemente wurden aktualisiert.' }
+    : { synced: 9, projectId: 1, message: '9 Projektelemente wurden aktualisiert.' })))
 }
 
 // ── Leistungsstände / Monatsrunde ───────────────────────────────────────────
@@ -733,4 +978,539 @@ function myWeek() {
     BILLED: false, CLOSED: false,
   }]
   return { from: '2026-09-21', to: '2026-09-27', bookings, drafts }
+}
+
+// ── Verträge, Preislisten, Interne Budgets (Runde 6) ─────────────────────────
+
+/** Verbrauch je Blatt in % des Budgets — LP5.3 liegt über dem Budget, BL2 genau darauf, NA1 über dem Plan. */
+const USE_PCT: Record<number, number> = {
+  102: 98, 103: 96, 104: 91, 105: 88, 106: 64, 107: 57, 108: 41, 109: 108, 110: 12, 112: 72, 113: 55,
+  114: 30, 115: 22, 116: 0, 118: 84, 119: 100, 120: 35, 121: 18,
+}
+/** Gebuchte Stunden der Blätter nach Plan. */
+const BOOKED_H: Record<number, number> = { 123: 194, 124: 82.75 }
+
+export function budgetOverview() {
+  const kids = new Map<number | null, typeof STRUCTURE>()
+  for (const n of STRUCTURE) kids.set(n.FATHER_ID as number | null, [...(kids.get(n.FATHER_ID as number | null) ?? []), n])
+  const agg = new Map<number, { budget: number; verbrauch: number; plan: 'none' | 'some' | 'all' }>()
+  const visit = (n: Record<string, unknown>): { budget: number; verbrauch: number; plan: 'none' | 'some' | 'all' } => {
+    const id = n.STRUCTURE_ID as number
+    const ch = kids.get(id) ?? []
+    let r: { budget: number; verbrauch: number; plan: 'none' | 'some' | 'all' }
+    if (!ch.length) {
+      r = n.PLAN_REVENUE != null
+        ? { budget: n.PLAN_REVENUE as number, verbrauch: n.TEC_SP_TOT_SUM as number, plan: 'all' }
+        : { budget: n.REVENUE as number, verbrauch: r2((n.REVENUE as number) * (USE_PCT[id] ?? 50) / 100), plan: 'none' }
+    } else {
+      const parts = ch.map(visit)
+      const plans = new Set(parts.map(p => p.plan))
+      r = {
+        budget: r2(parts.reduce((a, p) => a + p.budget, 0) + (n.SURCHARGES_TOTAL as number)),
+        verbrauch: r2(parts.reduce((a, p) => a + p.verbrauch, 0)),
+        plan: plans.size === 1 ? [...plans][0] : 'some',
+      }
+    }
+    agg.set(id, r)
+    return r
+  }
+  const roots = STRUCTURE.filter(n => n.FATHER_ID == null).map(visit)
+  const structures = STRUCTURE.map(n => {
+    const id = n.STRUCTURE_ID as number
+    const leaf = !(kids.get(id) ?? []).length
+    return {
+      ID: id, FATHER_ID: n.FATHER_ID, ABBR: n.ABBR, NAME: n.NAME, SORT_ORDER: n.SORT_ORDER, leaf,
+      ...agg.get(id)!,
+      ...(leaf && n.PLAN_REVENUE != null ? { planHours: n.PLAN_HOURS, bookedHours: BOOKED_H[id] ?? 0 } : {}),
+    }
+  })
+  return {
+    project: { ID: 1, ABBR: 'P-2024-001', NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', PROJECT_MANAGER_ID: 1, BUDGET_WARNINGS_MUTED: false },
+    projectAggregate: { budget: r2(roots.reduce((a, p) => a + p.budget, 0)), verbrauch: r2(roots.reduce((a, p) => a + p.verbrauch, 0)) },
+    structures,
+    rules: [
+      { ID: 1, TENANT_ID: 1, PROJECT_ID: 1, STRUCTURE_ID: null, THRESHOLD_PCT: 75, NOTIFY_PM: true, NOTIFY_BOOKER: false, NOTIFY_CC: [], MUTED: false, CREATED_AT: '2026-03-02T09:00:00Z', CREATED_BY: 1 },
+      { ID: 2, TENANT_ID: 1, PROJECT_ID: 1, STRUCTURE_ID: null, THRESHOLD_PCT: 90, NOTIFY_PM: true, NOTIFY_BOOKER: false, NOTIFY_CC: [2], MUTED: false, CREATED_AT: '2026-03-02T09:00:00Z', CREATED_BY: 1 },
+      { ID: 3, TENANT_ID: 1, PROJECT_ID: null, STRUCTURE_ID: 109, THRESHOLD_PCT: 100, NOTIFY_PM: true, NOTIFY_BOOKER: true, NOTIFY_CC: [], MUTED: false, CREATED_AT: '2026-05-11T09:00:00Z', CREATED_BY: 1 },
+      { ID: 4, TENANT_ID: 1, PROJECT_ID: null, STRUCTURE_ID: 123, THRESHOLD_PCT: 90, NOTIFY_PM: true, NOTIFY_BOOKER: true, NOTIFY_CC: [], MUTED: false, CREATED_AT: '2026-06-01T09:00:00Z', CREATED_BY: 1 },
+    ],
+    fired: [
+      { ID: 21, RULE_ID: 4, FIRED_AT: '2026-09-18T14:32:00Z', BUDGET_EUR: 17_100, ACTUAL_EUR: 15_480, TRIGGER_TEC_ID: null, RESET_AT: null },
+      { ID: 20, RULE_ID: 3, FIRED_AT: '2026-09-03T10:05:00Z', BUDGET_EUR: agg.get(109)!.budget, ACTUAL_EUR: r2(agg.get(109)!.budget * 1.01), TRIGGER_TEC_ID: null, RESET_AT: null },
+      { ID: 19, RULE_ID: 1, FIRED_AT: '2026-07-14T08:12:00Z', BUDGET_EUR: 402_000, ACTUAL_EUR: 301_900, TRIGGER_TEC_ID: null, RESET_AT: '2026-07-21T16:40:00Z' },
+    ],
+  }
+}
+
+export const ADDRESS_HITS = [
+  { ID: 1, ADDRESS_NAME_1: 'Stadt Musterstadt – Hochbauamt' },
+  { ID: 2, ADDRESS_NAME_1: 'Stadtwerke Ravensburg GmbH' },
+  { ID: 3, ADDRESS_NAME_1: 'Staatliches Hochbauamt Ulm' },
+  { ID: 4, ADDRESS_NAME_1: 'Kita-Verbund Sonnenblume e. V.' },
+]
+
+async function mockVertragPreiseBudget(page: Page) {
+  const get = (re: string, body: unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), r => r.fulfill(json(body)))
+  await get('stammdaten/vat', { data: [
+    { ID: 1, VAT: 'USt 19', VAT_PERCENT: 19 },
+    { ID: 2, VAT: 'USt 7', VAT_PERCENT: 7 },
+    { ID: 3, VAT: 'USt 0', VAT_PERCENT: 0 },
+  ] })
+  await get('stammdaten/contacts/by-address', { data: [
+    { ID: 1, FIRST_NAME: 'Petra', LAST_NAME: 'Albrecht' },
+    { ID: 2, FIRST_NAME: 'Rainer', LAST_NAME: 'Vogt' },
+  ] })
+  // Rollen kommen aus ROLES (mockPilot) — dieselben wie in der Angebotsstruktur
+  // Adresssuche (Autocomplete): filtert wie der Server auf den Namen
+  await page.route(/\/api\/v1\/stammdaten\/addresses\/search(\?|$)/, r => {
+    const q = (new URL(r.request().url()).searchParams.get('q') ?? '').toLowerCase()
+    return r.fulfill(json({ data: ADDRESS_HITS.filter(a => a.ADDRESS_NAME_1.toLowerCase().includes(q)) }))
+  })
+  const e2p = (id: number, emp: number, role: [number, string, string] | null, rate: number | null) => ({
+    ID: id, EMPLOYEE_ID: emp, ROLE_ID: role?.[0] ?? null, ROLE_ABBR: role?.[1] ?? '', ROLE_NAME: role?.[2] ?? '', HOURLY_RATE: rate,
+    EMPLOYEE_SHORT_NAME: EMPLOYEES[emp - 1].ABBR, EMPLOYEE_FIRST_NAME: EMPLOYEES[emp - 1].FIRST_NAME, EMPLOYEE_LAST_NAME: EMPLOYEES[emp - 1].LAST_NAME,
+  })
+  await get('employee2project/project/\\d+', { data: [
+    e2p(31, 1, [2, 'PL', 'Projektleitung'], 115),
+    e2p(32, 2, [2, 'PL', 'Projektleitung'], 110),
+    e2p(33, 3, [3, 'AR', 'Architekt/in'], 82.5),
+    e2p(34, 4, [3, 'AR', 'Architekt/in'], 78.5),
+    e2p(35, 6, [4, 'TZ', 'Technische/r Zeichner/in'], 68),
+    e2p(36, 9, null, null),
+  ] })
+  await get('buchungen/booking-prices', { data: [
+    { BOOKING_TYPE_ID: 1, KIND: 'UNIT', ABBR: 'PLOT-A0', NAME: 'Plot A0 farbig', UNIT_LABEL: 'Stk', SCOPE: 'global',
+      DEFAULT_SP_RATE: 18, DEFAULT_CP_RATE: 6.5, PROJECT_SP_RATE: 15, PROJECT_CP_RATE: null, EFFECTIVE_SP_RATE: 15, EFFECTIVE_CP_RATE: 6.5 },
+    { BOOKING_TYPE_ID: 2, KIND: 'UNIT', ABBR: 'KM', NAME: 'Fahrtkosten', UNIT_LABEL: 'km', SCOPE: 'global',
+      DEFAULT_SP_RATE: 0.42, DEFAULT_CP_RATE: 0.3, PROJECT_SP_RATE: null, PROJECT_CP_RATE: null, EFFECTIVE_SP_RATE: 0.42, EFFECTIVE_CP_RATE: 0.3 },
+    { BOOKING_TYPE_ID: 3, KIND: 'LUMP_COST', ABBR: 'GUT', NAME: 'Bodengutachten (Fremdleistung)', UNIT_LABEL: null, SCOPE: 'global',
+      DEFAULT_SP_RATE: null, DEFAULT_CP_RATE: 2400, PROJECT_SP_RATE: null, PROJECT_CP_RATE: 2180, EFFECTIVE_SP_RATE: null, EFFECTIVE_CP_RATE: 2180 },
+    { BOOKING_TYPE_ID: 9, KIND: 'LUMP_REVENUE', ABBR: 'MOD', NAME: 'Architekturmodell 1:200', UNIT_LABEL: null, SCOPE: 'project',
+      DEFAULT_SP_RATE: 3200, DEFAULT_CP_RATE: null, PROJECT_SP_RATE: null, PROJECT_CP_RATE: null, EFFECTIVE_SP_RATE: 3200, EFFECTIVE_CP_RATE: null },
+  ] })
+  await get('budget-warnings/projects/\\d+', { data: budgetOverview() })
+}
+
+// ── Nachträge (Runde 7) ──────────────────────────────────────────────────────
+
+export const NACHTRAG_STATUSES = [
+  { ID: 1, CODE: 'DRAFT', ABBR: 'Entwurf', SORT_ORDER: 1, IS_TERMINAL: false, ALLOWS_RELEASE: false },
+  { ID: 2, CODE: 'ANNOUNCED', ABBR: 'Angekündigt', SORT_ORDER: 2, IS_TERMINAL: false, ALLOWS_RELEASE: false },
+  { ID: 3, CODE: 'SUBMITTED', ABBR: 'Eingereicht', SORT_ORDER: 3, IS_TERMINAL: false, ALLOWS_RELEASE: true },
+  { ID: 4, CODE: 'IN_REVIEW', ABBR: 'In Prüfung', SORT_ORDER: 4, IS_TERMINAL: false, ALLOWS_RELEASE: true },
+  { ID: 5, CODE: 'PARTIALLY_COMMISSIONED', ABBR: 'Teilweise beauftragt', SORT_ORDER: 5, IS_TERMINAL: false, ALLOWS_RELEASE: true },
+  { ID: 6, CODE: 'COMMISSIONED', ABBR: 'Beauftragt', SORT_ORDER: 6, IS_TERMINAL: true, ALLOWS_RELEASE: false },
+  { ID: 7, CODE: 'REJECTED', ABBR: 'Abgelehnt', SORT_ORDER: 7, IS_TERMINAL: true, ALLOWS_RELEASE: false },
+  { ID: 8, CODE: 'WITHDRAWN', ABBR: 'Zurückgezogen', SORT_ORDER: 8, IS_TERMINAL: true, ALLOWS_RELEASE: false },
+  { ID: 9, CODE: 'DISPUTED', ABBR: 'Strittig', SORT_ORDER: 9, IS_TERMINAL: false, ALLOWS_RELEASE: false },
+]
+const PNAME = 'P-2024-001 Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1'
+const ntItem = (ID: number, ABBR: string, NAME: string, CATEGORY: string, statusId: number, claimed: number, approved: number, due: string | null) => {
+  const st = NACHTRAG_STATUSES.find(x => x.ID === statusId)!
+  return { ID, ABBR, NAME, NACHTRAG_TYPE: 'OWN', CATEGORY, STATUS_CODE: st.CODE, STATUS_NAME: st.ABBR, NACHTRAG_STATUS_ID: statusId,
+    PROJECT_ID: 1, PROJECT_NAME: PNAME, EMPLOYEE_NAME: 'S. Messina', ADDRESS_NAME: 'Stadt Musterstadt – Hochbauamt',
+    REVIEW_DUE_DATE: due, AMOUNT_CLAIMED_NET: claimed, AMOUNT_APPROVED_NET: approved, CREATED_AT: '2026-08-01T09:00:00Z' }
+}
+export const NACHTRAEGE = [
+  ntItem(401, 'N-001', 'Zusätzliche Tiefgaragenebene', 'CHANGED', 4, 48_600, 0, '2026-10-12'),
+  ntItem(402, 'N-002', 'Fassadenvariante Holz-Alu', 'ADDITIONAL', 5, 21_400, 12_800, '2026-09-20'),
+  ntItem(403, 'N-003', 'Mehraufwand Baugrundgutachten', 'CIRCUMSTANCE', 6, 6_250, 6_250, null),
+  ntItem(404, 'N-004', 'Verlängerte Bauzeit Rohbau', 'DISRUPTION', 1, 0, 0, null),
+  ntItem(405, 'N-005', 'Zusatztermine Nutzerabstimmung', 'ADDITIONAL', 7, 3_200, 0, null),
+]
+const ntPos = (ID: number, NACHTRAG_ID: number, FATHER_ID: number | null, ABBR: string, NAME: string, bt: number | null, REVENUE: number,
+  state: 'OPEN' | 'APPROVED' | 'PARTIAL', approved: number | null = null, qty: number | null = null, rate: number | null = null, sort = ID) => ({
+  ID, ABBR, NAME, NACHTRAG_ID, FATHER_ID, SORT_ORDER: sort, BILLING_TYPE_ID: bt, REVENUE_BASIS: REVENUE, REVENUE, EXTRAS_PERCENT: 0, EXTRAS: 0,
+  QUANTITY: qty, HOURLY_RATE: rate, ROLE_ABBR: null, ROLE_NAME: null, ROLE_ID: null, SURCHARGES_TOTAL: 0,
+  APPROVAL_STATE: state, APPROVED_AMOUNT_NET: approved, RELEASED_STRUCTURE_ID: state === 'OPEN' ? null : 9000 + ID,
+})
+export const NACHTRAG_POSITIONS: Record<number, ReturnType<typeof ntPos>[]> = {
+  401: [
+    ntPos(4101, 401, null, '1', 'Tiefgarage Ebene −2', null, 42_300, 'OPEN'),
+    ntPos(4102, 401, 4101, '1.1', 'Entwurfs- und Genehmigungsplanung', 1, 26_800, 'OPEN'),
+    ntPos(4103, 401, 4101, '1.2', 'Ausführungsplanung Rohbau', 1, 15_500, 'OPEN'),
+    ntPos(4104, 401, null, '2', 'Abstimmung Tragwerksplanung', 2, 6_300, 'OPEN', null, 60, 105),
+  ],
+  402: [
+    ntPos(4201, 402, null, '1', 'Fassade Holz-Alu', null, 16_480, 'OPEN'),
+    ntPos(4202, 402, 4201, '1.1', 'Entwurf Holz-Alu-Variante', 1, 8_000, 'APPROVED', 8_000),
+    ntPos(4203, 402, 4201, '1.2', 'Werkplanung Fassade', 1, 6_200, 'PARTIAL', 4_800),
+    ntPos(4204, 402, 4201, '1.3', 'Bemusterung', 2, 2_280, 'OPEN', null, 24, 95),
+    ntPos(4205, 402, null, '2', 'Brandschutznachweis Fassade', 1, 4_920, 'OPEN'),
+  ],
+}
+function ntDetail(id: number) {
+  const it = NACHTRAEGE.find(n => n.ID === id) ?? NACHTRAEGE[0]
+  return { ID: it.ID, TENANT_ID: 1, PROJECT_ID: 1, CONTRACT_ID: 11, OFFER_ID: null, ABBR: it.ABBR, NAME: it.NAME,
+    NACHTRAG_TYPE: 'OWN', NACHTRAG_STATUS_ID: it.NACHTRAG_STATUS_ID, CATEGORY: it.CATEGORY,
+    CLAIM_BASIS: it.ID === 402 ? '§ 650b BGB, § 10 HOAI' : '§ 650b BGB', REASON: null, IS_GRANTED_BASIS: false,
+    EMPLOYEE_ID: 1, ADDRESS_ID: 1, CONTACT_ID: 2, COMPANY_ID: 1, VAT_ID: 1,
+    ANNOUNCED_DATE: '2026-08-04', SUBMITTED_DATE: '2026-08-18', REVIEW_DUE_DATE: it.REVIEW_DUE_DATE,
+    DECISION_DATE: it.ID === 402 ? '2026-09-10' : null,
+    AMOUNT_CLAIMED_NET: it.AMOUNT_CLAIMED_NET, AMOUNT_APPROVED_NET: it.AMOUNT_APPROVED_NET,
+    REVIEW_FORMAL: it.ID === 402, REVIEW_CONTENT: it.ID === 402, REVIEW_CALCULATION: false,
+    REVIEW_NOTE: it.ID === 402 ? 'Stunden der Bemusterung noch belegen lassen.' : null,
+    REVIEW_RECOMMENDATION: it.ID === 402 ? 'REDUCE' : null,
+    REVIEWED_AT: it.ID === 402 ? '2026-09-05T10:00:00Z' : null, REVIEWED_BY: it.ID === 402 ? 1 : null, CREATED_AT: it.CREATED_AT }
+}
+
+async function mockNachtraege(page: Page) {
+  const r = (re: string, h: (route: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
+  const id = (route: Route) => Number(route.request().url().match(/nachtraege\/(\d+)/)?.[1])
+  await r('nachtraege/statuses', route => route.fulfill(json({ data: NACHTRAG_STATUSES })))
+  await r('nachtraege', route => route.request().method() === 'POST'
+    ? route.fulfill(json({ data: { ...ntDetail(401), ID: 406 } }))
+    : route.fulfill(json({ data: NACHTRAEGE })))
+  await r('nachtraege/\\d+', route => route.request().method() === 'GET'
+    ? route.fulfill(json({ data: ntDetail(id(route)) }))
+    : route.fulfill(json({ data: ntDetail(id(route)) })))
+  await r('nachtraege/\\d+/structure(/\\d+)?', route => route.request().method() === 'GET'
+    ? route.fulfill(json({ data: NACHTRAG_POSITIONS[id(route)] ?? [] }))
+    : route.fulfill(json({ data: {} })))
+  await r('nachtraege/\\d+/releases', route => route.fulfill(json({ data: id(route) === 402 ? [
+    { ID: 1, NACHTRAG_ID: 402, RELEASE_NO: 1, RELEASE_KIND: 'PARTIAL', RELEASE_BASIS: 'WRITTEN', AMOUNT_NET: 12_800, RELEASED_BY: 1,
+      RELEASED_AT: '2026-09-10T11:00:00Z', NOTE: 'Schreiben des Bauherrn vom 08.09.; Werkplanung gekürzt anerkannt.' },
+  ] : [] })))
+  await r('nachtraege/\\d+/release', route => route.fulfill(json({ data: { release_no: 2, amount_net: 4_920, approved_total_net: 17_720, status_code: 'PARTIALLY_COMMISSIONED', group_structure_id: 1 } })))
+  await r('nachtraege/\\d+/review', route => route.fulfill(json({ data: ntDetail(id(route)) })))
+}
+
+// ── Adressen und Kontakte (Runde 8) ─────────────────────────────────────────
+// Die Kontakte aus demoData tragen weder Anrede noch Adressnamen (ADDRESS) —
+// die Liste zeigte damit überall „—". Hier dieselben Adressen mit
+// vollständigen Kontakten und der Detailantwort einer Adresse.
+
+export const SALUTATIONS = [{ ID: 1, SALUTATION: 'Frau' }, { ID: 2, SALUTATION: 'Herr' }, { ID: 3, SALUTATION: 'Guten Tag' }]
+export const GENDERS = [{ ID: 1, GENDER: 'weiblich' }, { ID: 2, GENDER: 'männlich' }, { ID: 3, GENDER: 'divers' }]
+
+const contact = (ID: number, ADDRESS_ID: number, first: string, last: string, gender: 1 | 2, extra: Record<string, unknown> = {}) => ({
+  ID, TITLE: null, FIRST_NAME: first, LAST_NAME: last, NAME: `${first} ${last}`,
+  EMAIL: `${first.toLowerCase()}.${last.toLowerCase().replace(/[^a-z]/g, '')}@kunde-${ADDRESS_ID}.de`,
+  MOBILE: `0170 55${ID}0${ID}`, PHONE: null, SALUTATION_ID: gender, GENDER_ID: gender,
+  SALUTATION: gender === 1 ? 'Frau' : 'Herr', GENDER: gender === 1 ? 'weiblich' : 'männlich',
+  ADDRESS_ID, ADDRESS: DEMO_ADDRESSES.find(a => a.ID === ADDRESS_ID)?.ADDRESS_NAME_1 ?? '',
+  POSITION: null, DEPARTMENT: null, IS_PRIMARY: 0, NOTES: null, ...extra,
+})
+
+export const CONTACTS_ALL = [
+  contact(21, 1, 'Petra', 'Albrecht', 1, { POSITION: 'Amtsleitung', DEPARTMENT: 'Hochbauamt', IS_PRIMARY: 1, TITLE: 'Dr.' }),
+  contact(22, 1, 'Rainer', 'Vogt', 2, { POSITION: 'Sachbearbeitung', DEPARTMENT: 'Hochbauamt' }),
+  contact(23, 2, 'Julia', 'Neumann', 1, { POSITION: 'Geschäftsführung', IS_PRIMARY: 1, PHONE: '07541 3030-10' }),
+  contact(24, 2, 'Ben', 'Okafor', 2, { POSITION: 'Projektleitung', DEPARTMENT: 'Technik' }),
+  contact(25, 2, 'Miriam', 'Schäfer-Lindqvist', 1, { POSITION: 'Buchhaltung', DEPARTMENT: 'Finanzen', NOTES: 'Rechnungen bitte nur als E-Rechnung.' }),
+  contact(26, 3, 'Klaus', 'Riedl', 2, { POSITION: 'Liegenschaften', IS_PRIMARY: 1 }),
+  contact(27, 4, 'Anna', 'Weber', 1, { POSITION: 'Inhaberin', IS_PRIMARY: 1 }),
+]
+
+export function addressDetail(id: number) {
+  const address = DEMO_ADDRESSES.find(a => a.ID === id) ?? DEMO_ADDRESSES[0]
+  const withLinks = id === 2
+  return {
+    address,
+    contacts: CONTACTS_ALL.filter(c => c.ADDRESS_ID === address.ID),
+    projects:   withLinks ? [{ ID: 2, ABBR: 'P-2024-002', NAME: 'Sanierung Altbau Bahnhofstraße 14' }] : [],
+    offers:     withLinks ? [{ ID: 2, ABBR: 'A-2025-015', NAME: 'Sanierung Altbau Bahnhofstraße 14' }] : [],
+    contracts:  withLinks ? [{ ID: 12, ABBR: 'V-2024-002', NAME: 'Generalplanervertrag Sanierung Bahnhofstraße 14', PROJECT_ID: 2 }] : [],
+    invoices:   withLinks ? [
+      { ID: 2, INVOICE_NUMBER: 'RE-2026-0042', INVOICE_DATE: '2026-07-08', PROJECT_ID: 2 },
+      { ID: 10, INVOICE_NUMBER: 'RE-2026-0050', INVOICE_DATE: '2026-08-14', PROJECT_ID: 2 },
+    ] : [],
+    partials:   withLinks ? [{ ID: 3, ADVANCE_INVOICE_NUMBER: 'AR-2026-0003', ADVANCE_INVOICE_DATE: '2026-03-31', PROJECT_ID: 2 }] : [],
+    nachtraege: withLinks ? [{ ID: 403, ABBR: 'N-003', NAME: 'Erweiterte Bestandsaufnahme Dachstuhl', PROJECT_ID: 2 }] : [],
+    visible: { contacts: true, projects: true, offers: true, contracts: true, invoices: true, partials: true, nachtraege: true },
+  }
+}
+
+async function mockAdressen(page: Page) {
+  const get = (re: string, body: unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), r => r.fulfill(json(body)))
+  await get('stammdaten/salutations', { data: SALUTATIONS })
+  await get('stammdaten/genders', { data: GENDERS })
+  await get('stammdaten/contacts/list', { data: CONTACTS_ALL })
+  await page.route(/\/api\/v1\/stammdaten\/addresses\/(\d+)(\?|$)/, r => {
+    const id = Number(r.request().url().match(/addresses\/(\d+)/)?.[1])
+    const m = r.request().method()
+    if (m === 'GET') return r.fulfill(json({ data: addressDetail(id) }))
+    if (m === 'PATCH') return r.fulfill(json({ data: { ...addressDetail(id).address, ...(r.request().postDataJSON() ?? {}) } }))
+    if (m === 'DELETE') return id === 2
+      ? r.fulfill(json({ error: 'Adresse „Wohnbau Süd GmbH" kann nicht gelöscht werden — verwendet in 3 Kontakten, 1 Projekt (P-2024-002) und 2 Rechnungen (RE-2026-0042, RE-2026-0050).' }, 409))
+      : r.fulfill(json({ ok: true }))
+    return r.fulfill(json({ ok: true }))
+  })
+  await page.route(/\/api\/v1\/stammdaten\/address(\?|$)/, r => r.fulfill(json({ data: { ID: 42, ADDRESS_NAME_1: (r.request().postDataJSON() ?? {}).address_name_1 } })))
+  await page.route(/\/api\/v1\/stammdaten\/contacts(\?|$)/, r => r.request().method() === 'POST'
+    ? r.fulfill(json({ data: { ID: 900, ADDRESS_ID: (r.request().postDataJSON() ?? {}).address_id } }))
+    : r.fulfill(json({ data: CONTACTS_ALL })))
+  await page.route(/\/api\/v1\/stammdaten\/contacts\/(\d+)(\?|$)/, r => {
+    const id = Number(r.request().url().match(/contacts\/(\d+)/)?.[1])
+    const c = CONTACTS_ALL.find(x => x.ID === id)
+    if (r.request().method() === 'DELETE') return id === 23
+      ? r.fulfill(json({ error: 'Kontakt „Julia Neumann" kann nicht gelöscht werden — verwendet in 1 Vertrag (V-2024-002).' }, 409))
+      : r.fulfill(json({ ok: true }))
+    return r.fulfill(json({ data: { ...c, ...(r.request().postDataJSON() ?? {}) } }))
+  })
+}
+
+// ── Mitarbeiter-Modul (Runde 10) ─────────────────────────────────────────────
+// Neun Mitarbeiter wie oben, dazu Abteilung, Modell, Kostensatz, Rollen und ein
+// Urlaubsstand — genug, dass Liste und Akte wie in einem kleinen Büro aussehen.
+
+const DEPARTMENTS = [{ ID: 1, ABBR: 'Hochbau' }, { ID: 2, ABBR: 'Tiefbau' }, { ID: 3, ABBR: 'Verwaltung' }]
+const WORK_MODELS = [
+  { ID: 1, NAME: 'Vollzeit 40 h', COUNTRY_CODE: 'DE', STATE_CODE: 'BW', MON: 8, TUE: 8, WED: 8, THU: 8, FRI: 8, SAT: 0, SUN: 0 },
+  { ID: 2, NAME: 'Teilzeit 30 h', COUNTRY_CODE: 'DE', STATE_CODE: 'BW', MON: 6, TUE: 6, WED: 6, THU: 6, FRI: 6, SAT: 0, SUN: 0 },
+  { ID: 3, NAME: 'Teilzeit 20 h (Mo–Mi)', COUNTRY_CODE: 'DE', STATE_CODE: 'BW', MON: 8, TUE: 8, WED: 4, THU: 0, FRI: 0, SAT: 0, SUN: 0 },
+]
+const USER_ROLES = [
+  { ID: 1, ABBR: 'Administrator', NAME: 'Administrator', COLOR: '#1f4e79', IS_SYSTEM: true,  IS_DEFAULT: false, CREATED_AT: '2024-01-01', UPDATED_AT: '2024-01-01', EMPLOYEE_COUNT: 1 },
+  { ID: 2, ABBR: 'Projektleiter', NAME: 'Projektleiter', COLOR: '#2e7d32', IS_SYSTEM: true, IS_DEFAULT: false, CREATED_AT: '2024-01-01', UPDATED_AT: '2024-01-01', EMPLOYEE_COUNT: 3 },
+  { ID: 3, ABBR: 'Mitarbeiter', NAME: 'Mitarbeiter', COLOR: '#6d4c41', IS_SYSTEM: true,  IS_DEFAULT: true,  CREATED_AT: '2024-01-01', UPDATED_AT: '2024-01-01', EMPLOYEE_COUNT: 5 },
+]
+const EMP_DETAIL: Record<number, { dept: number; model: number; rate: number; entry: string; mail: string; phone?: string; mobile?: string; pn: string; gender: number; active?: number; roles: number[] }> = {
+  1: { dept: 1, model: 1, rate: 68.5, entry: '2016-03-01', mail: 's.messina@buero-messina.de', phone: '0751 36 18-10', mobile: '0170 4412 881', pn: 'MA-001', gender: 1, roles: [1] },
+  2: { dept: 1, model: 1, rate: 58.4, entry: '2018-09-01', mail: 't.kern@buero-messina.de', phone: '0751 36 18-12', pn: 'MA-004', gender: 1, roles: [2] },
+  3: { dept: 1, model: 2, rate: 54.2, entry: '2019-01-15', mail: 's.braun-hofmeister@buero-messina.de', pn: 'MA-006', gender: 2, roles: [2] },
+  4: { dept: 2, model: 1, rate: 49.8, entry: '2020-04-01', mail: 'l.hartmann@buero-messina.de', pn: 'MA-007', gender: 2, roles: [3] },
+  5: { dept: 2, model: 1, rate: 47.1, entry: '2021-02-01', mail: 'j.wagner@buero-messina.de', pn: 'MA-009', gender: 1, roles: [3] },
+  6: { dept: 1, model: 3, rate: 44.6, entry: '2022-10-01', mail: 'a.kaya@buero-messina.de', pn: 'MA-011', gender: 2, roles: [3] },
+  7: { dept: 3, model: 2, rate: 39.9, entry: '2017-06-01', mail: 'm.rieger@buero-messina.de', pn: 'MA-005', gender: 1, roles: [3] },
+  8: { dept: 1, model: 1, rate: 42.3, entry: '2023-08-01', mail: 'c.fischer@buero-messina.de', pn: 'MA-013', gender: 2, roles: [2, 3] },
+  9: { dept: 2, model: 1, rate: 36.0, entry: '2025-09-01', mail: '', pn: 'MA-014', gender: 1, active: 2, roles: [3] },
+}
+export const EMPLOYEE_LIST = EMPLOYEES.map(e => {
+  const d = EMP_DETAIL[e.ID]
+  return {
+    ...e, TITLE: e.ID === 1 ? 'Dipl.-Ing.' : null, MAIL: d.mail || null, PHONE: d.phone ?? null, MOBILE: d.mobile ?? null,
+    PERSONNEL_NUMBER: d.pn, BIRTH_DATE: null, NOTES: null, SUPERVISOR_ID: e.ID === 1 ? null : 1,
+    GENDER_ID: d.gender, GENDER: d.gender === 1 ? 'männlich' : 'weiblich', NAME: `${e.FIRST_NAME} ${e.LAST_NAME}`,
+    DEPARTMENT_ID: d.dept, DEPARTMENT_NAME: DEPARTMENTS.find(x => x.ID === d.dept)!.ABBR,
+    ENTRY_DATE: d.entry, EXIT_DATE: d.active === 2 ? '2026-06-30' : null, ACTIVE: d.active ?? 1,
+    CURRENT_MODEL_ID: d.model, CURRENT_MODEL_NAME: WORK_MODELS.find(m => m.ID === d.model)!.NAME,
+    CURRENT_COST_RATE: d.rate, CURRENT_COST_RATE_FROM: '2026-01-01', DASHBOARD_ROLE: e.ID === 1 ? 'geschaeftsleitung' : null,
+  }
+})
+
+async function mockMitarbeiter(page: Page) {
+  const empId = (r: Route) => Number(r.request().url().match(/mitarbeiter\/(\d+)/)?.[1])
+  const r = (re: string, h: (route: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
+  await r('license/usage', route => route.fulfill(json({ usage: [{ key: 'limits.employees', unit: 'Mitarbeitern', used: 8, limit: 15 }] })))
+  await r('mitarbeiter/list', route => route.fulfill(json({ data: EMPLOYEE_LIST })))
+  await r('mitarbeiter/report-list', route => route.fulfill(json({ data: EMPLOYEE_LIST.map((e, i) => ({
+    EMPLOYEE_ID: e.ID, ABBR: e.ABBR, FIRST_NAME: e.FIRST_NAME, LAST_NAME: e.LAST_NAME, DEPARTMENT_NAME: e.DEPARTMENT_NAME,
+    YEAR: 2026, MONTH: 9, REQUIRED: 136, ACTUAL: 136 + [2, -4.5, 6, 0, -1.5, 3.25, 8, -12][i % 8], BALANCE: [2, -4.5, 6, 0, -1.5, 3.25, 8, -12][i % 8],
+    HOURS_EXT: 120, COST: 0, RUNNING_BALANCE: [23.5, -6, 14.25, 0, -2.5, 9, 31, -18.5][i % 8], PRODUCTIVITY_PCT: 78,
+  })) })))
+  await r('mitarbeiter/genders', route => route.fulfill(json({ data: [{ ID: 1, GENDER: 'männlich' }, { ID: 2, GENDER: 'weiblich' }, { ID: 3, GENDER: 'divers' }] })))
+  await r('stammdaten/departments', route => route.fulfill(json({ data: DEPARTMENTS })))
+  await r('stammdaten/working-time-models', route => route.fulfill(json({ data: WORK_MODELS })))
+  await r('mitarbeiter/\\d+/work-models', route => {
+    const d = EMP_DETAIL[empId(route)] ?? EMP_DETAIL[1]
+    const rows = [{ ID: 11, EMPLOYEE_ID: empId(route), MODEL_ID: d.model, VALID_FROM: '2024-01-01', model: WORK_MODELS.find(m => m.ID === d.model) }]
+    if (empId(route) === 3) rows.unshift({ ID: 12, EMPLOYEE_ID: 3, MODEL_ID: 1, VALID_FROM: '2027-01-01', model: WORK_MODELS[0] })
+    return route.fulfill(json({ data: rows }))
+  })
+  await r('mitarbeiter/\\d+/cp-rates', route => {
+    const d = EMP_DETAIL[empId(route)] ?? EMP_DETAIL[1]
+    return route.fulfill(json({ data: [
+      { ID: 21, COST_RATE: d.rate, VALID_FROM: '2026-01-01' },
+      { ID: 22, COST_RATE: Math.round(d.rate * 0.96 * 100) / 100, VALID_FROM: '2025-01-01' },
+      { ID: 23, COST_RATE: Math.round(d.rate * 0.92 * 100) / 100, VALID_FROM: '2024-01-01' },
+    ] }))
+  })
+  await r('mitarbeiter/\\d+/access', route => {
+    const d = EMP_DETAIL[empId(route)] ?? EMP_DETAIL[1]
+    return route.fulfill(json({ has_password: empId(route) !== 8 && !!d.mail, has_mail: !!d.mail, active: (d.active ?? 1) === 1, can_login: empId(route) !== 8 && !!d.mail && (d.active ?? 1) === 1 }))
+  })
+  await r('mitarbeiter/\\d+/avatar', route => route.fulfill(json({ data: { asset_id: null, data_uri: null } })))
+  // Offen = kein Abschluss-Eintrag (die Oberfläche liest `data != null` als abgeschlossen)
+  await r('mitarbeiter/\\d+/month-close/\\d+/\\d+', route => route.fulfill(json({ data: null })))
+  await r('employee2project/employee/\\d+', route => route.fulfill(json({ data: [
+    { ID: 31, PROJECT_ID: 1, PROJECT_NUMBER: 'P-2024-001', PROJECT_NAME: 'Neubau Kindertagesstätte Sonnenblume, Bauabschnitt 1', STATUS_NAME: 'Laufend', ROLE_ABBR: 'PL', HOURLY_RATE: 95 },
+    { ID: 32, PROJECT_ID: 2, PROJECT_NUMBER: 'P-2024-002', PROJECT_NAME: 'Sanierung Altbau Bahnhofstraße 14', STATUS_NAME: 'Laufend', ROLE_ABBR: 'AR', HOURLY_RATE: 78.5 },
+    { ID: 33, PROJECT_ID: 8, PROJECT_NUMBER: 'P-2025-014', PROJECT_NAME: 'Brandschutzertüchtigung Schulzentrum', STATUS_NAME: 'Angebot', ROLE_ABBR: 'AR', HOURLY_RATE: 78.5 },
+  ] })))
+  await r('roles', route => route.fulfill(json({ data: USER_ROLES })))
+  await r('roles/employees', route => route.fulfill(json({ data: Object.entries(EMP_DETAIL).flatMap(([id, d]) => d.roles.map(rid => ({ EMPLOYEE_ID: Number(id), ROLE_ID: rid }))) })))
+  await r('employees/\\d+/roles', route => route.fulfill(json({ ok: true })))
+  await r('mitarbeiter/\\d+', route => {
+    const m = route.request().method()
+    const row = EMPLOYEE_LIST.find(e => e.ID === empId(route)) ?? EMPLOYEE_LIST[0]
+    if (m === 'PATCH') return route.fulfill(json({ data: { ...row, ...(route.request().postDataJSON() ?? {}) } }))
+    if (m === 'DELETE') return route.fulfill(json({ success: true }))
+    return route.fulfill(json({ data: row }))
+  })
+  await r('mitarbeiter', route => route.request().method() === 'POST'
+    ? route.fulfill(json({ data: { ...EMPLOYEE_LIST[0], ID: 42, ...(route.request().postDataJSON() ?? {}) }, invite: { sent: false, reason: 'no_mail' } }))
+    : route.fulfill(json({ data: [] })))
+  // Abwesenheiten
+  await r('abwesenheit/types', route => route.fulfill(json({ data: [
+    { ID: 1, NAME: 'Urlaub', COLOR: '#2e7d32', COUNTS_AS_WORKED: true, REDUCES_VACATION: true, REQUIRES_APPROVAL: true, IS_PAID: true, ACTIVE: 1, SORT_ORDER: 1 },
+    { ID: 2, NAME: 'Krank', COLOR: '#c62828', COUNTS_AS_WORKED: true, REDUCES_VACATION: false, REQUIRES_APPROVAL: false, IS_PAID: true, ACTIVE: 1, SORT_ORDER: 2 },
+    { ID: 3, NAME: 'Fortbildung', COLOR: '#1565c0', COUNTS_AS_WORKED: true, REDUCES_VACATION: false, REQUIRES_APPROVAL: true, IS_PAID: true, ACTIVE: 1, SORT_ORDER: 3 },
+  ] })))
+  await r('abwesenheit/vacation-balance', route => route.fulfill(json({ data: {
+    year: 2026, carryover: 3, entitled: 30, taken: 17.5, remaining: 15.5, pending: 4, breakdown: [],
+  } })))
+  // Vorschau wie der Server: Mo–Fr, je Jahr, Überschneidungen mit eigenen Einträgen
+  await r('abwesenheit/preview', route => {
+    const q = new URL(route.request().url()).searchParams
+    const emp = Number(q.get('employee_id') || 1), from = q.get('date_from') ?? '', to = q.get('date_to') || from
+    const half = q.get('half_day') === 'true' && from === to, typeId = Number(q.get('absence_type_id') || 0), ex = Number(q.get('exclude_id') || 0)
+    const byYear: Record<number, number> = {}
+    for (const d = new Date(`${from}T00:00:00`); d <= new Date(`${to}T00:00:00`); d.setDate(d.getDate() + 1)) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) byYear[d.getFullYear()] = (byYear[d.getFullYear()] ?? 0) + (half ? 0.5 : 1)
+    }
+    const days = Object.values(byYear).reduce((a, b) => a + b, 0)
+    const reduces = typeId === 1
+    const overlaps = ABSENCES.filter(a => a.EMPLOYEE_ID === emp && a.ID !== ex && ['REQUESTED', 'APPROVED'].includes(a.STATUS) && a.DATE_FROM <= to && a.DATE_TO >= from)
+      .map(a => ({ ID: a.ID, DATE_FROM: a.DATE_FROM, DATE_TO: a.DATE_TO, HALF_DAY: a.HALF_DAY, STATUS: a.STATUS, TYPE_NAME: a.TYPE_NAME }))
+    return route.fulfill(json({ data: {
+      days, by_year: Object.entries(byYear).map(([year, d]) => ({ year: Number(year), days: d })),
+      reduces_vacation: reduces, requires_approval: typeId ? typeId !== 2 : null,
+      balance: reduces ? Object.entries(byYear).map(([year, d]) => ({ year: Number(year), remaining: 15.5, pending: 4, days: d, after: 15.5 - 4 - d })) : null,
+      // Eigener Antrag (ohne employee_id) sperrt, die Erfassung durch die Verwaltung nicht
+      overlaps, overlap_blocks: overlaps.length > 0 && !q.get('employee_id'),
+    } }))
+  })
+  await r('abwesenheit/entitlements', route => route.fulfill(json({ data: [{ ID: 41, EMPLOYEE_ID: 2, YEAR: 2026, DAYS_ENTITLED: 30, CARRYOVER_OVERRIDE: null, NOTE: null }] })))
+  await r('abwesenheit/entitlements/all', route => route.fulfill(json({ data: EMPLOYEE_LIST.filter(e => e.ACTIVE !== 2).slice(0, 6).map((e, i) => ({
+    ID: 40 + e.ID, EMPLOYEE_ID: e.ID, YEAR: 2026, DAYS_ENTITLED: [30, 30, 28, 30, 25, 30][i], CARRYOVER_OVERRIDE: i === 2 ? 2 : null, NOTE: null,
+  })) })))
+  // Gefiltert wie der Server: Mitarbeiter, Status, Zeitraum als Überlappung
+  await r('abwesenheit', route => {
+    const q = new URL(route.request().url()).searchParams
+    const emp = q.get('employee_id'), st = q.get('status'), from = q.get('from'), to = q.get('to')
+    return route.fulfill(json({ data: ABSENCES.filter(a =>
+      (!emp || a.EMPLOYEE_ID === Number(emp)) && (!st || a.STATUS === st) &&
+      (!from || a.DATE_TO >= from) && (!to || a.DATE_FROM <= to)) }))
+  })
+  await r('mitarbeiter/month-close-overview', route => route.fulfill(json({
+    months: [{ year: 2026, month: 6 }, { year: 2026, month: 7 }, { year: 2026, month: 8 }, { year: 2026, month: 9 }],
+    data: EMPLOYEE_LIST.filter(e => e.ACTIVE !== 2).map(e => ({
+      ID: e.ID, ABBR: e.ABBR, FIRST_NAME: e.FIRST_NAME, LAST_NAME: e.LAST_NAME,
+      months: [6, 7, 8, 9].map(m => {
+        const closed = m < 8 || (m === 8 && e.ID % 3 !== 0)
+        return { year: 2026, month: m, closed, closed_at: closed ? `2026-${String(m + 1).padStart(2, '0')}-05T09:00:00Z` : null }
+      }),
+    })),
+  })))
+}
+
+// ── Abwesenheiten (Runde 11) ─────────────────────────────────────────────────
+
+const ABS_TYPE: Record<number, { TYPE_NAME: string; TYPE_COLOR: string; REDUCES_VACATION: boolean }> = {
+  1: { TYPE_NAME: 'Urlaub', TYPE_COLOR: '#2e7d32', REDUCES_VACATION: true },
+  2: { TYPE_NAME: 'Krank', TYPE_COLOR: '#c62828', REDUCES_VACATION: false },
+  3: { TYPE_NAME: 'Fortbildung', TYPE_COLOR: '#1565c0', REDUCES_VACATION: false },
+}
+const absence = (ID: number, EMPLOYEE_ID: number, ABSENCE_TYPE_ID: number, DATE_FROM: string, DATE_TO: string, DAYS: number,
+  STATUS: 'REQUESTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED', extra: Record<string, unknown> = {}) => {
+  const e = EMPLOYEES.find(x => x.ID === EMPLOYEE_ID)!
+  return {
+    ID, EMPLOYEE_ID, ABSENCE_TYPE_ID, DATE_FROM, DATE_TO, HALF_DAY: false, STATUS, NOTE: null as string | null,
+    REQUESTED_BY: EMPLOYEE_ID, REQUESTED_AT: '2026-09-20T08:00:00Z',
+    DECIDED_BY: STATUS === 'APPROVED' ? 1 : null, DECIDED_AT: STATUS === 'APPROVED' ? '2026-09-01T08:00:00Z' : null,
+    DECISION_NOTE: null as string | null, CLARIFICATION_LOG: null as unknown, DAYS, ...ABS_TYPE[ABSENCE_TYPE_ID],
+    EMPLOYEE_SHORT_NAME: e.ABBR, EMPLOYEE_FIRST_NAME: e.FIRST_NAME, EMPLOYEE_LAST_NAME: e.LAST_NAME,
+    ...extra,
+  }
+}
+export const ABSENCES = [
+  absence(51, 2, 1, '2026-10-12', '2026-10-16', 5, 'REQUESTED', { NOTE: 'Herbstferien' }),
+  absence(54, 4, 1, '2026-09-28', '2026-10-02', 5, 'REQUESTED', { NOTE: 'Umzug' }),
+  absence(56, 6, 3, '2026-10-06', '2026-10-06', 1, 'REQUESTED', {
+    NOTE: 'BIM-Schulung Revit, extern',
+    CLARIFICATION_LOG: [
+      { role: 'approver', by: 1, at: '2026-09-22T09:00:00Z', text: 'Wer übernimmt die Baubesprechung Kita an dem Tag?' },
+      { role: 'requester', by: 6, at: '2026-09-22T11:30:00Z', text: 'Jonas ist eingearbeitet und übernimmt.' },
+    ],
+  }),
+  absence(55, 5, 1, '2026-09-21', '2026-09-30', 8, 'APPROVED'),
+  absence(60, 3, 1, '2026-09-24', '2026-09-24', 0.5, 'APPROVED', { HALF_DAY: true }),
+  absence(59, 7, 2, '2026-09-15', '2026-09-16', 2, 'APPROVED'),
+  absence(57, 1, 1, '2026-09-07', '2026-09-11', 5, 'APPROVED'),
+  absence(58, 1, 1, '2026-12-28', '2026-12-31', 4, 'REQUESTED', {
+    NOTE: 'Zwischen den Jahren',
+    CLARIFICATION_LOG: [{ role: 'approver', by: 4, at: '2026-09-23T10:00:00Z', text: 'Ist der Bauantrag Werk II bis dahin eingereicht?' }],
+  }),
+  absence(61, 1, 3, '2026-05-18', '2026-05-18', 1, 'REJECTED', { DECISION_NOTE: 'Termin kollidiert mit der Abnahme.' }),
+  absence(52, 2, 1, '2026-08-03', '2026-08-14', 10, 'APPROVED'),
+  absence(53, 2, 2, '2026-03-09', '2026-03-10', 2, 'APPROVED', { DECIDED_BY: null, DECIDED_AT: null }),
+]
+
+// ── Einstellungen (Runde 12) ─────────────────────────────────────────────────
+// Eigene Funktion statt in mockPilot: die Vorbelegungen fließen in viele
+// Formulare ein (Gültigkeit, Status, Zahlungsziel) — die übrigen Tests sollen
+// weiter ohne sie laufen.
+
+export const TENANT_DEFAULTS: Record<string, string> = {
+  default_country_id: 'DE', default_project_status_id: '2', default_offer_status_id: '2',
+  default_currency_id: '1', default_vat_id: '1', offer_valid_days: '30',
+  default_cash_discount_percent: '2', default_cash_discount_days: '14', default_payment_term_days: '30',
+  default_payment_means_id: '1', budget_warning_default_pcts: '75, 90, 100', kpi_cpi_watch_threshold: '0.95',
+}
+export const DEPT_ROWS = [{ ID: 1, ABBR: 'Hochbau' }, { ID: 2, ABBR: 'Tiefbau' }, { ID: 3, ABBR: 'Verwaltung' }]
+export const TYPE_ROWS = [{ ID: 1, ABBR: 'Neubau' }, { ID: 2, ABBR: 'Sanierung' }, { ID: 3, ABBR: 'Umbau' }, { ID: 4, ABBR: 'Gutachten' }]
+
+export async function mockEinstellungen(page: Page) {
+  const r = (re: string, h: (route: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
+  let defaults = { ...TENANT_DEFAULTS }
+  await r('stammdaten/defaults', route => {
+    if (route.request().method() === 'PUT') {
+      const b = route.request().postDataJSON() ?? {}
+      const values: Record<string, string | null> = b.values ?? { [b.key]: b.value ?? null }
+      const next = { ...defaults }
+      for (const [k, v] of Object.entries(values)) { if (v == null || v === '') delete next[k]; else next[k] = String(v).replace(',', '.') }
+      defaults = next
+      return route.fulfill(json({ ok: true, data: values }))
+    }
+    return route.fulfill(json({ data: defaults }))
+  })
+  await r('stammdaten/currencies', route => route.fulfill(json({ data: [{ ID: 1, ABBR: 'EUR' }, { ID: 2, ABBR: 'CHF' }] })))
+  await r('stammdaten/companies', route => route.fulfill(json({ data: [{ ID: 1, COMPANY_NAME_1: 'Messina Architekten GmbH' }] })))
+  await r('stammdaten/departments', route => route.fulfill(json({ data: DEPT_ROWS })))
+  await r('stammdaten/typen', route => route.fulfill(json({ data: TYPE_ROWS })))
+  await r('stammdaten/rollen', route => route.fulfill(json({ data: ROLES })))
+  await r('stammdaten/(department|typ|rolle)/\\d+', route => {
+    const m = route.request().method()
+    // Hochbau hängt an Mitarbeitern und Projekten — Löschen scheitert wie am Server
+    if (m === 'DELETE' && /department\/1$/.test(route.request().url())) {
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Abteilung „Hochbau" wird noch in 5 Mitarbeiter:innen und 12 Projekten verwendet.' }) })
+    }
+    return route.fulfill(json(m === 'DELETE' ? { ok: true } : { data: route.request().postDataJSON() ?? {} }))
+  })
+  // Anlegen (POST) — GET /stammdaten/rollen ist die Liste oben
+  await r('stammdaten/(department|typ|rollen)', route => route.request().method() === 'POST'
+    ? route.fulfill(json({ data: [{ ID: 99, ...(route.request().postDataJSON() ?? {}) }] }))
+    : route.fallback())
+  await r('stammdaten/booking-types', route => route.fulfill(json({ data: [
+    { ID: 1, KIND: 'UNIT', ABBR: 'Plot', NAME: 'Plot A0', UNIT_LABEL: 'Stk', UNIT_CODE: 'C62', DEFAULT_SP_RATE: 18, DEFAULT_CP_RATE: 6.5, SCOPE: 'global', PROJECT_ID: null, ACTIVE: 1, SORT_ORDER: 1 },
+    { ID: 2, KIND: 'LUMP_COST', ABBR: 'Reise', NAME: 'Reisekosten', UNIT_LABEL: null, UNIT_CODE: null, DEFAULT_SP_RATE: null, DEFAULT_CP_RATE: null, SCOPE: 'global', PROJECT_ID: null, ACTIVE: 1, SORT_ORDER: 2 },
+  ] })))
+  await r('stammdaten/booking-text-templates', route => route.fulfill(json({ data: [
+    { ID: 1, LABEL: 'Baubesprechung', TEXT: 'Teilnahme Baubesprechung vor Ort', SORT_ORDER: 1, SCOPE: 'global', KIND: null, BOOKING_TYPE_ID: null },
+  ] })))
+  await r('abwesenheit/settings', route => route.fulfill(json({ data: { carryoverExpires: true, carryoverExpiryDate: '03-31' } })))
+  // Anlegen/Ändern/Löschen — die Listen kommen aus mockMitarbeiter
+  await r('abwesenheit/types(/\\d+)?', route => {
+    const m = route.request().method()
+    if (m === 'GET') return route.fallback()
+    return route.fulfill(json(m === 'DELETE' ? { ok: true, deactivated: /types\/1$/.test(route.request().url()) } : { data: route.request().postDataJSON() ?? {} }))
+  })
+  await r('stammdaten/working-time-models(/\\d+)?', route => {
+    const m = route.request().method()
+    if (m === 'GET') return route.fallback()
+    // Vollzeit ist zugeordnet — Löschen scheitert wie am Server
+    if (m === 'DELETE' && /working-time-models\/1$/.test(route.request().url())) {
+      return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'Arbeitszeitmodell „Vollzeit 40 h" wird noch von 6 Mitarbeiter:innen verwendet.' }) })
+    }
+    return route.fulfill(json(m === 'DELETE' ? { ok: true } : { data: { ID: 9, ...(route.request().postDataJSON() ?? {}) } }))
+  })
+  await r('stammdaten/working-time-models/country-states', route => route.fulfill(json({ data: {
+    DE: [{ code: 'BW', label: 'Baden-Württemberg' }, { code: 'BY', label: 'Bayern' }, { code: 'BE', label: 'Berlin' }],
+    AT: [{ code: null, label: 'Österreich (gesamt)' }],
+    CH: [{ code: null, label: 'Schweiz (gesamt)' }],
+  } })))
+  await r('arbzg/break-rules', route => route.fulfill(json({ data: [
+    { ID: 1, NAME: 'ArbZG-Standard', T1_HOURS: 6, T1_BREAK_MIN: 30, T2_HOURS: 9, T2_BREAK_MIN: 45, MIN_BLOCK_MIN: 15 },
+  ] })))
 }

@@ -25,10 +25,20 @@ export interface BudgetWarningFired {
 }
 
 export interface BudgetWarningStructureAgg {
-  ID:        number
-  FATHER_ID: number | null
-  budget:    number
-  verbrauch: number
+  ID:          number
+  FATHER_ID:   number | null
+  /** Element-Kürzel und -Name, Reihenfolge (seit Runde 6 — vorher stand „#412" da) */
+  ABBR?:       string | null
+  NAME?:       string | null
+  SORT_ORDER?: number | null
+  leaf?:       boolean
+  budget:      number
+  verbrauch:   number
+  /** Wie viele Blätter nach Plan aus dem Angebot rechnen (Budget = Plan, Verbrauch = gebucht) */
+  plan?:       'none' | 'some' | 'all'
+  /** Nur Blatt nach Plan: geplante und gebuchte Stunden */
+  planHours?:   number | null
+  bookedHours?: number
 }
 
 export interface BudgetWarningOverview {

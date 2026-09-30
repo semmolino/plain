@@ -5,7 +5,7 @@ import { PageHeader }     from '@/components/ui/PageHeader'
 import { DirtyGuardProvider } from '@/components/ui/DirtyGuard'
 import { useGuardedAction } from '@/hooks/useDirtyGuard'
 import { ProjekteListe }  from '@/pages/projekte/ProjekteListe'
-import { HonorarTab }     from '@/pages/projekte/HonorarWizard'
+import { HonorarTab }     from '@/pages/projekte/HonorarTab'
 import { ProjektStruktur } from '@/pages/projekte/ProjektStruktur'
 import { Buchungen }      from '@/pages/projekte/Buchungen'
 import { Leistungsstand } from '@/pages/projekte/Leistungsstand'
@@ -13,6 +13,7 @@ import { LeistungsstandRunde } from '@/pages/projekte/leistungsstand/Leistungsst
 import { Vertraege }      from '@/pages/projekte/Vertraege'
 import { Mitarbeiter }    from '@/pages/projekte/Mitarbeiter'
 import { Budget }          from '@/pages/projekte/Budget'
+import { Projektdaten }    from '@/pages/projekte/Projektdaten'
 import { NachtraegeListe } from '@/pages/nachtraege/NachtraegeListe'
 import { ProjektHeader }  from '@/pages/projekte/ProjektHeader'
 import { ProjektTabs, type ProjektTabDef } from '@/pages/projekte/ProjektTabs'
@@ -30,6 +31,7 @@ const WORKSPACE_TABS: (ProjektTabDef & { permissions: string[]; feature?: string
   { id: 'leistungsstand', label: 'Leistungsstände', group: 'arbeit',      permissions: ['projects.performance.view'] },
   { id: 'buchungen',      label: 'Buchungen',       group: 'arbeit',      permissions: ['projects.bookings.view'] },
   { id: 'nachtraege',     label: 'Nachträge',       group: 'arbeit',      permissions: ['nachtraege.view'], feature: 'nachtraege.management' },
+  { id: 'daten',          label: 'Projektdaten',    group: 'einrichtung', permissions: ['projects.view'] },
   { id: 'vertraege',      label: 'Verträge',        group: 'einrichtung', permissions: ['projects.contracts.view'], feature: 'projects.contracts' },
   { id: 'honorar',        label: 'Kalkulationen',   group: 'einrichtung', permissions: ['projects.calculations.view'], feature: 'hoai.calculator' },
   { id: 'mitarbeiter',    label: 'Preislisten',     group: 'einrichtung', permissions: ['projects.hourly_rates.view'], feature: 'projects.hourly_rates' },
@@ -108,7 +110,7 @@ function ProjektePageInner() {
     const openProject = (id: number) => go({ view: 'workspace', projectId: id, tab: view.pendingTab ?? 'struktur' })
     return (
       <div className="master-page pw-list">
-        <PageHeader title="Projekte" />
+        <PageHeader title="Projekte" srTitle />
         {listTabs.length > 1 && (
           <Tabs tabs={listTabs} active={view.listTab} onChange={id => guarded(() => go({ view: 'list', listTab: id as ListTab, pendingTab: null }))} />
         )}
@@ -116,7 +118,9 @@ function ProjektePageInner() {
           <p className="pw-pending-hint">Wähle ein Projekt, um „{pendingLabel}" zu öffnen.</p>
         )}
         <div className="master-tab-content">
-          {view.listTab === 'liste'   && <ProjekteListe onSelectProject={openProject} onProjectCreated={id => go({ view: 'workspace', projectId: id, tab: 'struktur' })} initialSearch={initialSearch} />}
+          {view.listTab === 'liste'   && <ProjekteListe onSelectProject={openProject}
+            onEditProject={id => go({ view: 'workspace', projectId: id, tab: 'daten' })}
+            onProjectCreated={id => go({ view: 'workspace', projectId: id, tab: 'struktur' })} initialSearch={initialSearch} />}
           {view.listTab === 'honorar' && <HonorarTab />}
           {view.listTab === 'leistungsstaende' && <LeistungsstandRunde />}
         </div>
@@ -142,6 +146,7 @@ function ProjektePageInner() {
         {view.tab === 'mitarbeiter'    && <Mitarbeiter     initialProjectId={pid} />}
         {view.tab === 'honorar'        && <HonorarTab      initialProjectId={pid} />}
         {view.tab === 'nachtraege'     && <NachtraegeListe projectId={pid} />}
+        {view.tab === 'daten'          && <Projektdaten    initialProjectId={pid} />}
       </div>
     </div>
   )

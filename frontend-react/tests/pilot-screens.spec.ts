@@ -1,6 +1,6 @@
 import { test, type Page } from '@playwright/test'
 import { hideDevtools } from './fixtures/demoData'
-import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
+import { mockPilot, mockEinstellungen, TIMER_DRAFTS } from './fixtures/pilotData'
 
 /**
  * Vorher/Nachher-Bilder fuer den UI-Pilot (Branch ui-sm).
@@ -15,10 +15,17 @@ import { mockPilot, TIMER_DRAFTS } from './fixtures/pilotData'
  * laufen nur in der Phase „nachher".
  */
 
-// vorher  = Stand vor dem Pilot (main), vorher2 = Stand nach Runde 1,
-// nachher = aktueller Stand. Szenen aus Runde 1 fehlen nur in „vorher",
-// Szenen aus Runde 2 in beiden Vorher-Phasen.
+// vorher  = Stand vor dem Pilot (main), vorher2 = nach Runde 1,
+// vorher3 = nach Runde 2, vorher4 = nach Runde 3, vorher5 = nach Runde 4,
+// vorher6 = nach Runde 5, vorher7 = nach Runde 6, vorher8 = nach Runde 7,
+// vorher9 = nach Runde 8, vorher10 = nach Runde 9, vorher11 = nach Runde 10,
+// vorher12 = nach Runde 11, nachher = aktueller Stand.
+// since(n): gibt es, was Runde n eingefuehrt hat? Runde 4 ist die
+// Rueckmeldung zu Runde 3 samt Angebots-Arbeitsbereich, Runde 5 „Vom Angebot
+// zum Projekt".
 const PHASE = process.env.PILOT_PHASE ?? 'nachher'
+const RANK: Record<string, number> = { vorher: 0, vorher2: 1, vorher3: 2, vorher4: 3, vorher5: 4, vorher6: 5, vorher7: 6, vorher8: 7, vorher9: 8, vorher10: 9, vorher11: 10, vorher12: 11 }
+const since = (round: number) => (RANK[PHASE] ?? 12) >= round
 // Nicht unter test-results/: das leert Playwright bei jedem Lauf.
 const OUT   = process.env.PILOT_OUT ?? `pilot-shots/${PHASE}`
 
@@ -108,7 +115,7 @@ test('Projekt – Struktur', async ({ page }, info) => {
 
 for (const d of ['compact', 'comfortable'] as const) {
   test(`Projekt – Struktur (${d})`, async ({ page }, info) => {
-    test.skip(PHASE === 'vorher', 'Dichte gibt es erst mit dem Pilot')
+    test.skip(!since(1), 'Dichte gibt es erst mit dem Pilot')
     await prepare(page, info.project.name, {}, d)
     await open(page, '/projekte?tab=struktur&projectId=1')
     await page.locator('.sx-table, .sxm-list, table').first().waitFor()
@@ -117,7 +124,7 @@ for (const d of ['compact', 'comfortable'] as const) {
 }
 
 test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Änderungszähler gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Änderungszähler gibt es erst mit dem Pilot')
   test.skip(info.project.name !== 'desktop', 'Inline-Bearbeitung ist Desktop')
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=struktur&projectId=1')
@@ -127,7 +134,7 @@ test('Projekt – Struktur mit Änderungen', async ({ page }, info) => {
 })
 
 test('Projekt – wechseln über den Namen', async ({ page }, info) => {
-  test.skip(!PHASE.startsWith('nachher'), 'Umschalter über den Namen gibt es erst mit Runde 2')
+  test.skip(!since(2), 'Umschalter über den Namen gibt es erst mit Runde 2')
   await prepare(page, info.project.name)
   await open(page, '/projekte?projectId=1&tab=struktur')
   await page.getByRole('button', { name: /Projekt wechseln/ }).click()
@@ -151,7 +158,7 @@ test('Stunden buchen – Dialog', async ({ page }, info) => {
 })
 
 test('Zeit buchen – aus dem Kopf', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Einstieg gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Einstieg gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/')
   await page.getByRole('button', { name: 'Zeit buchen' }).first().click()
@@ -182,7 +189,7 @@ test('Abschlagsrechnung – Schritte', async ({ page }, info) => {
   await page.getByRole('button', { name: /^Weiter/ }).last().click()
   await page.waitForTimeout(400)
   await shoot(page, dev, 'abschlag-4')
-  if (PHASE !== 'vorher') {
+  if (since(1)) {
     await page.getByRole('button', { name: 'Jetzt buchen' }).click()
     await page.getByRole('dialog').waitFor()
     await shoot(page, dev, 'abschlag-5-bestaetigen')
@@ -190,7 +197,7 @@ test('Abschlagsrechnung – Schritte', async ({ page }, info) => {
 })
 
 test('Abschlagsrechnung – Entwurf fortsetzen', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Fortsetzen per URL gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Fortsetzen per URL gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/rechnungen?tab=abschlag&draftId=501')
   await page.locator('#pp-buyer-ref').waitFor()
@@ -198,7 +205,7 @@ test('Abschlagsrechnung – Entwurf fortsetzen', async ({ page }, info) => {
 })
 
 test('Rechnungen – Neue Rechnung', async ({ page }, info) => {
-  test.skip(PHASE === 'vorher', 'Menü gibt es erst mit dem Pilot')
+  test.skip(!since(1), 'Menü gibt es erst mit dem Pilot')
   await prepare(page, info.project.name)
   await open(page, '/rechnungen')
   await page.getByRole('button', { name: /Neue Rechnung/ }).click()
@@ -266,7 +273,7 @@ test('Stempeluhr – Tagesübersicht', async ({ page }, info) => {
 })
 
 test('Meine Zeit – Buchung ändern', async ({ page }, info) => {
-  test.skip(!PHASE.startsWith('nachher'), 'gibt es erst mit Runde 2')
+  test.skip(!since(2), 'gibt es erst mit Runde 2')
   await prepare(page, info.project.name, { role: 'mitarbeiter' })
   await open(page, '/')
   await page.locator('.mz-row').first().getByRole('button', { name: /ändern/ }).click()
@@ -282,7 +289,7 @@ test('Leistungsstände – im Projekt', async ({ page }, info) => {
 })
 
 test('Leistungsstände – Monatsrunde', async ({ page }, info) => {
-  test.skip(!PHASE.startsWith('nachher'), 'gibt es erst mit Runde 2')
+  test.skip(!since(2), 'gibt es erst mit Runde 2')
   await prepare(page, info.project.name)
   await open(page, '/projekte?tab=leistungsstaende')
   await page.locator('.lsr-list').waitFor()
@@ -298,7 +305,7 @@ test('Leistungsstände – Monatsrunde', async ({ page }, info) => {
 })
 
 test('Struktur – Handy Blatt', async ({ page }, info) => {
-  test.skip(info.project.name !== 'mobile' || !PHASE.startsWith('nachher'), 'Blatt gibt es nur am Handy, erst mit Runde 2')
+  test.skip(info.project.name !== 'mobile' || !since(2), 'Blatt gibt es nur am Handy, erst mit Runde 2')
   await prepare(page, info.project.name)
   await open(page, '/projekte?projectId=1&tab=struktur')
   await page.getByRole('button', { name: /^LP5\.2 .*bearbeiten/ }).click()
@@ -344,9 +351,819 @@ test('Schlussrechnung – Schritte', async ({ page }, info) => {
   await shoot(page, dev, 'schluss-4')
   await nextStep(page)
   await shoot(page, dev, 'schluss-5')
-  if (PHASE.startsWith('nachher')) {
+  if (since(2)) {
     await page.getByRole('button', { name: 'Jetzt buchen' }).click()
     await page.getByRole('dialog').waitFor()
     await shoot(page, dev, 'schluss-6-bestaetigen')
   }
+})
+
+// ── Runde 3: Angebotsstruktur ────────────────────────────────────────────────
+// Vorher-Stand ist derselbe wie in main (Runde 1 und 2 liessen sie unberuehrt);
+// aufgenommen als PILOT_PHASE=vorher3 aus einem Arbeitsbaum vor Runde 3.
+
+// Seit Runde 4 ist das Angebot ein Arbeitsbereich mit URL; davor ein Modul-Reiter.
+const OFFER_WORKSPACE = since(4)
+
+async function openOfferStructure(page: Page) {
+  if (OFFER_WORKSPACE) {
+    await open(page, '/angebote?offerId=1&tab=struktur')
+  } else {
+    await page.addInitScript(() => localStorage.setItem('angebote-selected-oid', '1'))
+    await open(page, '/angebote')
+    await page.getByRole('tab', { name: 'Angebotsstruktur' }).click()
+  }
+  await page.waitForLoadState('networkidle')
+  await page.locator('.structure-table, .sxm-list').first().waitFor()
+}
+
+test('Angebotsstruktur', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  await shoot(page, info.project.name, 'angebot-struktur')
+})
+
+test('Angebotsstruktur – kompakt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(3), 'Dichte gibt es erst mit Runde 3, nur am Desktop')
+  await prepare(page, info.project.name, {}, 'compact')
+  await openOfferStructure(page)
+  await shoot(page, info.project.name, 'angebot-struktur-kompakt')
+})
+
+test('Angebotsstruktur – Zuschläge', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Zuschlags-Panel nur am Desktop')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  if (since(3)) await page.getByRole('button', { name: 'Zuschläge von LP5 bearbeiten' }).click()
+  else await page.locator('tr[data-struct-id="206"] .row-action-btn').first().click()
+  await page.locator('.surcharge-panel').waitFor()
+  await shoot(page, info.project.name, 'angebot-struktur-zuschlag')
+})
+
+test('Angebotsstruktur – offene Änderungen', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(3), 'Puffer und Aktionsleiste gibt es erst mit Runde 3')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  // Erst fokussieren, dann tippen: das Betragsfeld tauscht beim Fokus die
+  // Anzeige gegen den Rohwert — ein sofortiges fill() haengte sonst an.
+  const fee = page.locator('tr[data-struct-id="203"]').getByRole('textbox', { name: 'Honorar' })
+  await fee.click()
+  await page.waitForTimeout(100)
+  await fee.fill('15800')
+  await page.getByRole('textbox', { name: 'Stunden BL1' }).fill('30')
+  await page.getByRole('textbox', { name: 'Stunden BL3' }).click()
+  await shoot(page, info.project.name, 'angebot-struktur-geaendert')
+})
+
+test('Angebotsstruktur – neues Element', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Dialog am Desktop')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  const nachher = since(3)
+  await page.getByRole('button', { name: nachher ? /Neues Element/ : /Neue Position/ }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('input').first().fill('BL4')
+  await dialog.locator('select').first().selectOption('2')
+  if (nachher) {
+    await dialog.getByLabel('Bezeichnung').fill('Mitwirkung Nachbarschaftsbeteiligung')
+    await dialog.getByLabel('Rolle').selectOption('2')
+    await dialog.getByLabel('Stunden').fill('8')
+    await dialog.getByLabel('Übergeordnetes Element').selectOption('210')
+  } else {
+    await dialog.locator('input').nth(1).fill('Mitwirkung Nachbarschaftsbeteiligung')
+    await dialog.locator('select').nth(1).selectOption('2')
+    await dialog.locator('input[type="number"]').first().fill('8')
+    await dialog.locator('select').last().selectOption('210')
+  }
+  await shoot(page, info.project.name, 'angebot-neu')
+})
+
+test('Angebotsstruktur – Handy Blatt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !since(3), 'Blatt gibt es nur am Handy, erst mit Runde 3')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  await page.getByRole('button', { name: /^BL1 .*bearbeiten/ }).click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'angebot-blatt')
+})
+
+// ── Runde 4: Angebote als Arbeitsbereich ─────────────────────────────────────
+test('Angebote – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/angebote')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'angebote-liste')
+})
+
+test('Angebot – Angebotsdaten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (OFFER_WORKSPACE) {
+    await open(page, '/angebote?offerId=1&tab=daten')
+  } else {
+    await open(page, '/angebote')
+    await page.locator('table').first().waitFor()
+    await page.getByTitle('Angebotsdaten bearbeiten').first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await page.waitForLoadState('networkidle')
+  await shoot(page, info.project.name, 'angebot-daten')
+})
+
+test('Angebot – wechseln', async ({ page }, info) => {
+  test.skip(!OFFER_WORKSPACE, 'Umschalter über den Namen gibt es erst mit Runde 4')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  await page.locator('.pw-title-btn').click()
+  await page.waitForTimeout(300)
+  await shoot(page, info.project.name, 'angebot-wechseln')
+})
+
+// ── Runde 4: Rückmeldung zu Runde 3 ──────────────────────────────────────────
+// Ausschnitte in doppelter Aufloesung: Farbe und Buendigkeit der Zuschlaege
+// sind im ganzen Bild nicht zu erkennen.
+test.describe('Ausschnitte', () => {
+  test.use({ deviceScaleFactor: 2 })
+
+  async function clipTable(page: Page, name: string, rows: number) {
+    // Hoch genug, dass die feste Aktionsleiste unter dem Ausschnitt liegt.
+    await page.setViewportSize({ width: 1280, height: 1400 })
+    await hideDevtools(page)
+    await page.waitForTimeout(500)
+    const clip = await page.evaluate((n) => {
+      const t = document.querySelector('.sx-table') as HTMLElement
+      const trs = t.querySelectorAll('tbody tr')
+      const last = trs[Math.min(n, trs.length) - 1] as HTMLElement
+      const a = t.getBoundingClientRect(), b = last.getBoundingClientRect()
+      return { x: a.left, y: a.top, width: a.width, height: b.bottom - a.top }
+    }, rows)
+    await page.screenshot({ path: `${OUT}/desktop-${name}.png`, clip })
+  }
+
+  test('Zuschläge – Ausschnitt Angebot', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop' || !since(3), 'Tabelle am Desktop, erst mit Runde 3')
+    await prepare(page, info.project.name)
+    await openOfferStructure(page)
+    await clipTable(page, 'angebot-zuschlaege', 7)
+  })
+
+  test('Zuschläge – Ausschnitt Projekt', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop' || !since(2), 'Tabelle am Desktop, erst mit Runde 2')
+    await prepare(page, info.project.name)
+    await open(page, '/projekte?projectId=1&tab=struktur')
+    await page.locator('.sx-table').waitFor()
+    await clipTable(page, 'projekt-zuschlaege', 7)
+  })
+})
+
+test('Struktur – Spalten', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(4), 'Spaltenauswahl am Desktop, erst mit Runde 4')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.locator('.sx-table').waitFor()
+  await page.getByRole('button', { name: /Spalten/ }).click()
+  await page.waitForTimeout(200)
+  await shoot(page, info.project.name, 'struktur-spalten')
+})
+
+// ── Runde 5: Vom Angebot zum Projekt ─────────────────────────────────────────
+// Vorher-Stand ist main nach Runde 4 (PILOT_PHASE=vorher5, Arbeitsbaum).
+
+test('Angebotsstruktur – Aufwand nach Rollen', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(4), 'Tabelle am Desktop')
+  await prepare(page, info.project.name)
+  await openOfferStructure(page)
+  const row = page.locator('tr[data-struct-id="211"]')
+  if (since(5)) {
+    await row.getByRole('button', { name: 'Aktionen zu BL1' }).click()
+    await page.getByRole('menuitem', { name: 'Aufwand nach Rollen' }).click()
+    const panel = page.getByRole('group', { name: 'Aufwand BL1 nach Rollen' })
+    await panel.getByRole('button', { name: 'Rolle hinzufügen' }).click()
+    await panel.getByRole('combobox', { name: 'Rolle, Zeile 2' }).selectOption('4')
+    await panel.getByRole('textbox', { name: 'Stunden, Zeile 2' }).fill('10')
+    await page.getByRole('textbox', { name: 'Stunden, Zeile 1' }).click()
+  }
+  await row.scrollIntoViewIfNeeded()
+  await page.evaluate(() => document.querySelector('.app-main')?.scrollBy(0, 120))
+  await shoot(page, info.project.name, 'angebot-aufwand')
+})
+
+async function openBeauftragt(page: Page) {
+  await openOfferStructure(page)
+  const head = page.getByRole('button', { name: /Beauftragt/ })
+  if (await head.count()) await head.first().click()
+  else {
+    await page.getByRole('button', { name: /Weitere Aktionen|Aktionen/ }).first().click()
+    await page.getByRole('menuitem', { name: /als beauftragt markieren/i }).click()
+  }
+  await page.getByRole('dialog').waitFor()
+  await page.waitForLoadState('networkidle')
+}
+
+test('Beauftragen – Dialog', async ({ page }, info) => {
+  test.skip(!since(4), 'Dialog im Kopf gibt es erst mit Runde 4')
+  await prepare(page, info.project.name)
+  await openBeauftragt(page)
+  await shoot(page, info.project.name, 'beauftragen')
+})
+
+test('Projekt – Plan nach Aufwand', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Tabelle am Desktop')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.locator('.sx-table').waitFor()
+  await page.locator('tr[data-struct-id="124"]').scrollIntoViewIfNeeded()
+  await page.evaluate(() => document.querySelector('.app-main')?.scrollBy(0, 200))
+  await shoot(page, info.project.name, 'projekt-plan')
+})
+
+test('Projekt – Plan bearbeiten', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(5), 'gibt es erst mit Runde 5')
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=struktur')
+  await page.locator('tr[data-struct-id="124"]').getByRole('button', { name: /Aktionen zu NA2/ }).click()
+  await page.getByRole('menuitem', { name: 'Plan bearbeiten …' }).click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'projekt-plan-dialog')
+})
+
+test('Kalkulationen – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?tab=honorar')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'kalk-liste')
+})
+
+/** Neue Kalkulation im Angebot bis zu Schritt `upto` (2 = Grundlagen …). */
+async function kalkulation(page: Page, device: string, upto: number) {
+  await open(page, '/angebote?offerId=1&tab=kalkulationen')
+  await page.getByRole('button', { name: /Neue Kalkulation|Kalkulation hinzufügen/ }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  await dialog.locator('select').nth(0).selectOption('1')
+  await page.waitForLoadState('networkidle')
+  await dialog.locator('select').nth(1).selectOption('10')
+  if (upto === 1) { await shoot(page, device, 'kalk-1-leistungsbild'); return }
+  const weiter = () => dialog.getByRole('button', { name: /^(Speichern & )?Weiter/ }).last().click()
+  await weiter()
+  await dialog.locator('select').nth(0).selectOption('3')
+  await dialog.locator('input[type="number"]').nth(0).fill('50')
+  await dialog.locator('input[type="number"]').nth(1).fill('2450000')
+  if (upto === 2) { await shoot(page, device, 'kalk-2-grundlagen'); return }
+  await weiter(); await page.waitForLoadState('networkidle')
+  if (upto === 3) { await shoot(page, device, 'kalk-3-leistungsphasen'); return }
+  await weiter(); await page.waitForLoadState('networkidle')
+  await weiter(); await page.waitForLoadState('networkidle')
+  await dialog.getByRole('button', { name: /Umbauzuschlag/ }).click()
+  await dialog.getByRole('button', { name: /Details/ }).first().click()
+  if (upto === 5) { await shoot(page, device, 'kalk-5-zuschlaege'); return }
+  await weiter(); await page.waitForLoadState('networkidle')
+  await shoot(page, device, 'kalk-6-uebernehmen')
+}
+
+for (const [upto, name] of [[1, 'Leistungsbild'], [2, 'Grundlagen'], [3, 'Leistungsphasen'], [5, 'Zuschläge'], [6, 'Übernehmen']] as const) {
+  test(`Kalkulation – ${name}`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop' && upto !== 2, 'am Handy nur Grundlagen')
+    await prepare(page, info.project.name)
+    await kalkulation(page, info.project.name, upto)
+  })
+}
+
+test('Kalkulation – Schließen fragt nach', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop' || !since(5), 'Rückfrage gibt es erst mit Runde 5')
+  await prepare(page, info.project.name)
+  await kalkulation(page, info.project.name, 2)
+  await page.keyboard.press('Escape')
+  await page.getByRole('dialog', { name: 'Ungespeicherte Änderungen' }).waitFor()
+  await shoot(page, info.project.name, 'kalk-schliessen')
+})
+
+// ── Runde 6: Verträge, Preislisten, Interne Budgets ──────────────────────────
+
+test('Projekt – Vertrag', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  // Vor Runde 6 hingen die Beschriftungen nicht am Feld
+  await page.getByText('Vertragsnummer').first().waitFor()
+  await shoot(page, info.project.name, 'vertrag')
+})
+
+test('Projekt – Vertrag geändert', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  await page.getByText('Vertragsnummer').first().waitFor()
+  if (since(6)) await page.getByLabel(/^Skonto \(%\)/).fill('3')
+  else await page.locator('input[type="number"]').first().fill('3')
+  await page.locator('select').filter({ has: page.locator('option[value="AE"]') }).selectOption('AE')
+  await page.locator('input[type="text"]').first().focus()
+  await shoot(page, info.project.name, 'vertrag-geaendert')
+})
+
+test('Projekt – Preislisten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=mitarbeiter')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'preislisten')
+})
+
+test('Projekt – Preislisten bearbeiten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=mitarbeiter')
+  await page.locator('table').first().waitFor()
+  if (since(6)) await page.getByRole('button', { name: /SB: Sabine Braun-Hofmeister bearbeiten/ }).click()
+  else await page.locator('table').first().locator('tbody tr').nth(2).getByTitle('Bearbeiten').click()
+  await shoot(page, info.project.name, 'preislisten-bearbeiten')
+})
+
+test('Projekt – Interne Budgets', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=budget')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'budget')
+})
+
+test('Projekt – Budget Regel anlegen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=budget')
+  await page.getByRole('button', { name: /Neue Regel/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'budget-regel')
+})
+
+test('Kalkulation im Angebot – Übersicht', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop', 'Assistent am Desktop')
+  await prepare(page, info.project.name)
+  await open(page, '/angebote?offerId=1&tab=kalkulationen')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).click()
+  const dialog = page.getByRole('dialog')
+  await dialog.waitFor()
+  for (let i = 0; i < 4; i++) {
+    await dialog.getByRole('button', { name: /Weiter/ }).last().click()
+    await page.waitForLoadState('networkidle')
+  }
+  await shoot(page, info.project.name, 'kalk-angebot-uebersicht')
+})
+
+// ── Runde 7: Nachträge, Adresssuche ──────────────────────────────────────────
+
+test('Nachträge – im Projekt', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=nachtraege')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'nachtraege-liste')
+})
+
+test('Nachtrag – Detail', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/nachtraege/402')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'nachtrag-detail')
+})
+
+test('Nachtrag – Freigeben', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/nachtraege/402')
+  await page.getByRole('button', { name: /Freigeben/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'nachtrag-freigeben')
+})
+
+test('Nachtrag – Position hinzufügen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/nachtraege/402')
+  await page.getByRole('button', { name: /Position hinzufügen/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'nachtrag-position')
+})
+
+test('Adresssuche – Treffer mit Tastatur', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  const box = page.locator('#vt-address')
+  await box.fill('Sta')
+  await page.locator('.autocomplete-item').first().waitFor()
+  await box.press('ArrowDown'); await box.press('ArrowDown')
+  await shoot(page, info.project.name, 'adresssuche')
+})
+
+// ── Runde 8: Projektdaten, Kalkulation am Handy, Adressen und Kontakte ──────
+
+test('Projektdaten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) {
+    await open(page, '/projekte?projectId=1&tab=daten')
+    await page.locator('#pd-name').waitFor()
+  } else {
+    // Vorher: Dialog in der Projektliste
+    await open(page, '/projekte')
+    await page.getByRole('button', { name: 'Bearbeiten', exact: true }).first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await shoot(page, info.project.name, 'projektdaten')
+})
+
+/** Bestehende Kalkulation 71 (mit Besonderer Leistung und Zuschlag) bis Schritt `upto`. */
+async function kalkBestand(page: Page, upto: 3 | 4 | 5) {
+  await open(page, '/projekte?projectId=1&tab=honorar')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).first().click()
+  // Im Projekt steht der Assistent auf der Seite, im Angebot im Dialog
+  const wizard = page.locator('.hw-root')
+  await wizard.waitFor()
+  await page.waitForLoadState('networkidle')
+  for (let s = 2; s < upto; s++) {
+    // exakt: „Weitere Aktionen" (Handy) beginnt auch mit „Weiter"
+    await wizard.getByRole('button', { name: 'Weiter', exact: true }).click()
+    await page.waitForLoadState('networkidle')
+  }
+  return wizard
+}
+
+for (const [upto, name] of [[3, 'leistungsphasen'], [4, 'bl'], [5, 'zuschlaege']] as const) {
+  test(`Kalkulation am Handy – ${name}`, async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile', 'Handy')
+    await prepare(page, info.project.name)
+    await kalkBestand(page, upto)
+    await shoot(page, info.project.name, `kalk-handy-${name}`)
+  })
+}
+
+test('Kalkulation am Handy – Blatt', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !since(8), 'Blatt gibt es erst mit Runde 8')
+  await prepare(page, info.project.name)
+  await kalkBestand(page, 5)
+  await page.getByRole('list', { name: 'Zuschläge und Nachlässe' }).getByRole('button').first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'kalk-handy-blatt')
+})
+
+test('Kalkulation am Handy – Blatt im Angebot', async ({ page }, info) => {
+  test.skip(info.project.name !== 'mobile' || !since(8), 'Blatt gibt es erst mit Runde 8')
+  await prepare(page, info.project.name)
+  await open(page, '/angebote?offerId=1&tab=kalkulationen')
+  await page.getByRole('button', { name: 'Gebäude und Innenräume bearbeiten' }).click()
+  const wizard = page.locator('.hw-root')
+  await wizard.waitFor()
+  await wizard.getByRole('button', { name: 'Weiter', exact: true }).click()
+  await page.getByRole('list', { name: 'Leistungsphasen' }).getByRole('button').nth(4).click()
+  await page.getByRole('dialog', { name: /LPH 5/ }).waitFor()
+  await shoot(page, info.project.name, 'kalk-handy-blatt-angebot')
+})
+
+// Adressen und Kontakte
+test('Adressen – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen')
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'adressen-liste')
+})
+
+test('Adresse – Seite', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen/2')
+  await page.getByRole('heading', { level: 1, name: /Wohnbau Süd/ }).waitFor()
+  await shoot(page, info.project.name, 'adresse')
+})
+
+test('Adresse – bearbeiten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) {
+    await open(page, '/adressen/2?tab=daten')
+    await page.getByLabel('Name 1*').waitFor()
+  } else {
+    await open(page, '/adressen/2')
+    // Der Kopf-Knopf — die Stifte der Kontaktzeilen heissen auch „Bearbeiten"
+    await page.getByRole('button', { name: 'Bearbeiten', exact: true }).first().click()
+    await page.getByRole('dialog').waitFor()
+  }
+  await shoot(page, info.project.name, 'adresse-bearbeiten')
+})
+
+test('Adresse – Kontakt anlegen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/adressen/2')
+  await page.getByRole('button', { name: since(8) ? 'Kontakt hinzufügen' : 'Kontakt' }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'kontakt-neu')
+})
+
+test('Adresse – verwendet in', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, since(8) ? '/adressen/2?tab=verwendung' : '/adressen/2')
+  await page.getByText('P-2024-002').first().waitFor()
+  await shoot(page, info.project.name, 'adresse-verwendung')
+})
+
+test('Kontakte – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  if (since(8)) await open(page, '/adressen?tab=kontakte')
+  else { await open(page, '/adressen'); await page.getByRole('tab', { name: 'Kontakte' }).click() }
+  await page.locator('table').first().waitFor()
+  await shoot(page, info.project.name, 'kontakte-liste')
+})
+
+// ── Runde 9: Angebotsdaten, Kontakt vorbelegen ──────────────────────────────
+
+const json9 = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+/** Kontakte je Adresse: 1 mit Hauptansprechpartner, 2 mit genau einem. */
+async function mockContacts9(page: Page) {
+  const byAddress: Record<string, unknown[]> = {
+    '1': [
+      { ID: 2, FIRST_NAME: 'Rainer', LAST_NAME: 'Vogt', IS_PRIMARY: 1 },
+      { ID: 1, FIRST_NAME: 'Petra', LAST_NAME: 'Albrecht', IS_PRIMARY: 0 },
+    ],
+    '2': [{ ID: 5, FIRST_NAME: 'Jonas', LAST_NAME: 'Keller', IS_PRIMARY: 0 }],
+  }
+  await page.route(/\/api\/v1\/stammdaten\/contacts\/by-address(\?|$)/, r => {
+    const id = new URL(r.request().url()).searchParams.get('address_id') ?? ''
+    return r.fulfill(json9({ data: byAddress[id] ?? [] }))
+  })
+  await page.route(/\/api\/v1\/stammdaten\/companies(\?|$)/, r => r.fulfill(json9({ data: [{ ID: 1, COMPANY_NAME_1: 'Büro Messina Architekten' }] })))
+}
+
+async function pick9(page: Page, input: string, query: string, name: string) {
+  await page.locator(input).fill(query)
+  // Vorher (Runde 8) lag der Dialog am Handy 1111 px breit — der Treffer war
+  // nicht erreichbar. Das Bild zeigt dann genau diesen Zustand.
+  await page.getByRole('option', { name }).click({ timeout: 5000 }).catch(() => {})
+  await page.waitForTimeout(400)
+}
+
+test('Angebotsdaten', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  await open(page, '/angebote?offerId=1&tab=daten')
+  await page.locator('.form-group', { hasText: 'Angebotstitel' }).locator('input').waitFor()
+  await shoot(page, info.project.name, 'angebotsdaten')
+})
+
+test('Angebotsdaten – geändert', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  // Offen: die Stadtwerke als Empfänger — ein Kontakt; danach Titel angepasst
+  await open(page, '/angebote?offerId=1&tab=daten')
+  await page.locator('.form-group', { hasText: 'Angebotstitel' }).locator('input').fill('Neubau Kita Sonnenblume — Leistungsphasen 1–5, Stadtwerke')
+  await pick9(page, since(9) ? '#od-addr' : '#stmd-offer-addr', 'Stadtw', 'Stadtwerke Ravensburg GmbH')
+  await page.locator('.form-group', { hasText: /^Kontakt/ }).locator('select').scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'angebotsdaten-geaendert')
+})
+
+test('Neues Angebot', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  await open(page, '/angebote')
+  await page.getByRole('button', { name: '+ Neues Angebot' }).click()
+  const dlg = page.getByRole('dialog')
+  await dlg.waitFor()
+  await dlg.locator('.form-group', { hasText: 'Angebotstitel' }).locator('input').fill('Umbau Rathaus, Leistungsphasen 1–4')
+  await pick9(page, since(9) ? '#on-addr' : '#offer-addr', 'Musterst', 'Stadt Musterstadt – Hochbauamt')
+  // Der Empfänger ist der Teil, der sich geändert hat — in die Mitte holen
+  await dlg.locator('.form-group', { hasText: /^Kontakt/ }).locator('select').first()
+    .evaluate(el => el.scrollIntoView({ block: 'center' })).catch(() => {})
+  await shoot(page, info.project.name, 'angebot-neu')
+})
+
+test('Vertrag – Rechnungsempfänger gewählt', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await mockContacts9(page)
+  await open(page, '/projekte?projectId=1&tab=vertraege')
+  await pick9(page, '#vt-address', 'Stadtw', 'Stadtwerke Ravensburg GmbH')
+  await shoot(page, info.project.name, 'vertrag-kontakt')
+})
+
+// ── Runde 10: Mitarbeiter ────────────────────────────────────────────────────
+
+/** Vorher: Abschnitte der Akte im Dialog; nachher: Reiter der Mitarbeiterseite. */
+const AKTE_ABSCHNITT: Record<string, string> = {
+  stammdaten: 'Stammdaten', kostensatz: 'Kostensatz', arbeitszeit: 'Arbeitszeit', zeitkonto: 'Zeitkonto',
+  abwesenheit: 'Abwesenheit', rollen: 'Rolle & Rechte', zugang: 'Zugang',
+}
+
+async function openEmployee(page: Page, tab: keyof typeof AKTE_ABSCHNITT) {
+  if (since(10)) {
+    await open(page, `/mitarbeiter/2?tab=${tab}`)
+    await page.getByRole('heading', { level: 1, name: /Thomas Kern/ }).waitFor()
+  } else {
+    await open(page, '/mitarbeiter')
+    await page.getByRole('cell', { name: 'Kern', exact: true }).click()
+    const dlg = page.getByRole('dialog')
+    await dlg.waitFor()
+    if (tab !== 'stammdaten') await dlg.getByRole('button', { name: AKTE_ABSCHNITT[tab], exact: true }).click()
+  }
+  await page.waitForLoadState('networkidle')
+}
+
+test('Mitarbeiter – Liste', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter')
+  await page.getByText('Kern').first().waitFor()
+  await shoot(page, info.project.name, 'mitarbeiter-liste')
+})
+
+for (const tab of Object.keys(AKTE_ABSCHNITT)) {
+  test(`Mitarbeiter – ${AKTE_ABSCHNITT[tab]}`, async ({ page }, info) => {
+    await prepare(page, info.project.name)
+    await openEmployee(page, tab)
+    await shoot(page, info.project.name, `mitarbeiter-${tab}`)
+  })
+}
+
+test('Mitarbeiter – neu', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter')
+  await page.getByRole('button', { name: /Neuer Mitarbeiter/ }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'mitarbeiter-neu')
+})
+
+// Buchung im Zeitkonto ändern — dort schrieb „Speichern" nach einer Zeitänderung 0 Stunden.
+test('Mitarbeiter – Buchung im Zeitkonto', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openEmployee(page, 'zeitkonto')
+  if (since(10)) {
+    await page.getByRole('button', { name: /Buchungen anzeigen: 22\.09\.2026/ }).click()
+    await page.getByRole('button', { name: /^Buchung .* bearbeiten$/ }).first().click()
+  } else {
+    await page.getByRole('row', { name: /2026-09-22/ }).getByRole('button').click()
+    await page.locator('tr[title="Klicken zum Bearbeiten"]').first().click()
+  }
+  // Vorher liegt der Buchungsdialog über dem Mitarbeiterdialog
+  const dlg = page.getByRole('dialog', { name: 'Buchung bearbeiten' })
+  await dlg.waitFor()
+  await dlg.locator('input[type="time"]').nth(1).fill('13:30')
+  await shoot(page, info.project.name, 'mitarbeiter-buchung')
+})
+
+// ── Runde 11: Abwesenheiten und Stundencontrolling ───────────────────────────
+
+test('Abwesenheiten – Anträge', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten')
+  await page.getByText('Herbstferien').first().waitFor()
+  await shoot(page, info.project.name, 'abw-antraege')
+})
+
+// Vorher lehnte „Ablehnen" sofort ab — ohne Rückfrage und ohne Begründung.
+test('Abwesenheiten – Ablehnen', async ({ page }, info) => {
+  test.skip(!since(11), 'Gibt es erst mit Runde 11')
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten')
+  await page.getByRole('button', { name: /Antrag von LH ablehnen/ }).first().click()
+  const dlg = page.getByRole('dialog', { name: 'Antrag ablehnen?' })
+  await dlg.waitFor()
+  await dlg.getByLabel(/Begründung/).fill('In der Woche ist die Abgabe Werk II, bitte eine Woche später.')
+  await shoot(page, info.project.name, 'abw-ablehnen')
+})
+
+test('Abwesenheiten – Kalender', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=calendar')
+  await page.getByText('September 2026').first().waitFor()
+  await shoot(page, info.project.name, 'abw-kalender')
+})
+
+test('Abwesenheiten – Meine Anträge', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=my')
+  await page.getByText(/31\.12\.2026/).first().waitFor()
+  await shoot(page, info.project.name, 'abw-meine')
+})
+
+test('Abwesenheiten – Antrag stellen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=my')
+  await page.getByRole('button', { name: /Antrag stellen|Abwesenheit beantragen/ }).first().click()
+  if (since(11)) {
+    const dlg = page.getByRole('dialog', { name: 'Abwesenheit beantragen' })
+    await dlg.getByLabel('Art *').selectOption({ label: 'Urlaub' })
+    await dlg.getByLabel('Von *').fill('2026-10-19')
+    await dlg.getByLabel('Bis').fill('2026-10-23')
+    await dlg.getByText(/Arbeitstage/).first().waitFor()
+  } else {
+    await page.locator('select').filter({ hasText: 'Bitte wählen' }).selectOption({ label: 'Urlaub' })
+    await page.locator('input[type="date"]').nth(0).fill('2026-10-19')
+    await page.locator('input[type="date"]').nth(1).fill('2026-10-23')
+  }
+  await shoot(page, info.project.name, 'abw-antrag')
+})
+
+test('Abwesenheiten – Urlaubsansprüche', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await open(page, '/mitarbeiter?tab=abwesenheiten&sub=entitlements')
+  await page.getByText('Kern').first().waitFor()
+  await shoot(page, info.project.name, 'abw-ansprueche')
+})
+
+test('Mitarbeiter – Abwesenheit erfassen', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openEmployee(page, 'abwesenheit')
+  await page.getByRole('button', { name: /Abwesenheit erfassen/ }).first().click()
+  if (since(11)) await page.getByRole('dialog', { name: /Abwesenheit erfassen/ }).waitFor()
+  await shoot(page, info.project.name, 'mitarbeiter-abw-erfassen')
+})
+
+async function openControlling(page: Page, sub: 'list' | 'single' | 'close') {
+  if (since(11)) {
+    await open(page, `/mitarbeiter?tab=zeitwirtschaft${sub === 'list' ? '' : `&sub=${sub}`}${sub === 'single' ? '&emp=2' : ''}`)
+    return
+  }
+  await open(page, '/mitarbeiter?tab=zeitwirtschaft')
+  if (sub === 'single') {
+    await page.getByRole('button', { name: 'Einzelne/r Mitarbeiter' }).click()
+    const pick = page.getByPlaceholder('Mitarbeiter suchen …')
+    await pick.fill('Kern')
+    await pick.press('Enter')
+  }
+  if (sub === 'close') await page.getByRole('button', { name: 'Monatsabschluss' }).click()
+  await page.waitForLoadState('networkidle')
+}
+
+test('Stundencontrolling – Auswertung', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openControlling(page, 'list')
+  await page.getByText('Thomas Kern', { exact: false }).filter({ visible: true }).first().waitFor()
+  await shoot(page, info.project.name, 'sc-auswertung')
+})
+
+test('Stundencontrolling – Einzelne/r Mitarbeiter', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openControlling(page, 'single')
+  await page.getByText(/22\.09\.2026|2026-09-22/).first().waitFor()
+  await shoot(page, info.project.name, 'sc-einzeln')
+})
+
+test('Stundencontrolling – Monatsabschluss', async ({ page }, info) => {
+  await prepare(page, info.project.name)
+  await openControlling(page, 'close')
+  await page.getByText('Braun-Hofmeister').first().waitFor()
+  await shoot(page, info.project.name, 'sc-abschluss')
+})
+
+// ── Runde 12: Einstellungen ──────────────────────────────────────────────────
+
+async function openSettings(page: Page, device: string, tab: string, sub?: string) {
+  await prepare(page, device)
+  await mockEinstellungen(page)
+  await open(page, `/admin?tab=${tab}${sub && since(12) ? `&sub=${sub}` : ''}`)
+}
+
+test('Einstellungen – Vorbelegungen', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'vorbelegungen')
+  await page.getByText('Gültigkeitsdauer', { exact: false }).first().waitFor()
+  await shoot(page, info.project.name, 'einst-vorbelegungen')
+})
+
+test('Einstellungen – Vorbelegungen geändert', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'vorbelegungen')
+  // Vorher hing die Beschriftung nicht am Feld
+  const f = since(12) ? page.getByLabel('Skonto (%)') : page.locator('input[placeholder="z. B. 2"]')
+  await f.fill(since(12) ? '2,5' : '2.5')
+  await page.getByLabel(/Zahlungsziel/).first().fill('21')
+  await shoot(page, info.project.name, 'einst-vorbelegungen-geaendert')
+})
+
+test('Einstellungen – Abteilungen', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'abteilungen')
+  await page.getByText('Hochbau').first().waitFor()
+  await shoot(page, info.project.name, 'einst-abteilungen')
+})
+
+test('Einstellungen – Projektrollen', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'projektrollen')
+  await page.getByText('Projektleitung').first().waitFor()
+  await page.getByText('Projektleitung').first().scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'einst-rollen')
+})
+
+test('Einstellungen – Rolle bearbeiten', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'projektrollen')
+  if (since(12)) {
+    await page.getByRole('button', { name: 'Rolle PL bearbeiten' }).click()
+    await page.getByRole('dialog').waitFor()
+  } else {
+    await page.getByRole('row', { name: /Projektleitung/ }).getByRole('button', { name: '✎' }).click()
+  }
+  await shoot(page, info.project.name, 'einst-rolle-bearbeiten')
+})
+
+test('Einstellungen – Abwesenheitsarten', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'abwesenheitsarten')
+  await page.getByText('Fortbildung').first().waitFor()
+  await page.getByText('Fortbildung').first().scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'einst-abwesenheitsarten')
+})
+
+test('Einstellungen – Arbeitszeitmodelle', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'arbeitszeitmodelle')
+  await page.getByText('Teilzeit 30 h').first().waitFor()
+  await page.getByText('Teilzeit 30 h').first().scrollIntoViewIfNeeded()
+  await shoot(page, info.project.name, 'einst-arbeitszeitmodelle')
+})
+
+test('Einstellungen – Abwesenheitsart bearbeiten', async ({ page }, info) => {
+  await openSettings(page, info.project.name, 'stammdaten', 'abwesenheitsarten')
+  if (since(12)) await page.getByRole('button', { name: 'Urlaub bearbeiten' }).click()
+  else await page.getByRole('row', { name: /Urlaub/ }).getByRole('button', { name: /bearbeiten/i }).first().click()
+  await page.getByRole('dialog').waitFor()
+  await shoot(page, info.project.name, 'einst-abwesenheitsart')
 })

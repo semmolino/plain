@@ -29,11 +29,15 @@ import { Message } from './Message'
 
 export function DirtyGuardProvider({ children }: { children: ReactNode }) {
   const entries = useRef(new Map<string, { current: GuardEntry }>())
-  const [pending, setPending] = useState<(() => void) | null>(null)
+  // `only`: Rueckfrage nur fuer diese Bereiche — ein Dialog, der sich
+  // schliesst, fragt nach seinem Inhalt, nicht nach der Tabelle dahinter.
+  const [pending, setPending] = useState<{ action: () => void; only?: string[] } | null>(null)
   const [saving, setSaving]   = useState(false)
   const [error, setError]     = useState<string | null>(null)
 
-  const dirtyEntries = () => [...entries.current.values()].map(e => e.current).filter(e => e.dirty)
+  const dirtyEntries = (only?: string[]) => [...entries.current.entries()]
+    .filter(([k]) => !only || only.includes(k))
+    .map(([, e]) => e.current).filter(e => e.dirty)
 
   const register   = useCallback((key: string, entry: { current: GuardEntry }) => { entries.current.set(key, entry) }, [])
   const unregister = useCallback((key: string) => { entries.current.delete(key) }, [])
@@ -43,10 +47,10 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
     bypass.current = true
     try { action() } finally { queueMicrotask(() => { bypass.current = false }) }
   }, [])
-  const request    = useCallback((action: () => void) => {
-    if (dirtyEntries().length === 0) { runUnblocked(action); return }
+  const request    = useCallback((action: () => void, only?: string[]) => {
+    if (dirtyEntries(only).length === 0) { runUnblocked(action); return }
     setError(null)
-    setPending(() => action)
+    setPending({ action, only })
   }, [runUnblocked])
 
   const blocker = useBlocker(({ currentLocation, nextLocation, historyAction }) => {
@@ -66,14 +70,14 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const open    = pending !== null || blocked
-  const current = open ? dirtyEntries() : []
+  const current = open ? dirtyEntries(blocked ? undefined : pending?.only) : []
   const canSave = current.length > 0 && current.every(e => !!e.save)
   const what    = current.map(e => (e.count ? `${e.count} ${e.count === 1 ? 'Änderung' : 'Änderungen'}` : 'Änderungen')
     + (e.label ? ` in „${e.label}"` : '')).join(', ')
 
   function proceed() {
     if (blocked) { blocker.proceed?.(); return }
-    const action = pending
+    const action = pending?.action
     setPending(null)
     if (action) runUnblocked(action)
   }
@@ -99,16 +103,18 @@ export function DirtyGuardProvider({ children }: { children: ReactNode }) {
       {children}
       <Modal open={open} onClose={cancel} title="Ungespeicherte Änderungen">
         <p className="guard-text">
-          {what ? `${what} ${current.length === 1 && (current[0].count ?? 2) === 1 ? 'ist' : 'sind'} noch nicht gespeichert.` : 'Es gibt ungespeicherte Änderungen.'}
-          {' '}Beim Wechseln gehen sie verloren.
+          {current.length === 1 && current[0].note ? current[0].note : <>
+            {what ? `${what} ${current.length === 1 && (current[0].count ?? 2) === 1 ? 'ist' : 'sind'} noch nicht gespeichert.` : 'Es gibt ungespeicherte Änderungen.'}
+            {' '}Beim Wechseln gehen sie verloren.
+          </>}
         </p>
         <Message text={error} type="error" />
         <DialogFooter
           secondary={<button type="button" className="btn-secondary" onClick={proceed} disabled={saving}>Verwerfen</button>}
         >
-          <button type="button" className="btn-secondary" onClick={cancel} disabled={saving}>Abbrechen</button>
+          <button type="button" className="btn-secondary" onClick={cancel} disabled={saving} data-autofocus={canSave ? undefined : ''}>Abbrechen</button>
           {canSave && (
-            <button type="button" className="btn-primary" onClick={() => void saveAndProceed()} disabled={saving}>
+            <button type="button" className="btn-primary" onClick={() => void saveAndProceed()} disabled={saving} data-autofocus="">
               {saving ? 'Speichert …' : 'Speichern und wechseln'}
             </button>
           )}

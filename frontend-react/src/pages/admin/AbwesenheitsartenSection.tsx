@@ -1,20 +1,35 @@
-import { useState, useEffect, type CSSProperties } from 'react'
-import { DialogFooter } from '@/components/ui/DialogFooter'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Pencil, Trash2, Plus, Check } from 'lucide-react'
-import { Modal }        from '@/components/ui/Modal'
-import { Message }      from '@/components/ui/Message'
-import { FormField }    from '@/components/ui/FormField'
-import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { Can }          from '@/components/ui/Can'
-import { HelpHint }     from '@/components/ui/HelpHint'
-import { useToast }     from '@/store/toastStore'
+import { ActionBar } from '@/components/ui/ActionBar'
+import { DialogFooter } from '@/components/ui/DialogFooter'
+import { FormSection } from '@/components/ui/FormSection'
+import { HelpHint } from '@/components/ui/HelpHint'
+import { Message } from '@/components/ui/Message'
+import { Modal } from '@/components/ui/Modal'
+import { useConfirm } from '@/hooks/useConfirm'
+import { useCtrlS } from '@/hooks/useCtrlS'
+import { useRegisterDirty } from '@/hooks/useDirtyGuard'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
+import { useToast } from '@/store/toastStore'
 import { usePermission } from '@/store/permissionsStore'
 import {
   fetchAbsenceTypes, createAbsenceType, updateAbsenceType, deleteAbsenceType,
   fetchAbsenceSettings, putAbsenceSettings,
   type AbsenceType, type AbsenceTypePayload,
 } from '@/api/abwesenheit'
+
+/**
+ * Einstellungen → Stammdaten → Abwesenheitsarten (UI-Pilot Runde 12).
+ *
+ * Vorher: der Verfall des Urlaubsübertrags hatte einen eigenen
+ * Speichern-Knopf mitten auf der Seite, und ein Effekt setzte die Eingabe
+ * bei jedem Nachladen zurück. Die Arten standen in einer 12-px-Tabelle,
+ * deren Häkchen für Screenreader stumm waren; was die Kennzeichen bedeuten,
+ * stand nur im `title` (am Handy unerreichbar). Eine neue Art startete mit
+ * der Farbe `var(--accent)` — für ein Farbfeld kein Wert, der Wähler zeigte
+ * Schwarz.
+ */
 
 interface FormState {
   name:              string
@@ -26,217 +41,277 @@ interface FormState {
   active:            boolean
 }
 
+/** Vorgabefarbe einer neuen Art — gespeicherter Wert, kein Token (Okabe-Ito-Blau). */
+const DEFAULT_COLOR = '#0072b2'
+
 function emptyForm(): FormState {
-  return { name: '', color: 'var(--accent)', counts_as_worked: true, reduces_vacation: false, requires_approval: true, is_paid: true, active: true }
+  return { name: '', color: DEFAULT_COLOR, counts_as_worked: true, reduces_vacation: false, requires_approval: true, is_paid: true, active: true }
 }
 function toForm(t: AbsenceType): FormState {
   return {
-    name: t.NAME, color: t.COLOR ?? '#2563eb',
+    name: t.NAME, color: /^#[0-9a-f]{6}$/i.test(t.COLOR ?? '') ? t.COLOR! : DEFAULT_COLOR,
     counts_as_worked: t.COUNTS_AS_WORKED, reduces_vacation: t.REDUCES_VACATION,
     requires_approval: t.REQUIRES_APPROVAL, is_paid: t.IS_PAID, active: t.ACTIVE !== 0,
   }
 }
 
-const Flag = ({ on }: { on: boolean }) =>
-  on ? <Check size={14} strokeWidth={2.5} style={{ color: 'var(--success)' }} /> : <span style={{ color: 'var(--text-3)' }}>—</span>
+const FLAGS: { key: 'counts_as_worked' | 'reduces_vacation' | 'requires_approval' | 'is_paid'; col: keyof AbsenceType; label: string; hint: string }[] = [
+  { key: 'counts_as_worked',  col: 'COUNTS_AS_WORKED',  label: 'Zählt als gearbeitet', hint: 'Der Tag gilt im Zeitkonto als erfüllt — z. B. Urlaub, Krankheit.' },
+  { key: 'reduces_vacation',  col: 'REDUCES_VACATION',  label: 'Zehrt vom Urlaub',     hint: 'Die Arbeitstage gehen vom Urlaubsanspruch ab — in der Regel nur beim Urlaub.' },
+  { key: 'requires_approval', col: 'REQUIRES_APPROVAL', label: 'Freigabepflichtig',    hint: 'Ein Antrag zählt erst, wenn er genehmigt ist.' },
+  { key: 'is_paid',           col: 'IS_PAID',           label: 'Bezahlt',              hint: 'Kennzeichen für Auswertungen.' },
+]
+
+function Flag({ on }: { on: boolean }) {
+  return on
+    ? <><Check size={15} strokeWidth={2.25} className="st-flag-on" aria-hidden="true" /><span className="sr-only">ja</span></>
+    : <><span className="st-flag-off" aria-hidden="true">—</span><span className="sr-only">nein</span></>
+}
 
 export function AbwesenheitsartenSection() {
+  // Die Aktionsleiste gehört ans Seitenende, nicht zwischen die Abschnitte —
+  // der Verfall liefert Abschnitt und Leiste getrennt.
+  const verfall = useVerfall()
+  return (
+    <div className="ws-form">
+      {verfall.section}
+      <AbsenceTypesList />
+      {verfall.bar}
+    </div>
+  )
+}
+
+function AbsenceTypesList() {
   const qc = useQueryClient()
   const toast = useToast()
-  const [editId, setEditId] = useState<number | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [confirmState, setConfirmState] = useState<{ id: number; label: string } | null>(null)
+  const narrow = useIsNarrow()
+  const canManage = usePermission('absence.manage')
+  const [confirm, confirmDialog] = useConfirm()
+  const [dialog, setDialog] = useState<{ type: AbsenceType | null } | null>(null)
 
-  const { data, isLoading } = useQuery({ queryKey: ['absence-types'], queryFn: fetchAbsenceTypes })
+  const { data, isLoading, isError } = useQuery({ queryKey: ['absence-types'], queryFn: fetchAbsenceTypes })
   const rows = data?.data ?? []
 
   const delMut = useMutation({
     mutationFn: deleteAbsenceType,
-    onSuccess: (r) => {
+    onSuccess: (r, _id) => {
       void qc.invalidateQueries({ queryKey: ['absence-types'] })
-      toast.success(r?.deactivated ? 'Art deaktiviert (noch in Verwendung)' : 'Abwesenheitsart gelöscht')
+      toast.success(r?.deactivated ? 'Die Art wird noch verwendet und ist jetzt deaktiviert.' : 'Abwesenheitsart gelöscht.')
     },
     onError: (e: Error) => toast.error(e.message),
   })
 
-  const editing = editId != null ? rows.find(r => r.ID === editId) ?? null : null
+  async function askDelete(t: AbsenceType) {
+    const ok = await confirm({
+      title: 'Abwesenheitsart löschen?',
+      message: `„${t.NAME}“ wird gelöscht. Ist sie schon verwendet, wird sie stattdessen deaktiviert — bestehende Einträge behalten sie.`,
+      confirmLabel: 'Löschen',
+    })
+    if (ok) delMut.mutate(t.ID)
+  }
+
+  const actions = (t: AbsenceType) => canManage && (
+    <span className="st-row-actions">
+      <button type="button" className="row-action-btn" onClick={() => setDialog({ type: t })}
+        aria-label={`${t.NAME} bearbeiten`} title="Bearbeiten">
+        <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+      <button type="button" className="row-action-btn row-action-btn--danger" onClick={() => void askDelete(t)}
+        disabled={delMut.isPending} aria-label={`${t.NAME} löschen`} title="Löschen">
+        <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+      </button>
+    </span>
+  )
+  const name = (t: AbsenceType) => (
+    <span className="abs-type">
+      {/* Die Farbe ist ein gespeicherter Wert der Art, kein Token. */}
+      <span className="abs-type-dot" style={{ background: t.COLOR || 'var(--text-4)' }} aria-hidden="true" />
+      <span className="st-type-name">{t.NAME}</span>
+      {t.ACTIVE === 0 && <span className="st-badge">inaktiv</span>}
+    </span>
+  )
+
+  let body: ReactNode
+  if (isLoading) body = <p className="empty-note">Lädt …</p>
+  else if (isError) body = <Message type="error" text="Die Abwesenheitsarten konnten nicht geladen werden." />
+  else if (rows.length === 0) body = (
+    <p className="st-empty">
+      {canManage ? 'Noch keine Abwesenheitsarten. Legen Sie mit „Neue Art“ z. B. „Urlaub“ und „Krankheit“ an — erst dann lassen sich Abwesenheiten beantragen.'
+        : 'Noch keine Abwesenheitsarten.'}
+    </p>
+  )
+  else if (narrow) body = (
+    <ul className="st-cards" aria-label="Abwesenheitsarten">
+      {rows.map(t => (
+        <li key={t.ID} className={`st-card${t.ACTIVE === 0 ? ' st-card--inactive' : ''}`}>
+          <div className="st-card-main">
+            {name(t)}
+            <span className="st-card-sub">{FLAGS.filter(f => !!t[f.col]).map(f => f.label).join(' · ') || 'keine Kennzeichen'}</span>
+          </div>
+          {actions(t)}
+        </li>
+      ))}
+    </ul>
+  )
+  else body = (
+    <div className="table-scroll st-table-wrap">
+      <table className="master-table st-table">
+        <thead>
+          <tr>
+            <th scope="col">Art</th>
+            {FLAGS.map(f => <th key={f.key} scope="col" className="st-flag-col">{f.label}</th>)}
+            {canManage && <th scope="col"><span className="sr-only">Aktionen</span></th>}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(t => (
+            <tr key={t.ID} className={t.ACTIVE === 0 ? 'st-row--inactive' : undefined}>
+              <th scope="row">{name(t)}</th>
+              {FLAGS.map(f => <td key={f.key} className="st-flag-col"><Flag on={!!t[f.col]} /></td>)}
+              {canManage && <td className="st-row-actions-cell">{actions(t)}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
 
   return (
-    <>
-    <VerfallSettingsCard />
-    <div className="admin-block">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-        <h3 className="admin-block-title" style={{ margin: 0 }}>Abwesenheitsarten</h3>
-        <Can permission="absence.manage">
-          <button className="btn-small" onClick={() => setCreateOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <Plus size={13} strokeWidth={2} /> Neue Art
-          </button>
-        </Can>
-      </div>
-      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '4px 0 0' }}>
-        Arten für Urlaub, Krankheit &amp; Co. „Zählt als gearbeitet" schreibt das Tages-Soll im Zeitkonto gut,
-        „zehrt vom Urlaub" bucht auf den Urlaubsanspruch, „freigabepflichtig" erfordert eine Genehmigung.
-      </p>
-
-      {isLoading && <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>Laden …</p>}
-
-      {!isLoading && rows.length === 0 && (
-        <p style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 8 }}>
-          Noch keine Abwesenheitsarten. Mit „Neue Art" z. B. „Urlaub" oder „Krankheit" anlegen.
-        </p>
-      )}
-
-      {rows.length > 0 && (
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, margin: '10px 0' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-3)' }}>
-              <th scope="col" style={{ textAlign: 'left', padding: '2px 6px 4px 0' }}>Art</th>
-              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Schreibt das Tages-Soll im Zeitkonto gut">Zählt als gearbeitet</th>
-              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Reduziert den Urlaubsanspruch">Zehrt vom Urlaub</th>
-              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }} title="Antrag muss genehmigt werden">Freigabepflichtig</th>
-              <th scope="col" style={{ textAlign: 'center', padding: '2px 6px 4px 0' }}>Bezahlt</th>
-              <th scope="col"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(t => (
-              <tr key={t.ID} style={{ borderBottom: '1px solid var(--border-3)', opacity: t.ACTIVE === 0 ? 0.5 : 1 }}>
-                <td style={{ padding: '4px 6px 4px 0', fontWeight: 600 }}>
-                  <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: t.COLOR || 'var(--text-4)', marginRight: 6 }} />
-                  {t.NAME}{t.ACTIVE === 0 && <span style={{ fontWeight: 400, color: 'var(--text-3)' }}> (inaktiv)</span>}
-                </td>
-                <td style={{ padding: '4px 6px', textAlign: 'center' }}><Flag on={t.COUNTS_AS_WORKED} /></td>
-                <td style={{ padding: '4px 6px', textAlign: 'center' }}><Flag on={t.REDUCES_VACATION} /></td>
-                <td style={{ padding: '4px 6px', textAlign: 'center' }}><Flag on={t.REQUIRES_APPROVAL} /></td>
-                <td style={{ padding: '4px 6px', textAlign: 'center' }}><Flag on={t.IS_PAID} /></td>
-                <td style={{ padding: '4px 0', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  <Can permission="absence.manage">
-                    <button className="row-action-btn" onClick={() => setEditId(t.ID)} title="Bearbeiten">
-                      <Pencil size={13} strokeWidth={2} />
-                    </button>
-                    <button className="row-action-btn row-action-btn--danger"
-                      onClick={() => setConfirmState({ id: t.ID, label: t.NAME })} title="Löschen">
-                      <Trash2 size={13} strokeWidth={2} />
-                    </button>
-                  </Can>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      {createOpen && (
-        <AbwesenheitsartModal onClose={() => setCreateOpen(false)}
-          onSaved={() => { setCreateOpen(false); void qc.invalidateQueries({ queryKey: ['absence-types'] }) }} />
-      )}
-      {editing && (
-        <AbwesenheitsartModal existing={editing} onClose={() => setEditId(null)}
-          onSaved={() => { setEditId(null); void qc.invalidateQueries({ queryKey: ['absence-types'] }) }} />
-      )}
-
-      <ConfirmModal
-        open={confirmState !== null}
-        title="Abwesenheitsart löschen"
-        message={`Art „${confirmState?.label ?? ''}" löschen? Ist sie noch in Verwendung, wird sie stattdessen deaktiviert.`}
-        confirmLabel="Löschen"
-        confirmClass="danger"
-        onConfirm={() => { if (confirmState) delMut.mutate(confirmState.id); setConfirmState(null) }}
-        onCancel={() => setConfirmState(null)}
-      />
-    </div>
-    </>
+    <FormSection
+      title="Abwesenheitsarten" help="settings.abwesenheitsarten" layout="block" className="st-section"
+      hint="Wozu man abwesend sein kann — und was das fürs Zeitkonto und den Urlaub heißt."
+      actions={canManage ? (
+        <button type="button" className="btn-primary st-btn" onClick={() => setDialog({ type: null })}>
+          <Plus size={14} strokeWidth={2} aria-hidden="true" />Neue Art
+        </button>
+      ) : undefined}
+    >
+      {body}
+      {!canManage && <p className="ws-form-readonly">Nur Lesen — zum Ändern fehlt das Recht „Abwesenheiten verwalten“.</p>}
+      {dialog && <AbwesenheitsartDialog existing={dialog.type} taken={rows} onClose={() => setDialog(null)} />}
+      {confirmDialog}
+    </FormSection>
   )
 }
 
 // ── Verfall des Resturlaub-Übertrags (mandantenweit) ──────────────────────────
-function VerfallSettingsCard() {
+
+interface Verfall { expires: boolean; mm: string; dd: string }
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+const DAYS_IN = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+function useVerfall(): { section: ReactNode; bar: ReactNode } {
   const qc = useQueryClient()
   const toast = useToast()
   const canManage = usePermission('absence.manage')
-  const { data } = useQuery({ queryKey: ['absence-settings'], queryFn: fetchAbsenceSettings })
-  const s = data?.data
+  const [confirm, confirmDialog] = useConfirm()
+  const { data, isLoading } = useQuery({ queryKey: ['absence-settings'], queryFn: fetchAbsenceSettings })
+  const [edits, setEdits] = useState<Partial<Verfall>>({})
+  const [pending, setPending] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
 
-  const [expires, setExpires] = useState(false)
-  const [mm, setMm] = useState('03')
-  const [dd, setDd] = useState('31')
+  const saved = useMemo<Verfall>(() => {
+    const [m, d] = (data?.data?.carryoverExpiryDate || '03-31').split('-')
+    return { expires: !!data?.data?.carryoverExpires, mm: m || '03', dd: d || '31' }
+  }, [data])
+  const f: Verfall = { ...saved, ...edits }
+  const maxDay = DAYS_IN[Number(f.mm) - 1] ?? 31
+  const dd = Number(f.dd) > maxDay ? String(maxDay).padStart(2, '0') : f.dd
+  const changed = (f.expires !== saved.expires ? 1 : 0) + (f.expires && (f.mm !== saved.mm || dd !== saved.dd) ? 1 : 0)
+  const dirty = changed > 0
 
-  useEffect(() => {
-    if (!s) return
-    setExpires(s.carryoverExpires)
-    const [m, d] = (s.carryoverExpiryDate || '03-31').split('-')
-    if (m) setMm(m); if (d) setDd(d)
-  }, [s])
-
-  const saveMut = useMutation({
-    mutationFn: () => putAbsenceSettings({ carryoverExpires: expires, carryoverExpiryDate: `${mm}-${dd}` }),
-    onSuccess: () => {
-      toast.success('Einstellung gespeichert')
-      void qc.invalidateQueries({ queryKey: ['absence-settings'] })
+  async function save() {
+    if (!dirty || pending) return
+    setPending(true); setErr(null)
+    try {
+      await putAbsenceSettings({ carryoverExpires: f.expires, carryoverExpiryDate: `${f.mm}-${dd}` })
+      await qc.invalidateQueries({ queryKey: ['absence-settings'] })
       void qc.invalidateQueries({ queryKey: ['vacation-balance'] })
       void qc.invalidateQueries({ queryKey: ['my-vacation-balance'] })
-    },
-    onError: (e: Error) => toast.error(e.message),
-  })
+      setEdits({})
+      toast.success('Verfall des Urlaubsübertrags gespeichert.')
+    } catch (e) {
+      setErr((e as Error)?.message || 'Speichern fehlgeschlagen')
+      throw e
+    } finally {
+      setPending(false)
+    }
+  }
+  async function discard() {
+    if (await confirm({ title: 'Änderung verwerfen?', message: 'Der Verfall bleibt, wie er gespeichert ist.', confirmLabel: 'Verwerfen' })) {
+      setEdits({}); setErr(null)
+    }
+  }
 
-  const MONTHS = ['01','02','03','04','05','06','07','08','09','10','11','12']
-  const DAYS   = Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'))
-  const selStyle: CSSProperties = { height: 34, padding: '0 8px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }
+  useRegisterDirty('abwesenheit-verfall', { dirty, label: 'Urlaubsübertrag', count: changed, save })
+  useCtrlS(() => { if (dirty && !pending) void save().catch(() => {}) }, canManage)
 
-  return (
-    <div className="admin-block">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <h3 className="admin-block-title" style={{ margin: 0 }}>Urlaubsübertrag &amp; Verfall</h3>
-        <HelpHint id="absence.carryover_expiry" />
-      </div>
-      <p style={{ fontSize: 12, color: 'var(--text-3)', margin: '4px 0 10px' }}>
-        Legt fest, ob nicht genommener Resturlaub-Übertrag aus dem Vorjahr zu einem Stichtag verfällt.
-        Standardmäßig aus — der Übertrag wird dann unbegrenzt vorgetragen.
-      </p>
-
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: canManage ? 'pointer' : 'default' }}>
-        <input type="checkbox" checked={expires} disabled={!canManage}
-          onChange={e => setExpires(e.target.checked)} />
-        Resturlaub-Übertrag verfällt zum Stichtag
-      </label>
-
-      {expires && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, margin: '10px 0 0' }}>
-          <span style={{ color: 'var(--text-2)' }}>Stichtag (jährlich):</span>
-          <select value={dd} disabled={!canManage} onChange={e => setDd(e.target.value)} style={selStyle}>
-            {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <span>.</span>
-          <select value={mm} disabled={!canManage} onChange={e => setMm(e.target.value)} style={selStyle}>
-            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <span style={{ color: 'var(--text-3)' }}>(Vorgabe 31.03.)</span>
-        </div>
-      )}
-
-      <Can permission="absence.manage">
-        <div style={{ marginTop: 12 }}>
-          <button className="btn-primary btn-small" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
-            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
-          </button>
-        </div>
-      </Can>
-    </div>
+  const section = (
+    <>
+      <FormSection title="Urlaubsübertrag und Verfall" help="absence.carryover_expiry"
+        hint="Ob nicht genommener Übertrag aus dem Vorjahr zu einem Stichtag verfällt. Aus: er wird unbegrenzt vorgetragen.">
+        {isLoading ? <p className="empty-note form-section-wide">Lädt …</p> : (
+          <fieldset className="ws-form-fields form-section-wide st-verfall" disabled={!canManage || pending}>
+            <legend className="sr-only">Verfall des Urlaubsübertrags</legend>
+            <label className="ws-check">
+              <input type="checkbox" checked={f.expires} onChange={e => { setEdits(x => ({ ...x, expires: e.target.checked })); setErr(null) }} />
+              <span>Übertrag verfällt zum Stichtag</span>
+            </label>
+            {f.expires && (
+              <div className="st-date" role="group" aria-labelledby="vf-date-label">
+                <span id="vf-date-label" className="st-date-label">Stichtag (jedes Jahr)</span>
+                <label className="sr-only" htmlFor="vf-day">Tag</label>
+                <select id="vf-day" value={dd} onChange={e => setEdits(x => ({ ...x, dd: e.target.value }))}>
+                  {Array.from({ length: maxDay }, (_, i) => String(i + 1).padStart(2, '0')).map(d => <option key={d} value={d}>{Number(d)}.</option>)}
+                </select>
+                <label className="sr-only" htmlFor="vf-month">Monat</label>
+                <select id="vf-month" value={f.mm} onChange={e => setEdits(x => ({ ...x, mm: e.target.value }))}>
+                  {MONTHS.map((m, i) => <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>)}
+                </select>
+                <span className="st-date-note">Vorgabe: 31. März</span>
+              </div>
+            )}
+          </fieldset>
+        )}
+        {!canManage && <p className="ws-form-readonly form-section-wide">Nur Lesen — zum Ändern fehlt das Recht „Abwesenheiten verwalten“.</p>}
+        <Message type="error" text={err} />
+      </FormSection>
+      {confirmDialog}
+    </>
   )
+  const bar = canManage && (
+        <ActionBar
+          dirty={dirty} quiet={!dirty && !pending}
+          status={pending ? 'Speichert …' : dirty ? 'Verfall geändert' : 'Keine Änderungen'}
+          secondary={dirty ? <button type="button" className="btn-secondary" onClick={() => void discard()} disabled={pending}>Verwerfen</button> : undefined}
+        >
+          <button type="button" className="btn-primary" onClick={() => void save().catch(() => {})} disabled={!dirty || pending}>
+            {pending ? 'Speichert …' : 'Speichern'}
+          </button>
+        </ActionBar>
+  )
+  return { section, bar }
 }
 
-function AbwesenheitsartModal({ existing, onClose, onSaved }: { existing?: AbsenceType; onClose: () => void; onSaved: () => void }) {
+function AbwesenheitsartDialog({ existing, taken, onClose }: { existing: AbsenceType | null; taken: AbsenceType[]; onClose: () => void }) {
+  const qc = useQueryClient()
   const toast = useToast()
+  const [confirm, confirmDialog] = useConfirm()
   const isCreate = existing == null
-  const [form, setForm] = useState<FormState>(existing ? toForm(existing) : emptyForm())
-  const [msg, setMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const initial = useMemo(() => (existing ? toForm(existing) : emptyForm()), [existing])
+  const [form, setForm] = useState<FormState>(initial)
+  const [tried, setTried] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const dirty = JSON.stringify(form) !== JSON.stringify(initial)
+  const name = form.name.trim()
+  const duplicate = !!name && taken.some(t => t.ID !== existing?.ID && t.NAME.trim().toLocaleLowerCase('de') === name.toLocaleLowerCase('de'))
 
-  const set = <K extends keyof FormState>(k: K) => (v: FormState[K]) => setForm(f => ({ ...f, [k]: v }))
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => { setForm(f => ({ ...f, [k]: v })); setErr(null) }
 
   const saveMut = useMutation({
     mutationFn: async () => {
       const payload: AbsenceTypePayload = {
-        name:              form.name.trim(),
+        name,
         color:             form.color,
         counts_as_worked:  form.counts_as_worked,
         reduces_vacation:  form.reduces_vacation,
@@ -245,51 +320,74 @@ function AbwesenheitsartModal({ existing, onClose, onSaved }: { existing?: Absen
         active:            form.active ? 1 : 0,
       }
       if (isCreate) await createAbsenceType(payload)
-      else          await updateAbsenceType(existing!.ID, payload)
+      else          await updateAbsenceType(existing.ID, payload)
     },
-    onSuccess: () => { toast.success(isCreate ? 'Art angelegt' : 'Art aktualisiert'); onSaved() },
-    onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['absence-types'] })
+      toast.success(isCreate ? `„${name}“ angelegt.` : `„${name}“ gespeichert.`)
+      onClose()
+    },
+    onError: (e: Error) => setErr(e.message),
   })
 
   function handleSave() {
-    if (!form.name.trim()) { setMsg({ text: 'Name erforderlich', type: 'error' }); return }
-    setMsg(null); saveMut.mutate()
+    if (saveMut.isPending) return
+    setTried(true)
+    if (!name)     { setErr('Bitte einen Namen angeben.'); return }
+    if (duplicate) { setErr(`Die Art „${name}“ gibt es schon.`); return }
+    setErr(null); saveMut.mutate()
   }
-
-  const check = (k: keyof FormState, label: string, hint: string) => (
-    <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }} title={hint}>
-      <input type="checkbox" checked={form[k] as boolean} onChange={e => set(k)(e.target.checked as FormState[typeof k])} />
-      {label}
-    </label>
-  )
+  async function requestClose() {
+    if (saveMut.isPending) return
+    if (dirty && !(await confirm({ title: 'Eingaben verwerfen?', message: isCreate ? 'Es wird keine Art angelegt.' : 'Die Art bleibt, wie sie war.', confirmLabel: 'Verwerfen' }))) return
+    onClose()
+  }
+  useCtrlS(handleSave, true)
 
   return (
-    <Modal open onClose={onClose} title={isCreate ? 'Neue Abwesenheitsart' : `Art bearbeiten — ${form.name}`}>
-      <div className="master-form">
-        <div className="form-row">
-          <FormField label="Name*" id="at-name" value={form.name} onChange={e => set('name')(e.target.value)} required />
-          <div className="form-group" style={{ maxWidth: 90 }}>
-            <label>Farbe</label>
-            <input type="color" value={form.color} onChange={e => set('color')(e.target.value)} style={{ width: '100%', height: 34, padding: 2, border: '1px solid var(--border)', borderRadius: 6 }} />
+    <>
+      <Modal open onClose={() => void requestClose()} title={isCreate ? 'Neue Abwesenheitsart' : `${existing.NAME} bearbeiten`}>
+        <div className="st-dialog">
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="at-name">Name*</label>
+              <input id="at-name" type="text" value={form.name} maxLength={80} autoComplete="off" placeholder="z. B. Urlaub"
+                aria-invalid={tried && (!name || duplicate) ? true : undefined} onChange={e => set('name', e.target.value)} />
+            </div>
+            <div className="form-group st-field-color">
+              <label htmlFor="at-color">Farbe</label>
+              <input id="at-color" type="color" value={form.color} onChange={e => set('color', e.target.value)} />
+            </div>
           </div>
+          <fieldset className="st-flags">
+            <legend className="ws-label-help">Wirkung<HelpHint id="settings.abwesenheitsarten" size={13} /></legend>
+            {FLAGS.map(f => (
+              <div key={f.key} className="st-flag">
+                <label className="ws-check">
+                  <input type="checkbox" checked={form[f.key]} aria-describedby={`at-${f.key}-hint`} onChange={e => set(f.key, e.target.checked)} />
+                  <span>{f.label}</span>
+                </label>
+                <p id={`at-${f.key}-hint`} className="form-field-hint st-flag-hint">{f.hint}</p>
+              </div>
+            ))}
+            <div className="st-flag">
+              <label className="ws-check">
+                <input type="checkbox" checked={form.active} aria-describedby="at-active-hint" onChange={e => set('active', e.target.checked)} />
+                <span>Aktiv</span>
+              </label>
+              <p id="at-active-hint" className="form-field-hint st-flag-hint">Nur aktive Arten stehen bei neuen Anträgen zur Wahl.</p>
+            </div>
+          </fieldset>
+          <Message type="error" text={err} />
         </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '4px 0' }}>
-          {check('counts_as_worked',  'Zählt als gearbeitet', 'Schreibt das Tages-Soll im Zeitkonto gut (z. B. Urlaub, Krankheit).')}
-          {check('reduces_vacation',  'Zehrt vom Urlaubsanspruch', 'Bucht auf den Jahres-Urlaubsanspruch (nur Urlaub).')}
-          {check('requires_approval', 'Freigabepflichtig', 'Antrag muss genehmigt werden, bevor er zählt.')}
-          {check('is_paid',           'Bezahlt', 'Bezahlte Abwesenheit.')}
-          {check('active',            'Aktiv (zur Auswahl)', 'Nur aktive Arten erscheinen bei der Erfassung.')}
-        </div>
-
-        <Message text={msg?.text ?? null} type={msg?.type} />
         <DialogFooter>
-          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
-            {saveMut.isPending ? 'Speichert …' : 'Speichern'}
+          <button type="button" className="btn-secondary" onClick={() => void requestClose()}>Abbrechen</button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
+            {saveMut.isPending ? 'Speichert …' : isCreate ? 'Anlegen' : 'Speichern'}
           </button>
         </DialogFooter>
-      </div>
-    </Modal>
+      </Modal>
+      {confirmDialog}
+    </>
   )
 }

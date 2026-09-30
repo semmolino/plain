@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  cpiLevel, vacLevel, costRatioLevel, readCpiThresholds, CPI_DEFAULTS, KPI_LABEL, KPI_COLOR,
+  cpiLevel, vacLevel, costRatioLevel, readCpiThresholds, CPI_DEFAULTS, KPI_LABEL, KPI_COLOR, budgetShareLevel, lowestRulePct,
 } from './kpiLevel'
 
 describe('readCpiThresholds', () => {
@@ -142,5 +142,39 @@ describe('costRatioLevel', () => {
     for (const v of [null, undefined, NaN, 0, -1]) {
       expect(costRatioLevel(v, t)).toBe('unknown')
     }
+  })
+})
+
+describe('budgetShareLevel', () => {
+  it('ab 100 % Handlungsbedarf, auch ohne Regel', () => {
+    expect(budgetShareLevel(100, null)).toBe('critical')
+    expect(budgetShareLevel(107.7, 75)).toBe('critical')
+  })
+
+  it('beobachten ab der niedrigsten Warnregel, einschliesslich', () => {
+    expect(budgetShareLevel(75, 75)).toBe('watch')
+    expect(budgetShareLevel(99.9, 75)).toBe('watch')
+    expect(budgetShareLevel(74.9, 75)).toBe('plan')
+  })
+
+  it('ohne Regel oder mit einer Regel ab 100 % keine Zwischenstufe', () => {
+    expect(budgetShareLevel(98, null)).toBe('plan')
+    expect(budgetShareLevel(98, 100)).toBe('plan')
+    expect(budgetShareLevel(98, 120)).toBe('plan')
+  })
+
+  it('ohne Budget nicht bewertbar', () => {
+    expect(budgetShareLevel(null, 75)).toBe('unknown')
+    expect(budgetShareLevel(NaN, 75)).toBe('unknown')
+  })
+})
+
+describe('lowestRulePct', () => {
+  it('nimmt die kleinste gültige Schwelle', () => {
+    expect(lowestRulePct([{ THRESHOLD_PCT: 90 }, { THRESHOLD_PCT: '75' }, { THRESHOLD_PCT: 100 }])).toBe(75)
+  })
+  it('ohne Regel null', () => {
+    expect(lowestRulePct([])).toBeNull()
+    expect(lowestRulePct(undefined)).toBeNull()
   })
 })

@@ -19,13 +19,12 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { RecentList }  from '@/components/recents/RecentList'
 import { trackRecent } from '@/api/recents'
 import {
-  fetchOffers, deleteOffer, openOfferPdf, openAuftragsbestaetigungPdf, fetchOfferStructure, convertOffer, updateOffer,
+  fetchOffers, deleteOffer, openOfferPdf, openAuftragsbestaetigungPdf, updateOffer,
   fetchOfferStatuses,
-  type OfferListItem, type ConvertOfferPayload, type UpdateOfferPayload,
+  type OfferListItem, type UpdateOfferPayload,
 } from '@/api/angebote'
-import { BeauftragtModal } from './BeauftragtModal'
-import { AngeboteAnlegen } from './AngeboteAnlegen'
-import { Modal }          from '@/components/ui/Modal'
+import { BeauftragtDialog } from './BeauftragtDialog'
+import { AngebotAnlegenDialog } from './AngebotAnlegenDialog'
 import { money } from '@/utils/money'
 
 const PAGE_SIZE = 25
@@ -56,23 +55,15 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
   // Anlegen lief frueher ueber einen eigenen Tab. Jetzt Primaeraktion in der
   // Liste — wie "+ Neues Projekt" in der Projektliste.
   const [showCreate,    setShowCreate]    = useState(false)
-  const [convertErr,    setConvertErr]    = useState<string | null>(null)
   const [confirmState,  setConfirmState]  = useState<{ title: string; message: string; confirmLabel?: string; onConfirm: () => void } | null>(null)
 
   const { data, isLoading } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
   const { data: statusData } = useQuery({ queryKey: ['offer-statuses'], queryFn: fetchOfferStatuses })
   const rejectedId   = statusData?.data?.find(s => s.ABBR === 'Abgelehnt')?.ID ?? null
-  const beauftragtId = statusData?.data?.find(s => s.ABBR === 'Beauftragt')?.ID ?? null
-
-  const { data: structData } = useQuery({
-    queryKey: ['offer-structure', beauftragtRow?.ID],
-    queryFn:  () => fetchOfferStructure(beauftragtRow!.ID),
-    enabled:  beauftragtRow !== null,
-  })
 
   const deleteMut = useMutation({
     mutationFn: deleteOffer,
-    onSuccess: () => { setMsg({ text: 'Angebot gelöscht ✅', type: 'success' }); void qc.invalidateQueries({ queryKey: ['offers'] }) },
+    onSuccess: () => { setMsg({ text: 'Angebot gelöscht', type: 'success' }); void qc.invalidateQueries({ queryKey: ['offers'] }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
   })
 
@@ -80,33 +71,6 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
     mutationFn: (id: number) => updateOffer(id, { offer_status_id: rejectedId!, refusal_date: TODAY }),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['offers'] }) },
     onError: (e: Error) => setMsg({ text: e.message, type: 'error' }),
-  })
-
-  const convertMut = useMutation({
-    mutationFn: (body: ConvertOfferPayload) => convertOffer(beauftragtRow!.ID, body),
-    onSuccess: (res) => {
-      setBeauftragtRow(null)
-      setConvertErr(null)
-      void qc.invalidateQueries({ queryKey: ['offers'] })
-      setMsg({ text: `Projekt ${res.data.projectName} wurde angelegt ✅`, type: 'success' })
-    },
-    onError: (e: Error) => setConvertErr(e.message),
-  })
-
-  const markOrderedMut = useMutation({
-    mutationFn: (body: { order_date: string; project_id?: number | null }) =>
-      updateOffer(beauftragtRow!.ID, {
-        order_date:      body.order_date,
-        project_id:      body.project_id ?? null,
-        ...(beauftragtId ? { offer_status_id: beauftragtId } : {}),
-      }),
-    onSuccess: () => {
-      setBeauftragtRow(null)
-      setConvertErr(null)
-      void qc.invalidateQueries({ queryKey: ['offers'] })
-      setMsg({ text: 'Angebot als beauftragt markiert ✅', type: 'success' })
-    },
-    onError: (e: Error) => setConvertErr(e.message),
   })
 
   const rows = data?.data ?? []
@@ -331,7 +295,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                           </button>
                           <button
                             className="row-menu-item"
-                            onClick={() => navigate('/projekte', { state: { tab: 'struktur', projectId: r.PROJECT_ID } })}
+                            onClick={() => navigate(`/projekte?projectId=${r.PROJECT_ID}&tab=struktur`)}
                           >
                             <FolderOpen size={13} strokeWidth={1.75} /> Zum Projekt {r.PROJECT_NAME ?? ''}
                           </button>
@@ -339,7 +303,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
                       )}
                       {isOpen(r) && (
                         <Can permission="offers.convert">
-                          <button className="row-menu-item" onClick={() => { setConvertErr(null); setBeauftragtRow(r) }}>
+                          <button className="row-menu-item" onClick={() => setBeauftragtRow(r)}>
                             <CheckCircle2 size={13} strokeWidth={2} /> Als beauftragt markieren
                           </button>
                         </Can>
@@ -363,7 +327,7 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
               {!pageRows.length && (
                 <tr><td colSpan={10} className="empty-note">
                   {rows.length === 0
-                    ? 'Noch keine Angebote — erstelle dein erstes über den Tab „Anlegen". Aus einem beauftragten Angebot wird per „Beauftragt" ein Projekt.'
+                    ? 'Noch keine Angebote — erstelle dein erstes mit „+ Neues Angebot". Aus einem beauftragten Angebot wird über „Als beauftragt markieren" ein Projekt.'
                     : 'Keine Angebote für diese Filter.'}
                 </td></tr>
               )}
@@ -390,29 +354,16 @@ export function AngeboteListe({ onSelectOffer, onEditStammdaten, onOfferCreated 
       )}
     </div>
 
-    {beauftragtRow && (
-      <BeauftragtModal
-        open={beauftragtRow !== null}
-        offerName={beauftragtRow.ABBR ?? beauftragtRow.NAME}
-        structNodes={structData?.data ?? []}
-        onConvert={body => convertMut.mutate(body)}
-        onMarkOrdered={body => markOrderedMut.mutate(body)}
-        onClose={() => setBeauftragtRow(null)}
-        isPending={convertMut.isPending || markOrderedMut.isPending}
-        error={convertErr}
-      />
-    )}
+    <BeauftragtDialog offer={beauftragtRow} onClose={() => setBeauftragtRow(null)}
+      onDone={m => { setBeauftragtRow(null); setMsg({ text: m, type: 'success' }) }} />
 
-    <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Neues Angebot anlegen" className="modal-wide">
-      <AngeboteAnlegen onOfferCreated={id => { setShowCreate(false); onOfferCreated?.(id) }} />
-    </Modal>
+    <AngebotAnlegenDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={id => onOfferCreated?.(id)} />
 
     <ConfirmModal
       open={confirmState !== null}
       title={confirmState?.title ?? ''}
       message={confirmState?.message ?? ''}
       confirmLabel={confirmState?.confirmLabel ?? 'Bestätigen'}
-      confirmClass="danger"
       onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
       onCancel={() => setConfirmState(null)}
     />

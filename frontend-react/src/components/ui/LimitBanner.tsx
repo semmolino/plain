@@ -16,7 +16,9 @@ export function LimitBanner({ capability }: { capability: string }) {
     staleTime: 30_000,
   })
 
-  const item = data?.usage.find((u) => u.key === capability)
+  // ?. auch an usage: ohne Lizenzdaten (Auffang-Antwort, alter Server) riss
+  // die Anzeige sonst die ganze Mitarbeiterseite mit (Runde 10).
+  const item = data?.usage?.find((u) => u.key === capability)
   if (!item || item.limit == null) return null
 
   const reached = item.used >= item.limit

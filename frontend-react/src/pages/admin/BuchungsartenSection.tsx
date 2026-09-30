@@ -76,7 +76,7 @@ export function BuchungsartenSection() {
           Buchungsarten (Pauschalen & Stückleistungen) <HelpHint id="settings.booking_types" />
         </h3>
         <Can permission="settings.booking_types.edit">
-          <button className="btn-small" onClick={() => setCreateOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <button type="button" className="btn-small" onClick={() => setCreateOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <Plus size={13} strokeWidth={2} /> Neue Buchungsart
           </button>
         </Can>
@@ -114,10 +114,10 @@ export function BuchungsartenSection() {
                 <td style={{ padding: '4px 6px 4px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(t.DEFAULT_CP_RATE)}</td>
                 <td style={{ padding: '4px 0', textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <Can permission="settings.booking_types.edit">
-                    <button className="row-action-btn" onClick={() => setEditId(t.ID)} title="Bearbeiten">
+                    <button type="button" className="row-action-btn" onClick={() => setEditId(t.ID)} title="Bearbeiten">
                       <Pencil size={13} strokeWidth={2} />
                     </button>
-                    <button className="row-action-btn row-action-btn--danger"
+                    <button type="button" className="row-action-btn row-action-btn--danger"
                       onClick={() => setConfirmState({ id: t.ID, label: t.ABBR })} title="Löschen">
                       <Trash2 size={13} strokeWidth={2} />
                     </button>
@@ -143,7 +143,6 @@ export function BuchungsartenSection() {
         title="Buchungsart löschen"
         message={`Buchungsart „${confirmState?.label ?? ''}" löschen? Bereits erfasste Buchungen bleiben unverändert erhalten.`}
         confirmLabel="Löschen"
-        confirmClass="danger"
         onConfirm={() => { if (confirmState) delMut.mutate(confirmState.id); setConfirmState(null) }}
         onCancel={() => setConfirmState(null)}
       />
@@ -242,8 +241,8 @@ function BuchungsartModal({ existing, onClose, onSaved }: { existing?: BookingTy
 
         <Message text={msg?.text ?? null} type={msg?.type} />
         <DialogFooter>
-          <button className="btn-secondary" onClick={onClose}>Abbrechen</button>
-          <button className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
+          <button type="button" className="btn-secondary" onClick={onClose}>Abbrechen</button>
+          <button type="button" className="btn-primary" onClick={handleSave} disabled={saveMut.isPending}>
             {saveMut.isPending ? 'Speichert …' : 'Speichern'}
           </button>
         </DialogFooter>

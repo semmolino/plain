@@ -72,6 +72,24 @@ test.describe('Monatsrunde', () => {
     await expect(page.getByRole('region', { name: /P-2025-014/ })).toBeVisible()
   })
 
+  // Bis Runde 3 merkte sich „Überspringen" nur der Browser-Tab.
+  test('Überspringen bleibt nach dem Neuladen und gilt je Stichtag', async ({ page }, info) => {
+    desktopOnly(info.project.name)
+    await setup(page)
+    await page.goto('/projekte?tab=leistungsstaende')
+    const bar = page.getByRole('region', { name: 'Seitenaktionen' })
+    await bar.getByRole('button', { name: 'Überspringen' }).click()
+    const item = page.getByRole('button', { name: /P-2024-001/ })
+    await expect(item).toContainText('übersprungen')
+    await page.reload()
+    await expect(page.getByRole('button', { name: /P-2024-001/ })).toContainText('übersprungen')
+    // Anderer Stichtag: dort ist nichts übersprungen
+    await page.locator('.lr-asof input').fill('2026-07-31')
+    await expect(page.getByRole('button', { name: /P-2024-001/ })).not.toContainText('übersprungen')
+    await page.locator('.lr-asof input').fill('2026-08-31')
+    await expect(page.getByRole('button', { name: /P-2024-001/ })).toContainText('übersprungen')
+  })
+
   test('Warnungen, Sperre und ungültige Eingabe', async ({ page }, info) => {
     desktopOnly(info.project.name)
     await setup(page)

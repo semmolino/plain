@@ -18,6 +18,9 @@ const DEFAULT_SETTINGS = {
 
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
 
+// Buchungsarten ohne Stundencharakter — dieselbe Menge wie in services/buchungen.js
+const SPECIAL_KINDS = new Set(['UNIT', 'LUMP_COST', 'LUMP_REVENUE']);
+
 function fmtEur(n) {
   return new Intl.NumberFormat('de-DE', {
     style: 'currency', currency: 'EUR',
@@ -31,14 +34,22 @@ async function getSettings(supabase, tenantId) {
     .select('KEY, VALUE')
     .eq('TENANT_ID', tenantId)
     .in('KEY', Object.keys(DEFAULT_SETTINGS));
-  const map = Object.fromEntries((data || []).map(r => [r.KEY, r.VALUE]));
+  // Runde 12: Die Vorbelegungen speicherten „aktiv" als leere Zeile (VALUE
+  // null). Hier galt nur 'true' als aktiv — nach dem ersten Speichern der
+  // Einstellungsseite waren Budget-Warnungen, beide Empfänger und die
+  // Standard-Schwellen still aus, während die Seite „aktiv" zeigte. Eine
+  // leere Zeile ist jetzt „nicht gesetzt", abschalten kann nur 'false'.
+  const map = Object.fromEntries((data || [])
+    .filter(r => r.VALUE != null && String(r.VALUE).trim() !== '')
+    .map(r => [r.KEY, r.VALUE]));
   const merged = { ...DEFAULT_SETTINGS, ...map };
+  const pcts = String(merged.budget_warning_default_pcts || '')
+    .split(/[;,\s]+/).map(s => Number(s.trim().replace(',', '.'))).filter(n => n > 0);
   return {
-    enabled:        merged.budget_warning_enabled === 'true',
-    defaultPcts:    String(merged.budget_warning_default_pcts || '')
-                      .split(',').map(s => Number(s.trim())).filter(n => n > 0),
-    notifyPm:       merged.budget_warning_notify_pm === 'true',
-    notifyBooker:   merged.budget_warning_notify_booker === 'true',
+    enabled:        merged.budget_warning_enabled !== 'false',
+    defaultPcts:    pcts.length ? pcts : [75, 90, 100],
+    notifyPm:       merged.budget_warning_notify_pm !== 'false',
+    notifyBooker:   merged.budget_warning_notify_booker !== 'false',
   };
 }
 
@@ -46,17 +57,34 @@ async function getSettings(supabase, tenantId) {
 
 // Lädt rekursiv alle Strukturknoten eines Projekts und liefert Maps:
 //   childrenOf:  Map<parentId(string), childIds[]>
-//   nodes:       Map<id(string), { ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL }>
+//   nodes:       Map<id(string), { ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL,
+//                                  BILLING_TYPE_ID, PLAN_REVENUE, BOOKED_REVENUE }>
+//
+// Plan (Migration 0173): ein Blatt nach Aufwand mit Plan aus dem Angebot hat
+// als Budget den Plan und als Verbrauch das gebuchte Honorar. Sein REVENUE ist
+// die Summe der Buchungen — als Budget waechst es mit jeder Buchung mit und
+// koennte nie warnen. Gebucht = Σ HOURLY_RATE_TOTAL der bestaetigten
+// Buchungen, dieselbe Quelle wie REVENUE (services/buchungen.js).
 async function loadProjectTree(supabase, projectId) {
-  const { data, error } = await supabase
+  // ABBR/NAME/SORT_ORDER nur fuer die Uebersicht im Reiter „Interne Budgets"
+  // (Runde 6) — vorher stand dort „Struktur #412" statt des Elements.
+  const COLS = 'ID, FATHER_ID, ABBR, NAME, SORT_ORDER, REVENUE, COSTS, SURCHARGES_TOTAL, BILLING_TYPE_ID';
+  let { data, error } = await supabase
     .from('PROJECT_STRUCTURE')
-    .select('ID, FATHER_ID, REVENUE, COSTS, SURCHARGES_TOTAL')
+    .select(`${COLS}, PLAN_HOURS, PLAN_REVENUE`)
     .eq('PROJECT_ID', projectId);
+  // Schema-Cache ohne die neue Spalte (Deploy vor dem Reload): wie bisher rechnen
+  if (error && /PLAN_/.test(String(error.message || ''))) {
+    ({ data, error } = await supabase
+      .from('PROJECT_STRUCTURE')
+      .select(COLS)
+      .eq('PROJECT_ID', projectId));
+  }
   if (error) throw new Error(error.message);
   const nodes = new Map();
   const childrenOf = new Map();
   for (const n of data || []) {
-    nodes.set(String(n.ID), n);
+    nodes.set(String(n.ID), { ...n });
     if (n.FATHER_ID != null) {
       const fid = String(n.FATHER_ID);
       const arr = childrenOf.get(fid) || [];
@@ -64,37 +92,73 @@ async function loadProjectTree(supabase, projectId) {
       childrenOf.set(fid, arr);
     }
   }
+  const planIds = [...nodes.values()]
+    .filter(n => hasPlan(n) && !(childrenOf.get(String(n.ID)) || []).length)
+    .map(n => n.ID);
+  if (planIds.length) {
+    const { data: bk, error: bkErr } = await supabase
+      .from('BOOKING')
+      .select('STRUCTURE_ID, HOURLY_RATE_TOTAL, QUANTITY_INT, BOOKING_KIND')
+      .in('STRUCTURE_ID', planIds)
+      .neq('STATUS', 'DRAFT');
+    if (bkErr) throw new Error(bkErr.message);
+    for (const id of planIds) Object.assign(nodes.get(String(id)), { BOOKED_REVENUE: 0, BOOKED_HOURS: 0 });
+    for (const r of bk || []) {
+      const n = nodes.get(String(r.STRUCTURE_ID));
+      if (!n) continue;
+      n.BOOKED_REVENUE += Number(r.HOURLY_RATE_TOTAL ?? 0) || 0;
+      // Stunden nur aus Zeitbuchungen — Pauschalen und Stueckleistungen
+      // tragen QUANTITY_INT = 0 bzw. eine Stueckzahl (services/buchungen.js)
+      if (!SPECIAL_KINDS.has(r.BOOKING_KIND)) n.BOOKED_HOURS += Number(r.QUANTITY_INT ?? 0) || 0;
+    }
+  }
   return { nodes, childrenOf };
+}
+
+function hasPlan(n) {
+  return Number(n.BILLING_TYPE_ID) === 2 && Number(n.PLAN_REVENUE ?? 0) > 0;
 }
 
 // Aggregat (rekursiv) eines Knotens:
 //   - Budget = Σ REVENUE der Leaves im Subtree + eigene SURCHARGES_TOTAL der Parents
 //   - Verbrauch = Σ COSTS der Leaves im Subtree
+//   - Ausnahme Blatt nach Aufwand mit Plan: Budget = Plan, Verbrauch = gebucht
+//   - plan: 'none' | 'some' | 'all' — wie viele Blaetter nach Plan rechnen
+//     (fuer die Beschriftung in Uebersicht und Benachrichtigung)
 function aggregateSubtree(structureIdStr, nodes, childrenOf, cache = new Map()) {
   if (cache.has(structureIdStr)) return cache.get(structureIdStr);
   const node = nodes.get(structureIdStr);
-  if (!node) { const r = { budget: 0, verbrauch: 0 }; cache.set(structureIdStr, r); return r; }
+  if (!node) { const r = { budget: 0, verbrauch: 0, plan: 'none' }; cache.set(structureIdStr, r); return r; }
   const children = childrenOf.get(structureIdStr) || [];
   if (children.length === 0) {
-    // Leaf: REVENUE als Budget, COSTS als Verbrauch
-    const r = {
-      budget:    Number(node.REVENUE ?? 0),
-      verbrauch: Number(node.COSTS ?? 0),
-    };
+    const r = hasPlan(node)
+      ? { budget: round2(Number(node.PLAN_REVENUE)), verbrauch: round2(Number(node.BOOKED_REVENUE ?? 0)), plan: 'all' }
+      // Leaf: REVENUE als Budget, COSTS als Verbrauch
+      : { budget: Number(node.REVENUE ?? 0), verbrauch: Number(node.COSTS ?? 0), plan: 'none' };
     cache.set(structureIdStr, r);
     return r;
   }
   let b = 0, v = 0;
+  const plans = new Set();
   for (const cid of children) {
     const c = aggregateSubtree(cid, nodes, childrenOf, cache);
     b += c.budget;
     v += c.verbrauch;
+    plans.add(c.plan);
   }
   // Parent: eigene SURCHARGES_TOTAL dazu (Aufschlag des Parents auf Children)
   b += Number(node.SURCHARGES_TOTAL ?? 0);
-  const r = { budget: round2(b), verbrauch: round2(v) };
+  const plan = plans.size === 1 ? [...plans][0] : 'some';
+  const r = { budget: round2(b), verbrauch: round2(v), plan };
   cache.set(structureIdStr, r);
   return r;
+}
+
+/** Beschriftung von Budget und Verbrauch je nach Plan-Anteil. */
+function budgetLabels(plan) {
+  if (plan === 'all')  return { budget: 'Plan aus dem Angebot', verbrauch: 'Gebucht' };
+  if (plan === 'some') return { budget: 'Budget (Honorar bzw. Plan)', verbrauch: 'Verbraucht' };
+  return { budget: 'Honorar + Zuschläge', verbrauch: 'Verbraucht' };
 }
 
 // Liefert {budget, verbrauch} für ein Projekt insgesamt
@@ -138,7 +202,7 @@ async function loadStructureName(supabase, structureId) {
   return data || null;
 }
 
-async function notifyBudgetWarning(supabase, { rule, project, structure, budget, actual, limitEur, triggerEmployeeId, triggerTecId, tenantId }) {
+async function notifyBudgetWarning(supabase, { rule, project, structure, budget, actual, limitEur, plan = 'none', triggerEmployeeId, triggerTecId, tenantId }) {
   const recipients = new Set();
   if (rule.NOTIFY_PM && project?.PROJECT_MANAGER_ID) recipients.add(Number(project.PROJECT_MANAGER_ID));
   if (rule.NOTIFY_BOOKER && triggerEmployeeId)        recipients.add(Number(triggerEmployeeId));
@@ -157,12 +221,13 @@ async function notifyBudgetWarning(supabase, { rule, project, structure, budget,
   const projectLabel = `${project?.ABBR ?? ''}${project?.NAME ? ': ' + project.NAME : ''}`;
 
   const pctActual = budget > 0 ? round2(actual / budget * 100) : 0;
+  const labels = budgetLabels(plan);
   const title = `Budget ${Number(rule.THRESHOLD_PCT)} % erreicht – ${scopeLabel}`;
   const body  = [
     `Projekt ${projectLabel}`,
-    `Honorar + Zuschläge: ${fmtEur(budget)}`,
+    `${labels.budget}: ${fmtEur(budget)}`,
     `Schwellenwert: ${Number(rule.THRESHOLD_PCT)} % = ${fmtEur(limitEur)}`,
-    `Verbraucht: ${fmtEur(actual)} (${pctActual.toFixed(1).replace('.', ',')} %)`,
+    `${labels.verbrauch}: ${fmtEur(actual)} (${pctActual.toFixed(1).replace('.', ',')} %)`,
   ].join('\n');
 
   const link = `/projekte?tab=budget&projectId=${rule.PROJECT_ID ?? (structure?.PROJECT_ID ?? project?.ID ?? '')}`;
@@ -233,7 +298,7 @@ async function evaluateScopes(supabase, { tenantId, projectId, structureIds, tri
 
 async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCache, triggerEmployeeId, triggerTecId, tenantId }) {
   // Budget + Verbrauch für den Scope der Regel
-  let budget, verbrauch, structure = null;
+  let budget, verbrauch, structure = null, plan = 'none';
   if (rule.STRUCTURE_ID) {
     const sid = String(rule.STRUCTURE_ID);
     if (!nodes.has(sid)) {
@@ -243,16 +308,19 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
     const agg = aggregateSubtree(sid, nodes, childrenOf, aggCache);
     budget = agg.budget;
     verbrauch = agg.verbrauch;
+    plan = agg.plan;
     structure = await loadStructureName(supabase, rule.STRUCTURE_ID);
   } else {
     // Projekt-Ebene
     let b = 0, v = 0;
+    const plans = new Set();
     for (const node of nodes.values()) {
       if (node.FATHER_ID == null) {
         const r = aggregateSubtree(String(node.ID), nodes, childrenOf, aggCache);
-        b += r.budget; v += r.verbrauch;
+        b += r.budget; v += r.verbrauch; plans.add(r.plan);
       }
     }
+    plan = plans.size === 1 ? [...plans][0] : plans.size ? 'some' : 'none';
     try {
       const { data: proj } = await supabase
         .from('PROJECT').select('SURCHARGES_TOTAL').eq('ID', project.ID).maybeSingle();
@@ -310,7 +378,7 @@ async function evaluateRule(supabase, { rule, project, nodes, childrenOf, aggCac
     }
     console.log(`[BUDGET_WARNING] rule ${rule.ID}: FIRE notification`);
     await notifyBudgetWarning(supabase, {
-      rule, project, structure, budget, actual: verbrauch, limitEur: limit,
+      rule, project, structure, budget, actual: verbrauch, limitEur: limit, plan,
       triggerEmployeeId, triggerTecId, tenantId,
     });
   } else if (!breached && open) {
@@ -393,11 +461,23 @@ async function getProjectOverview(supabase, { tenantId, projectId }) {
   const cache = new Map();
   const structures = Array.from(nodes.values()).map(n => {
     const agg = aggregateSubtree(String(n.ID), nodes, childrenOf, cache);
+    const leaf = !(childrenOf.get(String(n.ID)) || []).length;
     return {
-      ID:        n.ID,
-      FATHER_ID: n.FATHER_ID,
-      budget:    agg.budget,
-      verbrauch: agg.verbrauch,
+      ID:         n.ID,
+      FATHER_ID:  n.FATHER_ID,
+      ABBR:       n.ABBR ?? null,
+      NAME:       n.NAME ?? null,
+      SORT_ORDER: n.SORT_ORDER ?? null,
+      leaf,
+      budget:     agg.budget,
+      verbrauch:  agg.verbrauch,
+      plan:       agg.plan,
+      // Blatt nach Plan: Stunden neben dem Honorar, damit der Reiter zeigen
+      // kann, wie weit die geplanten Stunden verbraucht sind
+      ...(leaf && hasPlan(n) ? {
+        planHours:     n.PLAN_HOURS != null ? round2(n.PLAN_HOURS) : null,
+        bookedHours:   round2(n.BOOKED_HOURS ?? 0),
+      } : {}),
     };
   });
 

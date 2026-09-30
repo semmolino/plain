@@ -54,10 +54,7 @@ export function ServicePage() {
 
   return (
     <div className="page-root service-page">
-      <div className="service-page-head">
-        <h1>Service</h1>
-        <p className="service-page-sub">Vorschläge, Feedback und Unterstützung — direkt an plan&amp;simple.</p>
-      </div>
+      <h1 className="sr-only">Service – Vorschläge, Feedback und Unterstützung</h1>
 
       <ConsentGate>
         {tabs.length > 1 && (

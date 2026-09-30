@@ -285,6 +285,55 @@ export const HELP = {
     ),
   },
 
+  'settings.vorbelegungen': {
+    title: 'Vorbelegungen',
+    body: (
+      <>
+        Startwerte, mit denen neue Adressen, Projekte, Angebote, Verträge und Rechnungen
+        angelegt werden. Sie sparen Tipparbeit und sorgen für einheitliche Belege — im
+        jeweiligen Formular bleibt jeder Wert änderbar. <strong>Bestehende Datensätze ändern
+        sich nicht</strong>, wenn eine Vorbelegung geändert wird. Ein leeres Feld heißt „keine
+        Vorbelegung": dann gilt der Standard, den das Feld nennt.
+      </>
+    ),
+  },
+  'settings.projektrollen': {
+    title: 'Projektrollen und Stundensätze',
+    body: (
+      <>
+        Eine Projektrolle (z. B. „PL" für Projektleitung) trägt einen <strong>Standard-Stundensatz</strong>
+        für den Verkauf. Er wird vorgeschlagen, wenn jemand einem Projekt mit dieser Rolle
+        zugeordnet oder ein Angebotselement nach Aufwand kalkuliert wird, und bleibt dort je
+        Projekt änderbar. Bestehende Zuordnungen und Buchungen behalten ihren Satz. Der
+        Kostensatz hängt nicht an der Rolle, sondern am Mitarbeiter.
+      </>
+    ),
+  },
+  'settings.abwesenheitsarten': {
+    title: 'Abwesenheitsarten',
+    body: (
+      <>
+        <strong>Zählt als gearbeitet</strong>: der Tag gilt im Zeitkonto als erfüllt (Urlaub, Krankheit).
+        {' '}<strong>Zehrt vom Urlaub</strong>: die Arbeitstage gehen vom Urlaubsanspruch ab.
+        {' '}<strong>Freigabepflichtig</strong>: ein Antrag zählt erst, wenn er genehmigt ist.
+        {' '}<strong>Bezahlt</strong> ist ein Kennzeichen für Auswertungen. Eine Art, die schon
+        verwendet wird, lässt sich nicht löschen, sondern nur deaktivieren — sie steht dann bei
+        neuen Anträgen nicht mehr zur Wahl.
+      </>
+    ),
+  },
+  'settings.arbeitszeitmodelle': {
+    title: 'Arbeitszeitmodelle',
+    body: (
+      <>
+        Das Soll je Wochentag. Daraus rechnen Zeitkonto, Urlaubstage und Monatsabschluss: ein Tag
+        mit 0 Stunden ist frei, Feiertage kommen aus dem gewählten Bundesland. Ein Modell wird dem
+        Mitarbeiter mit einem Gültig-ab-Datum zugeordnet; ändert sich das Modell, gilt die Änderung
+        für alle, denen es zugeordnet ist.
+      </>
+    ),
+  },
+
   // ── E-Rechnung / Peppol ──────────────────────────────────────────────────
   'einvoice.what': {
     title: 'Was ist eine E-Rechnung?',
@@ -492,9 +541,38 @@ export const HELP = {
     title: 'Sicherheitseinbehalt',
     body: (
       <>
-        Ein vereinbarter Prozentsatz der Schlussrechnung, der vorübergehend
-        einbehalten wird (Gewährleistungssicherheit). Er mindert den jetzt
-        fälligen Betrag und wird später gesondert freigegeben.
+        Ein vereinbarter Prozentsatz, den der Auftraggeber von jeder{' '}
+        <strong>Abschlagsrechnung</strong> einbehält — als Sicherheit, bis die Leistung
+        abgenommen ist. Er mindert den jetzt fälligen Betrag. Mit der{' '}
+        <strong>Schluss- oder Teilschlussrechnung</strong> wird er aufgelöst, also
+        wieder mit abgerechnet. Bemessen wird er wahlweise vom Brutto oder vom Netto.
+      </>
+    ),
+  },
+
+  // ── Verträge (Projekt-Reiter) ────────────────────────────────────────────
+  'contract.defaults': {
+    title: 'Vertrag als Vorbelegung',
+    body: (
+      <>
+        Der Vertrag hält fest, was für jede Rechnung aus diesem Projekt gilt: an wen sie geht,
+        Skonto, Steuersatz und Umsatzsteuer-Kategorie, dazu ein vereinbarter
+        Sicherheitseinbehalt. Beim Anlegen einer Rechnung werden die Werte vorbelegt und lassen
+        sich dort für diese eine Rechnung ändern. <strong>Bereits gestellte Rechnungen ändern
+        sich nicht</strong>, wenn der Vertrag geändert wird.
+      </>
+    ),
+  },
+  'contract.vat_category': {
+    title: 'Umsatzsteuer-Kategorie',
+    body: (
+      <>
+        Legt fest, wie Rechnungen aus diesem Vertrag die Umsatzsteuer behandeln. Die Angabe geht
+        auch in die E-Rechnung. Im Normalfall gilt der <strong>Regelsatz</strong>. Bei{' '}
+        <strong>Reverse Charge (§13b UStG)</strong> schuldet der Auftraggeber die Steuer: die
+        Rechnung weist dann keine aus und nennt den Grund. Code und Text des Befreiungsgrunds sind
+        optional, ohne Text steht der übliche Satz auf der Rechnung. Im Rechnungsassistenten lässt
+        sich die Kategorie je Rechnung ändern.
       </>
     ),
   },
@@ -548,6 +626,64 @@ export const HELP = {
         <strong> vollen</strong> Summe der vorherigen Zuschläge, auch mit dem Anteil, der auf
         Leistungsphasen entfällt, die dieser Zuschlag gar nicht umfasst. Die Reihenfolge
         der Zeilen bestimmt das Ergebnis mit.
+      </>
+    ),
+  },
+  'hoai.leistungsbild': {
+    title: 'Honorarordnung und Leistungsbild',
+    body: (
+      <>
+        Die <strong>Honorarordnung</strong> (HOAI-Fassung oder AHO-Heft) legt fest, nach welchen
+        Tafeln gerechnet wird; das <strong>Leistungsbild</strong> (z. B. § 34 Gebäude, § 51
+        Tragwerksplanung) bestimmt Leistungsphasen, Honorarzonen und Bemessungsgrundlage.
+        <br /><br />
+        Mit „Weiter" legt plan&amp;simple die Kalkulation an. Sie gilt aber erst mit
+        <strong> Übernehmen</strong> im letzten Schritt: wer vorher abbricht oder das Fenster
+        schließt, wird gefragt, und die angefangene Kalkulation wird verworfen.
+      </>
+    ),
+  },
+  'hoai.grundlagen': {
+    title: 'Grundlagen',
+    body: (
+      <>
+        Honorarzone, Lage in der Zone und die Bemessungsgrundlage — meist die
+        <strong> anrechenbaren Kosten</strong>. K0 gilt für alle Leistungsphasen; K1–K4
+        (z. B. Kostenberechnung, Kostenanschlag) nur, wenn eine Leistungsphase im nächsten
+        Schritt ausdrücklich darauf zeigt. Die DIN-276-Hilfe ermittelt K0 aus den Kostengruppen.
+        <br /><br />
+        Bei Flächenplanung, Verrechnungseinheiten oder Brandschutz steht statt der Kosten ein
+        einzelner Wert (ha, VE, m²).
+      </>
+    ),
+  },
+  'hoai.bl': {
+    title: 'Besondere Leistungen',
+    body: (
+      <>
+        Leistungen über die Grundleistungen hinaus (§ 3 Abs. 3 HOAI), frei zu vereinbaren:
+        als <strong>Pauschalbetrag</strong> oder als Prozentsatz — vom Honorar einer
+        Leistungsphase, vom Grundhonorar, vom Tafelwert zu Kx oder von den Baukosten.
+        Jede Besondere Leistung wird ein eigenes Element der Struktur und lässt sich im
+        nächsten Schritt in Zuschläge einbeziehen.
+      </>
+    ),
+  },
+  'hoai.uebernehmen': {
+    title: 'Übernehmen und aktualisieren',
+    body: (
+      <>
+        <strong>Neue Kalkulation:</strong> je Leistungsphase mit Honorar und je Besondere Leistung
+        entsteht ein pauschales Element, Zuschläge werden anteilig auf sie verteilt. Im Projekt
+        steht es unter dem gewählten Element; im Angebot wahlweise unter einem Element oder in
+        einem neuen auf oberster Ebene — beim Beauftragen geht es mit ins Projekt.
+        <br /><br />
+        <strong>Bearbeiten:</strong> jeder Schritt ist mit „Weiter" gespeichert. „Struktur
+        aktualisieren" (im Projekt) bzw. „Angebot aktualisieren" überschreibt Honorar und
+        Nebenkosten der Elemente, die aus dieser Kalkulation entstanden sind; ihre eigenen Zuschläge
+        bleiben, neue Besondere Leistungen bekommen ein Element dazu. Beim Beauftragen geht die
+        Verknüpfung mit ins Projekt. Elemente, die vor 09/2026 übernommen wurden, sind nicht
+        verknüpft.
       </>
     ),
   },
@@ -1055,6 +1191,38 @@ export const HELP = {
       </>
     ),
   },
+  'mitarbeiter.status': {
+    title: 'Status (Aktiv/Inaktiv)',
+    body: (
+      <>
+        <strong>Inaktiv</strong> ist der Weg für Ausgeschiedene: keine
+        Anmeldung mehr, laufende Sitzungen enden, und der Mitarbeiter zählt
+        nicht mehr gegen die Mitarbeiter-Grenze des Tarifs. Gebuchte Stunden,
+        Belege und Auswertungen vergangener Jahre bleiben vollständig.
+        <br /><br />
+        Löschen geht nur, solange nichts am Mitarbeiter hängt — hat er schon
+        gebucht oder ist Zuständiger an einem Beleg, ist „inaktiv" richtig.
+        Das eigene Konto und den letzten Administrator lässt plan&simple nicht
+        deaktivieren.
+      </>
+    ),
+  },
+  'mitarbeiter.dashboard_rolle': {
+    title: 'Dashboard-Rolle',
+    body: (
+      <>
+        Legt fest, mit welcher Ansicht die Übersicht nach der Anmeldung
+        startet (Geschäftsleitung, Controller, Projektleiter, Mitarbeiter).
+        „Standard" heißt: wer die Ansicht wechseln darf, wählt selbst, alle
+        anderen sehen die Mitarbeiter-Ansicht.
+        <br /><br />
+        Benachrichtigungen, die sich an eine Rolle richten (etwa die
+        Erinnerung an die Leistungsstände), gehen nach dieser Angabe.{' '}
+        <strong>Rechte vergibt sie keine</strong> — die kommen allein aus dem
+        Reiter „Rollen".
+      </>
+    ),
+  },
   'mitarbeiter.saldo': {
     title: 'Gleitzeitsaldo',
     body: (
@@ -1062,6 +1230,45 @@ export const HELP = {
         Differenz aus tatsächlich gebuchter und laut Arbeitszeitmodell
         geschuldeter Zeit. Positiv = Überstunden, negativ = Minusstunden. Wird
         fortlaufend pro Monat fortgeschrieben.
+      </>
+    ),
+  },
+  'mitarbeiter.saldo_laufend': {
+    title: 'Laufender Saldo',
+    body: (
+      <>
+        Das Gleitzeitkonto bis heute (beim Stichtag: bis zum Stichtag) — alle
+        Monatssalden seit Beginn der Aufzeichnung zusammen. Der Monatssaldo
+        daneben ist nur der gewählte Monat.
+        <br /><br />
+        Im Modus „Zeitraum" steht an dieser Stelle der <strong>Saldo im
+        Zeitraum</strong>: die Monatssalden ab dem ersten Monat des Zeitraums,
+        ohne den Stand davor.
+      </>
+    ),
+  },
+  'mitarbeiter.produktivitaet': {
+    title: 'Produktivität',
+    body: (
+      <>
+        Anteil der abrechenbaren Stunden auf Kundenprojekten an allen
+        gebuchten Stunden. Stunden auf internen Projekten zählen mit, aber
+        nicht als produktiv. Urlaub, Krankheit und Feiertage gehen nicht ein —
+        sie sind keine Buchungen.
+      </>
+    ),
+  },
+  'mitarbeiter.monatsabschluss': {
+    title: 'Monatsabschluss',
+    body: (
+      <>
+        Ein abgeschlossener Monat sperrt die Buchungen des Mitarbeiters in
+        diesem Monat: sie lassen sich nicht mehr ändern, löschen oder
+        umbuchen. So bleiben Zeitkonto, Auswertungen und Abrechnungen
+        verlässlich.
+        <br /><br />
+        Abschließen geht mit einem Klick, <strong>Öffnen</strong> fragt nach —
+        danach sind Änderungen im Monat wieder möglich.
       </>
     ),
   },
@@ -1373,6 +1580,25 @@ export const HELP = {
     ),
   },
 
+  'absence.vacation_balance': {
+    title: 'Resturlaub',
+    body: (
+      <>
+        <strong>Anspruch + Übertrag − genommen.</strong> Genommen sind die
+        genehmigten Urlaubstage. Gezählt wird nach dem Arbeitszeitmodell, das
+        am jeweiligen Tag gilt: wer Montag bis Mittwoch arbeitet, verbraucht
+        für eine Urlaubswoche drei Tage. Feiertage zählen nicht, ein Urlaub
+        über den Jahreswechsel zählt in jedem Jahr anteilig.
+        <br /><br />
+        Beantragte, noch nicht genehmigte Tage stehen daneben und mindern den
+        Resturlaub erst mit der Genehmigung. Der Übertrag ist der Rest des
+        Vorjahres — außer unter „Urlaubsansprüche" ist ein fester Wert
+        hinterlegt — und kann zum Stichtag verfallen (Einstellungen →
+        Stammdaten, Abwesenheitsarten).
+      </>
+    ),
+  },
+
   // ── Nachträge ────────────────────────────────────────────────────────────
   'nachtrag.overview': {
     title: 'Was ist ein Nachtrag?',
@@ -1439,6 +1665,24 @@ export const HELP = {
         Möglich sind <strong>Teilfreigaben</strong> (nur bestimmte Positionen), Kürzungen „der Höhe nach"
         (anerkannter Betrag&nbsp;&lt;&nbsp;gefordert) und eine <strong>vorläufige Anordnung</strong>, wenn schon
         vor der endgültigen Einigung gearbeitet werden soll. Jede Freigabe wird protokolliert.
+        <br /><br />
+        Eine freigegebene Position steht im Projekt und lässt sich im Nachtrag <strong>nicht mehr ändern
+        oder löschen</strong> — auch nicht, wenn sie gekürzt anerkannt wurde; Korrekturen laufen dann im
+        Projekt. Positionen nach Aufwand starten im Projekt bei 0 und bringen ihre Schätzung als{' '}
+        <strong>Plan</strong> mit, wie beim Beauftragen eines Angebots.
+      </>
+    ),
+  },
+  'nachtrag.positionen': {
+    title: 'Positionen eines Nachtrags',
+    body: (
+      <>
+        Positionen beschreiben Leistung und Preis des Nachtrags — <strong>pauschal</strong> mit festem
+        Betrag oder <strong>nach Aufwand</strong> mit Stunden und Satz. Eine Position mit Unterpositionen
+        zählt deren Beträge zusammen. Die Summe aller Positionen ist der geforderte Betrag.
+        <br /><br />
+        Bearbeiten und löschen lässt sich eine Position, solange sie <strong>nicht freigegeben</strong> ist.
+        Freigegeben wird je Position; eine Position mit Unterpositionen gibt man über diese frei.
       </>
     ),
   },
@@ -1450,9 +1694,9 @@ export const HELP = {
     title: 'Funktionen zu einer Zeile',
     body: (
       <>
-        Das <strong>⋯ am Zeilenende</strong> (in der Angebotsstruktur: <strong>Rechtsklick</strong>, auf
-        dem Handy langes Antippen) öffnet die Funktionen zu genau diesem Element. Der Rechtsklick
-        funktioniert in der Projektstruktur weiterhin als Abkürzung:
+        Das <strong>⋯ am Zeilenende</strong> öffnet die Funktionen zu genau diesem Element — in der
+        Projekt- wie in der Angebotsstruktur. Rechtsklick (auf dem Handy langes Antippen) funktioniert
+        weiterhin als Abkürzung:
         <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
           <li>
             <strong>Element anlegen</strong> — legt ein <em>untergeordnetes</em> Element darunter an.
@@ -1469,8 +1713,9 @@ export const HELP = {
             Element; die ermittelten Beträge fließen als Unterelemente zurück in die Struktur.
           </li>
           <li>
-            <strong>Element löschen</strong> — löscht das Element samt Kind-Elementen. Nicht möglich,
-            solange Buchungen oder Rechnungen darauf verweisen.
+            <strong>Element löschen</strong> — in der Projektstruktur samt Kind-Elementen; nicht
+            möglich, solange Buchungen oder Rechnungen darauf verweisen. In der Angebotsstruktur erst,
+            wenn das Element keine Unterelemente mehr hat.
           </li>
         </ul>
         <p style={{ margin: '8px 0 0' }}>
@@ -1490,10 +1735,155 @@ export const HELP = {
         „Intern" werden <strong>gesammelt</strong> und erst mit <strong>Speichern</strong> (oder
         Strg+S) übernommen. Geänderte Felder sind markiert; die Leiste unten zeigt, wie viele Elemente
         offen sind. <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
+        Summen rechnen die offenen Eingaben schon mit: Nebenkosten, Gesamt, die Werte der übergeordneten
+        Elemente und die Gesamtzeile stehen auf dem Stand nach dem Speichern. Solche Werte sind
+        <em> kursiv mit Punkt</em> („Summen vorläufig"); der Tooltip nennt den gespeicherten Wert.<br /><br />
         Sofort wirken dagegen Befehle, die die Struktur selbst ändern: Element anlegen, löschen,
         verschieben und Nebenkosten vererben — jeweils nach Rückfrage. Wer mit offenen Änderungen den
         Reiter oder das Projekt wechselt, die Seite über die Navigation verlässt oder im Browser
         zurückgeht, wird gefragt, ob gespeichert werden soll.
+      </>
+    ),
+  },
+  // ── UI-Pilot Runde 3: Angebotsstruktur im Muster der Projektstruktur ─────
+  'offers.structure.save': {
+    title: 'Wann wird gespeichert?',
+    body: (
+      <>
+        Änderungen an Kürzel, Bezeichnung, Abrechnungsart, Honorar, Stunden × Satz, Nebenkosten und
+        Zuschlägen — auch an den Angebotszuschlägen in der obersten Zeile — werden{' '}
+        <strong>gesammelt</strong> und erst mit <strong>Speichern</strong> (oder Strg+S) übernommen.
+        Geänderte Felder sind markiert; die Leiste unten zeigt, wie viele Elemente offen sind.{' '}
+        <strong>Verwerfen</strong> nimmt alle offenen Änderungen zurück.<br /><br />
+        Sofort wirken dagegen Anlegen, Löschen und Verschieben — jeweils nach Rückfrage. Wer mit
+        offenen Änderungen das Angebot oder den Reiter wechselt, die Seite verlässt oder im Browser
+        zurückgeht, wird gefragt, ob gespeichert werden soll. Am Handy wird jedes Element einzeln in
+        seinem Blatt gespeichert.
+      </>
+    ),
+  },
+  'offers.structure.hours': {
+    title: 'Aufwand: Stunden × Satz',
+    body: (
+      <>
+        Elemente mit der Abrechnungsart <strong>nach Aufwand</strong> tragen im Angebot eine{' '}
+        <strong>Schätzung</strong>: Stunden × Stundensatz ergibt das Honorar. Der Satz wird beim
+        Anlegen aus der gewählten Rolle vorbelegt und lässt sich je Element ändern.<br /><br />
+        Mehrere Rollen in einem Element (z. B. Projektleitung und Bauzeichnung mit eigenen Sätzen):
+        im Menü ⋯ der Zeile <strong>Aufwand nach Rollen</strong>. Das Honorar ist dann die Summe
+        der Zeilen.<br /><br />
+        Bei der Beauftragung starten solche Elemente in der Projektstruktur bei 0 — dort zählt, was
+        tatsächlich gebucht wird. Die Schätzung geht als <strong>Plan</strong> mit (Stunden und
+        Honorar); die Budgetwarnung vergleicht das Gebuchte damit.
+      </>
+    ),
+  },
+  'projects.structure.plan': {
+    title: 'Plan eines Elements nach Aufwand',
+    body: (
+      <>
+        Was für ein Element nach Aufwand <strong>angeboten</strong> war: Stunden und Honorar. Beim
+        Beauftragen kommt der Plan aus den Aufwandszeilen des Angebots; hier lässt er sich setzen,
+        ändern oder entfernen (Menü ⋯ → <strong>Plan bearbeiten</strong>).<br /><br />
+        Die Tabelle zeigt unter dem gebuchten Betrag den Plan, „über Plan", sobald mehr gebucht ist.
+        Die <strong>Budgetwarnung</strong> rechnet bei solchen Elementen mit dem Plan als Budget und dem
+        gebuchten Honorar als Verbrauch — ohne Plan wäre das Budget die Summe der Buchungen selbst und
+        könnte nie warnen.
+      </>
+    ),
+  },
+  // ── UI-Pilot Runde 9: Angebotsdaten ─────────────────────────────────────
+  'offers.probability': {
+    title: 'Wahrscheinlichkeit',
+    body: (
+      <>
+        Deine Einschätzung, wie sicher der Auftrag kommt — von 0 bis 100 %. Sie steht in der
+        Angebotsliste und im Kopf des Angebots und lässt sich dort sortieren. In Umsätze, Kennzahlen
+        oder das PDF geht sie nicht ein. Leer lassen heißt „keine Einschätzung".
+      </>
+    ),
+  },
+  'projects.internal': {
+    title: 'Internes Projekt',
+    body: (
+      <>
+        Für Büroarbeit ohne Auftraggeber — Akquise, Verwaltung, Fortbildung. Stunden darauf zählen in der
+        <strong> Produktivität</strong> der Mitarbeiter nicht als Projektarbeit.<br /><br />
+        Abgerechnet wird je Element: Rechnungen lassen ein Element aus, sobald <strong>es selbst</strong>
+        intern ist. Nach dem Speichern fragt plan&amp;simple deshalb, ob die Elemente der Struktur
+        mitgehen sollen. Einzelne Elemente lassen sich in der Struktur auch ohne das ganze Projekt als
+        intern markieren.
+      </>
+    ),
+  },
+  'projects.hourly_rates': {
+    title: 'Stundensätze im Projekt',
+    body: (
+      <>
+        Wer hier mit Rolle und Stundensatz steht, bucht in diesem Projekt zu genau diesem Satz: jede
+        Buchung übernimmt ihn, daraus entsteht das Honorar nach Aufwand. <strong>Ohne Zuordnung</strong>{' '}
+        gibt es keinen Satz — Stunden über die Stempeluhr oder „Eigene Zeit" zählen dann mit 0 €.
+        <br /><br />
+        Die <strong>Rolle als Vorlage</strong> füllt Kürzel, Bezeichnung und Satz aus Einstellungen →
+        Stammdaten vor; hier geändert gilt es nur für dieses Projekt. Bereits erfasste Buchungen behalten
+        ihren Satz.
+      </>
+    ),
+  },
+  'projects.budget.elements': {
+    title: 'Budget je Element',
+    body: (
+      <>
+        Das interne Budget eines Elements ist sein Honorar samt Zuschlägen (ohne Nebenkosten), der
+        Verbrauch sind die Kosten der gebuchten Stunden. Ein Element mit Unterelementen zählt deren
+        Werte zusammen.
+        <br /><br />
+        Ausnahme <strong>nach Aufwand mit Plan</strong>: dort ist das Honorar die Summe der Buchungen und
+        wüchse mit jeder mit. Budget ist deshalb der <strong>Plan</strong> aus dem Angebot, Verbrauch das
+        gebuchte Honorar; daneben stehen geplante und gebuchte Stunden. Die Warnregeln unten rechnen mit
+        denselben Werten.
+        <br /><br />
+        Der Anteil ist <strong>orange („beobachten")</strong> ab der niedrigsten Warnregel des Projekts und{' '}
+        <strong>rot („Handlungsbedarf")</strong> ab 100 %. Ohne Warnregel gibt es nur die Grenze bei 100 %.
+      </>
+    ),
+  },
+  'projects.budget.rules': {
+    title: 'Warnregeln',
+    body: (
+      <>
+        Eine Regel meldet sich, sobald der Verbrauch einen Anteil des Budgets erreicht — für das ganze
+        Projekt oder für ein Element. Sie meldet sich einmal und erst wieder, wenn der Verbrauch zwischendurch
+        unter die Schwelle gefallen ist — frühestens einen Tag nach der letzten Meldung. <strong>Stumm</strong> heißt: die Überwachung läuft
+        weiter, benachrichtigt wird niemand.
+      </>
+    ),
+  },
+  'offers.convert.preview': {
+    title: 'Was ins Projekt übergeht',
+    body: (
+      <>
+        Die Struktur des Angebots wird die Projektstruktur. <strong>Pauschale</strong> Elemente
+        übernehmen ihr Honorar. Elemente <strong>nach Aufwand</strong> starten bei 0 — gebucht wird,
+        was anfällt — und bekommen die Schätzung aus dem Angebot als <strong>Plan</strong>, gegen den
+        die Budgetwarnung vergleicht.<br /><br />
+        Die Zuordnung der Mitarbeiter legt fest, wer mit welcher Rolle und welchem Satz auf das Projekt
+        bucht (Preisliste). Jede Rolle aus den Aufwandszeilen steht einmal zur Auswahl.
+      </>
+    ),
+  },
+  'offers.structure.effort': {
+    title: 'Aufwand nach Rollen',
+    body: (
+      <>
+        Ein Element nach Aufwand kann mehrere <strong>Aufwandszeilen</strong> tragen: je Zeile eine
+        Rolle, die geschätzten Stunden und der Satz. Die Rolle belegt den Satz vor; ein selbst
+        eingetragener Satz bleibt stehen.<br /><br />
+        Das Honorar des Elements ist die <strong>Summe der Zeilen</strong>. Im Angebots-PDF und in
+        der Auftragsbestätigung steht jede Zeile einzeln unter dem Element.<br /><br />
+        Anders als ein Unterelement je Rolle bleibt es <strong>ein</strong> Element: nach der
+        Beauftragung bucht man auf dieses eine Projekt-Element, gleich in welcher Rolle. Die Summe
+        der Zeilen wird dort sein Plan.
       </>
     ),
   },
@@ -1558,8 +1948,9 @@ export const HELP = {
         Projekte (Projektleitung) und das letzte Monatsende.<br /><br />
         Links wählst du das Projekt, rechts trägst du die Prozente ein. <strong>Speichern &amp;
         nächstes</strong> (Strg+S) springt zum nächsten offenen Projekt, <strong>Unverändert
-        bestätigen</strong> gilt, wenn sich nichts bewegt hat, <strong>Überspringen</strong> merkt sich
-        das Projekt nur für diese Sitzung. Erledigt ist ein Projekt, sobald es für diesen oder einen
+        bestätigen</strong> gilt, wenn sich nichts bewegt hat, <strong>Überspringen</strong> stellt das
+        Projekt ans Ende der Runde — gemerkt für diesen Stichtag, auch wenn du den Browser schließt;
+        zum nächsten Monatsende ist es wieder offen. Erledigt ist ein Projekt, sobald es für diesen oder einen
         späteren Stichtag gepflegt ist. Nach Aufwand abgerechnete Elemente stehen immer auf 100 % und
         erscheinen nicht als Eingabe.
       </>

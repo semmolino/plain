@@ -1,35 +1,76 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { X, Percent, MousePointerClick } from 'lucide-react'
-import { HelpHint } from '@/components/ui/HelpHint'
+import { Plus, GripVertical, ChevronRight, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useAnchoredPosition } from '@/hooks/useAnchoredPosition'
-import { Message }      from '@/components/ui/Message'
-import { Modal }        from '@/components/ui/Modal'
-import { ConfirmModal } from '@/components/ui/ConfirmModal'
-import { HonorarWizard } from '@/pages/projekte/HonorarWizard'
+import { useCtrlS } from '@/hooks/useCtrlS'
+import { HelpHint } from '@/components/ui/HelpHint'
+import { Message }       from '@/components/ui/Message'
+import { Modal }         from '@/components/ui/Modal'
+import { ConfirmModal }  from '@/components/ui/ConfirmModal'
+import { DialogFooter }  from '@/components/ui/DialogFooter'
+import { ActionBar }     from '@/components/ui/ActionBar'
+import { RowMenu }       from '@/components/ui/RowMenu'
+import { AmountInput }   from '@/components/ui/AmountInput'
+import { ColumnChooser } from '@/components/ui/ColumnChooser'
+import { useIsNarrow } from '@/hooks/useIsNarrow'
+import { useRegisterDirty, useGuardedAction } from '@/hooks/useDirtyGuard'
+import { HonorarWizard, HONORAR_WIZARD_GUARD } from '@/pages/projekte/HonorarWizard'
+import { SurchargePanelRow } from '@/pages/projekte/struktur/SurchargePanelRow'
+import { STRUKTUR_SPALTEN, useStrukturSpalten } from '@/pages/projekte/struktur/strukturSpalten'
+import { SurchargeAmount } from '@/pages/projekte/struktur/SurchargeAmount'
+import { OfferStrukturMobile } from '@/pages/angebote/struktur/OfferStrukturMobile'
+import { PendingValue }   from '@/pages/projekte/struktur/PendingValue'
+import { EffortPanelRow } from '@/pages/angebote/struktur/EffortPanelRow'
 import {
   fetchOffer, fetchOffers, fetchOfferStructure, addOfferStructureNode, updateOfferStructureNode,
-  deleteOfferStructureNode, moveOfferStructureNode, updateOfferStructureSurcharges,
-  patchOfferRootSurcharges, openOfferPdf,
+  deleteOfferStructureNode, moveOfferStructureNode, patchOfferRootSurcharges,
   type OfferStructureNode,
 } from '@/api/angebote'
-import { fetchBillingTypes, fetchActiveRoles } from '@/api/projekte'
+import { fetchBillingTypes, fetchActiveRoles, type StructureNode } from '@/api/projekte'
 import { buildStructureTree, flattenTree } from '@/utils/treeUtils'
-import type { StructureNode } from '@/api/projekte'
+import {
+  surchargeDefault, sameSurcharge, surchargeBody, computeSurcharges, type SurchargeEdit,
+} from '@/pages/projekte/struktur/strukturCalc'
+import {
+  aggregateOffer, offerRootTotals, offerRowChanges, offerLeafFee, hoursRate, isHourlyBt, pendingOfferStructure,
+  effectiveLines, nodeLines, withFirstLine, rolesLabel, linesHours, linesFee, serializeLines,
+  type OfferRowEdit, type OfferPutBody, type EffortLineEdit,
+} from '@/pages/angebote/struktur/offerStrukturCalc'
 import { fmtEur, money } from '@/utils/money'
+import { fmtHours } from '@/utils/zeit'
+import { usePermission } from '@/store/permissionsStore'
+import { useFeature, useLicenseReadOnly } from '@/store/licenseStore'
+import { useToast } from '@/store/toastStore'
 
+/**
+ * Angebotsstruktur (UI-Pilot Runde 3) — dasselbe Muster wie die
+ * Projektstruktur aus Runde 2.
+ *
+ * Vorher speicherte die Tabelle auf zwei Arten: Eingaben mit dem Knopf ganz
+ * unten, Zuschlaege beim Schliessen des Panels („speichert automatisch"); wer
+ * das Angebot oder den Reiter wechselte, verlor Offenes ohne Rueckfrage. Die
+ * Funktionen je Zeile lagen nur hinter dem Rechtsklick. Jetzt:
+ *  - Feldaenderungen, Stunden × Satz und Zuschlaege sammeln sich in einem
+ *    Puffer; die Aktionsleiste unten nennt die Zahl und haelt „Speichern"
+ *    (Strg+S) in Reichweite. Ein geaendertes Element ist genau ein Aufruf.
+ *  - Anlegen, Loeschen und Verschieben wirken sofort, mit Rueckfrage.
+ *  - Angebots- und Reiterwechsel fragen nach, wenn noch etwas offen ist.
+ *  - Das ⋯ jeder Zeile traegt dieselben Befehle wie der Rechtsklick.
+ *  - Aufwand nach Rollen (Runde 5): „Stunden × Satz" ist die erste
+ *    Aufwandszeile; mit mehreren Rollen zeigt die Zelle „24 h · Betrag" und
+ *    oeffnet das Aufwands-Panel unter der Zeile.
+ * Die Summen rechnet der mit der Projektstruktur geteilte Kern
+ * (struktur/offerStrukturCalc.ts → projekte/struktur/strukturCalc.ts).
+ */
 
-type RowEdit = { nameShort: string; nameLong: string; billingTypeId: string; nk: string; budget: string; hours: string; rate: string }
 type AddForm = {
   ABBR: string; NAME: string; BILLING_TYPE_ID: string; FATHER_ID: string
   REVENUE: string; EXTRAS_PERCENT: string
-  // Aufwandsschätzung (BILLING_TYPE_ID=2): Menge/Stunden × Rolle/Satz
+  // Aufwand (BT 2): Honorar = Stunden × Satz, Satz aus der Rolle vorbelegt
   QUANTITY: string; HOURLY_RATE: string; ROLE_ID: string; ROLE_ABBR: string; ROLE_NAME: string
-}
-type SurchargeEdit = {
-  s1Label: string; s1Pct: string; s1Cumul: boolean
-  s2Label: string; s2Pct: string; s2Cumul: boolean
-  s3Label: string; s3Pct: string; s3Cumul: boolean
+  // Mehrere Aufwandszeilen, uebernommen vom uebergeordneten Element
+  LINES?: EffortLineEdit[]
 }
 
 function emptyAdd(): AddForm {
@@ -39,39 +80,72 @@ function emptyAdd(): AddForm {
   }
 }
 
-interface Props { initialOfferId?: number; onOfferChange?: (id: number | null) => void }
+// Der Baum aus treeUtils kennt nur Projekt-Elemente (STRUCTURE_ID).
+type FlatOffer = { node: OfferStructureNode; depth: number }
+function flattenOffer(structure: OfferStructureNode[]): FlatOffer[] {
+  if (!structure.length) return []
+  return flattenTree(buildStructureTree(structure.map(n => ({ ...n, STRUCTURE_ID: n.ID })) as unknown as StructureNode[]))
+    .map(({ node, depth }) => ({ node: node as unknown as OfferStructureNode, depth }))
+}
 
-export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
+function depthOf(id: string, parentMap: Map<string, string | null>): number {
+  let d = 0, cur: string | null | undefined = id
+  const seen = new Set<string>()
+  while (cur != null) {
+    if (seen.has(cur)) break
+    seen.add(cur)
+    cur = parentMap.get(cur)
+    d++
+  }
+  return d
+}
+
+// Welches Angebot, bestimmt der Arbeitsbereich (AngebotePage) — gewechselt
+// wird ueber den Kopf, nicht mehr ueber ein eigenes Suchfeld hier.
+interface Props { initialOfferId?: number }
+
+export function AngeboteStruktur({ initialOfferId }: Props) {
+  const [confirm, confirmDialog] = useConfirm()
   const qc = useQueryClient()
+  const toast = useToast()
   const oid = initialOfferId ?? null
 
-  const [edits, setEdits]               = useState<Record<number, RowEdit>>({})
+  const readOnlyLicense = useLicenseReadOnly()
+  const permEdit    = usePermission('offers.edit')
+  const permCalc    = usePermission('projects.calculations.edit')
+  const featureCalc = useFeature('hoai.calculator')
+  const canEdit     = permEdit && !readOnlyLicense
+  const canCalc     = permCalc && featureCalc && !readOnlyLicense
+  // Immer luftig (Rueckmeldung Runde 3); welche Spalten, waehlt jeder selbst.
+  const cols = useStrukturSpalten('angebotsstruktur.spalten')
+  const narrow = useIsNarrow()
+
+  const [edits, setEdits]               = useState<Record<number, OfferRowEdit>>({})
+  const [rootEdit, setRootEdit]         = useState<SurchargeEdit | null>(null)
   const [selectedIds, setSelectedIds]   = useState<Set<number>>(new Set())
   const [dragIds, setDragIds]           = useState<Set<number>>(new Set())
   const [dragOverId, setDragOverId]     = useState<number | null | 'root'>(null)
   const [dragZone, setDragZone]         = useState<'above' | 'on'>('on')
-  const [saveMsg, setSaveMsg]           = useState<{ text: string; type: 'success'|'error' } | null>(null)
+  const [errorMsg, setErrorMsg]         = useState<string | null>(null)
   const [addForm, setAddForm]           = useState<AddForm | null>(null)
+  const [addError, setAddError]         = useState<string | null>(null)
   const [confirmState, setConfirmState] = useState<{ title: string; message: string; onConfirm: () => void } | null>(null)
-  const [surchargePanel, setSurchargePanel] = useState<number | null>(null)
-  const [contextMenu, setContextMenu]   = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
-  const [kalkFatherId, setKalkFatherId]             = useState<number | null>(null)
-  const [offerInput, setOfferInput]                 = useState('')
-  const [offerDropdownOpen, setOfferDropdownOpen]   = useState(false)
-  const [offerSurchargePanel, setOfferSurchargePanel] = useState<boolean>(false)
-  const [offerSurchargeEdit,  setOfferSurchargeEdit]  = useState<SurchargeEdit | null>(null)
-  const contextMenuRef                              = useRef<HTMLDivElement>(null)
-  const contextMenuStyle                            = useAnchoredPosition(contextMenuRef, contextMenu)
-  const offerAcRef                                  = useRef<HTMLDivElement>(null)
-  const [surchargeEdits, setSurchargeEdits] = useState<Record<number, SurchargeEdit>>({})
-  const [elementSearch, setElementSearch]   = useState('')
-
-  const tbodyRef     = useRef<HTMLTableSectionElement>(null)
-  const rootZoneRef  = useRef<HTMLDivElement>(null)
-  const pointerDragRef = useRef<{ id: number; idsToMove: number[]; active: boolean; zone: 'above'|'on'; targetId: number|null } | null>(null)
-  const flatTreeRef    = useRef<typeof flatTree>([])
-  const selectedIdsRef = useRef<Set<number>>(new Set())
-  const parentMapRef   = useRef<Map<string, string|null>>(new Map())
+  const [surchargePanel, setSurchargePanel]       = useState<number | null>(null)
+  const [effortPanel, setEffortPanel]             = useState<number | null>(null)
+  const [offerSurchargePanel, setOfferSurchargePanel] = useState(false)
+  const [kalkFatherId, setKalkFatherId]           = useState<number | null>(null)
+  const [elementSearch, setElementSearch]         = useState('')
+  const [collapsed, setCollapsed]                 = useState<Set<number>>(new Set())
+  const [contextMenu, setContextMenu]             = useState<{ x: number; y: number; nodeId: number | null } | null>(null)
+  const [saving, setSaving]                       = useState(false)
+  const contextMenuRef  = useRef<HTMLDivElement>(null)
+  const longPressRef    = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const parentMapRef    = useRef<Map<string, string | null>>(new Map())
+  const pointerDragRef  = useRef<{ id: number; idsToMove: number[]; active: boolean; zone: 'above' | 'on'; targetId: number | null } | null>(null)
+  const flatTreeRef     = useRef<FlatOffer[]>([])
+  const selectedIdsRef  = useRef<Set<number>>(new Set())
+  // Long-Press auf dem Handy setzt x=0 — das Menü wird dann zentriert statt verankert
+  const contextMenuStyle = useAnchoredPosition(contextMenuRef, contextMenu && contextMenu.x !== 0 ? contextMenu : null)
 
   const { data: offersData } = useQuery({ queryKey: ['offers'], queryFn: fetchOffers })
   const { data: structData, isLoading } = useQuery({
@@ -79,410 +153,214 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     queryFn:  () => fetchOfferStructure(oid!),
     enabled:  oid !== null,
   })
-  const { data: btData } = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
+  const { data: btData }    = useQuery({ queryKey: ['billing-types'], queryFn: fetchBillingTypes })
   const { data: rolesData } = useQuery({ queryKey: ['active-roles'], queryFn: fetchActiveRoles })
-
-  const offers = offersData?.data ?? []
-  const roles  = rolesData?.data  ?? []
-
   const { data: offerDetailData } = useQuery({
     queryKey: ['offer-detail', oid],
     queryFn:  () => fetchOffer(oid!),
     enabled:  oid !== null,
   })
+
+  const offers      = useMemo(() => offersData?.data ?? [], [offersData])
+  const roles       = rolesData?.data ?? []
+  const btypes      = btData?.data ?? []
+  const structure   = useMemo(() => structData?.data ?? [], [structData])
   const offerDetail = offerDetailData?.data ?? null
+  const currentOffer = offers.find(o => o.ID === oid)
 
-  const structure = structData?.data ?? []
-  const btypes    = btData?.data     ?? []
-
-  useEffect(() => { setEdits({}); setAddForm(null); setSelectedIds(new Set()) }, [oid])
-
-  // Sync offer input display when oid or offers change
-  useEffect(() => {
-    if (oid && offers.length > 0) {
-      const o = offers.find(x => x.ID === oid)
-      if (o) setOfferInput(o.ABBR + (o.NAME ? ` – ${o.NAME}` : ''))
-    } else if (!oid) {
-      setOfferInput('')
-    }
-  }, [oid, offers])
-
-  // Close offer autocomplete on outside click, restore display name
-  useEffect(() => {
-    if (!offerDropdownOpen) return
-    function onDown(e: MouseEvent) {
-      if (offerAcRef.current && !offerAcRef.current.contains(e.target as Node)) {
-        setOfferDropdownOpen(false)
-        if (oid) {
-          const o = offers.find(x => x.ID === oid)
-          if (o) setOfferInput(o.ABBR + (o.NAME ? ` – ${o.NAME}` : ''))
-        }
-      }
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [offerDropdownOpen, oid, offers])
+  // Anderes Angebot → Puffer und Auswahl leeren (waehrend des Renderns, statt
+  // in einem Effekt einen zweiten Durchlauf anzustossen).
+  const [seenOid, setSeenOid] = useState(oid)
+  if (seenOid !== oid) {
+    setSeenOid(oid)
+    setEdits({}); setRootEdit(null); setAddForm(null); setSelectedIds(new Set()); setCollapsed(new Set())
+    setSurchargePanel(null); setEffortPanel(null); setOfferSurchargePanel(false); setErrorMsg(null)
+  }
 
   useEffect(() => {
     if (!contextMenu) return
     function onDown(e: MouseEvent) {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node))
-        setContextMenu(null)
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) setContextMenu(null)
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [contextMenu])
 
-  const flatTree = structure.length
-    ? flattenTree(buildStructureTree(structure.map(n => ({ ...n, STRUCTURE_ID: n.ID })) as unknown as StructureNode[]))
-    : []
+  // ── Baum ─────────────────────────────────────────────────────────────────
+
+  const flatTree  = useMemo(() => flattenOffer(structure), [structure])
   const parentIds = new Set(structure.filter(n => n.FATHER_ID != null).map(n => String(n.FATHER_ID)))
   const parentMap = new Map(structure.map(n => [String(n.ID), n.FATHER_ID != null ? String(n.FATHER_ID) : null]))
+  const nodeById  = useMemo(() => new Map(structure.map(n => [n.ID, n])), [structure])
+  // Mit den offenen Eingaben gerechnet (Runde 6) — wie in der Projektstruktur
+  const view      = useMemo(() => pendingOfferStructure(structure, edits), [structure, edits])
+  const savedAgg  = useMemo(() => aggregateOffer(structure), [structure])
+  const aggMap    = useMemo(() => view.pending.size ? aggregateOffer(view.nodes) : savedAgg, [view, savedAgg])
+  const viewById  = useMemo(() => new Map(view.nodes.map(n => [n.ID, n])), [view])
 
-  const aggMap = useMemo(() => {
-    const childrenOf = new Map<string, string[]>()
+  const showInklCol  = cols.show('inkl')
+  const hasParents   = parentIds.size > 0
+  const allCollapsed = hasParents && [...parentIds].every(id => collapsed.has(Number(id)))
+  function toggleCollapsed(id: number) {
+    setCollapsed(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  function toggleAllCollapsed() {
+    setCollapsed(allCollapsed ? new Set() : new Set([...parentIds].map(Number)))
+  }
+  function isHidden(id: number): boolean {
+    let cur = parentMap.get(String(id))
+    while (cur != null) { if (collapsed.has(Number(cur))) return true; cur = parentMap.get(cur) }
+    return false
+  }
+  function descendantCount(id: number): number {
+    let c = 0
     for (const n of structure) {
-      if (n.FATHER_ID != null) {
-        const fid = String(n.FATHER_ID)
-        const arr = childrenOf.get(fid) ?? []
-        arr.push(String(n.ID))
-        childrenOf.set(fid, arr)
-      }
+      let cur = n.FATHER_ID != null ? String(n.FATHER_ID) : null
+      while (cur != null) { if (cur === String(id)) { c++; break } cur = parentMap.get(cur) ?? null }
     }
-    const nodeMap = new Map(structure.map(n => [String(n.ID), n]))
-    const cache = new Map<string, { surcharges: number; revenueBasis: number; extras: number }>()
-    function agg(id: string): { surcharges: number; revenueBasis: number; extras: number } {
-      if (cache.has(id)) return cache.get(id)!
-      const children = childrenOf.get(id) ?? []
-      if (children.length === 0) {
-        const node = nodeMap.get(id)!
-        const rb = node?.REVENUE_BASIS != null
-          ? Number(node.REVENUE_BASIS)
-          : Math.max(0, Number(node?.REVENUE ?? 0) - Number(node?.SURCHARGES_TOTAL ?? 0))
-        const r = { surcharges: Number(node?.SURCHARGES_TOTAL ?? 0), revenueBasis: rb, extras: Number(node?.EXTRAS ?? 0) }
-        cache.set(id, r); return r
-      }
-      let surcharges = 0, revenueBasis = 0, extras = 0
-      for (const cid of children) { const c = agg(cid); surcharges += c.surcharges; revenueBasis += c.revenueBasis; extras += c.extras }
-      const ownNode       = nodeMap.get(id)
-      const ownSurcharges = Number(ownNode?.SURCHARGES_TOTAL ?? 0)
-      const ownNk         = Number(ownNode?.EXTRAS_PERCENT ?? 0)
-      surcharges += ownSurcharges  // parent's own surcharges on top
-      // NK applies to the parent's own surcharges too
-      extras = Math.round((extras + ownSurcharges * ownNk / 100) * 100) / 100
-      cache.set(id, { surcharges, revenueBasis, extras }); return { surcharges, revenueBasis, extras }
-    }
-    for (const n of structure) agg(String(n.ID))
-    return cache
-  }, [structure])
+    return c
+  }
 
-  const filteredOffers = useMemo(() => {
-    if (!offerDropdownOpen) return offers
-    const sq = offerInput.toLowerCase().trim()
-    if (!sq) return offers
-    return offers.filter(o =>
-      (o.ABBR?.toLowerCase().includes(sq)) ||
-      (o.NAME?.toLowerCase().includes(sq))
-    )
-  }, [offers, offerInput, offerDropdownOpen])
-
-  const filteredFlatTree = useMemo(() => {
-    if (!elementSearch) return flatTree
+  // Beim Filtern gilt das Zuklappen nicht — Treffer sollen sichtbar sein.
+  const filteredFlatTree = (() => {
+    if (!elementSearch) return collapsed.size ? flatTree.filter(({ node }) => !isHidden(node.ID)) : flatTree
     const sq = elementSearch.toLowerCase()
     const matchIds = new Set(
-      flatTree.filter(({ node }) =>
-        (node.ABBR?.toLowerCase().includes(sq)) ||
-        (node.NAME?.toLowerCase().includes(sq))
-      ).map(({ node }) => (node as unknown as OfferStructureNode).ID)
+      flatTree.filter(({ node }) => node.ABBR?.toLowerCase().includes(sq) || node.NAME?.toLowerCase().includes(sq))
+        .map(({ node }) => node.ID),
     )
     for (const id of [...matchIds]) {
       let cursor = parentMap.get(String(id))
       while (cursor != null) { matchIds.add(Number(cursor)); cursor = parentMap.get(cursor) }
     }
-    return flatTree.filter(({ node }) => matchIds.has((node as unknown as OfferStructureNode).ID))
-  }, [flatTree, elementSearch, parentMap])
+    return flatTree.filter(({ node }) => matchIds.has(node.ID))
+  })()
 
-  // Root totals
-  const rootRevenueBasis  = useMemo(() => structure.filter(n => n.FATHER_ID == null).reduce((s, n) => {
-    const isP = parentIds.has(String(n.ID))
-    return s + (isP ? (aggMap.get(String(n.ID))?.revenueBasis ?? 0) : (n.REVENUE_BASIS != null ? Number(n.REVENUE_BASIS) : Number(n.REVENUE ?? 0)))
-  }, 0), [structure, aggMap, parentIds])
-  const structureSurcharges = useMemo(() => structure.reduce((s, n) => s + Number(n.SURCHARGES_TOTAL ?? 0), 0), [structure])
-  const offerLevelSurcharges = Number(offerDetail?.SURCHARGES_TOTAL ?? 0)
-  const rootSurcharges = structureSurcharges + offerLevelSurcharges
-  const rootStructureRevenueSum = useMemo(() => structure.filter(n => n.FATHER_ID == null).reduce((s, n) => s + Number(n.REVENUE ?? 0), 0), [structure])
-  const rootRevenueFinal  = rootStructureRevenueSum + offerLevelSurcharges
-  const rootExtras        = useMemo(() => structure.filter(n => n.FATHER_ID == null).reduce((s, n) => {
-    const isP = parentIds.has(String(n.ID))
-    return s + (isP ? (aggMap.get(String(n.ID))?.extras ?? 0) : Number(n.EXTRAS ?? 0))
-  }, 0), [structure, aggMap, parentIds])
+  // ── Puffer ───────────────────────────────────────────────────────────────
 
-  // ── Surcharge helpers ────────────────────────────────────────────────────
+  function editRow(id: number, patch: Partial<OfferRowEdit>) {
+    setEdits(prev => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+  }
 
-  function surchargeDefault(n: OfferStructureNode): SurchargeEdit {
-    return {
-      s1Label: n.SURCHARGE_1_LABEL ?? '', s1Pct: n.SURCHARGE_1_PCT != null ? String(n.SURCHARGE_1_PCT) : '', s1Cumul: n.SURCHARGE_1_CUMUL ?? true,
-      s2Label: n.SURCHARGE_2_LABEL ?? '', s2Pct: n.SURCHARGE_2_PCT != null ? String(n.SURCHARGE_2_PCT) : '', s2Cumul: n.SURCHARGE_2_CUMUL ?? true,
-      s3Label: n.SURCHARGE_3_LABEL ?? '', s3Pct: n.SURCHARGE_3_PCT != null ? String(n.SURCHARGE_3_PCT) : '', s3Cumul: n.SURCHARGE_3_CUMUL ?? true,
+  const pendingRows = useMemo(() => Object.entries(edits)
+    .map(([idStr, e]) => {
+      const node = nodeById.get(Number(idStr))
+      return node ? { id: Number(idStr), node, body: offerRowChanges(node, e) } : null
+    })
+    .filter((r): r is { id: number; node: OfferStructureNode; body: OfferPutBody } => r != null && Object.keys(r.body).length > 0),
+  [edits, nodeById])
+
+  const rootChanged = rootEdit != null && !sameSurcharge(rootEdit, surchargeDefault(offerDetail))
+  const dirtyCount  = pendingRows.length + (rootChanged ? 1 : 0)
+  const dirty       = dirtyCount > 0
+
+  function discardAll() {
+    setEdits({}); setRootEdit(null); setSurchargePanel(null); setEffortPanel(null); setOfferSurchargePanel(false); setErrorMsg(null)
+  }
+
+  function invalidateOffer() {
+    return Promise.all([
+      qc.invalidateQueries({ queryKey: ['offer-structure', oid] }),
+      qc.invalidateQueries({ queryKey: ['offer-detail', oid] }),
+      qc.invalidateQueries({ queryKey: ['offers'] }),
+    ])
+  }
+
+  // ── Speichern ────────────────────────────────────────────────────────────
+
+  async function saveAll() {
+    if (!dirty || oid == null) return
+    setSaving(true); setErrorMsg(null)
+    const rows = pendingRows
+    try {
+      for (const r of rows) await updateOfferStructureNode(oid, r.id, r.body)
+      if (rootChanged && rootEdit) await patchOfferRootSurcharges(oid, surchargeBody(rootEdit))
+    } catch (e) {
+      setErrorMsg((e as Error)?.message || 'Speichern fehlgeschlagen')
+      setSaving(false)
+      void invalidateOffer()
+      throw e
     }
+    await invalidateOffer()
+    setEdits({}); setRootEdit(null); setSurchargePanel(null); setEffortPanel(null); setOfferSurchargePanel(false)
+    setSaving(false)
+    const n = rows.length + (rootChanged ? 1 : 0)
+    toast.success(n === 1 ? '1 Element gespeichert' : `${n} Elemente gespeichert`)
   }
 
-  function computeSurchargesDisplay(base: number, s: SurchargeEdit) {
-    const r2 = (n: number) => Math.round(n * 100) / 100
-    const s1Active = !!s.s1Label && s.s1Pct !== '' && Number(s.s1Pct) !== 0
-    const s1Eur    = s1Active ? r2(base * Number(s.s1Pct) / 100) : 0
-    const s1Sub    = base + s1Eur
-    const s2Base   = s.s2Cumul ? s1Sub : base
-    const s2Active = !!s.s2Label && s.s2Pct !== '' && Number(s.s2Pct) !== 0
-    const s2Eur    = s2Active ? r2(s2Base * Number(s.s2Pct) / 100) : 0
-    const s2Sub    = s1Sub + s2Eur
-    const s3Base   = s.s3Cumul ? s2Sub : base
-    const s3Active = !!s.s3Label && s.s3Pct !== '' && Number(s.s3Pct) !== 0
-    const s3Eur    = s3Active ? r2(s3Base * Number(s.s3Pct) / 100) : 0
-    return { s1Eur, s2Eur, s3Eur, total: r2(s1Eur + s2Eur + s3Eur) }
-  }
-
-  // ── Mutations ────────────────────────────────────────────────────────────
-
-  const saveMut = useMutation({
-    mutationFn: async (rows: Array<{ id: number; nameShort: string; nameLong: string; billingTypeId: string; nk: number; budget: number; hours: number; rate: number; changed: Record<string,boolean> }>) => {
-      for (const r of rows) {
-        const body: Record<string, unknown> = {}
-        if (r.changed.nameShort)     body.abbr      = r.nameShort
-        if (r.changed.nameLong)      body.name       = r.nameLong
-        if (r.changed.billingTypeId) body.billing_type_id = Number(r.billingTypeId)
-        if (r.changed.nk)            body.extras_percent  = r.nk
-        if (r.changed.budget)        body.revenue         = r.budget
-        if (r.changed.hours)         body.quantity        = r.hours
-        if (r.changed.rate)          body.hourly_rate         = r.rate
-        await updateOfferStructureNode(oid!, r.id, body)
-      }
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
-      setSaveMsg({ text: 'Gespeichert ✅', type: 'success' })
-      setEdits({})
-      setTimeout(() => setSaveMsg(null), 3000)
-    },
-    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+  const guarded = useGuardedAction()
+  useRegisterDirty('angebotsstruktur', {
+    dirty, count: dirtyCount, label: 'Angebotsstruktur',
+    save: () => saveAll(),
   })
 
-  const surchargeMut = useMutation({
-    mutationFn: ({ id, s }: { id: number; s: SurchargeEdit }) =>
-      updateOfferStructureSurcharges(oid!, id, {
-        SURCHARGE_1_LABEL: s.s1Label || null, SURCHARGE_1_PCT: s.s1Pct !== '' ? Number(s.s1Pct) : null, SURCHARGE_1_CUMUL: s.s1Cumul,
-        SURCHARGE_2_LABEL: s.s2Label || null, SURCHARGE_2_PCT: s.s2Pct !== '' ? Number(s.s2Pct) : null, SURCHARGE_2_CUMUL: s.s2Cumul,
-        SURCHARGE_3_LABEL: s.s3Label || null, SURCHARGE_3_PCT: s.s3Pct !== '' ? Number(s.s3Pct) : null, SURCHARGE_3_CUMUL: s.s3Cumul,
-      }),
-    onSuccess: (_, { id }) => {
-      void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
-      setSurchargeEdits(prev => { const n = { ...prev }; delete n[id]; return n })
-    },
-    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
-  })
-
-  function closeSurchargePanel(nodeId: number) {
-    const pending = surchargeEdits[nodeId]
-    if (pending) surchargeMut.mutate({ id: nodeId, s: pending })
-    setSurchargePanel(null)
+  async function confirmDiscard() {
+    const ok = await confirm({
+      title: 'Änderungen verwerfen',
+      message: `${dirtyCount === 1 ? 'Die Änderung' : `Alle ${dirtyCount} Änderungen`} an der Angebotsstruktur zurücknehmen? Gespeichertes bleibt unberührt.`,
+      confirmLabel: 'Verwerfen',
+    })
+    if (ok) discardAll()
   }
 
-  // Offer-level (root) surcharge mutation — Option A
-  const offerSurchargeMut = useMutation({
-    mutationFn: (s: SurchargeEdit) =>
-      patchOfferRootSurcharges(oid!, {
-        SURCHARGE_1_LABEL: s.s1Label || null,
-        SURCHARGE_1_PCT:   s.s1Pct !== '' ? Number(s.s1Pct) : null,
-        SURCHARGE_1_CUMUL: s.s1Cumul,
-        SURCHARGE_2_LABEL: s.s2Label || null,
-        SURCHARGE_2_PCT:   s.s2Pct !== '' ? Number(s.s2Pct) : null,
-        SURCHARGE_2_CUMUL: s.s2Cumul,
-        SURCHARGE_3_LABEL: s.s3Label || null,
-        SURCHARGE_3_PCT:   s.s3Pct !== '' ? Number(s.s3Pct) : null,
-        SURCHARGE_3_CUMUL: s.s3Cumul,
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['offer-detail', oid] })
-      setOfferSurchargeEdit(null)
-      setSaveMsg({ text: 'Angebotszuschläge gespeichert ✅', type: 'success' })
-      setTimeout(() => setSaveMsg(null), 3000)
-    },
-    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
-  })
-
-  function closeOfferSurchargePanel() {
-    if (offerSurchargeEdit) offerSurchargeMut.mutate(offerSurchargeEdit)
-    setOfferSurchargePanel(false)
-  }
-
-  function offerSurchargeDefault(): SurchargeEdit {
-    const o = offerDetail
-    return {
-      s1Label: o?.SURCHARGE_1_LABEL ?? '',
-      s1Pct:   o?.SURCHARGE_1_PCT != null ? String(o.SURCHARGE_1_PCT) : '',
-      s1Cumul: o?.SURCHARGE_1_CUMUL ?? true,
-      s2Label: o?.SURCHARGE_2_LABEL ?? '',
-      s2Pct:   o?.SURCHARGE_2_PCT != null ? String(o.SURCHARGE_2_PCT) : '',
-      s2Cumul: o?.SURCHARGE_2_CUMUL ?? true,
-      s3Label: o?.SURCHARGE_3_LABEL ?? '',
-      s3Pct:   o?.SURCHARGE_3_PCT != null ? String(o.SURCHARGE_3_PCT) : '',
-      s3Cumul: o?.SURCHARGE_3_CUMUL ?? true,
-    }
-  }
+  // ── Sofort wirkende Befehle ──────────────────────────────────────────────
 
   const addMut = useMutation({
     mutationFn: (f: AddForm) => {
-      const isHourly = Number(f.BILLING_TYPE_ID) === 2
+      const hourly = isHourlyBt(f.BILLING_TYPE_ID)
       return addOfferStructureNode(oid!, {
-        abbr:      f.ABBR.trim(),
-        name:       f.NAME.trim() || undefined,
+        abbr:            f.ABBR.trim(),
+        name:            f.NAME.trim() || undefined,
         billing_type_id: Number(f.BILLING_TYPE_ID),
         father_id:       f.FATHER_ID ? Number(f.FATHER_ID) : null,
         extras_percent:  f.EXTRAS_PERCENT !== '' ? Number(f.EXTRAS_PERCENT) : undefined,
-        ...(isHourly
+        ...(hourly && f.LINES?.length
+          ? { effort_lines: serializeLines(f.LINES) }
+          : hourly
           ? {
-              // Aufwandsschätzung: Honorar = Menge/Stunden × Satz
-              quantity:        f.QUANTITY !== '' ? Number(f.QUANTITY) : 0,
-              hourly_rate:         f.HOURLY_RATE  !== '' ? Number(f.HOURLY_RATE)  : 0,
-              role_id:         f.ROLE_ID ? Number(f.ROLE_ID) : undefined,
-              role_abbr: f.ROLE_ABBR || undefined,
-              role_name:  f.ROLE_NAME  || undefined,
+              quantity:    f.QUANTITY    !== '' ? Number(f.QUANTITY)    : 0,
+              hourly_rate: f.HOURLY_RATE !== '' ? Number(f.HOURLY_RATE) : 0,
+              role_id:     f.ROLE_ID ? Number(f.ROLE_ID) : undefined,
+              role_abbr:   f.ROLE_ABBR || undefined,
+              role_name:   f.ROLE_NAME || undefined,
             }
-          : {
-              revenue: f.REVENUE !== '' ? Number(f.REVENUE) : undefined,
-            }),
+          : { revenue: f.REVENUE !== '' ? Number(f.REVENUE) : undefined }),
       })
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
-      setSaveMsg({ text: 'Element angelegt ✅', type: 'success' })
+      void invalidateOffer()
+      toast.success('Element angelegt')
       setAddForm(null)
-      setTimeout(() => setSaveMsg(null), 3000)
     },
-    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+    onError: (e: Error) => setAddError(e.message),
   })
 
   const deleteMut = useMutation({
     mutationFn: (id: number) => deleteOfferStructureNode(oid!, id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
-      setSaveMsg({ text: 'Element gelöscht ✅', type: 'success' })
-      setTimeout(() => setSaveMsg(null), 3000)
+    onSuccess: (_, id) => {
+      void invalidateOffer()
+      setEdits(prev => { const n = { ...prev }; delete n[id]; return n })
+      toast.success('Element gelöscht')
     },
-    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
+    onError: (e: Error) => setErrorMsg(e.message),
   })
-
-  const moveMut = useMutation({
-    mutationFn: ({ id, fatherId, sortAfterId }: { id: number; fatherId: number|null; sortAfterId: string|null }) =>
-      moveOfferStructureNode(oid!, id, { father_id: fatherId, sort_after_id: sortAfterId }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['offer-structure', oid] }),
-    onError: (e: Error) => setSaveMsg({ text: e.message, type: 'error' }),
-  })
-
-  // ── Inline edit helpers ──────────────────────────────────────────────────
-
-  function nodeDefault(id: number): RowEdit {
-    const node = structure.find(n => n.ID === id)
-    const isHourly = Number(node?.BILLING_TYPE_ID) === 2
-    return {
-      nameShort:    node?.ABBR ?? '',
-      nameLong:     node?.NAME  ?? '',
-      billingTypeId: String(node?.BILLING_TYPE_ID ?? ''),
-      nk:     String(node?.EXTRAS_PERCENT ?? 0),
-      budget: isHourly ? '' : String(node?.REVENUE_BASIS ?? node?.REVENUE ?? 0),
-      hours:  isHourly ? String(node?.QUANTITY ?? 0) : '',
-      rate:   isHourly ? String(node?.HOURLY_RATE ?? 0)  : '',
-    }
-  }
-
-  function setField(id: number, field: keyof RowEdit, value: string) {
-    setEdits(prev => {
-      const cur = prev[id] ?? nodeDefault(id)
-      return { ...prev, [id]: { ...cur, [field]: value } }
-    })
-  }
-
-  // ── Save all ─────────────────────────────────────────────────────────────
-
-  const saveAll = useCallback(() => {
-    setSaveMsg(null)
-    const rows = Object.entries(edits).map(([idStr, edit]) => {
-      const id   = Number(idStr)
-      const node = structure.find(n => n.ID === id)
-      const origNS  = node?.ABBR    ?? ''
-      const origNL  = node?.NAME     ?? ''
-      const origBT  = String(node?.BILLING_TYPE_ID ?? '')
-      const origNk  = node?.EXTRAS_PERCENT ?? 0
-      const origBudget = node?.REVENUE_BASIS ?? node?.REVENUE ?? 0
-      const origHours  = node?.QUANTITY ?? 0
-      const origRate   = node?.HOURLY_RATE ?? 0
-      const nk     = edit.nk     !== '' ? Number(edit.nk)     : origNk
-      const budget = edit.budget !== '' ? Number(edit.budget) : origBudget
-      const hours  = edit.hours  !== '' ? Number(edit.hours)  : origHours
-      const rate   = edit.rate   !== '' ? Number(edit.rate)   : origRate
-      return {
-        id, nameShort: edit.nameShort ?? origNS, nameLong: edit.nameLong ?? origNL,
-        billingTypeId: edit.billingTypeId ?? origBT, nk, budget, hours, rate,
-        changed: {
-          nameShort:    (edit.nameShort    ?? origNS)  !== origNS,
-          nameLong:     (edit.nameLong     ?? origNL)  !== origNL,
-          billingTypeId: (edit.billingTypeId ?? origBT) !== origBT,
-          nk:            nk     !== origNk,
-          budget:        budget !== origBudget,
-          hours:         hours  !== origHours,
-          rate:          rate   !== origRate,
-        },
-      }
-    }).filter(r => Object.values(r.changed).some(Boolean))
-    if (!rows.length) { setSaveMsg({ text: 'Keine Änderungen', type: 'error' }); return }
-    saveMut.mutate(rows)
-  }, [edits, structure, saveMut])
-
-  // ── Keyboard shortcut ────────────────────────────────────────────────────
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); if (addForm) submitAdd(); else saveAll() }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [addForm, saveAll])
-
-  // ── Add element ──────────────────────────────────────────────────────────
-
-  function submitAdd() {
-    if (!addForm) return
-    if (!addForm.ABBR.trim()) { setSaveMsg({ text: 'Kürzel ist erforderlich', type: 'error' }); return }
-    if (!addForm.BILLING_TYPE_ID)  { setSaveMsg({ text: 'Abrechnungsart ist erforderlich', type: 'error' }); return }
-    setSaveMsg(null)
-    addMut.mutate(addForm)
-  }
-
-  // ── Multi-select ─────────────────────────────────────────────────────────
-
-  function toggleRow(id: number) {
-    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-  }
-  function toggleAll() {
-    const allIds = filteredFlatTree.map(({ node }) => (node as unknown as OfferStructureNode).ID)
-    if (allIds.every(id => selectedIds.has(id))) setSelectedIds(new Set())
-    else setSelectedIds(new Set(allIds))
-  }
-  const allSelected = filteredFlatTree.length > 0 && filteredFlatTree.every(({ node }) => selectedIds.has((node as unknown as OfferStructureNode).ID))
 
   async function doBulkDelete(ids: number[]) {
-    if (!ids.length) return
-    setSaveMsg(null)
+    if (!ids.length || oid == null) return
+    // Tiefste zuerst: das Backend loescht ein Element nur ohne Unterelemente
+    // (dependencyCheck.checkOfferStructure) — ein ausgewaehlter Vater
+    // klappt also, wenn seine Kinder vor ihm fallen.
+    const sorted = [...ids].sort((a, b) => depthOf(String(b), parentMap) - depthOf(String(a), parentMap))
+    setErrorMsg(null)
     let failed = 0
-    for (const id of ids) {
-      try { await deleteOfferStructureNode(oid!, id) } catch { failed++ }
+    for (const id of sorted) {
+      try { await deleteOfferStructureNode(oid, id) } catch { failed++ }
     }
-    void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
+    void invalidateOffer()
     setSelectedIds(new Set())
-    setSaveMsg(failed
-      ? { text: `${ids.length - failed} gelöscht, ${failed} fehlgeschlagen`, type: 'error' }
-      : { text: `${ids.length} Element${ids.length > 1 ? 'e' : ''} gelöscht ✅`, type: 'success' })
-    setTimeout(() => setSaveMsg(null), 4000)
+    setEdits(prev => { const n = { ...prev }; for (const id of ids) delete n[id]; return n })
+    if (failed) setErrorMsg(`${ids.length - failed} gelöscht, ${failed} fehlgeschlagen`)
+    else toast.success(`${ids.length} Element${ids.length > 1 ? 'e' : ''} gelöscht`)
   }
 
   function bulkDelete() {
@@ -490,20 +368,104 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
     if (!ids.length) return
     setConfirmState({
       title: `${ids.length} Element${ids.length > 1 ? 'e' : ''} löschen`,
-      message: `${ids.length} Element${ids.length > 1 ? 'e' : ''} löschen?`,
+      message: `${ids.length} Element${ids.length > 1 ? 'e' : ''} löschen?\nEin Element mit Unterelementen lässt sich nur zusammen mit ihnen löschen.`,
       onConfirm: () => void doBulkDelete(ids),
     })
   }
 
-  // ── Drag & Drop ──────────────────────────────────────────────────────────
+  function askDelete(node: OfferStructureNode) {
+    if (parentIds.has(String(node.ID))) {
+      setErrorMsg(`„${node.ABBR ?? ''}" hat Unterelemente — erst diese löschen oder verschieben.`)
+      return
+    }
+    setConfirmState({
+      title: 'Element löschen',
+      message: `Element „${node.ABBR ?? ''}" löschen?`,
+      onConfirm: () => deleteMut.mutate(node.ID),
+    })
+  }
 
-  flatTreeRef.current    = flatTree
-  selectedIdsRef.current = selectedIds
-  parentMapRef.current   = parentMap
+  /**
+   * Ein Blatt mit eigenem Honorar, das Unterelemente bekommt, zeigt danach nur
+   * noch deren Summe — sein Betrag waere weg. Frueher geschah das still.
+   * Beim Anlegen wird der Betrag deshalb ins neue Element uebernommen.
+   */
+  function leafValue(fatherId: number | null): { node: OfferStructureNode; fee: number } | null {
+    if (fatherId == null) return null
+    const f = nodeById.get(fatherId)
+    if (!f || parentIds.has(String(f.ID))) return null
+    const fee = offerLeafFee(f, undefined)
+    return fee > 0 ? { node: f, fee } : null
+  }
 
-  function isDescendant(targetId: string, srcId: string, pMap: Map<string, string|null>): boolean {
-    let cursor: string|null|undefined = pMap.get(String(targetId))
-    while (cursor != null) { if (cursor === String(srcId)) return true; cursor = pMap.get(cursor) }
+  function addPrefill(fatherId: number | null): Partial<AddForm> {
+    const f = fatherId != null ? nodeById.get(fatherId) : undefined
+    if (!f) return {}
+    const base: Partial<AddForm> = {
+      BILLING_TYPE_ID: String(f.BILLING_TYPE_ID ?? ''),
+      EXTRAS_PERCENT:  String(f.EXTRAS_PERCENT ?? ''),
+    }
+    const lv = leafValue(fatherId)
+    if (!lv) return base
+    const fLines = nodeLines(f)
+    if (isHourlyBt(f.BILLING_TYPE_ID) && fLines.length > 1) return { ...base, LINES: fLines }
+    return isHourlyBt(f.BILLING_TYPE_ID)
+      ? { ...base, QUANTITY: String(f.QUANTITY ?? ''), HOURLY_RATE: String(f.HOURLY_RATE ?? ''),
+          ROLE_ID: f.ROLE_ID != null ? String(f.ROLE_ID) : '', ROLE_ABBR: f.ROLE_ABBR ?? '', ROLE_NAME: f.ROLE_NAME ?? '' }
+      : { ...base, REVENUE: String(lv.fee) }
+  }
+
+  /**
+   * Anderes uebergeordnetes Element im Dialog: Abrechnungsart und NK % kommen
+   * von dort (wie bisher). Den Betrag eines Blatts uebernimmt das neue Element
+   * nur, solange noch nichts eingegeben ist — Getipptes geht nicht verloren.
+   */
+  function withParent(f: AddForm, fatherId: number | null): AddForm {
+    const p = addPrefill(fatherId)
+    const untouched = !f.REVENUE && !f.QUANTITY && !f.HOURLY_RATE && !f.ROLE_ID
+    return {
+      ...f,
+      // Uebernommene Zeilen gehoeren zum bisherigen Vater, nicht zur Eingabe
+      LINES: undefined,
+      ...(p.BILLING_TYPE_ID ? { BILLING_TYPE_ID: p.BILLING_TYPE_ID } : {}),
+      ...(p.EXTRAS_PERCENT !== undefined ? { EXTRAS_PERCENT: p.EXTRAS_PERCENT } : {}),
+      ...(untouched ? p : {}),
+    }
+  }
+
+  function openAdd(fatherId: number | null) {
+    setAddError(null)
+    setAddForm({ ...emptyAdd(), FATHER_ID: fatherId != null ? String(fatherId) : '', ...addPrefill(fatherId) })
+  }
+
+  function submitAdd() {
+    if (!addForm) return
+    if (!addForm.ABBR.trim())     { setAddError('Bitte ein Kürzel angeben.'); return }
+    if (!addForm.BILLING_TYPE_ID) { setAddError('Bitte eine Abrechnungsart wählen.'); return }
+    setAddError(null)
+    addMut.mutate(addForm)
+  }
+
+  useCtrlS(() => {
+    if (addForm) submitAdd()
+    else if (dirty && !saving) void saveAll().catch(() => {})
+  }, canEdit && oid != null)
+
+  // ── Drag & Drop (Pointer-Events, wie in der Projektstruktur) ─────────────
+
+  // Die Zeiger-Handler lesen den Stand erst waehrend des Ziehens.
+  useLayoutEffect(() => {
+    parentMapRef.current   = parentMap
+    flatTreeRef.current    = flatTree
+    selectedIdsRef.current = selectedIds
+  })
+
+  function isDescendant(targetId: string | number, srcId: string | number, pMap: Map<string, string | null>): boolean {
+    let cursor: string | null | undefined = pMap.get(String(targetId))
+    while (cursor != null) {
+      if (cursor === String(srcId)) return true
+      cursor = pMap.get(cursor)
+    }
     return false
   }
 
@@ -518,423 +480,464 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
       const state = pointerDragRef.current
       if (!state) return
       if (!state.active) { state.active = true; setDragIds(new Set(idsToMove)) }
-      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement|null
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
       const rootZone = el?.closest('.struct-root-drop')
-      const tr = el?.closest('tr[data-struct-id]') as HTMLElement|null
+      const tr = el?.closest('tr[data-struct-id]') as HTMLElement | null
       if (rootZone) {
         state.targetId = null; state.zone = 'on'
         setDragOverId('root'); setDragZone('on')
       } else if (tr) {
         const targetId = Number(tr.dataset.structId)
-        const blocked = idsToMove.some(srcId =>
-          String(targetId) === String(srcId) || isDescendant(String(targetId), String(srcId), parentMapRef.current)
-        )
-        if (!blocked) {
+        if (idsToMove.includes(targetId) || idsToMove.some(src => isDescendant(targetId, src, parentMapRef.current))) {
+          state.targetId = null; setDragOverId(null)
+        } else {
           const rect = tr.getBoundingClientRect()
-          const zone: 'above'|'on' = ev.clientY < rect.top + rect.height * 0.35 ? 'above' : 'on'
+          const zone: 'above' | 'on' = (ev.clientY - rect.top) / rect.height < 0.35 ? 'above' : 'on'
           state.targetId = targetId; state.zone = zone
           setDragOverId(targetId); setDragZone(zone)
         }
       } else {
-        state.targetId = null
-        setDragOverId(null)
+        state.targetId = null; setDragOverId(null)
       }
     }
 
-    function onUp() {
+    async function onUp(ev: PointerEvent) {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
       const state = pointerDragRef.current
+      if (!state?.active) { pointerDragRef.current = null; return }
+      const { targetId, zone, idsToMove: items } = state
       pointerDragRef.current = null
       setDragIds(new Set()); setDragOverId(null)
-      if (!state?.active) return
-      const { idsToMove: ids, targetId, zone } = state
+      if (oid == null) return
 
-      if (targetId === null) {
-        // Drop to root
-        for (const mid of ids) moveMut.mutate({ id: mid, fatherId: null, sortAfterId: '__end__' })
-        return
+      const el = document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
+      const rootZone = el?.closest('.struct-root-drop')
+      if (!rootZone && targetId === null) return
+      const fatherIdStr = rootZone ? null : zone === 'on'
+        ? String(targetId)
+        : (parentMapRef.current.get(String(targetId)) ?? null)
+      const fatherId = fatherIdStr != null ? Number(fatherIdStr) : null
+
+      // Reihenfolge wie im Baum behalten; parallele Aufrufe (wie bis Runde 2)
+      // ueberschrieben sich gegenseitig die SORT_ORDER.
+      const flatNodes = flatTreeRef.current.map(({ node }) => node)
+      const ordered = items
+        .map(iid => flatNodes.find(n => n.ID === iid))
+        .filter((n): n is OfferStructureNode => n != null)
+        .filter(n => !isDescendant(fatherIdStr ?? -1, n.ID, parentMapRef.current))
+        .sort((a, b) => flatNodes.indexOf(a) - flatNodes.indexOf(b))
+        .map(n => n.ID)
+      if (ordered.length === 0) return
+
+      const lv = !rootZone && zone === 'on' ? leafValue(fatherId) : null
+      if (lv) {
+        const ok = await confirm({
+          title: 'Honorar wird ersetzt',
+          message: `„${lv.node.ABBR ?? ''}" hat ein eigenes Honorar von ${fmtEur(lv.fee)}. Als übergeordnetes Element zählt danach nur die Summe seiner Unterelemente — der bisherige Betrag entfällt. Trotzdem verschieben?`,
+          confirmLabel: 'Verschieben',
+          confirmClass: 'btn-primary',
+        })
+        if (!ok) return
       }
-      const targetNode = flatTreeRef.current.find(({ node }) => (node as unknown as OfferStructureNode).ID === targetId)
-      if (!targetNode) return
-      const targetN = targetNode.node as unknown as OfferStructureNode
-      if (zone === 'on') {
-        for (const mid of ids) moveMut.mutate({ id: mid, fatherId: targetN.ID, sortAfterId: '__end__' })
-      } else {
-        // Insert above target: same parent, before target
-        const tFather = targetN.FATHER_ID ?? null
-        const siblings = flatTreeRef.current
-          .filter(({ node }) => {
-            const n = node as unknown as OfferStructureNode
-            return (n.FATHER_ID ?? null) === tFather && !ids.includes(n.ID)
-          })
-        const idx = siblings.findIndex(({ node }) => (node as unknown as OfferStructureNode).ID === targetId)
-        const sortAfterId = idx > 0 ? String((siblings[idx - 1].node as unknown as OfferStructureNode).ID) : null
-        for (const mid of ids) moveMut.mutate({ id: mid, fatherId: tFather, sortAfterId })
+
+      try {
+        if (zone === 'on' || rootZone) {
+          for (const iid of ordered) await moveOfferStructureNode(oid, iid, { father_id: fatherId, sort_after_id: '__end__' })
+        } else {
+          const siblings = flatNodes.filter(n => (parentMapRef.current.get(String(n.ID)) ?? null) === fatherIdStr && !ordered.includes(n.ID))
+          const idx = siblings.findIndex(n => n.ID === targetId)
+          let sortAfterId: string | null = idx > 0 ? String(siblings[idx - 1].ID) : null
+          for (const iid of ordered) {
+            await moveOfferStructureNode(oid, iid, { father_id: fatherId, sort_after_id: sortAfterId })
+            sortAfterId = String(iid)
+          }
+        }
+        void invalidateOffer()
+        toast.success(ordered.length > 1 ? `${ordered.length} Elemente verschoben` : 'Verschoben')
+        if (items.length > 1) setSelectedIds(new Set())
+      } catch (err) {
+        setErrorMsg((err as Error).message ?? 'Fehler beim Verschieben')
+        void invalidateOffer()
       }
     }
 
     window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp, { once: true })
-    const cleanup = () => { window.removeEventListener('pointermove', onMove) }
-    window.addEventListener('pointerup', cleanup, { once: true })
+    window.addEventListener('pointerup', onUp)
   }
 
-  // ── Render guard ─────────────────────────────────────────────────────────
+  // ── Summen ───────────────────────────────────────────────────────────────
+
+  const savedOfferSurcharges = Number(offerDetail?.SURCHARGES_TOTAL ?? 0)
+  const savedRoot = offerRootTotals(structure, savedAgg, savedOfferSurcharges)
+  // Angebotszuschlaege rechnen auf die Summe der Wurzel-Honorare — mit
+  // offenen Eingaben also neu.
+  const offerLevelSurcharges = view.pending.size || rootChanged
+    ? computeSurcharges(offerRootTotals(view.nodes, aggMap, 0).rootStructureRevenueSum, rootEdit ?? surchargeDefault(offerDetail)).total
+    : savedOfferSurcharges
+  const { rootRevenue, rootSurcharges, rootStructureRevenueSum, rootRevenueFinal, rootExtras, rootGesamt } =
+    offerRootTotals(view.nodes, aggMap, offerLevelSurcharges)
+
+  const allIds = structure.map(n => n.ID)
+  const allSelected = allIds.length > 0 && allIds.every(id => selectedIds.has(id))
+  function toggleRow(id: number) {
+    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  function toggleAll() { setSelectedIds(allSelected ? new Set() : new Set(allIds)) }
+
+  const addParent  = addForm?.FATHER_ID ? nodeById.get(Number(addForm.FATHER_ID)) : undefined
+  const addTakes   = addForm ? leafValue(addForm.FATHER_ID ? Number(addForm.FATHER_ID) : null) : null
+  const COLS = cols.colCount
+
+  // Zeilenmenue und Rechtsklick teilen sich dieselben Befehle.
+  function rowCommands(node: OfferStructureNode) {
+    const isParent = parentIds.has(String(node.ID))
+    const hourly = !isParent && isHourlyBt(edits[node.ID]?.billingTypeId ?? node.BILLING_TYPE_ID)
+    return [
+      canEdit && { key: 'add',  label: 'Unterelement anlegen', run: () => openAdd(node.ID) },
+      canEdit && hourly && { key: 'eff', label: 'Aufwand nach Rollen', run: () => setEffortPanel(node.ID) },
+      canEdit && { key: 'sur',  label: 'Zuschläge bearbeiten', run: () => setSurchargePanel(node.ID) },
+      canCalc && { key: 'kalk', label: 'Kalkulation anlegen',  run: () => setKalkFatherId(node.ID) },
+      canEdit && { key: 'del',  label: isParent ? 'Löschen (erst Unterelemente)' : 'Element löschen', danger: true, disabled: isParent, run: () => askDelete(node) },
+    ].filter(Boolean) as { key: string; label: string; run: () => void; disabled?: boolean; danger?: boolean }[]
+  }
+
+  function openOfferSurcharges() {
+    setRootEdit(rootEdit ?? surchargeDefault(offerDetail))
+    setOfferSurchargePanel(true)
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <>
-    <div className="ls-wrap">
-      {/* ── Offer selector + PDF button ── */}
-      <div className="ls-toolbar" style={{ marginBottom: 12 }}>
-        <label className="ls-label">Angebot</label>
-        <div ref={offerAcRef} className="project-ac-wrap" style={{ flex: 1, maxWidth: 380, position: 'relative' }}>
-          <input
-            className="ls-select"
-            style={{ width: '100%' }}
-            placeholder="— Angebot wählen —"
-            value={offerInput}
-            onFocus={() => setOfferDropdownOpen(true)}
-            onChange={e => { setOfferInput(e.target.value); setOfferDropdownOpen(true) }}
-          />
-          {offerDropdownOpen && (
-            <div className="project-ac-dropdown">
-              {filteredOffers.length === 0 && (
-                <div className="project-ac-option" style={{ color: 'var(--text-3)', fontStyle: 'italic' }}>Keine Treffer</div>
-              )}
-              {filteredOffers.map(o => (
-                <div key={o.ID} className="project-ac-option"
-                  onMouseDown={e => {
-                    e.preventDefault()
-                    setOfferInput(o.ABBR + (o.NAME ? ` – ${o.NAME}` : ''))
-                    setOfferDropdownOpen(false)
-                    onOfferChange?.(o.ID)
-                  }}>
-                  <span className="project-ac-short">{o.ABBR}</span>
-                  {o.NAME && <span className="project-ac-long">{o.NAME}</span>}
-                </div>
-              ))}
-            </div>
-          )}
+    <div className="sx-root">
+      {oid === null && (
+        <div className="empty-block">
+          <p className="empty-note">Kein Angebot gewählt.</p>
+          <p className="empty-block-why">In der Angebotsliste ein Angebot öffnen. Die Struktur gliedert das Honorar des Angebots — sie wird bei der Beauftragung zur Projektstruktur.</p>
         </div>
-        {oid && (
-          <button className="btn-small" onClick={() => openOfferPdf(oid)} title="PDF öffnen">PDF</button>
-        )}
-      </div>
+      )}
 
-      {oid && !isLoading && (
+      {oid !== null && isLoading && <p className="empty-note">Lade Struktur …</p>}
+
+      {oid !== null && !isLoading && (
         <>
-          {selectedIds.size > 0 && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-              <button className="btn-small" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={bulkDelete}>
+          {!narrow && canEdit && selectedIds.size > 0 && (
+            <div className="struct-bulk-bar">
+              <span>{selectedIds.size} ausgewählt</span>
+              <button type="button" className="btn-small" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={bulkDelete}>
                 Löschen ({selectedIds.size})
               </button>
-              <button className="btn-small" onClick={() => setSelectedIds(new Set())}>Auswahl aufheben</button>
+              <button type="button" className="btn-small" onClick={() => setSelectedIds(new Set())}>Auswahl aufheben</button>
             </div>
           )}
 
           {dragIds.size > 0 && (
-            <div ref={rootZoneRef} className={`struct-root-drop${dragOverId === 'root' ? ' drag-over' : ''}`}>
-              Hier ablegen → Projektlevel
+            <div className={`struct-root-drop${dragOverId === 'root' ? ' drag-over' : ''}`}>
+              Hier ablegen → oberste Ebene
             </div>
           )}
 
-          {/* Gleiche Leiste wie in der Projektstruktur: Anlegen gehoert nach
-              oben, und die Rechtsklick-Funktionen brauchen einen sichtbaren
-              Hinweis. */}
-          <div className="list-toolbar">
+          <div className="list-toolbar sx-toolbar">
             {flatTree.length > 0 && (
-              <input type="search" className="list-search" placeholder="Elemente filtern …"
-                style={{ maxWidth: 260, fontSize: 13 }}
+              <input type="search" className="list-search sx-search" placeholder="Elemente filtern …"
+                aria-label="Elemente filtern"
                 value={elementSearch} onChange={e => setElementSearch(e.target.value)} />
             )}
-            <span className="struct-context-tip">
-              <MousePointerClick size={13} strokeWidth={1.75} />
-              Rechtsklick / langes Tippen auf eine Zeile öffnet weitere Funktionen
-              <HelpHint id="structure.contextmenu" />
-            </span>
-            <button className="btn-primary btn-small" type="button" style={{ marginLeft: 'auto' }}
-              onClick={() => { setSaveMsg(null); setAddForm(emptyAdd()) }}>
-              + Neue Position
-            </button>
+            <div className="sx-toolbar-right">
+              {!narrow && flatTree.length > 0 && <ColumnChooser columns={STRUKTUR_SPALTEN} hidden={cols.hidden} onToggle={cols.toggle} />}
+              {canEdit && (
+                <button className="btn-secondary" type="button" onClick={() => openAdd(null)}>
+                  <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Neues Element
+                </button>
+              )}
+            </div>
           </div>
 
-          {flatTree.length > 0 && (
+          <Message text={errorMsg} type="error" />
+
+          {flatTree.length > 0 && narrow && (
+            <OfferStrukturMobile offerId={oid} flat={filteredFlatTree} parentIds={parentIds} aggMap={aggMap}
+              billingTypes={btypes} roles={roles} canEdit={canEdit}
+              root={{ label: `${currentOffer?.ABBR ?? ''} · Angebot gesamt`, total: rootGesamt }}
+              onAdd={openAdd} onDelete={askDelete} />
+          )}
+
+          {flatTree.length > 0 && !narrow && (
             <div className="list-section">
-              <table className="master-table structure-table">
+              <table className="master-table structure-table sx-table">
                 <thead>
                   <tr>
-                    <th scope="col" style={{ width: 28 }}>
-                      <input type="checkbox" checked={allSelected} onChange={toggleAll} title="Alle auswählen" />
+                    <th scope="col" className="sx-col-check">
+                      {canEdit && <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Alle auswählen" />}
                     </th>
-                    <th scope="col" style={{ width: 24 }}></th>
-                    <th scope="col">Kürzel</th>
-                    <th scope="col">Bezeichnung</th>
-                    <th scope="col">Abrechnung</th>
-                    <th scope="col" className="num">Honorar €</th>
-                    <th scope="col" className="num">Zuschläge €</th>
-                    <th scope="col" className="num">Honorar + Zuschl. €</th>
-                    <th scope="col" className="num">NK %</th>
-                    <th scope="col" className="num">Nebenkosten €</th>
-                    <th scope="col"></th>
+                    <th scope="col" className="sx-col-grip"><span className="sr-only">Verschieben</span></th>
+                    <th scope="col">
+                      <span className="sx-th-element">
+                        Element
+                        {hasParents && (
+                          <button type="button" className="sx-collapse-all" onClick={toggleAllCollapsed}
+                            aria-label={allCollapsed ? 'Alle Ebenen aufklappen' : 'Alle Ebenen zuklappen'}
+                            title={allCollapsed ? 'Alle aufklappen' : 'Alle zuklappen'}>
+                            {allCollapsed ? <ChevronsUpDown size={13} strokeWidth={2} aria-hidden="true" /> : <ChevronsDownUp size={13} strokeWidth={2} aria-hidden="true" />}
+                          </button>
+                        )}
+                      </span>
+                    </th>
+                    {cols.show('bt') && <th scope="col">Abrechnung</th>}
+                    <th scope="col" className="num">
+                      <span className="sx-th-element ox-th-fee">Honorar € <HelpHint id="offers.structure.hours" size={13} /></span>
+                    </th>
+                    {cols.show('sur') && <th scope="col" className="num">Zuschläge €</th>}
+                    {showInklCol && <th scope="col" className="num" title="Honorar einschließlich Zuschlägen">inkl. Zuschl. €</th>}
+                    {cols.show('nkpct') && <th scope="col">NK %</th>}
+                    {cols.show('nk') && <th scope="col" className="num">Nebenkosten €</th>}
+                    {cols.show('total') && <th scope="col" className="num">Gesamt €</th>}
+                    <th scope="col" className="sx-col-menu">
+                      <span className="sr-only">Aktionen</span>
+                      <HelpHint id="structure.contextmenu" align="right" size={13} />
+                    </th>
                   </tr>
                 </thead>
-                <tbody ref={tbodyRef}>
-                  {/* Root totals row */}
-                  {structure.length > 0 && (
-                    <>
-                    <tr style={{ fontWeight: 700, background: 'rgba(37,99,235,0.04)', borderBottom: '2px solid var(--border)', cursor: 'context-menu' }}
-                      onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) }}>
-                      <td></td><td></td>
-                      <td style={{ fontSize: 12, color: 'var(--text-3)' }}>Gesamt</td>
-                      <td></td>
-                      <td><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
-                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(rootRevenueBasis)}</span></td>
-                      <td className="num"><span style={{ color: rootSurcharges > 0 ? 'var(--success)' : 'rgba(17,24,39,0.25)', fontSize: 12 }}>{rootSurcharges > 0 ? fmtEur(rootSurcharges) : '—'}</span></td>
-                      <td className="num"><span style={{ fontSize: 12, fontWeight: rootSurcharges > 0 ? 600 : undefined }}>{money(rootRevenueFinal)}</span></td>
-                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span></td>
-                      <td className="num"><span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(rootExtras)}</span></td>
-                      <td>
-                        <button
-                          className="row-action-btn"
-                          title={offerLevelSurcharges > 0 ? `Angebotszuschläge (${fmtEur(offerLevelSurcharges)})` : 'Angebotszuschläge bearbeiten'}
-                          style={offerLevelSurcharges > 0 ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : { color: 'var(--text-3)' }}
-                          onClick={() => {
-                            if (offerSurchargePanel) closeOfferSurchargePanel()
-                            else { setOfferSurchargeEdit(offerSurchargeDefault()); setOfferSurchargePanel(true) }
-                          }}
-                        ><Percent size={13} strokeWidth={2} /></button>
-                      </td>
-                    </tr>
-                    {offerSurchargePanel && offerSurchargeEdit && (() => {
-                      const sE = offerSurchargeEdit
-                      const computed = computeSurchargesDisplay(rootStructureRevenueSum, sE)
-                      const setEdit = (f: Partial<SurchargeEdit>) => setOfferSurchargeEdit(prev => prev ? { ...prev, ...f } : prev)
-                      return (
-                        <tr className="surcharge-panel-row">
-                          <td colSpan={11}>
-                            <div className="surcharge-panel">
-                              <div className="surcharge-panel-basis">
-                                Angebotszuschläge – Basis (Summe Wurzel-Honorar): <strong>{money(rootStructureRevenueSum)}</strong>
-                              </div>
-                              <div className="surcharge-grid">
-                                <div className="surcharge-grid-header">
-                                  <span>Kumul.</span>
-                                  <span>Bezeichnung</span>
-                                  <span style={{ textAlign: 'right' }}>%</span>
-                                  <span style={{ textAlign: 'right' }}>Betrag</span>
-                                </div>
-                                {([
-                                  { label: sE.s1Label, pct: sE.s1Pct, cumul: sE.s1Cumul, eur: computed.s1Eur, disableCumul: true,  placeholder: 'z.B. GP-Zuschlag', labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const },
-                                  { label: sE.s2Label, pct: sE.s2Pct, cumul: sE.s2Cumul, eur: computed.s2Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const },
-                                  { label: sE.s3Label, pct: sE.s3Pct, cumul: sE.s3Cumul, eur: computed.s3Eur, disableCumul: false, placeholder: '(leer = inaktiv)', labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const },
-                                ] as const).map((row, i) => (
-                                  <div className="surcharge-grid-row" key={i}>
-                                    <input type="checkbox" checked={row.cumul} disabled={row.disableCumul}
-                                      onChange={e => setEdit({ [row.cumulKey]: e.target.checked })} />
-                                    <input className="tbl-input" placeholder={row.placeholder} value={row.label}
-                                      onChange={e => setEdit({ [row.labelKey]: e.target.value })} />
-                                    <input className="tbl-input" type="number" min={-100} max={500} step={0.1}
-                                      style={{ width: 64, textAlign: 'right' }} value={row.pct}
-                                      onChange={e => setEdit({ [row.pctKey]: e.target.value })} />
-                                    <span className="surcharge-eur">{row.label || row.pct ? fmtEur(row.eur) : '—'}</span>
-                                  </div>
-                                ))}
-                                <div className="surcharge-grid-total">
-                                  Gesamt Angebotszuschläge: <strong>{money(computed.total)}</strong>
-                                </div>
-                              </div>
-                              <div className="surcharge-panel-actions">
-                                <button className="btn-small" onClick={closeOfferSurchargePanel}>
-                                  {offerSurchargeMut.isPending ? 'Speichert …' : 'Schließen (speichert automatisch)'}
-                                </button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })()}
-                    </>
-                  )}
+                <tbody>
+                  <tr className={`sx-root-row${rootChanged ? ' sx-row-changed' : ''}`}
+                    onContextMenu={canEdit ? e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: null }) } : undefined}>
+                    <td></td>
+                    <td></td>
+                    <td className="sx-cell-element">
+                      <span className="sx-root-abbr">{currentOffer?.ABBR ?? ''}</span>
+                      <span className="sx-root-name">Angebot gesamt</span>
+                    </td>
+                    {cols.show('bt') && <td className="sx-muted">—</td>}
+                    <td className="num sx-muted"><PendingValue now={rootRevenue} saved={savedRoot.rootRevenue}>{money(rootRevenue)}</PendingValue></td>
+                    {cols.show('sur') && <td className="num"><span className="sx-surcharge-static"><PendingValue now={rootSurcharges} saved={savedRoot.rootSurcharges}><SurchargeAmount value={rootSurcharges} /></PendingValue></span></td>}
+                    {showInklCol && <td className="num"><PendingValue now={rootRevenueFinal} saved={savedRoot.rootRevenueFinal}>{money(rootRevenueFinal)}</PendingValue></td>}
+                    {cols.show('nkpct') && <td className="sx-muted">—</td>}
+                    {cols.show('nk') && <td className="num sx-muted"><PendingValue now={rootExtras} saved={savedRoot.rootExtras}>{money(rootExtras)}</PendingValue></td>}
+                    {cols.show('total') && <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rootRevenueFinal)} + Nebenkosten ${fmtEur(rootExtras)}`}><PendingValue now={rootGesamt} saved={savedRoot.rootGesamt}>{money(rootGesamt)}</PendingValue></td>}
+                    <td className="sx-col-menu">
+                      {canEdit && (
+                        <RowMenu label="Aktionen zum Angebot" triggerClassName="row-action-btn">
+                          <button type="button" role="menuitem" className="row-menu-item" onClick={openOfferSurcharges}>
+                            Angebotszuschläge bearbeiten
+                          </button>
+                        </RowMenu>
+                      )}
+                    </td>
+                  </tr>
+                  {offerSurchargePanel && (() => {
+                    const sE = rootEdit ?? surchargeDefault(offerDetail)
+                    return (
+                      <SurchargePanelRow
+                        colSpan={COLS} title="Angebotszuschläge – Basis (Summe Wurzel-Honorar)" basis={rootStructureRevenueSum}
+                        edit={sE} computed={computeSurcharges(rootStructureRevenueSum, sE)} readOnly={!canEdit}
+                        onChange={f => setRootEdit({ ...sE, ...f })}
+                        onDone={() => setOfferSurchargePanel(false)}
+                      />
+                    )
+                  })()}
 
                   {filteredFlatTree.map(({ node, depth }) => {
-                    const n        = node as unknown as OfferStructureNode
-                    const edit     = edits[n.ID]
-                    const isParent = parentIds.has(String(n.ID))
-                    const isHourly = Number(edit?.billingTypeId ?? n.BILLING_TYPE_ID) === 2
-                    const isDragOver = dragOverId === n.ID
+                    const edit      = edits[node.ID]
+                    const changes   = offerRowChanges(node, edit)
+                    const isParent  = parentIds.has(String(node.ID))
+                    const nameShort = edit?.nameShort     ?? (node.ABBR ?? '')
+                    const nameLong  = edit?.nameLong      ?? (node.NAME ?? '')
+                    const btId      = edit?.billingTypeId ?? String(node.BILLING_TYPE_ID ?? '')
+                    const nkVal     = edit?.nk            ?? String(node.EXTRAS_PERCENT ?? 0)
+                    const budgetVal = edit?.budget        ?? String(node.REVENUE_BASIS ?? node.REVENUE ?? 0)
+                    const hourly    = !isParent && isHourlyBt(btId)
+                    const { hours, rate } = hoursRate(node, edit)
+                    const lines     = effectiveLines(node, edit)
+                    // Mehrere Rollen (oder Panel offen): die Zelle fasst zusammen
+                    const multi     = hourly && (lines.length > 1 || effortPanel === node.ID)
+                    const linesTitle = lines.map(l => `${l.roleAbbr || 'ohne Rolle'}: ${fmtHours(Number(l.hours) || 0)} h × ${fmtEur(Number(l.rate) || 0)}`).join('\n')
+                    const isDragOver = dragOverId === node.ID
 
-                    const nameShort    = edit?.nameShort     ?? (n.ABBR ?? '')
-                    const nameLong     = edit?.nameLong      ?? (n.NAME  ?? '')
-                    const btId         = edit?.billingTypeId ?? String(n.BILLING_TYPE_ID ?? '')
-                    const nkVal        = edit?.nk            ?? String(n.EXTRAS_PERCENT ?? 0)
-                    const budgetVal    = edit?.budget        ?? String(n.REVENUE_BASIS ?? n.REVENUE ?? 0)
-                    const hoursVal     = edit?.hours         ?? String(n.QUANTITY ?? 0)
-                    const rateVal      = edit?.rate          ?? String(n.HOURLY_RATE ?? 0)
-                    const hourlyEur    = Number(hoursVal || 0) * Number(rateVal || 0)
-
-                    const hasSurcharges = (n.SURCHARGES_TOTAL ?? 0) > 0
-                    const displayRevenueBasis = isParent
-                      ? (aggMap.get(String(n.ID))?.revenueBasis ?? (n.REVENUE_BASIS != null ? Number(n.REVENUE_BASIS) : Number(n.REVENUE ?? 0)))
-                      : (n.REVENUE_BASIS != null ? Number(n.REVENUE_BASIS) : Number(n.REVENUE ?? 0))
-                    const displaySurcharges = isParent
-                      ? (aggMap.get(String(n.ID))?.surcharges ?? (n.SURCHARGES_TOTAL ?? 0))
-                      : (n.SURCHARGES_TOTAL ?? 0)
-                    const displayExtras = isParent
-                      ? (aggMap.get(String(n.ID))?.extras ?? Number(n.EXTRAS ?? 0))
-                      : Number(n.EXTRAS ?? 0)
-
-                    const sEdit        = surchargeEdits[n.ID] ?? surchargeDefault(n)
-                    const surchargeBase = n.REVENUE_BASIS != null ? Number(n.REVENUE_BASIS) : Number(n.REVENUE ?? 0)
-                    const computed     = computeSurchargesDisplay(surchargeBase, sEdit)
+                    const sEdit = edit?.surcharge ?? surchargeDefault(node)
+                    // Zuschlaege eines Vaters rechnen auf die Summe der Kinder, eines Blatts auf sein Honorar
+                    // Stand mit offenen Eingaben (Runde 6) und der gespeicherte zum Vergleich
+                    const vnode  = viewById.get(node.ID) ?? node
+                    const savedA = savedAgg.get(String(node.ID))
+                    const surchargeBase = isParent ? Number(vnode.REVENUE_BASIS ?? 0) : offerLeafFee(node, edit)
+                    const computed = computeSurcharges(surchargeBase, sEdit)
+                    const surchargeChanged = changes.SURCHARGE_1_CUMUL !== undefined
+                    const hasSurcharges = Number(node.SURCHARGES_TOTAL ?? 0) !== 0
+                    const cmds = rowCommands(node)
+                    const ch = (f: keyof OfferPutBody) => changes[f] !== undefined ? ' sx-changed' : ''
+                    const agg = aggMap.get(String(node.ID))
 
                     return (
-                      <React.Fragment key={n.ID}>
+                      <React.Fragment key={node.ID}>
                       <tr
-                        data-struct-id={n.ID}
+                        data-struct-id={node.ID}
                         className={[
                           isParent ? 'struct-row-parent' : '',
+                          Object.keys(changes).length ? 'sx-row-changed' : '',
                           isDragOver && dragZone === 'on'    ? 'ps-drag-over'  : '',
                           isDragOver && dragZone === 'above' ? 'ps-drop-above' : '',
-                          dragIds.has(n.ID) ? 'ps-dragging' : '',
+                          dragIds.has(node.ID) ? 'ps-dragging' : '',
                         ].filter(Boolean).join(' ')}
-                        onContextMenu={e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: n.ID }) }}
+                        onContextMenu={cmds.length ? e => { e.preventDefault(); setContextMenu({ x: e.clientX, y: e.clientY, nodeId: node.ID }) } : undefined}
+                        onTouchStart={cmds.length ? () => { longPressRef.current = setTimeout(() => setContextMenu({ x: 0, y: 0, nodeId: node.ID }), 600) } : undefined}
+                        onTouchEnd={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null } }}
+                        onTouchMove={() => { if (longPressRef.current) { clearTimeout(longPressRef.current); longPressRef.current = null } }}
                       >
-                        <td>
-                          <input type="checkbox" checked={selectedIds.has(n.ID)} onChange={() => toggleRow(n.ID)} />
+                        <td className="sx-col-check">
+                          {canEdit && <input type="checkbox" checked={selectedIds.has(node.ID)}
+                            aria-label={`${node.ABBR ?? ''} auswählen`} onChange={() => toggleRow(node.ID)} />}
                         </td>
-                        <td>
-                          <span className="ps-drag-handle" title="Ziehen zum Verschieben"
-                            onPointerDown={e => handleHandlePointerDown(e, n.ID)}>⋮⋮</span>
-                        </td>
-                        <td style={{ paddingLeft: 4 + depth * 16 }}>
-                          <input className="tbl-input" style={{ width: 70, fontWeight: isParent ? 700 : undefined }}
-                            value={nameShort} onChange={e => setField(n.ID, 'nameShort', e.target.value)} />
-                          {isParent && <span className="struct-agg-badge" title="Aggregierter Wert"> ∑</span>}
-                        </td>
-                        <td>
-                          <input className="tbl-input" style={{ width: 160 }}
-                            value={nameLong} onChange={e => setField(n.ID, 'nameLong', e.target.value)} />
-                          {isHourly && !isParent && (
-                            <span className="ls-muted" style={{ marginLeft: 6, fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                              {n.ROLE_ABBR && <span style={{ fontWeight: 600 }}>{n.ROLE_ABBR}:</span>}
-                              <input
-                                className="tbl-input" type="number" min={0} step={0.5}
-                                style={{ width: 56, fontSize: 11, padding: '1px 4px', textAlign: 'right' }}
-                                value={hoursVal}
-                                onChange={e => setField(n.ID, 'hours', e.target.value)}
-                                title="Geschätzte Stunden — Honorar = Stunden × Satz"
-                              />
-                              h ×
-                              <input
-                                className="tbl-input" type="number" min={0} step={1}
-                                style={{ width: 56, fontSize: 11, padding: '1px 4px', textAlign: 'right' }}
-                                value={rateVal}
-                                onChange={e => setField(n.ID, 'rate', e.target.value)}
-                                title="Stundensatz (€/h)"
-                              />
-                              €/h
+                        <td className="sx-col-grip">
+                          {canEdit && (
+                            <span className="ps-drag-handle" title="Halten und ziehen zum Verschieben"
+                              onPointerDown={e => handleHandlePointerDown(e, node.ID)}>
+                              <GripVertical size={14} strokeWidth={2} aria-hidden="true" />
                             </span>
                           )}
                         </td>
-                        <td>
-                          <select className="tbl-select" value={btId}
-                            onChange={e => setField(n.ID, 'billingTypeId', e.target.value)}>
-                            {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}</option>)}
-                          </select>
-                        </td>
-                        <td className="num">
-                          {isParent ? (
-                            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>{money(displayRevenueBasis)}</span>
-                          ) : isHourly ? (
-                            <span style={{ color: 'var(--text-3)', fontSize: 12 }} title="Honorar = Stunden × Satz (oben editierbar)">{money(hourlyEur)}</span>
-                          ) : (
-                            <input className="tbl-input" type="number" min={0} step={100}
-                              style={{ width: 90, textAlign: 'right' }}
-                              value={budgetVal} onChange={e => setField(n.ID, 'budget', e.target.value)} />
-                          )}
-                        </td>
-                        <td className="num">
-                          {displaySurcharges !== 0 ? (
-                            <span style={{ color: displaySurcharges > 0 ? 'var(--success)' : 'var(--danger)', fontSize: 12 }}>{money(displaySurcharges)}</span>
-                          ) : (
-                            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>—</span>
-                          )}
-                        </td>
-                        <td className="num">
-                          <span style={{ fontSize: 12, fontWeight: hasSurcharges ? 600 : undefined }}>
-                            {money(Number(n.REVENUE ?? 0))}
-                          </span>
-                        </td>
-                        <td className="num">
-                          <input className="tbl-input" type="number" min={0} max={100} step={0.1} style={{ width: 56 }}
-                            value={nkVal} onChange={e => setField(n.ID, 'nk', e.target.value)} />
-                        </td>
-                        <td className="num">{money(displayExtras)}</td>
-                        <td>
-                          <div style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-                            <button
-                              className="row-action-btn"
-                              title={hasSurcharges ? `Zuschläge (${fmtEur(n.SURCHARGES_TOTAL ?? 0)})` : 'Zuschläge bearbeiten'}
-                              style={hasSurcharges ? { color: 'var(--accent)', borderColor: 'var(--accent)' } : { color: 'var(--text-3)' }}
-                              onClick={() => { if (surchargePanel === n.ID) closeSurchargePanel(n.ID); else setSurchargePanel(n.ID) }}
-                            ><Percent size={13} strokeWidth={2} /></button>
-                            <button className="btn-small" style={{ color: 'var(--danger)', borderColor: 'var(--danger)', display: 'inline-flex', alignItems: 'center' }}
-                              disabled={deleteMut.isPending}
-                              onClick={() => setConfirmState({
-                                title: 'Element löschen',
-                                message: `Element „${nameShort}" löschen?`,
-                                onConfirm: () => deleteMut.mutate(n.ID),
-                              })}
-                            ><X size={12} strokeWidth={2.5} /></button>
+                        <td className="sx-cell-element" style={{ paddingLeft: `calc(var(--sx-pad-x) + ${depth} * var(--sx-indent))` }}>
+                          <div className="sx-element">
+                            {isParent ? (
+                              <button type="button" className="sx-twisty" onClick={() => toggleCollapsed(node.ID)}
+                                aria-expanded={!collapsed.has(node.ID)}
+                                aria-label={`${nameShort} ${collapsed.has(node.ID) ? 'aufklappen' : 'zuklappen'}`}>
+                                <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
+                              </button>
+                            ) : <span className="sx-twisty-space" aria-hidden="true" />}
+                            {canEdit ? (
+                              <input className={`tbl-input sx-input sx-input-abbr${isParent ? ' sx-input-parent' : ''}${ch('abbr')}`}
+                                aria-label="Kürzel" value={nameShort}
+                                onChange={e => editRow(node.ID, { nameShort: e.target.value })} />
+                            ) : <span className={`sx-abbr-text${isParent ? ' sx-strong' : ''}`}>{nameShort}</span>}
+                            {canEdit ? (
+                              <input className={`tbl-input sx-input sx-input-name${ch('name')}`}
+                                aria-label="Bezeichnung" title={nameLong} value={nameLong}
+                                onChange={e => editRow(node.ID, { nameLong: e.target.value })} />
+                            ) : <span className="sx-name-text" title={nameLong}>{nameLong}</span>}
+                            {isParent && collapsed.has(node.ID) && (
+                              <span className="sx-collapsed-count">{descendantCount(node.ID)} ausgeblendet</span>
+                            )}
+                            {hourly && rolesLabel(lines) && (
+                              <span className="ox-role" title={lines.length > 1 ? linesTitle : lines[0]?.roleName ? `Rolle: ${lines[0].roleName}` : 'Rolle'}>{rolesLabel(lines)}</span>
+                            )}
                           </div>
                         </td>
-                      </tr>
-                      {surchargePanel === n.ID && (
-                        <tr className="surcharge-panel-row">
-                          <td colSpan={11}>
-                            <div className="surcharge-panel">
-                              <div className="surcharge-panel-basis">
-                                Basis (Honorar): <strong>{money(surchargeBase)}</strong>
-                              </div>
-                              <div className="surcharge-grid">
-                                <div className="surcharge-grid-header">
-                                  <span>Kumul.</span><span>Bezeichnung</span>
-                                  <span style={{ textAlign: 'right' }}>%</span>
-                                  <span style={{ textAlign: 'right' }}>Betrag</span>
-                                </div>
-                                {([
-                                  { label: sEdit.s1Label, pct: sEdit.s1Pct, cumul: sEdit.s1Cumul, eur: computed.s1Eur, disableCumul: true,  placeholder: 'z.B. GP-Zuschlag',
-                                    onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [n.ID]: { ...(prev[n.ID] ?? surchargeDefault(n)), ...f } })),
-                                    labelKey: 's1Label' as const, pctKey: 's1Pct' as const, cumulKey: 's1Cumul' as const },
-                                  { label: sEdit.s2Label, pct: sEdit.s2Pct, cumul: sEdit.s2Cumul, eur: computed.s2Eur, disableCumul: false, placeholder: '(leer = inaktiv)',
-                                    onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [n.ID]: { ...(prev[n.ID] ?? surchargeDefault(n)), ...f } })),
-                                    labelKey: 's2Label' as const, pctKey: 's2Pct' as const, cumulKey: 's2Cumul' as const },
-                                  { label: sEdit.s3Label, pct: sEdit.s3Pct, cumul: sEdit.s3Cumul, eur: computed.s3Eur, disableCumul: false, placeholder: '(leer = inaktiv)',
-                                    onChange: (f: Partial<SurchargeEdit>) => setSurchargeEdits(prev => ({ ...prev, [n.ID]: { ...(prev[n.ID] ?? surchargeDefault(n)), ...f } })),
-                                    labelKey: 's3Label' as const, pctKey: 's3Pct' as const, cumulKey: 's3Cumul' as const },
-                                ] as const).map((row, i) => (
-                                  <div className="surcharge-grid-row" key={i}>
-                                    <input type="checkbox" checked={row.cumul} disabled={row.disableCumul}
-                                      onChange={e => row.onChange({ [row.cumulKey]: e.target.checked })} />
-                                    <input className="tbl-input" placeholder={row.placeholder} value={row.label}
-                                      onChange={e => row.onChange({ [row.labelKey]: e.target.value })} />
-                                    <input className="tbl-input" type="number" min={-100} max={500} step={0.1}
-                                      style={{ width: 64, textAlign: 'right' }} value={row.pct}
-                                      onChange={e => row.onChange({ [row.pctKey]: e.target.value })} />
-                                    <span className="surcharge-eur">{row.label || row.pct ? fmtEur(row.eur) : '—'}</span>
-                                  </div>
-                                ))}
-                                <div className="surcharge-grid-total">
-                                  Gesamt Zuschläge: <strong>{money(computed.total)}</strong>
-                                </div>
-                              </div>
-                              <div className="surcharge-panel-actions">
-                                <button className="btn-small" onClick={() => closeSurchargePanel(n.ID)}>
-                                  {surchargeMut.isPending ? 'Speichert …' : 'Schließen (speichert automatisch)'}
-                                </button>
-                              </div>
-                            </div>
+                        {cols.show('bt') && (
+                        <td>
+                          {canEdit ? (
+                            <select className={`tbl-select sx-input sx-input-bt${ch('billing_type_id')}`} aria-label="Abrechnungsart" value={btId}
+                              onChange={e => editRow(node.ID, { billingTypeId: e.target.value })}>
+                              {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}</option>)}
+                            </select>
+                          ) : btypes.find(b => String(b.ID) === btId)?.ABBR ?? '—'}
+                        </td>
+                        )}
+                        <td className="num">
+                          {multi && canEdit ? (
+                            <button type="button" className={`sx-surcharge-btn ox-effort-btn${ch('effort_lines')}`}
+                              aria-expanded={effortPanel === node.ID} title={linesTitle}
+                              aria-label={`Aufwand ${nameShort} nach Rollen bearbeiten`}
+                              onClick={() => setEffortPanel(p => p === node.ID ? null : node.ID)}>
+                              {fmtHours(linesHours(lines))} h · {fmtEur(linesFee(lines))}
+                            </button>
+                          ) : hourly && canEdit ? (
+                            // Aufwand: Stunden × Satz der ersten Zeile statt eines Betrags.
+                            // Das Produkt steht im Tooltip, in „inkl. Zuschl." und in „Gesamt".
+                            <span className="ox-hours" title={`Honorar = ${hours} h × ${fmtEur(Number(rate))} = ${fmtEur(offerLeafFee(node, edit))}`}>
+                              <input className={`tbl-input sx-input ox-input-hours${ch('effort_lines')}`} type="text" inputMode="decimal"
+                                aria-label={`Stunden ${nameShort}`} value={hours}
+                                onChange={e => editRow(node.ID, { lines: withFirstLine(node, edit, { hours: e.target.value.replace(',', '.') }) })} />
+                              <span className="ox-times" aria-hidden="true">h ×</span>
+                              <AmountInput className={`tbl-input sx-input ox-input-rate${ch('effort_lines')}`}
+                                aria-label={`Stundensatz ${nameShort}`} value={rate}
+                                onChange={v => editRow(node.ID, { lines: withFirstLine(node, edit, { rate: v }) })} />
+                            </span>
+                          ) : isParent || hourly || !canEdit ? (
+                            <span className="sx-muted" title={hourly ? linesTitle : isParent ? 'Summe der Unterelemente' : undefined}>
+                              {isParent
+                                ? <PendingValue now={agg?.revenueBasis} saved={savedA?.revenueBasis}>{money(agg?.revenueBasis ?? 0)}</PendingValue>
+                                : money(offerLeafFee(node, edit))}
+                            </span>
+                          ) : (
+                            <AmountInput className={`tbl-input sx-input sx-input-num${ch('revenue')}`}
+                              aria-label="Honorar" value={budgetVal}
+                              onChange={v => editRow(node.ID, { budget: v })} />
+                          )}
+                        </td>
+                        {cols.show('sur') && (
+                        <td className="num">
+                          {(() => {
+                            const sv = isParent ? (agg?.surcharges ?? 0) : Number(vnode.SURCHARGES_TOTAL ?? 0)
+                            const svSaved = isParent ? (savedA?.surcharges ?? 0) : Number(node.SURCHARGES_TOTAL ?? 0)
+                            // Selbst geaenderte Zuschlaege traegt schon sx-changed am Knopf
+                            const amount = surchargeChanged ? <SurchargeAmount value={sv} />
+                              : <PendingValue now={sv} saved={svSaved}><SurchargeAmount value={sv} /></PendingValue>
+                            return canEdit ? (
+                              <button type="button" className={`sx-surcharge-btn${surchargeChanged ? ' sx-changed' : ''}`}
+                                aria-label={`Zuschläge von ${nameShort} bearbeiten`}
+                                onClick={() => setSurchargePanel(p => p === node.ID ? null : node.ID)}>
+                                {amount}
+                              </button>
+                            ) : <span className="sx-surcharge-static">{amount}</span>
+                          })()}
+                        </td>
+                        )}
+                        {showInklCol && (
+                          <td className={`num${hasSurcharges ? ' sx-strong' : ''}`}>
+                            <PendingValue now={vnode.REVENUE} saved={node.REVENUE}>{money(Number(vnode.REVENUE ?? 0))}</PendingValue>
                           </td>
-                        </tr>
+                        )}
+                        {cols.show('nkpct') && (
+                        <td>
+                          {canEdit ? (
+                            <input className={`tbl-input sx-input sx-input-pct${ch('extras_percent')}`} type="text" inputMode="decimal"
+                              aria-label="Nebenkosten in Prozent" value={nkVal}
+                              onChange={e => editRow(node.ID, { nk: e.target.value.replace(',', '.') })} />
+                          ) : `${nkVal} %`}
+                        </td>
+                        )}
+                        {cols.show('nk') && (
+                          <td className="num">
+                            <PendingValue now={isParent ? agg?.extras : vnode.EXTRAS} saved={isParent ? savedA?.extras : node.EXTRAS}>
+                              {money(isParent ? agg?.extras : vnode.EXTRAS)}
+                            </PendingValue>
+                          </td>
+                        )}
+                        {cols.show('total') && (() => {
+                          const rev = Number(vnode.REVENUE ?? 0)
+                          const ext = isParent ? (agg?.extras ?? 0) : Number(vnode.EXTRAS ?? 0)
+                          const savedTotal = Number(node.REVENUE ?? 0) + (isParent ? (savedA?.extras ?? 0) : Number(node.EXTRAS ?? 0))
+                          return (
+                            <td className="num sx-strong" title={showInklCol ? undefined : `Honorar inkl. Zuschläge ${fmtEur(rev)} + Nebenkosten ${fmtEur(ext)}`}>
+                              <PendingValue now={rev + ext} saved={savedTotal}>{fmtEur(rev + ext)}</PendingValue>
+                            </td>
+                          )
+                        })()}
+                        <td className="sx-col-menu">
+                          {cmds.length > 0 && (
+                            <RowMenu label={`Aktionen zu ${node.ABBR ?? ''}`} triggerClassName="row-action-btn">
+                              {cmds.map(c => (
+                                <button key={c.key} type="button" role="menuitem" disabled={c.disabled}
+                                  className={`row-menu-item${c.danger ? ' danger' : ''}`} onClick={c.run}>
+                                  {c.label}
+                                </button>
+                              ))}
+                            </RowMenu>
+                          )}
+                        </td>
+                      </tr>
+                      {effortPanel === node.ID && hourly && (
+                        <EffortPanelRow colSpan={COLS} abbr={nameShort} lines={lines} roles={roles} readOnly={!canEdit}
+                          onChange={ls => editRow(node.ID, { lines: ls })}
+                          onDone={() => setEffortPanel(null)} />
+                      )}
+                      {surchargePanel === node.ID && (
+                        <SurchargePanelRow
+                          colSpan={COLS} title={`Zuschläge ${node.ABBR ?? ''} – Basis (Honorar)`} basis={surchargeBase}
+                          edit={sEdit} computed={computed} readOnly={!canEdit}
+                          onChange={f => editRow(node.ID, { surcharge: { ...sEdit, ...f } })}
+                          onDone={() => setSurchargePanel(null)}
+                        />
                       )}
                       </React.Fragment>
                     )
@@ -945,205 +948,211 @@ export function AngeboteStruktur({ initialOfferId, onOfferChange }: Props) {
           )}
 
           {flatTree.length === 0 && !addForm && (
-            <p className="empty-note">Noch keine Positionen vorhanden.</p>
+            <div className="empty-block">
+              <p className="empty-note">Dieses Angebot hat noch keine Struktur.</p>
+              <p className="empty-block-why">Die Struktur gliedert das Honorar (z. B. Leistungsphasen oder Stunden nach Aufwand). Sie steht so im Angebots-PDF und wird bei der Beauftragung zur Projektstruktur.</p>
+              {canEdit && (
+                <button type="button" className="btn-secondary" onClick={() => openAdd(null)}>
+                  <Plus size={15} strokeWidth={2.25} aria-hidden="true" /> Erstes Element anlegen
+                </button>
+              )}
+            </div>
           )}
 
-          <div className="structure-actions">
-            <button className="btn-primary" type="button" onClick={saveAll} disabled={saveMut.isPending}>
-              {saveMut.isPending ? 'Speichert …' : 'Speichern (Strg+S)'}
-            </button>
-          </div>
-          <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />
+          {canEdit && flatTree.length > 0 && !narrow && (
+            <ActionBar
+              dirty={dirty}
+              quiet={!dirty}
+              status={saving ? 'Speichert …' : dirty
+                ? `${dirtyCount} ${dirtyCount === 1 ? 'Element' : 'Elemente'} geändert${view.pending.size || rootChanged ? ' · Summen vorläufig' : ''}`
+                : 'Alle Änderungen gespeichert'}
+              secondary={dirty ? (
+                <button type="button" className="btn-secondary" onClick={() => void confirmDiscard()} disabled={saving}>Verwerfen</button>
+              ) : undefined}
+            >
+              <HelpHint id="offers.structure.save" align="right" />
+              <button className="btn-primary" type="button" onClick={() => void saveAll().catch(() => {})} disabled={!dirty || saving}>
+                {saving ? 'Speichert …' : <>Speichern <kbd>Strg+S</kbd></>}
+              </button>
+            </ActionBar>
+          )}
         </>
       )}
-    </div>
 
-    {/* Add element modal */}
-    <Modal open={addForm !== null} onClose={() => { setAddForm(null); setSaveMsg(null) }} title="Neue Position anlegen">
-      {addForm && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label style={{ fontSize: 11 }}>Kürzel*</label>
-              <input style={{ width: 80 }} value={addForm.ABBR}
-                onChange={e => setAddForm(f => f && { ...f, ABBR: e.target.value })} />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label style={{ fontSize: 11 }}>Bezeichnung</label>
-              <input style={{ width: 160 }} value={addForm.NAME}
-                onChange={e => setAddForm(f => f && { ...f, NAME: e.target.value })} />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label style={{ fontSize: 11 }}>Abrechnungsart*</label>
-              <select style={{ fontSize: 12 }} value={addForm.BILLING_TYPE_ID}
-                onChange={e => setAddForm(f => f && { ...f, BILLING_TYPE_ID: e.target.value })}>
-                <option value="">Bitte wählen …</option>
-                {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}{b.NAME ? ' – ' + b.NAME : ''}</option>)}
-              </select>
-            </div>
-            {Number(addForm.BILLING_TYPE_ID) === 2 ? (
-              <>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label style={{ fontSize: 11 }}>Rolle</label>
-                  <select style={{ fontSize: 12 }} value={addForm.ROLE_ID}
-                    onChange={e => {
-                      const rid = e.target.value
-                      const role = roles.find(r => String(r.ID) === rid)
-                      setAddForm(f => f && {
-                        ...f,
-                        ROLE_ID: rid,
-                        ROLE_ABBR: role?.ABBR ?? f.ROLE_ABBR,
-                        ROLE_NAME:  role?.NAME  ?? f.ROLE_NAME,
-                        HOURLY_RATE: role?.HOURLY_RATE != null ? String(role.HOURLY_RATE) : f.HOURLY_RATE,
-                      })
-                    }}>
-                    <option value="">— frei —</option>
-                    {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}</option>)}
+      {/* ── Neues Element ── */}
+      <Modal open={addForm !== null} onClose={() => { setAddForm(null); setAddError(null) }} title="Neues Element anlegen">
+        {addForm && (() => {
+          const hourly = isHourlyBt(addForm.BILLING_TYPE_ID)
+          const set = (patch: Partial<AddForm>) => setAddForm(f => f && { ...f, ...patch })
+          return (
+            <form className="sx-add-form" onSubmit={e => { e.preventDefault(); submitAdd() }}>
+              <p className="sx-add-context">
+                {addParent ? <>unter <strong>{addParent.ABBR}</strong>{addParent.NAME ? ` · ${addParent.NAME}` : ''}</> : 'auf oberster Ebene des Angebots'}
+              </p>
+              <div className="sx-add-grid">
+                <div className="form-group">
+                  <label htmlFor="ox-add-abbr">Kürzel*</label>
+                  <input id="ox-add-abbr" autoFocus value={addForm.ABBR} placeholder="z. B. LP3"
+                    onChange={e => set({ ABBR: e.target.value })} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="ox-add-bt">Abrechnungsart*</label>
+                  <select id="ox-add-bt" value={addForm.BILLING_TYPE_ID} onChange={e => set({ BILLING_TYPE_ID: e.target.value })}>
+                    <option value="">Bitte wählen …</option>
+                    {btypes.map(b => <option key={b.ID} value={b.ID}>{b.ABBR}{b.NAME ? ' – ' + b.NAME : ''}</option>)}
                   </select>
                 </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label style={{ fontSize: 11 }}>Menge / Stunden</label>
-                  <input type="number" min={0} step={0.5} style={{ width: 90 }} placeholder="0"
-                    value={addForm.QUANTITY}
-                    onChange={e => setAddForm(f => f && { ...f, QUANTITY: e.target.value })} />
+                <div className="form-group sx-add-wide">
+                  <label htmlFor="ox-add-name">Bezeichnung</label>
+                  <input id="ox-add-name" value={addForm.NAME} onChange={e => set({ NAME: e.target.value })} />
                 </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label style={{ fontSize: 11 }}>Satz €/h</label>
-                  <input type="number" min={0} step={1} style={{ width: 90 }} placeholder="0"
-                    value={addForm.HOURLY_RATE}
-                    onChange={e => setAddForm(f => f && { ...f, HOURLY_RATE: e.target.value })} />
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label style={{ fontSize: 11 }}>Honorar (berechnet)</label>
-                  <div style={{ fontSize: 13, fontWeight: 600, padding: '6px 0' }}>
-                    {money((Number(addForm.QUANTITY) || 0) * (Number(addForm.HOURLY_RATE) || 0))}
+                {hourly && addForm.LINES?.length ? (
+                  <div className="form-group sx-add-wide">
+                    <label htmlFor="ox-add-lines">Aufwand</label>
+                    <output id="ox-add-lines" className="sxm-readonly">
+                      {addForm.LINES.length} Rollen · {fmtHours(linesHours(addForm.LINES))} h · {fmtEur(linesFee(addForm.LINES))}
+                      <span className="form-field-hint">Vom übergeordneten Element übernommen, danach über „Aufwand nach Rollen" änderbar.</span>
+                    </output>
                   </div>
+                ) : hourly ? (
+                  <>
+                    <div className="form-group">
+                      <label htmlFor="ox-add-role">Rolle</label>
+                      <select id="ox-add-role" value={addForm.ROLE_ID}
+                        onChange={e => {
+                          const role = roles.find(r => String(r.ID) === e.target.value)
+                          set({
+                            ROLE_ID: e.target.value,
+                            ROLE_ABBR: role?.ABBR ?? '',
+                            ROLE_NAME: role?.NAME ?? '',
+                            ...(role?.HOURLY_RATE != null ? { HOURLY_RATE: String(role.HOURLY_RATE) } : {}),
+                          })
+                        }}>
+                        <option value="">— ohne Rolle —</option>
+                        {roles.map(r => <option key={r.ID} value={r.ID}>{r.ABBR}{r.NAME ? ' – ' + r.NAME : ''}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="ox-add-hours">Stunden</label>
+                      <input id="ox-add-hours" type="text" inputMode="decimal" placeholder="0" value={addForm.QUANTITY}
+                        onChange={e => set({ QUANTITY: e.target.value.replace(',', '.') })} />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="ox-add-rate">Satz €/h</label>
+                      <AmountInput id="ox-add-rate" value={addForm.HOURLY_RATE} placeholder="0,00"
+                        onChange={v => set({ HOURLY_RATE: v })} />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="ox-add-fee">Honorar</label>
+                      <output id="ox-add-fee" className="sxm-readonly">{fmtEur((Number(addForm.QUANTITY) || 0) * (Number(addForm.HOURLY_RATE) || 0))}
+                        <span className="form-field-hint">Stunden × Satz</span></output>
+                    </div>
+                  </>
+                ) : (
+                  <div className="form-group">
+                    <label htmlFor="ox-add-rev">Honorar €</label>
+                    <AmountInput id="ox-add-rev" value={addForm.REVENUE} placeholder="0,00" onChange={v => set({ REVENUE: v })} />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label htmlFor="ox-add-nk">Nebenkosten %</label>
+                  <input id="ox-add-nk" type="text" inputMode="decimal" placeholder="0" value={addForm.EXTRAS_PERCENT}
+                    onChange={e => set({ EXTRAS_PERCENT: e.target.value.replace(',', '.') })} />
                 </div>
-              </>
-            ) : (
-              <div className="form-group" style={{ margin: 0 }}>
-                <label style={{ fontSize: 11 }}>Honorar €</label>
-                <input type="number" min={0} step={100} style={{ width: 100 }} placeholder="0"
-                  value={addForm.REVENUE}
-                  onChange={e => setAddForm(f => f && { ...f, REVENUE: e.target.value })} />
+                <div className="form-group sx-add-wide">
+                  <label htmlFor="ox-add-father">Übergeordnetes Element</label>
+                  <select id="ox-add-father" value={addForm.FATHER_ID}
+                    onChange={e => {
+                      const fid = e.target.value ? Number(e.target.value) : null
+                      setAddForm(f => f && withParent({ ...f, FATHER_ID: e.target.value }, fid))
+                    }}>
+                    <option value="">— oberste Ebene —</option>
+                    {flatTree.map(({ node, depth }) => (
+                      <option key={node.ID} value={node.ID}>
+                        {'  '.repeat(depth)}{node.ABBR}{node.NAME ? ' – ' + node.NAME : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {addTakes && (
+                    <span className="form-field-hint">
+                      „{addTakes.node.ABBR}" hat bisher ein eigenes Honorar von {fmtEur(addTakes.fee)}. Es ist hier vorbelegt — als
+                      übergeordnetes Element zeigt „{addTakes.node.ABBR}" danach die Summe seiner Unterelemente.
+                    </span>
+                  )}
+                </div>
               </div>
+              <Message text={addError} type="error" />
+              <DialogFooter>
+                <button type="button" className="btn-secondary" onClick={() => { setAddForm(null); setAddError(null) }}>Abbrechen</button>
+                <button type="submit" className="btn-primary" disabled={addMut.isPending}>
+                  {addMut.isPending ? 'Legt an …' : 'Anlegen'}
+                </button>
+              </DialogFooter>
+            </form>
+          )
+        })()}
+      </Modal>
+
+      <ConfirmModal
+        open={confirmState !== null}
+        title={confirmState?.title ?? ''}
+        message={confirmState?.message ?? ''}
+        confirmLabel="Löschen"
+        onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
+        onCancel={() => setConfirmState(null)}
+      />
+
+      <Modal open={kalkFatherId !== null} onClose={() => guarded(() => setKalkFatherId(null), [HONORAR_WIZARD_GUARD])} title="HOAI-Kalkulation anlegen" className="modal-xl">
+        {kalkFatherId !== null && oid && (
+          <HonorarWizard
+            offerId={oid}
+            initialFatherId={kalkFatherId}
+            onDone={() => { setKalkFatherId(null); void invalidateOffer() }}
+          />
+        )}
+      </Modal>
+
+      {contextMenu && (() => {
+        const cmNode = contextMenu.nodeId != null ? nodeById.get(contextMenu.nodeId) : undefined
+        const isMultiDelete = contextMenu.nodeId != null && selectedIds.has(contextMenu.nodeId) && selectedIds.size > 1
+        const style: React.CSSProperties = contextMenu.x === 0
+          ? { position: 'fixed', top: '40%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 1500 }
+          : contextMenuStyle
+        const cmds = cmNode ? rowCommands(cmNode) : []
+        return (
+          <div className="struct-context-menu" ref={contextMenuRef} style={style} role="menu">
+            {cmNode ? cmds.filter(c => !c.danger || !isMultiDelete).map(c => (
+              <button key={c.key} type="button" role="menuitem" disabled={c.disabled}
+                className={c.danger ? 'struct-context-danger' : undefined}
+                onClick={() => { c.run(); setContextMenu(null) }}>{c.label}</button>
+            )) : (
+              <>
+                <button type="button" role="menuitem" onClick={() => { openAdd(null); setContextMenu(null) }}>
+                  Element auf oberster Ebene anlegen
+                </button>
+                <button type="button" role="menuitem" onClick={() => { openOfferSurcharges(); setContextMenu(null) }}>
+                  Angebotszuschläge bearbeiten
+                </button>
+              </>
             )}
-            <div className="form-group" style={{ margin: 0 }}>
-              <label style={{ fontSize: 11 }}>NK %</label>
-              <input type="number" min={0} max={100} step={0.1} style={{ width: 70 }} placeholder="0"
-                value={addForm.EXTRAS_PERCENT}
-                onChange={e => setAddForm(f => f && { ...f, EXTRAS_PERCENT: e.target.value })} />
-            </div>
-            <div className="form-group" style={{ margin: 0 }}>
-              <label style={{ fontSize: 11 }}>Übergeordnet</label>
-              <select style={{ fontSize: 12 }} value={addForm.FATHER_ID}
-                onChange={e => {
-                  const fid = e.target.value
-                  const parent = structure.find(n => String(n.ID) === fid)
-                  setAddForm(f => f && {
-                    ...f, FATHER_ID: fid,
-                    ...(parent ? { BILLING_TYPE_ID: String(parent.BILLING_TYPE_ID ?? f.BILLING_TYPE_ID), EXTRAS_PERCENT: String(parent.EXTRAS_PERCENT ?? f.EXTRAS_PERCENT) } : {}),
+            {isMultiDelete && canEdit && (
+              <>
+                <div className="struct-context-divider" />
+                <button type="button" role="menuitem" className="struct-context-danger" onClick={() => {
+                  const ids = Array.from(selectedIds)
+                  setConfirmState({
+                    title: `${ids.length} Elemente löschen`,
+                    message: `${ids.length} Elemente löschen?\nEin Element mit Unterelementen lässt sich nur zusammen mit ihnen löschen.`,
+                    onConfirm: () => void doBulkDelete(ids),
                   })
-                }}>
-                <option value="">Projektlevel</option>
-                {flatTree.map(({ node }) => {
-                  const n = node as unknown as OfferStructureNode
-                  return <option key={n.ID} value={n.ID}>{n.ABBR}{n.NAME ? ' – ' + n.NAME : ''}</option>
-                })}
-              </select>
-            </div>
+                  setContextMenu(null)
+                }}>{selectedIds.size} Elemente löschen</button>
+              </>
+            )}
           </div>
-          <Message text={saveMsg?.text ?? null} type={saveMsg?.type} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn-primary btn-small" type="button" onClick={submitAdd} disabled={addMut.isPending}>
-              {addMut.isPending ? '…' : 'Speichern (Strg+S)'}
-            </button>
-            <button className="btn-small" type="button" onClick={() => { setAddForm(null); setSaveMsg(null) }}>Abbrechen</button>
-          </div>
-        </div>
-      )}
-    </Modal>
-
-    <ConfirmModal
-      open={confirmState !== null}
-      title={confirmState?.title ?? ''}
-      message={confirmState?.message ?? ''}
-      confirmLabel="Löschen"
-      confirmClass="danger"
-      onConfirm={() => { confirmState?.onConfirm(); setConfirmState(null) }}
-      onCancel={() => setConfirmState(null)}
-    />
-
-    <Modal open={kalkFatherId !== null} onClose={() => setKalkFatherId(null)} title="HOAI-Kalkulation anlegen" className="modal-xl">
-      {kalkFatherId !== null && oid && (
-        <HonorarWizard
-          offerId={oid}
-          initialFatherId={kalkFatherId}
-          onDone={() => {
-            setKalkFatherId(null)
-            void qc.invalidateQueries({ queryKey: ['offer-structure', oid] })
-          }}
-        />
-      )}
-    </Modal>
-
-    {contextMenu && (() => {
-      const cmNode = contextMenu.nodeId != null ? structure.find(n => n.ID === contextMenu.nodeId) : undefined
-      const isMultiDelete = contextMenu.nodeId != null && selectedIds.has(contextMenu.nodeId) && selectedIds.size > 1
-      const style: React.CSSProperties = contextMenuStyle
-      return (
-        <div className="struct-context-menu" ref={contextMenuRef} style={style}>
-          <button onClick={() => {
-            setAddForm({
-              ...emptyAdd(),
-              FATHER_ID:       contextMenu.nodeId != null ? String(contextMenu.nodeId) : '',
-              BILLING_TYPE_ID: cmNode ? String(cmNode.BILLING_TYPE_ID ?? '') : '',
-              EXTRAS_PERCENT:  cmNode ? String(cmNode.EXTRAS_PERCENT  ?? '') : '',
-            })
-            setContextMenu(null)
-          }}>Element anlegen</button>
-          {contextMenu.nodeId != null ? (
-            <button onClick={() => { setSurchargePanel(contextMenu.nodeId as number); setContextMenu(null) }}>
-              Zuschlag hinzufügen
-            </button>
-          ) : (
-            <button onClick={() => {
-              setOfferSurchargeEdit(offerSurchargeDefault())
-              setOfferSurchargePanel(true)
-              setContextMenu(null)
-            }}>
-              Angebotszuschlag hinzufügen
-            </button>
-          )}
-          {contextMenu.nodeId != null && (
-            <button onClick={() => { setKalkFatherId(contextMenu.nodeId as number); setContextMenu(null) }}>
-              Kalkulation anlegen
-            </button>
-          )}
-          {(cmNode || isMultiDelete) && <div className="struct-context-divider" />}
-          {isMultiDelete ? (
-            <button className="struct-context-danger" onClick={() => {
-              const ids = Array.from(selectedIds)
-              setConfirmState({
-                title: `${ids.length} Elemente löschen`,
-                message: `${ids.length} Elemente löschen?`,
-                onConfirm: () => void doBulkDelete(ids),
-              })
-              setContextMenu(null)
-            }}>{selectedIds.size} Elemente löschen</button>
-          ) : cmNode ? (
-            <button className="struct-context-danger" onClick={() => {
-              setConfirmState({
-                title: 'Element löschen',
-                message: `Element „${cmNode.ABBR}" löschen?`,
-                onConfirm: () => deleteMut.mutate(cmNode.ID),
-              })
-              setContextMenu(null)
-            }}>Element löschen</button>
-          ) : null}
-        </div>
-      )
-    })()}
-    </>
+        )
+      })()}
+      {confirmDialog}
+    </div>
   )
 }

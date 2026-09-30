@@ -78,7 +78,11 @@ test.describe('Stempeluhr-Dialoge', () => {
     const dialog = page.getByRole('dialog', { name: 'Stempeluhr starten' })
     await dialog.getByRole('combobox', { name: 'Projekt suchen …' }).fill('P-2024-001')
     await dialog.getByRole('option', { name: /P-2024-001/ }).first().click()
-    const options = await dialog.getByLabel('Woran arbeitest du?*').locator('option').allInnerTexts()
+    // Die Leistungen laden erst nach der Projektwahl — allInnerTexts() wartet
+    // nicht und las unter Last eine leere Liste.
+    const select = dialog.getByLabel('Woran arbeitest du?*')
+    await expect(select.locator('option', { hasText: 'LP5.1' })).toHaveCount(1)
+    const options = await select.locator('option').allInnerTexts()
     // 106 (LP5) hat Unterelemente — darauf nimmt der Server keine Buchung an.
     expect(options.some(o => /^LP5: /.test(o))).toBe(false)
     expect(options.some(o => /LP5\.1/.test(o))).toBe(true)

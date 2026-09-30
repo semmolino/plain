@@ -1,10 +1,12 @@
 "use strict";
+const tenantDefaults = require("../services/tenantDefaults");
 const { findAssetForTenant } = require("../services/assetAccess");
 
 const objectStorage = require("../services/objectStorage");
 const svc  = require("../services/stammdaten");
 const misch = require("../services/mischhonorar");
 const { suchwert } = require("../services/pgrestFilter");
+const adressen = require("../services/adressen");
 
 // Reichert FEE_CALCULATION_MASTER-Rows um Merkmale des Leistungsbilds an:
 //   BASE_TYPE            Bemessungsgrundlage (Migration 0054)
@@ -57,23 +59,12 @@ async function selectWithFallback(makeQuery, fullCols, baseCols) {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/stammdaten/status
-// ---------------------------------------------------------------------------
-async function postStatus(req, res, supabase) {
-  const abbr = req.body.abbr;
-  if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("PROJECT_STATUS").insert([{ ABBR: abbr }]);
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
-}
-
-// ---------------------------------------------------------------------------
 // POST /api/stammdaten/typ
 // ---------------------------------------------------------------------------
 async function postTyp(req, res, supabase) {
-  const abbr = req.body.abbr;
-  if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("PROJECT_TYPE").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]);
+  const abbr = typeof req.body?.abbr === "string" ? req.body.abbr.trim() : "";
+  if (!abbr) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("PROJECT_TYPE").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]).select("ID, ABBR");
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -82,9 +73,9 @@ async function postTyp(req, res, supabase) {
 // POST /api/stammdaten/department
 // ---------------------------------------------------------------------------
 async function postDepartment(req, res, supabase) {
-  const abbr = req.body.abbr;
-  if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("DEPARTMENT").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]);
+  const abbr = typeof req.body?.abbr === "string" ? req.body.abbr.trim() : "";
+  if (!abbr) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("DEPARTMENT").insert([{ ABBR: abbr, TENANT_ID: req.tenantId }]).select("ID, ABBR");
   if (error) return res.status(500).json({ error: error.message });
   res.json({ data });
 }
@@ -720,25 +711,12 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
 // POST /api/stammdaten/fee-calculation-masters/:id/add-to-offer-structure
 // ---------------------------------------------------------------------------
 async function postFeeCalcAddToOfferStructure(req, res, supabase) {
-  const id       = parseInt(req.params.id, 10);
-  const fatherId = parseInt(req.body?.father_id, 10);
-  if (!id)       return res.status(400).json({ error: 'id is required' });
-  if (!fatherId) return res.status(400).json({ error: 'father_id is required' });
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'id is required' });
   try {
-    const { data: calcMaster, error: calcErr } = await supabase
-      .from('FEE_CALCULATION_MASTER').select('ID, OFFER_ID').eq('ID', id).eq('TENANT_ID', req.tenantId).single();
-    if (calcErr || !calcMaster) return res.status(404).json({ error: 'FEE_CALCULATION_MASTER nicht gefunden' });
-
-    const { data: father, error: fatherErr } = await supabase
-      .from('OFFER_STRUCTURE').select('ID, OFFER_ID').eq('ID', fatherId).maybeSingle();
-    if (fatherErr) return res.status(500).json({ error: fatherErr.message });
-    if (!father)   return res.status(404).json({ error: 'Übergeordnetes Angebotselement nicht gefunden' });
-
-    const offerId = father.OFFER_ID;
-    const { attachFeeCalcToOfferStructure } = require('../services/angebote');
-    await attachFeeCalcToOfferStructure(supabase, { calcMasterId: id, fatherId, offerId, tenantId: req.tenantId });
-
-    return res.json({ success: true, message: 'Angebotsstruktur wurde angelegt ✅' });
+    const { addFeeCalcToOffer } = require('../services/angebote');
+    const out = await addFeeCalcToOffer(supabase, { calcMasterId: id, fatherRaw: req.body?.father_id, tenantId: req.tenantId });
+    return res.json({ success: true, fatherId: out.fatherId, message: 'Kalkulation ins Angebot übernommen' });
   } catch (err) {
     return res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
@@ -860,34 +838,47 @@ async function writeWithOptionalCols(runWrite, row, optionalKeys) {
   return res;
 }
 
-async function postAddress(req, res, supabase) {
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
-  if (!address_name_1 || typeof address_name_1 !== "string") return res.status(400).json({ error: "address_name_1 is required" });
-
-  const parsedCountryId = typeof country_id === "number" ? country_id : parseInt(country_id, 10);
-  if (!parsedCountryId || Number.isNaN(parsedCountryId)) return res.status(400).json({ error: "country_id is required" });
-
-  const insertRow = {
-    ADDRESS_NAME_1: address_name_1.trim(),
-    ADDRESS_NAME_2: (address_name_2 || "").trim() || null,
-    STREET: (street || "").trim() || null,
-    POST_CODE: (post_code || "").trim() || null,
-    CITY: (city || "").trim() || null,
-    POST_OFFICE_BOX: (post_office_box || "").trim() || null,
-    COUNTRY_ID: parsedCountryId,
-    CUSTOMER_NUMBER: (customer_number || "").trim() || null,
-    "TAX-ID": (tax_id || "").trim() || null,
-    BUYER_REFERENCE: (buyer_reference || "").trim() || null,
-    TENANT_ID: req.tenantId ?? null,
-    ...buildAddrOptionalCols(req.body),
+/** Grundspalten einer Adresse aus dem Body — gekuerzt, leer = null. */
+function addressBaseCols(body) {
+  const { trimOrNull } = adressen;
+  const { address_name_2, street, post_code, city, post_office_box, customer_number, tax_id, buyer_reference } = body || {};
+  return {
+    ...adressen.addressRequired(body),
+    ADDRESS_NAME_2: trimOrNull(address_name_2),
+    STREET: trimOrNull(street),
+    POST_CODE: trimOrNull(post_code),
+    CITY: trimOrNull(city),
+    POST_OFFICE_BOX: trimOrNull(post_office_box),
+    CUSTOMER_NUMBER: trimOrNull(customer_number),
+    "TAX-ID": trimOrNull(tax_id),
+    BUYER_REFERENCE: trimOrNull(buyer_reference),
   };
+}
 
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("ADDRESS").insert([row]),
-    insertRow, ADDR_OPTIONAL_DB_COLS,
-  );
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+const fail = (res, e) => res.status(e?.status || 500).json({ error: e?.message || String(e) });
+
+async function postAddress(req, res, supabase) {
+  try {
+    const insertRow = { ...addressBaseCols(req.body), TENANT_ID: req.tenantId ?? null, ...buildAddrOptionalCols(req.body) };
+    // Die neue ID geht zurueck — die Oberflaeche oeffnet danach die Adresse.
+    const { data, error } = await writeWithOptionalCols(
+      (row) => supabase.from("ADDRESS").insert([row]).select("ID, ADDRESS_NAME_1").single(),
+      insertRow, ADDR_OPTIONAL_DB_COLS,
+    );
+    if (error) throw error;
+    res.json({ data });
+  } catch (e) { fail(res, e); }
+}
+
+// Stundensatz einer Rolle: „95,50" wie „95.50", leer = kein Satz. Vorher
+// schnitt parseFloat bei „95,50" still auf 95 ab, „abc" wurde zu null.
+function parseHourlyRate(v) {
+  if (v === undefined || v === null || String(v).trim() === "") return null;
+  const t = String(v).trim().replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(t)) throw { status: 400, message: "Stundensatz: bitte einen Betrag wie 95,50." };
+  const n = Number(t);
+  if (n > 10000) throw { status: 400, message: "Stundensatz: höchstens 10.000 €/h." };
+  return n;
 }
 
 // ---------------------------------------------------------------------------
@@ -897,28 +888,22 @@ async function postRollen(req, res, supabase) {
   const { abbr, name, hourly_rate } = req.body || {};
   if (!abbr || typeof abbr !== "string") return res.status(400).json({ error: "abbr is required" });
 
+  if (!abbr.trim()) return res.status(400).json({ error: "Kürzel erforderlich" });
+  let rate;
+  try { rate = parseHourlyRate(hourly_rate); } catch (e) { return res.status(e.status).json({ error: e.message }); }
   const insertRow = {
     ABBR: abbr.trim(),
     NAME:  (name || "").trim() || null,
-    HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
+    HOURLY_RATE:    rate,
     TENANT_ID:  req.tenantId ?? null,
     ACTIVE:     1,
   };
 
-  let data, error, usedTable;
-  ({ data, error } = await supabase.from("ROLE").insert([insertRow]));
-  usedTable = "ROLE";
-
-  if (error) {
-    const msg = String(error.message || "");
-    if (msg.toLowerCase().includes("does not exist") || msg.toLowerCase().includes("relation") || msg.toLowerCase().includes("not found")) {
-      ({ data, error } = await supabase.from("ADDRESS").insert([insertRow]));
-      usedTable = "ADDRESS";
-    }
-  }
-
+  // Frueher fiel ein fehlgeschlagener Insert hier auf die Tabelle ADDRESS
+  // zurueck — eine Rolle landete dann als Adresse im Adressbuch.
+  const { data, error } = await supabase.from("ROLE").insert([insertRow]);
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data, table: usedTable });
+  res.json({ data, table: "ROLE" });
 }
 
 // ---------------------------------------------------------------------------
@@ -983,23 +968,19 @@ async function listAddresses(req, res, supabase) {
 // PATCH /api/stammdaten/addresses/:id
 // ---------------------------------------------------------------------------
 async function patchAddress(req, res, supabase) {
-  const id = req.params.id;
-  const { address_name_1, address_name_2, street, post_code, city, post_office_box, country_id, customer_number, tax_id, buyer_reference } = req.body || {};
-  if (!address_name_1 || !country_id) return res.status(400).json({ error: "ADDRESS_NAME_1 und COUNTRY_ID sind erforderlich" });
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  let update;
+  try { update = { ...addressBaseCols(req.body), ...buildAddrOptionalCols(req.body) }; }
+  catch (e) { return fail(res, e); }
 
-  const update = {
-    ADDRESS_NAME_1: address_name_1, ADDRESS_NAME_2: address_name_2 || null,
-    STREET: street || null, POST_CODE: post_code || null, CITY: city || null,
-    POST_OFFICE_BOX: post_office_box || null, COUNTRY_ID: parseInt(country_id, 10),
-    CUSTOMER_NUMBER: customer_number || null, "TAX-ID": tax_id || null, BUYER_REFERENCE: buyer_reference || null,
-    ...buildAddrOptionalCols(req.body),
-  };
-
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("ADDRESS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single(),
+  const { data: rows, error } = await writeWithOptionalCols(
+    (row) => supabase.from("ADDRESS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*"),
     update, ADDR_OPTIONAL_DB_COLS,
   );
   if (error) return res.status(500).json({ error: error.message });
+  const data = rows?.[0];
+  if (!data) return res.status(404).json({ error: "Adresse nicht gefunden" });
 
   let countryName = "";
   const { data: cData } = await supabase.from("COUNTRY").select("NAME, ABBR").eq("ID", data.COUNTRY_ID).maybeSingle();
@@ -1036,15 +1017,19 @@ async function getAddressDetail(req, res, supabase) {
   const contactBase = "ID, TITLE, FIRST_NAME, LAST_NAME, EMAIL, MOBILE, SALUTATION_ID, GENDER_ID, ADDRESS_ID";
   const contactFull = contactBase + ", POSITION, DEPARTMENT, PHONE, IS_PRIMARY, NOTES";
 
-  const [contactsRes, projects, offers, invoices, partials, salutations, genders] = await Promise.all([
-    selectWithFallback(
+  // Kontakte nur mit Kontakt-Recht, Belege nur mit dem Recht ihres Moduls —
+  // vorher gab die Detailseite alles an jeden mit addresses.view.
+  const can = (key) => !!req._permissionsUnrestricted || !!req.permissions?.has?.(key);
+  const canContacts = can("addresses.contacts.view");
+  let links;
+  try { links = await adressen.addressLinks(supabase, { tenantId, addressId: id, can }); }
+  catch (e) { return res.status(500).json({ error: e?.message || String(e) }); }
+
+  const [contactsRes, salutations, genders] = await Promise.all([
+    canContacts ? selectWithFallback(
       (cols) => supabase.from("CONTACTS").select(cols).eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id).order("LAST_NAME", { ascending: true }),
       contactFull, contactBase,
-    ),
-    safe(supabase.from("PROJECT").select("ID, ABBR, NAME").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
-    safe(supabase.from("OFFER").select("ID, ABBR").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
-    safe(supabase.from("INVOICE").select("ID, INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
-    safe(supabase.from("ADVANCE_INVOICE").select("ID, ADVANCE_INVOICE_NUMBER").eq("TENANT_ID", tenantId).eq("ADDRESS_ID", id)),
+    ) : Promise.resolve({ data: [] }),
     safe(supabase.from("SALUTATION").select("ID, SALUTATION").limit(5000)),
     safe(supabase.from("GENDER").select("ID, GENDER").limit(5000)),
   ]);
@@ -1062,7 +1047,13 @@ async function getAddressDetail(req, res, supabase) {
     data: {
       address: { ...addr, TAX_ID: addr["TAX-ID"] ?? null, COUNTRY: countryName },
       contacts,
-      projects, offers, invoices, partials,
+      ...links,
+      // Was der Aufrufer sehen darf — die Oberflaeche blendet den Rest aus,
+      // statt „keine Verknuepfungen" zu behaupten.
+      visible: Object.fromEntries([
+        ["contacts", canContacts],
+        ...Object.entries(adressen.LINK_PERMISSIONS).map(([k, perm]) => [k, can(perm)]),
+      ]),
     },
   });
 }
@@ -1090,15 +1081,19 @@ async function getContactsByAddress(req, res, supabase) {
   const addressId = parseInt((req.query.address_id || "").toString(), 10);
   if (!addressId) return res.json({ data: [] });
 
+  // IS_PRIMARY: Projekt, Angebot und Vertrag belegen damit den Kontakt vor
+  // (UI-Pilot Runde 9) — der Hauptansprechpartner steht deshalb vorn.
   const { data, error } = await supabase
     .from("CONTACTS")
-    .select("ID, FIRST_NAME, LAST_NAME")
+    .select("ID, FIRST_NAME, LAST_NAME, IS_PRIMARY")
     .eq("TENANT_ID", req.tenantId)
     .eq("ADDRESS_ID", addressId)
     .order("LAST_NAME", { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ data: data || [] });
+  const rows = (data || []).map(c => ({ ...c, IS_PRIMARY: Number(c.IS_PRIMARY) === 1 ? 1 : 0 }));
+  rows.sort((a, b) => b.IS_PRIMARY - a.IS_PRIMARY);
+  res.json({ data: rows });
 }
 
 // ---------------------------------------------------------------------------
@@ -1132,7 +1127,7 @@ async function listContacts(req, res, supabase) {
   const [{ data: salutations, error: sErr }, { data: genders, error: gErr }, { data: addresses, error: aErr }] = await Promise.all([
     supabase.from("SALUTATION").select("ID, SALUTATION").limit(5000),
     supabase.from("GENDER").select("ID, GENDER").limit(5000),
-    supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").limit(5000),
+    supabase.from("ADDRESS").select("ID, ADDRESS_NAME_1").eq("TENANT_ID", req.tenantId).limit(5000),
   ]);
   if (sErr) return res.status(500).json({ error: sErr.message });
   if (gErr) return res.status(500).json({ error: gErr.message });
@@ -1149,26 +1144,35 @@ async function listContacts(req, res, supabase) {
 // PATCH /api/stammdaten/contacts/:id
 // ---------------------------------------------------------------------------
 async function patchContact(req, res, supabase) {
-  const id = req.params.id;
-  const { title, first_name, last_name, email, mobile, salutation_id, gender_id, address_id } = req.body || {};
-  if (!first_name || !last_name || !salutation_id || !gender_id || !address_id) return res.status(400).json({ error: "Vorname, Nachname, Anrede, Geschlecht und Adresse sind erforderlich" });
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: "invalid id" });
+  const { trimOrNull } = adressen;
+  let updateRow;
+  try {
+    updateRow = {
+      ...adressen.contactRequired(req.body),
+      TITLE: trimOrNull(req.body?.title), EMAIL: trimOrNull(req.body?.email), MOBILE: trimOrNull(req.body?.mobile),
+      ...buildContactOptionalCols(req.body),
+    };
+    await adressen.assertOwnAddress(supabase, { tenantId: req.tenantId, addressId: updateRow.ADDRESS_ID });
+  } catch (e) { return fail(res, e); }
 
-  const updateRow = {
-    TITLE: title || null, FIRST_NAME: first_name, LAST_NAME: last_name,
-    EMAIL: email || null, MOBILE: mobile || null,
-    SALUTATION_ID: parseInt(salutation_id, 10), GENDER_ID: parseInt(gender_id, 10), ADDRESS_ID: parseInt(address_id, 10),
-    ...buildContactOptionalCols(req.body),
-  };
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("CONTACTS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*").single(),
+  const { data: rows, error } = await writeWithOptionalCols(
+    (row) => supabase.from("CONTACTS").update(row).eq("ID", id).eq("TENANT_ID", req.tenantId).select("*"),
     updateRow, CONTACT_OPTIONAL_DB_COLS,
   );
   if (error) return res.status(500).json({ error: error.message });
+  const data = rows?.[0];
+  if (!data) return res.status(404).json({ error: "Kontakt nicht gefunden" });
+  if (updateRow.IS_PRIMARY === 1) {
+    try { await adressen.ensureSinglePrimary(supabase, { tenantId: req.tenantId, addressId: data.ADDRESS_ID, contactId: id }); }
+    catch (e) { return fail(res, e); }
+  }
 
   const [{ data: s }, { data: g }, { data: a }] = await Promise.all([
     supabase.from("SALUTATION").select("SALUTATION").eq("ID", data.SALUTATION_ID).maybeSingle(),
     supabase.from("GENDER").select("GENDER").eq("ID", data.GENDER_ID).maybeSingle(),
-    supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("ID", data.ADDRESS_ID).maybeSingle(),
+    supabase.from("ADDRESS").select("ADDRESS_NAME_1").eq("ID", data.ADDRESS_ID).eq("TENANT_ID", req.tenantId).maybeSingle(),
   ]);
 
   res.json({ data: { ...data, NAME: `${data.FIRST_NAME || ""} ${data.LAST_NAME || ""}`.trim(), SALUTATION: s?.SALUTATION || "", GENDER: g?.GENDER || "", ADDRESS: a?.ADDRESS_NAME_1 || "" } });
@@ -1199,24 +1203,25 @@ async function getVat(req, res, supabase) {
 async function getDefaults(req, res, supabase) {
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(401).json({ error: "no tenant" });
-  const { data, error } = await supabase.from("TENANT_SETTINGS").select("KEY, VALUE").eq("TENANT_ID", tenantId);
-  if (error) return res.status(500).json({ error: error.message });
-  const settings = {};
-  for (const row of data || []) settings[row.KEY] = row.VALUE;
-  res.json({ data: settings });
+  try { res.json({ data: await tenantDefaults.readDefaults(supabase, tenantId) }); }
+  catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
 }
 
+// PUT /defaults — { values: { key: value, … } } oder wie bisher { key, value }.
+// Geprüft wird je Schlüssel: Recht, Art, Grenzen (services/tenantDefaults.js).
 async function putDefault(req, res, supabase) {
   const tenantId = req.tenantId;
   if (!tenantId) return res.status(401).json({ error: "no tenant" });
-  const { key, value } = req.body || {};
-  if (!key) return res.status(400).json({ error: "key required" });
-  const { error } = await supabase.from("TENANT_SETTINGS").upsert(
-    [{ TENANT_ID: tenantId, KEY: key, VALUE: value ?? null, UPDATED_AT: new Date().toISOString() }],
-    { onConflict: "TENANT_ID,KEY" }
-  );
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ ok: true });
+  const b = req.body || {};
+  const values = b.values && typeof b.values === "object" && !Array.isArray(b.values)
+    ? b.values
+    : (b.key ? { [b.key]: b.value ?? null } : null);
+  if (!values) return res.status(400).json({ error: "key oder values erforderlich" });
+  const can = (p) => (typeof req.hasPermission === "function" ? req.hasPermission(p) : false);
+  try {
+    const saved = await tenantDefaults.writeDefaults(supabase, tenantId, values, can);
+    res.json({ ok: true, data: saved });
+  } catch (e) { res.status(e?.status || 500).json({ error: e?.message || String(e) }); }
 }
 
 // ---------------------------------------------------------------------------
@@ -1258,32 +1263,25 @@ async function searchPaymentMeans(req, res, supabase) {
 // POST /api/stammdaten/contacts
 // ---------------------------------------------------------------------------
 async function postContact(req, res, supabase) {
-  const { title, first_name, last_name, email, mobile, salutation_id, gender_id, address_id } = req.body || {};
-
-  if (!first_name || typeof first_name !== "string" || !first_name.trim()) return res.status(400).json({ error: "first_name is required" });
-  if (!last_name || typeof last_name !== "string" || !last_name.trim()) return res.status(400).json({ error: "last_name is required" });
-
-  const parsedSalutationId = typeof salutation_id === "number" ? salutation_id : parseInt(salutation_id, 10);
-  const parsedGenderId = typeof gender_id === "number" ? gender_id : parseInt(gender_id, 10);
-  const parsedAddressId = typeof address_id === "number" ? address_id : parseInt(address_id, 10);
-
-  if (!parsedSalutationId || Number.isNaN(parsedSalutationId)) return res.status(400).json({ error: "salutation_id is required" });
-  if (!parsedGenderId || Number.isNaN(parsedGenderId)) return res.status(400).json({ error: "gender_id is required" });
-  if (!parsedAddressId || Number.isNaN(parsedAddressId)) return res.status(400).json({ error: "address_id is required" });
-
-  const insertRow = {
-    TITLE: (title || "").trim() || null, FIRST_NAME: first_name.trim(), LAST_NAME: last_name.trim(),
-    EMAIL: (email || "").trim() || null, MOBILE: (mobile || "").trim() || null,
-    SALUTATION_ID: parsedSalutationId, GENDER_ID: parsedGenderId, ADDRESS_ID: parsedAddressId,
-    TENANT_ID: req.tenantId ?? null,
-    ...buildContactOptionalCols(req.body),
-  };
-  const { data, error } = await writeWithOptionalCols(
-    (row) => supabase.from("CONTACTS").insert([row]),
-    insertRow, CONTACT_OPTIONAL_DB_COLS,
-  );
-  if (error) return res.status(500).json({ error: error.message });
-  res.json({ data });
+  const { trimOrNull } = adressen;
+  try {
+    const insertRow = {
+      ...adressen.contactRequired(req.body),
+      TITLE: trimOrNull(req.body?.title), EMAIL: trimOrNull(req.body?.email), MOBILE: trimOrNull(req.body?.mobile),
+      TENANT_ID: req.tenantId ?? null,
+      ...buildContactOptionalCols(req.body),
+    };
+    await adressen.assertOwnAddress(supabase, { tenantId: req.tenantId, addressId: insertRow.ADDRESS_ID });
+    const { data, error } = await writeWithOptionalCols(
+      (row) => supabase.from("CONTACTS").insert([row]).select("ID, ADDRESS_ID").single(),
+      insertRow, CONTACT_OPTIONAL_DB_COLS,
+    );
+    if (error) throw error;
+    if (insertRow.IS_PRIMARY === 1 && data?.ID) {
+      await adressen.ensureSinglePrimary(supabase, { tenantId: req.tenantId, addressId: insertRow.ADDRESS_ID, contactId: data.ID });
+    }
+    res.json({ data });
+  } catch (e) { fail(res, e); }
 }
 
 // ── Stammdaten list + delete ─────────────────────────────────────────────────
@@ -1346,9 +1344,10 @@ async function patchDepartment(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   const { abbr } = req.body || {};
-  if (!abbr) return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("DEPARTMENT").update({ ABBR: abbr.trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").single();
+  if (!abbr || !String(abbr).trim()) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("DEPARTMENT").update({ ABBR: String(abbr).trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Abteilung nicht gefunden" });
   res.json({ data });
 }
 
@@ -1356,9 +1355,10 @@ async function patchTyp(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   const { abbr } = req.body || {};
-  if (!abbr) return res.status(400).json({ error: "abbr is required" });
-  const { data, error } = await supabase.from("PROJECT_TYPE").update({ ABBR: abbr.trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").single();
+  if (!abbr || !String(abbr).trim()) return res.status(400).json({ error: "Bezeichnung erforderlich" });
+  const { data, error } = await supabase.from("PROJECT_TYPE").update({ ABBR: String(abbr).trim() }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR").maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Projekttyp nicht gefunden" });
   res.json({ data });
 }
 
@@ -1366,13 +1366,16 @@ async function patchRolle(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "invalid id" });
   const { abbr, name, hourly_rate } = req.body || {};
-  if (!abbr) return res.status(400).json({ error: "abbr is required" });
+  if (!abbr || !String(abbr).trim()) return res.status(400).json({ error: "Kürzel erforderlich" });
+  let rate;
+  try { rate = parseHourlyRate(hourly_rate); } catch (e) { return res.status(e.status).json({ error: e.message }); }
   const { data, error } = await supabase.from("ROLE").update({
-    ABBR: abbr.trim(),
+    ABBR: String(abbr).trim(),
     NAME:  (name || "").trim() || null,
-    HOURLY_RATE:    hourly_rate !== undefined && hourly_rate !== "" ? parseFloat(hourly_rate) : null,
-  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR, NAME, HOURLY_RATE").single();
+    HOURLY_RATE:    rate,
+  }).eq("ID", id).eq("TENANT_ID", req.tenantId).select("ID, ABBR, NAME, HOURLY_RATE").maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: "Rolle nicht gefunden" });
   res.json({ data });
 }
 
@@ -1828,113 +1831,35 @@ async function getHonorarPdf(req, res, supabase) {
 
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-/**
- * Verteilt einen Betrag proportional auf Empfaenger und legt den Rundungsrest
- * auf den letzten Empfaenger. Ohne diesen Ausgleich fehlten Cents: 100,00 EUR
- * auf 3 gleich grosse Leistungsphasen ergaben 3 x 33,33 = 99,99 EUR, waehrend
- * die Zuschlagszeile im PDF 100,00 EUR auswies (Audit B6).
- *
- * Gleiches Vorgehen wie distributeAcrossRemaining in services/partialPayments.js.
- *
- * @param {number} amount   zu verteilender Betrag (bereits auf 2 Stellen)
- * @param {Array<{key: any, weight: number}>} parts  Empfaenger mit Gewicht
- * @returns {Map<any, number>} je Empfaenger ein auf 2 Stellen gerundeter Anteil
- */
-function distributeWithRemainder(amount, parts) {
-  const out = new Map();
-  const eligible = parts.filter(p => p.weight > 0);
-  if (!eligible.length) return out;
-
-  const totalWeight = eligible.reduce((s, p) => s + p.weight, 0);
-  if (totalWeight <= 0) return out;
-
-  const target = r2(amount);
-  let running = 0;
-  eligible.forEach((p, idx) => {
-    if (idx === eligible.length - 1) {
-      out.set(p.key, r2(target - running));
-    } else {
-      const share = r2((target * p.weight) / totalWeight);
-      out.set(p.key, share);
-      running = r2(running + share);
-    }
-  });
-  return out;
-}
-
-/**
- * Splits each surcharge's stored AMOUNT proportionally between the LPH phases it
- * targets (via LPH_FILTER) and the BL items it targets (via BL_FILTER).
- * Returns two plain objects: lphAlloc {phaseId → share} and blAlloc {blId → share}.
- *
- * B6: Die Anteile werden je Zuschlag gerundet und mit Restausgleich verteilt.
- * Vorher blieben sie ungerundet und wurden erst je Strukturzeile gerundet --
- * die Summe der Zeilen wich dann um Cents vom ausgewiesenen Zuschlag ab.
- */
-function computeSurchargeAllocations(phases, surchargeRows, blItems) {
-  const allPhaseIds = (phases || []).map(p => p.ID);
-  const lphAlloc = {};
-  const blAlloc  = {};
-
-  for (const s of (surchargeRows || [])) {
-    const amount = Number(s.AMOUNT) || 0;
-    if (amount === 0) continue;
-
-    let selectedLphIds;
-    if (s.LPH_FILTER) {
-      try { selectedLphIds = JSON.parse(s.LPH_FILTER); } catch { selectedLphIds = allPhaseIds; }
-    } else {
-      selectedLphIds = allPhaseIds;
-    }
-    const selectedPhases = (phases || []).filter(p => selectedLphIds.includes(p.ID));
-    const lphBase = selectedPhases.reduce((sum, p) => sum + (Number(p.PHASE_REVENUE) || 0), 0);
-
-    let selectedBlItems = [], blBase = 0;
-    if (s.BL_FILTER && (blItems || []).length > 0) {
-      try {
-        const selectedBlIds = JSON.parse(s.BL_FILTER);
-        selectedBlItems = (blItems || []).filter(b => b.ID && selectedBlIds.includes(b.ID));
-        blBase = selectedBlItems.reduce((sum, b) => sum + (Number(b.AMOUNT) || 0), 0);
-      } catch { /* ignore */ }
-    }
-
-    const totalBase = lphBase + blBase;
-    if (totalBase === 0) continue;
-
-    // Erst die beiden Haelften bilden, und zwar so, dass sie zusammen genau
-    // den Zuschlag ergeben -- die zweite ist der Rest der ersten.
-    const lphAmt = lphBase > 0 ? r2(r2(amount) * (lphBase / totalBase)) : 0;
-    const blAmt  = blBase  > 0 ? r2(r2(amount) - lphAmt)                : 0;
-
-    if (lphBase > 0) {
-      const shares = distributeWithRemainder(lphAmt, selectedPhases.map(p => ({
-        key: p.ID, weight: Number(p.PHASE_REVENUE) || 0,
-      })));
-      for (const [phaseId, share] of shares) {
-        lphAlloc[phaseId] = r2((lphAlloc[phaseId] || 0) + share);
-      }
-    }
-
-    if (blBase > 0) {
-      const shares = distributeWithRemainder(blAmt, selectedBlItems.map(b => ({
-        key: b.ID, weight: Number(b.AMOUNT) || 0,
-      })));
-      for (const [blId, share] of shares) {
-        blAlloc[blId] = r2((blAlloc[blId] || 0) + share);
-      }
-    }
-  }
-
-  return { lphAlloc, blAlloc };
-}
+// Zuschlagsverteilung liegt seit Runde 6 in services/feeAllocation.js — der
+// Abgleich mit dem Angebot braucht dieselbe Rechnung. Hier nur re-exportiert
+// (Tests und Aufrufer greifen weiterhin ueber den Controller zu).
+const { computeSurchargeAllocations, distributeWithRemainder } = require("../services/feeAllocation");
 
 async function syncFeeCalcToStructure(req, res, supabase) {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ error: "id is required" });
   try {
     const { data: master } = await supabase.from("FEE_CALCULATION_MASTER")
-      .select("ID, PROJECT_ID").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
+      .select("ID, PROJECT_ID, OFFER_ID").eq("ID", id).eq("TENANT_ID", req.tenantId).single();
     if (!master) return res.status(404).json({ error: "Honorarberechnung nicht gefunden" });
+
+    // Noch im Angebot (Runde 6): „Angebot aktualisieren" — dieselbe Rechnung
+    // auf den Angebotselementen (services/angebote.js).
+    if (!master.PROJECT_ID && master.OFFER_ID) {
+      const { syncFeeCalcToOfferStructure } = require("../services/angebote");
+      const out = await syncFeeCalcToOfferStructure(supabase, { calcMasterId: id, tenantId: req.tenantId });
+      return res.json({
+        synced: out.synced, projectId: null, offerId: out.offerId,
+        message: out.synced > 0
+          ? `${out.synced} Angebotselement${out.synced !== 1 ? "e wurden" : " wurde"} aktualisiert.`
+          : "Keine Elemente aktualisiert.",
+      });
+    }
+
+    const { leafValues } = require("../services/feeAllocation");
+    const { computeSurchargesNode } = require("../services/projekte");
+    const ROW_COLS = "ID, EXTRAS_PERCENT, FATHER_ID, SURCHARGE_1_LABEL, SURCHARGE_1_PCT, SURCHARGE_1_CUMUL, SURCHARGE_2_LABEL, SURCHARGE_2_PCT, SURCHARGE_2_CUMUL, SURCHARGE_3_LABEL, SURCHARGE_3_PCT, SURCHARGE_3_CUMUL";
 
     const { data: phases } = await supabase.from("FEE_CALCULATION_PHASE")
       .select("ID, PHASE_REVENUE, FEE_PERCENT").eq("FEE_MASTER_ID", id);
@@ -1945,14 +1870,14 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       .order("SORT_ORDER", { ascending: true });
 
     const { data: structRows } = await supabase.from("PROJECT_STRUCTURE")
-      .select("ID, EXTRAS_PERCENT, FATHER_ID, FEE_CALC_PHASE_ID")
+      .select(`${ROW_COLS}, FEE_CALC_PHASE_ID`)
       .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId);
 
     // Soft-fail BL queries if migration 0043 not yet run
     let blStructRows = [], blItems = [];
     try {
       const [blStructRes, blItemsRes] = await Promise.all([
-        supabase.from("PROJECT_STRUCTURE").select("ID, EXTRAS_PERCENT, FATHER_ID, FEE_CALC_BL_ID").eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
+        supabase.from("PROJECT_STRUCTURE").select(`${ROW_COLS}, FEE_CALC_BL_ID`).eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).not("FEE_CALC_BL_ID", "is", null),
         supabase.from("FEE_CALCULATION_BL").select("ID, ABBR, NAME, AMOUNT").eq("FEE_CALC_MASTER_ID", id).order("SORT_ORDER", { ascending: true }),
       ]);
       blStructRows = blStructRes.data || [];
@@ -1978,11 +1903,10 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       if (!phase) continue;
       const baseRevenue = Number(phase.PHASE_REVENUE ?? 0) || 0;
       const surchargeShare = lphAlloc[phase.ID] || 0;
-      const revenue = Math.round((baseRevenue + surchargeShare) * 100) / 100;
-      const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
-      const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
+      // Eigene Zuschlaege und NK des Elements obendrauf, Honorar-Feld mit
+      // (leafValues) — vorher blieben beide auf dem alten Stand
       const { error } = await supabase.from("PROJECT_STRUCTURE")
-        .update({ REVENUE: revenue, EXTRAS: extras })
+        .update(leafValues(baseRevenue + surchargeShare, row, computeSurchargesNode))
         .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
       if (!error) synced++;
     }
@@ -1992,11 +1916,8 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       const bl = blMap.get(row.FEE_CALC_BL_ID);
       if (!bl) continue;
       const blSurchargeShare = blAlloc[bl.ID] || 0;
-      const revenue = Math.round(((Number(bl.AMOUNT) || 0) + blSurchargeShare) * 100) / 100;
-      const extrasPercent = Number(row.EXTRAS_PERCENT ?? 0) || 0;
-      const extras = Math.round((revenue * extrasPercent) / 100 * 100) / 100;
       const { error } = await supabase.from("PROJECT_STRUCTURE")
-        .update({ REVENUE: revenue, EXTRAS: extras })
+        .update(leafValues((Number(bl.AMOUNT) || 0) + blSurchargeShare, row, computeSurchargesNode))
         .eq("ID", row.ID).eq("TENANT_ID", req.tenantId);
       if (!error) synced++;
     }
@@ -2063,7 +1984,7 @@ async function syncFeeCalcToStructure(req, res, supabase) {
       synced,
       projectId: master.PROJECT_ID,
       message: synced > 0
-        ? `${synced} Projektelement${synced !== 1 ? "e" : ""} wurden aktualisiert.`
+        ? `${synced} Projektelement${synced !== 1 ? "e wurden" : " wurde"} aktualisiert.`
         : "Keine Elemente aktualisiert.",
     });
   } catch (e) {
@@ -2190,7 +2111,7 @@ async function saveFeeCalcZoneSplits(req, res, supabase) {
 }
 
 module.exports = {
-  postStatus, postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones, getFeeZoneLookup, getFeeZoneCriteria,
+  postTyp, postDepartment, getCountries, getBillingTypes, getFeeGroups, getFeeMasters, getFeeZones, getFeeZoneLookup, getFeeZoneCriteria,
   getFeeCalcZoneSplits, saveFeeCalcZoneSplits,
   postFeeCalcMasterInit, patchFeeCalcMasterBasis, postFeeCalcPhasesInit, patchFeeCalcPhase,
   postFeeCalcPhasesSave, deleteFeeCalcMaster, postFeeCalcAddToStructure, postFeeCalcAddToOfferStructure, syncFeeCalcToStructure,

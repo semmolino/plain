@@ -17,6 +17,12 @@ interface Props {
   /** Unter dem Kopf, z. B. eine Kennzahlen-Leiste. */
   children?:   ReactNode
   className?:  string
+  /**
+   * Titel nur fuer Screenreader (Modulseiten). Welches Modul offen ist, zeigt
+   * die Seitennavigation — der sichtbare Titel „Angebote" ueber „Angebote"
+   * war doppelt und kostete eine Zeile (Rueckmeldung UI-Pilot Runde 3).
+   */
+  srTitle?:    boolean
 }
 
 /**
@@ -33,7 +39,10 @@ interface Props {
  * (actions, rechts, die wichtigste zuletzt). Auf dem Handy rutschen die
  * Aktionen unter den Titel statt ihn zu stauchen.
  */
-export function PageHeader({ title, back, eyebrow, titleAddon, meta, actions, children, className }: Props) {
+export function PageHeader({ title, back, eyebrow, titleAddon, meta, actions, children, className, srTitle }: Props) {
+  if (srTitle && !back && !eyebrow && !titleAddon && !meta && !actions && !children) {
+    return <h1 className="sr-only">{title}</h1>
+  }
   return (
     <header className={`page-header${className ? ` ${className}` : ''}`}>
       {back && (
@@ -45,10 +54,12 @@ export function PageHeader({ title, back, eyebrow, titleAddon, meta, actions, ch
       <div className="page-header-main">
         <div className="page-header-titles">
           {eyebrow && <div className="page-header-eyebrow">{eyebrow}</div>}
-          <div className="page-header-titlerow">
-            <h1 className="page-header-title">{title}</h1>
-            {titleAddon}
-          </div>
+          {srTitle ? <h1 className="sr-only">{title}</h1> : (
+            <div className="page-header-titlerow">
+              <h1 className="page-header-title">{title}</h1>
+              {titleAddon}
+            </div>
+          )}
           {meta && <div className="page-header-meta">{meta}</div>}
         </div>
         {actions && <div className="page-header-actions">{actions}</div>}

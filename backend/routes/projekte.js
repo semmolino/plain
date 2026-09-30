@@ -42,6 +42,7 @@ module.exports = (supabase) => {
   router.post("/structure/:id/transfer-to-child",      requirePermission("projects.structure.edit"), (req, res) => ctrl.transferFatherToChild(req, res, supabase));
   router.patch("/structure/:id/inherit",               requirePermission("projects.structure.edit"), (req, res) => ctrl.inheritStructure(req, res, supabase));
   router.patch("/structure/:id/move",                  requirePermission("projects.structure.edit"), (req, res) => ctrl.moveStructure(req, res, supabase));
+  router.patch("/structure/:id/plan",                  requirePermission("projects.structure.edit"), (req, res) => ctrl.patchStructurePlan(req, res, supabase));
   router.patch("/structure/:id",                       requirePermission("projects.structure.edit"), (req, res) => ctrl.patchStructure(req, res, supabase));
   router.delete("/structure/:id",                      requirePermission("projects.structure.edit"), (req, res) => ctrl.deleteStructure(req, res, supabase));
 
