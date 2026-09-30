@@ -135,7 +135,13 @@ test('Rechnungsliste — weggelassene Spalten kehren beim Aufziehen zurueck', as
   // Weil die Tabelle width:100% hat, fuellt sie ihren Container nach jedem
   // Weglassen aber wieder vollstaendig aus — freier Platz entstand nie, und
   // einmal weggelassene Spalten waeren fuer immer weg gewesen.
-  await page.setViewportSize({ width: 1100, height: 900 })
+  //
+  // Schmale Breite 1280 statt 1100: Seit „Testversion 1" (Seitenleiste
+  // 232px, Inhalt mit 32px Rand, Tabellen 14px mit 12px Zellabstand) passt
+  // die Grundausstattung der Liste erst ab rund 1280px ganz hinein. Darunter
+  // scrollt sie mit fixierter Aktionsspalte — geprueft wird hier das
+  // Weglassen und Zurueckholen, nicht die kleinste denkbare Breite.
+  await page.setViewportSize({ width: 1280, height: 900 })
   await mockDemo(page); await page.goto('/rechnungen'); await hideDevtools(page)
   await page.locator('.master-table').waitFor()
   await expect.poll(() => spalten(page)).not.toContain('SEB €')
@@ -144,7 +150,7 @@ test('Rechnungsliste — weggelassene Spalten kehren beim Aufziehen zurueck', as
   await expect.poll(() => spalten(page), { message: 'SEB muss auf breitem Fenster zurueckkommen' })
     .toContain('SEB €')
 
-  await page.setViewportSize({ width: 1100, height: 900 })
+  await page.setViewportSize({ width: 1280, height: 900 })
   await expect.poll(() => spalten(page)).not.toContain('SEB €')
   // Am Ende steht die Tabelle ruhig — kein Hin und Her an der Grenze.
   await expect.poll(() => ueberstand(page)).toBeLessThanOrEqual(1)

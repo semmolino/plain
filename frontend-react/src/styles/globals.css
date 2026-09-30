@@ -164,6 +164,8 @@
   --badge-border:   #C9CED9;
   --progress-track: var(--accent-bg);
   --progress-fill:  var(--accent);
+  /* Zebrastreifen in Tabellen: Testversion 1 trennt Zeilen nur ueber Linien. */
+  --row-stripe:     transparent;
 
   /* Typografie-Skala — zentrale Steuerung fuer Titel/Headings.
      Hierarchie laeuft ueber die GROESSE; Testversion 1: Titel 600 mit enger
@@ -204,7 +206,11 @@
      Theme-abhaengig (--shadow-color), damit Schatten im Dark-Theme
      nicht unsichtbar werden. */
   --shadow-color: 16,22,61;
-  --shadow-sm: 0 1px 2px  rgba(var(--shadow-color),0.06);
+  /* Testversion 1: Karten sind flach — weiss mit 1px Rahmen statt Schatten.
+     --shadow-sm bleibt als Token, damit Bausteine ihn weiter benennen koennen;
+     wer bisher NUR ueber den Schatten eine Kante hatte, traegt jetzt einen
+     Rahmen. Erhebung (Dialoge, Menues) laeuft ueber --shadow-md/-lg. */
+  --shadow-sm: none;
   --shadow-md: 0 2px 8px  rgba(var(--shadow-color),0.08);
   --shadow-lg: 0 8px 24px rgba(var(--shadow-color),0.12);
 
@@ -223,10 +229,12 @@
   --warning-strong: #92400e;
   --warning-bg:     #fef3c7;
   --warning-fg:     #ffffff;
-  --info:           #1d4ed8;
+  /* Testversion 1: --info ist das „Aktiv"-Blau der Status-Punkte (kein
+     Hellblau als Text), die Flaeche die Balkenspur. */
+  --info:           #25348C;
   --info-fg:        #ffffff;
-  --info-strong:    #1e40af;
-  --info-bg:        #dbeafe;
+  --info-strong:    #1B2668;
+  --info-bg:        #E7EAF6;
   /* ── Controlling-Ampel ─────────────────────────────────────────────────
      Eigene Ebene NEBEN den Statusfarben, nicht statt ihnen: --success heisst
      „gespeichert / gebucht", --kpi-good heisst „wirtschaftlich ueber Ziel".
@@ -704,6 +712,7 @@
   --nav-active-bg: var(--chrome-text);
   --nav-active-fg: var(--chrome);
   --nav-fg-strong: var(--chrome-text);
+  --row-stripe:    var(--dim-2);
 }
 
 /* Dunkle Flaechen: Schildrahmen und Balkenspur aus dem Theme, der blaue
@@ -749,13 +758,23 @@ td.num,
 .ox-effort-amount, .ox-effort-sum,
 .tm-block-time, .tm-row-time, .tm-row-hours,
 .mz-day-hours, .mz-row-time, .mz-row-hours,
-.prl-rate, .bud-share-pct, .lr-table .lr-num, .lsr-item-pct,
+.prl-rate, .bud-share-pct, .lr-table td.lr-num, .lsr-item-pct,
 .iw-amount, .iw-sum-num, .iw-sum-head strong, .sw-se-amt, .sw-table .sw-amount,
 .ks-breakdown-group > div span:last-child,
 .dash-attn-amount, .dash-time-today strong {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+  /* Geist Mono laeuft breiter und wirkt groesser als Geist; in der Vorgabe
+     steht sie neben 14px-Text bei rund 13px. Eigene Groessen spaeterer
+     Regeln (Uhr im Blatt, Kennzahlen) gewinnen weiterhin. */
+  font-size: 0.93em;
 }
+.money .money, td.num .money, .cell-id .money { font-size: inherit; }
+/* Links ohne eigene Klasse: Akzent statt Browser-Blau (Testversion 1: kein
+   Hellblau als Text). :where() haelt die Spezifitaet bei 0 — jede Klasse,
+   die eine eigene Farbe setzt, gewinnt weiterhin. */
+:where(a) { color: var(--accent); }
+
 /* Kennzahl-Kacheln bleiben in Geist, auch wenn der Wert aus money() kommt. */
 .kpi-value .money, .ws-tile-value .money, .daten-kpi-value .money,
 .recap-stat-value .money { font-family: inherit; }
@@ -921,11 +940,12 @@ td.num,
 .reset-url-box { margin-top: 12px; padding: 10px 12px; background: var(--accent-bg); border-radius: 8px; border: 1px solid var(--accent-bg2); word-break: break-all; }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
+/* Testversion 1: Hauptbutton Nachttinte, weisse Schrift, Radius 8, 38px. */
 .btn-primary {
-  width: 100%; padding: 13px;
+  width: 100%; padding: 9px 16px; min-height: 38px;
   background: var(--btn); color: var(--btn-fg);
-  border: none; border-radius: 10px;
-  font-size: 15px; font-weight: 700;
+  border: none; border-radius: var(--radius-md);
+  font-size: 14px; font-weight: 600;
   cursor: pointer; margin-top: 4px;
   transition: background 0.15s;
 }
@@ -943,7 +963,7 @@ button {
   border-radius: var(--radius-md);
   background: var(--surface);
   color: var(--text);
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
   transition: box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
 }
@@ -970,7 +990,7 @@ button:hover { background: var(--hover-bg); }
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--surface); color: var(--text);
-  font-size: 13px; font-weight: 600;
+  font-size: 14px; font-weight: 500;
   white-space: nowrap; cursor: pointer;
 }
 .btn:hover:not(:disabled),
@@ -1066,9 +1086,9 @@ input[type="date"], input[type="time"] {
 .form-group input,
 .form-group select,
 .form-group textarea {
-  width: 100%; padding: 10px 12px;
+  width: 100%; padding: 8px 12px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: var(--surface); color: var(--text);
   font-size: 15px; outline: none;
 }
@@ -1079,7 +1099,7 @@ input[type="date"], input[type="time"] {
 .list-toolbar input[type="search"],
 .list-toolbar select {
   padding: 8px 12px;
-  border: 1px solid var(--border); border-radius: 10px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
   background: var(--surface); color: var(--text);
   font-size: 14px; outline: none; height: 38px;
 }
@@ -1335,12 +1355,14 @@ input::placeholder { color: var(--text-4); }
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
 }
-.kpi-label { font-size: var(--fs-label); font-weight: var(--fw-heading); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); color: var(--text-3); margin-bottom: var(--space-1); }
+/* Testversion 1: Kennzahl-Label 13px / 500 in normaler Schreibung, Kennzahl
+   28px / 600 mit enger Laufweite. */
+.kpi-label { font-size: 13px; font-weight: 500; color: var(--text-3); margin-bottom: var(--space-1); }
 /* Die Kennzahl ist der Zweck der Kachel — vorher stand sie mit 18px kaum
    ueber der Ueberschrift. tabular-nums, damit Betraege in der Reihe fluchten. */
 .kpi-value {
-  font-size: 24px; line-height: 1.15;
-  font-weight: var(--fw-title); color: var(--text);
+  font-size: 28px; line-height: 1.15; letter-spacing: -0.02em;
+  font-weight: 600; color: var(--text);
   font-variant-numeric: tabular-nums;
 }
 /* vorher 10px auf --text-5 = 2.4:1 — unter der eigenen 11px-Grenze und
@@ -1356,12 +1378,11 @@ input::placeholder { color: var(--text-4); }
   box-shadow: var(--shadow-sm);
   margin-bottom: var(--space-4);
 }
+/* Kartentitel wie H2 der Vorgabe: 16px / 600, normale Schreibung. */
 .dash-card-title {
-  font-size: var(--fs-eyebrow);
+  font-size: var(--fs-card-title);
   font-weight: var(--fw-heading);
   color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-eyebrow);
   margin-bottom: 10px;
 }
 
@@ -1544,7 +1565,7 @@ input::placeholder { color: var(--text-4); }
   border-bottom: 1px solid var(--border-2);
 }
 .tabs {
-  display: flex; gap: var(--space-1);
+  display: flex; gap: var(--space-5);
   overflow-x: auto;
   scrollbar-width: none;
   scroll-behavior: smooth;
@@ -1583,24 +1604,28 @@ input::placeholder { color: var(--text-4); }
   .tabs-arrow { width: 44px; }
 }
 
+/* Testversion 1: Text schwarz, der aktive Reiter fett mit 3px Linie in
+   Nachttinte darunter — schlicht, ohne Spitze. Die Linie ist ein
+   Innenschatten statt eines Rahmens: sie verschiebt so beim Wechsel nichts. */
 .tab-btn {
   flex: 0 0 auto;
-  padding: 8px 14px;
+  padding: 10px 0 12px;
   border: none;
-  border-bottom: 2px solid transparent;
   border-radius: 0;
   background: none;
-  font-size: 13px; font-weight: 600;
-  color: var(--text-3);
+  font-size: 14px; font-weight: 500;
+  color: var(--text);
   cursor: pointer; box-shadow: none;
   white-space: nowrap;
-  transition: color 0.12s, border-color 0.12s, background 0.12s;
+  transition: color 0.12s, box-shadow 0.12s;
 }
-.tab-btn:hover { background: var(--hover-bg); transform: none; box-shadow: none; color: var(--text); }
-.tab-btn.active {
+.tab-btn:hover { background: none; transform: none; box-shadow: inset 0 -3px 0 var(--border); color: var(--text); }
+.tab-btn.active,
+.tab-btn.active:hover {
   background: none;
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: inset 0 -3px 0 var(--accent);
 }
 .tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-sm); }
 
@@ -1644,8 +1669,8 @@ input::placeholder { color: var(--text-4); }
 .list-toolbar,
 .pl-toolbar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); flex-wrap: wrap; }
 .list-search {
-  flex: 1; min-width: 180px; padding: 8px 12px;
-  border: 1px solid var(--border); border-radius: 10px;
+  flex: 1; min-width: 180px; padding: 8px 12px; min-height: 38px;
+  border: 1px solid var(--border); border-radius: var(--radius-md);
   background: var(--surface); font-size: 14px; outline: none; color: var(--text);
 }
 /* Lupe als Hintergrundbild statt als zusaetzliches Markup. WICHTIG: nur in
@@ -1700,10 +1725,13 @@ input::placeholder { color: var(--text-4); }
 /* ── Master table ────────────────────────────────────────────────────────── */
 /* 13px = Untergrenze fuer Fliesstext aus CLAUDE.md (vorher 12px — und das
    in JEDER Tabelle der App, also auf der Hauptarbeitsflaeche). */
-.master-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 400px; }
+/* Testversion 1: Tabelle 14px, Kopf 12,5px / 600 (38px), Zeile 44px,
+   Linien in --border, Zeilen nur ueber Linien getrennt (--row-stripe). */
+.master-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 400px; }
 .master-table th {
-  text-align: left; padding: 8px; font-weight: 700;
-  color: var(--text-2); border-bottom: 2px solid var(--border-2);
+  text-align: left; padding: 0 12px; height: 38px;
+  font-size: 12.5px; font-weight: 600;
+  color: var(--text-2); border-bottom: 1px solid var(--border-2);
   white-space: nowrap;
   position: sticky; top: 0; z-index: 2; background: var(--surface);
 }
@@ -1715,11 +1743,11 @@ input::placeholder { color: var(--text-4); }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.master-table td { padding: 8px; border-bottom: 1px solid var(--border-4); vertical-align: middle; }
+.master-table td { padding: 6px 12px; height: 44px; border-bottom: 1px solid var(--border-4); vertical-align: middle; }
 /* Zeilenköpfe (th scope="row"/"rowgroup") sehen aus wie Zellen. Die
    Kopfregel oben machte sie fett, mit Doppelrand — und klebend am oberen Rand. */
 .master-table tbody th { position: static; font-weight: 400; color: var(--text); border-bottom: 1px solid var(--border-4); background: transparent; }
-.master-table tbody tr:nth-child(even) th { background: var(--dim-2); }
+.master-table tbody tr:nth-child(even) th { background: var(--row-stripe); }
 /* Kennungen und Datumsangaben duerfen nicht umbrechen: „RE-2025-0046" wurde
    in der Rechnungsliste sonst dreizeilig und „2025-08-01" zweizeilig, was
    die Zeilenhoehe verdreifacht hat. */
@@ -1891,7 +1919,7 @@ input::placeholder { color: var(--text-4); }
   background-color: var(--surface);
 }
 .master-table.master-table--sticky-actions tbody tr:nth-child(even) td.doc-actions {
-  background-image: linear-gradient(var(--dim-2), var(--dim-2));
+  background-image: linear-gradient(var(--row-stripe), var(--row-stripe));
 }
 .master-table.master-table--sticky-actions tbody tr:hover td.doc-actions {
   background-image: linear-gradient(var(--accent-tint), var(--accent-tint));
@@ -1901,7 +1929,7 @@ input::placeholder { color: var(--text-4); }
 
 /* Zebrastreifen: bei 10+ Spalten verrutscht das Auge sonst leicht in die
    Nachbarzeile. tbody-Kinder, damit der sticky Header unberuehrt bleibt. */
-.master-table tbody tr:nth-child(even) td { background: var(--dim-2); }
+.master-table tbody tr:nth-child(even) td { background: var(--row-stripe); }
 
 /* ── Aufklappbare Detailzeile ────────────────────────────────────────────
    Fuer Listen, die Spalten aus Platzmangel weglassen (siehe useFitColumns).
@@ -1915,7 +1943,7 @@ input::placeholder { color: var(--text-4); }
    bewusst als Paar (even UND odd), damit in einem Browser ohne `of` beide
    Regeln ausfallen und die Grundregel greift, statt die Streifen zu
    verlieren. */
-.master-table--aufklappbar tbody tr:nth-child(even of :not(.row-detail)) td { background: var(--dim-2); }
+.master-table--aufklappbar tbody tr:nth-child(even of :not(.row-detail)) td { background: var(--row-stripe); }
 .master-table--aufklappbar tbody tr:nth-child(odd  of :not(.row-detail)) td { background: transparent; }
 
 .row-expand-btn {
@@ -1997,10 +2025,11 @@ input::placeholder { color: var(--text-4); }
 .pl-clear-btn:hover { background: var(--danger-bg); }
 .pl-col-wrap { position: relative; }
 .pl-col-btn {
-  padding: 0 10px; height: 30px; font-size: 12px; border-radius: var(--radius-sm);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 12px; height: 38px; font-size: 14px; font-weight: 500; border-radius: var(--radius-md);
   border: 1px solid var(--border); background: var(--surface); cursor: pointer; white-space: nowrap;
 }
-.pl-col-btn:hover { border-color: var(--accent); color: var(--accent); }
+.pl-col-btn:hover { background: var(--hover-bg); }
 .pl-col-panel {
   position: absolute; top: calc(100% + 4px); right: 0; z-index: 120;
   background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
@@ -2033,13 +2062,15 @@ input::placeholder { color: var(--text-4); }
 /* Filter chips */
 .filter-chip-wrap { position: relative; display: inline-flex; align-items: center; }
 .filter-chip-btn {
-  padding: 5px 10px; font-size: 12px; border-radius: var(--radius-pill);
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 38px; padding: 0 12px; font-size: 14px; font-weight: 500;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border); background: var(--surface);
   cursor: pointer; white-space: nowrap; color: var(--text);
   transition: border-color 0.12s, background 0.12s;
 }
-.filter-chip-btn:hover { border-color: var(--accent); color: var(--accent); }
-.filter-chip-btn.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent-dark); font-weight: 600; }
+.filter-chip-btn:hover { background: var(--hover-bg); }
+.filter-chip-btn.active { background: var(--accent-bg); border-color: var(--accent); color: var(--text); font-weight: 600; }
 /* 24x24 statt vormals 18x18 — das ist die Untergrenze aus WCAG 2.5.8
    (Target Size, Minimum). Gemessen an einem Chip von 90x44 kostet das
    keine Zeile Umbruch. */
@@ -2226,7 +2257,7 @@ th.doc-actions, td.doc-actions {
 }
 .modal-backdrop--confirm { z-index: 600; }
 .modal-card {
-  background: var(--surface); border-radius: 18px;
+  background: var(--surface); border-radius: 14px;
   width: 100%; max-width: 480px; max-height: 90dvh;
   display: flex; flex-direction: column;
   box-shadow: var(--shadow-lg);
@@ -2313,7 +2344,7 @@ th.doc-actions, td.doc-actions {
 /* ── Admin section ───────────────────────────────────────────────────────── */
 .admin-section { max-width: 480px; }
 .admin-section-hint { font-size: 12px; color: var(--text-3); margin-bottom: 14px; }
-.admin-block { margin-bottom: 20px; padding: 14px 16px; background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-sm); }
+.admin-block { margin-bottom: 20px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm); }
 .admin-block-title { font-size: var(--fs-eyebrow); font-weight: var(--fw-heading); color: var(--text-3); text-transform: uppercase; letter-spacing: var(--ls-eyebrow); margin-bottom: 10px; }
 /* Beschriftung ueber dem Feld statt als loser Text hinter dem Knopf. */
 .admin-input-row { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -2323,7 +2354,7 @@ th.doc-actions, td.doc-actions {
    lesbaren Text. Eine Feldbeschriftung muss man lesen koennen -> --text-2. */
 .admin-field-label { font-size: var(--fs-label); font-weight: 600; text-transform: uppercase; letter-spacing: var(--ls-eyebrow); color: var(--text-2); }
 .admin-company-selector { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-.admin-company-btn { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; cursor: pointer; color: var(--text-2); transition: background 0.15s, border-color 0.15s; }
+.admin-company-btn { padding: 6px 14px; border-radius: var(--radius-md); border: 1px solid var(--border); background: var(--surface); font-size: 13px; cursor: pointer; color: var(--text-2); transition: background 0.15s, border-color 0.15s; }
 .admin-company-btn:hover { background: var(--dim); }
 .admin-company-btn.active { background: var(--btn); color: var(--btn-fg); border-color: var(--btn); }
 
@@ -2431,7 +2462,8 @@ th.doc-actions, td.doc-actions {
 .buchungen-summary {
   display: flex; gap: 20px; flex-wrap: wrap;
   padding: 8px 12px; background: var(--surface);
-  border-radius: 10px; margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg); margin-bottom: 8px;
   box-shadow: var(--shadow-sm);
   font-size: 14px;
 }
@@ -2598,6 +2630,7 @@ th.doc-actions, td.doc-actions {
 .wizard-steps {
   display: flex; gap: 0; margin: 0 0 var(--space-6);
   padding: 0; list-style: none;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg); overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
@@ -2707,7 +2740,7 @@ th.doc-actions, td.doc-actions {
 .dash-table tbody tr:hover td { background: var(--accent-tint); }
 
 .billing-proposal-box {
-  background: var(--surface); border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   padding: 12px 16px; display: flex; flex-direction: column; gap: 6px;
 }
@@ -2739,7 +2772,7 @@ th.doc-actions, td.doc-actions {
 }
 .daten-filter-mode-btn {
   display: flex; align-items: center; gap: 4px;
-  padding: 4px 12px; border-radius: 20px; border: 1px solid var(--border);
+  padding: 4px 12px; border-radius: var(--radius-md); border: 1px solid var(--border);
   background: var(--surface); font-size: 0.85rem; cursor: pointer; user-select: none; color: var(--text);
 }
 .daten-filter-mode-btn input { display: none; }
@@ -2758,19 +2791,22 @@ th.doc-actions, td.doc-actions {
 }
 
 /* ── SegmentNav (einheitlicher Umschalter) ─────────────────────────────────── */
+/* Testversion 1 („Segmente"): weisse Leiste mit Rahmen, aktives Segment in
+   Nachttinte mit weisser Schrift. */
 .seg-nav {
   display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px;
-  background: var(--surface-2); border: 1px solid var(--border);
-  border-radius: 10px; margin-bottom: 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 9px; margin-bottom: 16px;
 }
 .seg-nav-btn {
-  padding: 6px 14px; font-size: 13px; font-weight: 500;
-  border: none; background: transparent; color: var(--text-3);
-  border-radius: 7px; cursor: pointer; white-space: nowrap;
+  min-height: 32px; padding: 0 12px; font-size: 13.5px; font-weight: 500;
+  border: none; background: transparent; color: var(--text);
+  border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap;
 }
-.seg-nav-btn:hover { color: var(--text); background: var(--chrome-hover-bg); }
-.seg-nav-btn.active {
-  background: var(--surface); color: var(--text);
+.seg-nav-btn:hover { color: var(--text); background: var(--hover-bg); }
+.seg-nav-btn.active,
+.seg-nav-btn.active:hover {
+  background: var(--accent); color: var(--accent-fg); font-weight: 600;
   box-shadow: var(--shadow-sm);
 }
 
@@ -2780,7 +2816,7 @@ th.doc-actions, td.doc-actions {
   gap: 10px; margin-bottom: 4px;
 }
 .daten-kpi-tile {
-  background: var(--surface); border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: 12px 14px;
   box-shadow: var(--shadow-sm);
   display: flex; flex-direction: column; gap: 4px;
@@ -3241,7 +3277,7 @@ th.doc-actions, td.doc-actions {
 .cte-date        { display: inline-block; font-size: 13px; cursor: pointer; padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
 .cte-date:hover  { background: var(--hover-bg); }
 .cte-date-empty  { color: var(--text-3); font-size: 12px; }
-.inline-date-input { width: 130px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; padding: 5px 8px; height: 32px; outline: none; font-family: inherit; }
+.inline-date-input { width: 130px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font-size: 13px; padding: 5px 8px; height: 32px; outline: none; font-family: inherit; }
 .inline-date-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-ring); }
 /* In filter bars, give it the same height as filter chips */
 .pl-filter-chips .inline-date-input,
@@ -3570,8 +3606,8 @@ th.doc-actions, td.doc-actions {
   transition: background 0.15s, color 0.15s;
 }
 .recent-list-toggle-btn.active {
-  background: var(--surface);
-  color: var(--text);
+  background: var(--accent);
+  color: var(--accent-fg);
   box-shadow: var(--shadow-sm);
 }
 .recent-chip-count {
@@ -5246,13 +5282,12 @@ fieldset:disabled .ws-check { cursor: default; }
 /* ── Umschalter aus Segmenten (aria-pressed) ───────────────────────────────
    „Wie wird beauftragt?", Berechnungsmodus eines Zuschlags. Vorher faerbte
    der Modus-Knopf sich mit festem Weiss auf Akzent. */
-.seg-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.seg-toggle { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .seg-toggle button {
-  flex: 1; min-height: 36px; padding: 0 14px; margin: 0; border: 0; border-radius: 0; box-shadow: none;
-  background: var(--surface); color: var(--text-2); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  flex: 1; min-height: 32px; padding: 0 12px; margin: 0; border: 0; border-radius: var(--radius-sm); box-shadow: none;
+  background: transparent; color: var(--text); font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer;
 }
-.seg-toggle button + button { border-left: 1px solid var(--border); }
-.seg-toggle button[aria-pressed="true"] { background: var(--accent-bg); color: var(--text); }
+.seg-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 @media (max-width: 640px) { .seg-toggle button { min-height: 44px; } }
 
 /* ── Dichte-Umschalter (Buchungen) ───────────────────────────────────────── */
@@ -5269,7 +5304,7 @@ fieldset:disabled .ws-check { cursor: default; }
   font-size: 12px; font-weight: 600; color: var(--text-2);
 }
 .density-btn:hover { background: var(--hover-bg); }
-.density-btn[aria-pressed="true"] { background: var(--dim); color: var(--text); }
+.density-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); }
 @media (max-width: 640px), (pointer: coarse) {
   .density-toggle { display: none; }
 }
@@ -6219,13 +6254,12 @@ fieldset:disabled .ws-check { cursor: default; }
 /* ── Leistungsstände: Monatsrunde ────────────────────────────────────────── */
 .lsr-root { display: flex; flex-direction: column; gap: var(--space-3); }
 .lsr-head { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
-.lsr-scope { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.lsr-scope { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); }
 .lsr-scope button {
-  height: 36px; padding: 0 14px; border: 0; border-radius: 0; margin: 0; box-shadow: none;
-  background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 600; cursor: pointer;
+  height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-sm); margin: 0; box-shadow: none;
+  background: transparent; color: var(--text); font-size: 13.5px; font-weight: 500; cursor: pointer;
 }
-.lsr-scope button + button { border-left: 1px solid var(--border); }
-.lsr-scope button[aria-pressed="true"] { background: var(--accent-bg); color: var(--text); }
+.lsr-scope button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
 .lsr-progress { margin-left: auto; display: flex; align-items: center; gap: var(--space-2); font-size: 13px; color: var(--text-2); }
 .lsr-progress strong { color: var(--text); }
 .lsr-progress-bar { width: 120px; height: 6px; border-radius: var(--radius-pill); background: var(--dim); overflow: hidden; }
