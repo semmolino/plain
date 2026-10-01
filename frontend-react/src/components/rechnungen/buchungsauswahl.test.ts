@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import type { TecEntry } from '@/api/rechnungen'
 import {
   filterBookings, billable, initialSelection, withZeros, triState, toggleRows, summarize,
-  outsidePeriod, idsOf, loadPrefs, savePref, PREFS_KEY, type BookingFilters,
+  outsidePeriod, idsOf, loadPrefs, savePref, sortBookings, sortKeyOr, PREFS_KEY, type BookingFilters,
 } from './buchungsauswahl'
 
 function b(ID: number, date: string, amount: number, over: Partial<TecEntry> = {}): TecEntry {
@@ -87,6 +87,28 @@ describe('Sammelaktionen mit „0-Beträge mitabrechnen"', () => {
   it('Nur sichtbare: genau die sichtbaren Abrechenbaren', () => {
     const sichtbar = filterBookings(list, { ...none, since: '2026-09-10' })
     expect([...idsOf(billable(sichtbar, false))]).toEqual([3])
+  })
+})
+
+describe('sortBookings', () => {
+  it('Beträge als Zahl, nicht als Text; Gleichstand nach Datum', () => {
+    const rows = [b(1, '2026-09-02', 90), b(2, '2026-09-01', 1000), b(3, '2026-08-01', 90)]
+    expect(ids(sortBookings(rows, 'HOURLY_RATE_TOTAL', 'asc'))).toEqual([3, 1, 2])
+    expect(ids(sortBookings(rows, 'HOURLY_RATE_TOTAL', 'desc'))).toEqual([2, 3, 1])
+  })
+  it('Buchungen ohne Stunden (Pauschalen) stehen in beiden Richtungen unten', () => {
+    // Stunden: 1 → 1 h, 2 → 1 h, 3 → 2,5 h, 4 → keine
+    expect(ids(sortBookings(list, 'HOURS', 'asc'))).toEqual([1, 2, 3, 4])
+    expect(ids(sortBookings(list, 'HOURS', 'desc'))).toEqual([3, 1, 2, 4])
+  })
+  it('Text nach deutscher Sortierung, ohne die Liste zu verändern', () => {
+    const before = ids(list)
+    expect(ids(sortBookings(list, 'EMPLOYEE_SHORT_NAME', 'asc'))[0]).toBe(3) // AB vor SM
+    expect(ids(list)).toEqual(before)
+  })
+  it('unbekannter gespeicherter Schlüssel fällt aufs Datum zurück', () => {
+    expect(sortKeyOr('ID')).toBe('BOOKING_DATE')
+    expect(sortKeyOr('HOURS')).toBe('HOURS')
   })
 })
 

@@ -1,4 +1,5 @@
 import type { TecEntry } from '@/api/rechnungen'
+import { compareRows } from '@/utils/sortRows'
 
 /**
  * Auswahl-Logik der Buchungstabelle in den Rechnungsassistenten
@@ -55,6 +56,23 @@ export function filterBookings(list: TecEntry[], f: BookingFilters): TecEntry[] 
     }
     return true
   })
+}
+
+// ── Sortierung über die Spaltenköpfe ─────────────────────────────────────────
+
+export type BookingSortKey = 'BOOKING_DATE' | 'EMPLOYEE_SHORT_NAME' | 'POSTING_DESCRIPTION' | 'HOURS' | 'HOURLY_RATE_TOTAL'
+const SORT_KEYS: readonly BookingSortKey[] = ['BOOKING_DATE', 'EMPLOYEE_SHORT_NAME', 'POSTING_DESCRIPTION', 'HOURS', 'HOURLY_RATE_TOTAL']
+const NUMERIC_SORT_KEYS: readonly BookingSortKey[] = ['HOURS', 'HOURLY_RATE_TOTAL']
+
+/** Ein gespeicherter Schlüssel, den es nicht (mehr) gibt, fällt aufs Datum zurück. */
+export const sortKeyOr = (k: unknown): BookingSortKey =>
+  SORT_KEYS.includes(k as BookingSortKey) ? k as BookingSortKey : 'BOOKING_DATE'
+
+/** Sortiert eine Kopie. Gleichstand ordnet das Datum — sonst sprängen gleich
+ *  teure Buchungen bei jedem Klick durcheinander. Leerwerte stehen immer unten. */
+export function sortBookings(rows: TecEntry[], key: BookingSortKey, dir: 'asc' | 'desc'): TecEntry[] {
+  return [...rows].sort((a, b) =>
+    compareRows(a, b, key, dir, NUMERIC_SORT_KEYS) || compareRows(a, b, 'BOOKING_DATE', 'asc'))
 }
 
 /** Was eine Sammelaktion wählt: 0-Beträge nur, wenn sie mitabgerechnet werden. */

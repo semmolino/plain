@@ -2,12 +2,15 @@ import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { SortTh } from '@/components/ui/SortTh'
 import type { LastInvoice, TecEntry } from '@/api/rechnungen'
+import { useStickyState } from '@/hooks/useStickyState'
 import { fmtEur, money } from '@/utils/money'
 import { fmtDateDe, fmtHours } from '@/utils/zeit'
 import {
-  billable, filterBookings, idsOf, isZeroBooking, loadPrefs, outsidePeriod, savePref, summarize,
-  toggleRows, triState, withZeros, PREFS_KEY, type BookingPrefs, type Period, type TriState,
+  billable, filterBookings, idsOf, isZeroBooking, loadPrefs, outsidePeriod, savePref, sortBookings, sortKeyOr,
+  summarize, toggleRows, triState, withZeros, PREFS_KEY,
+  type BookingPrefs, type BookingSortKey, type Period, type TriState,
 } from './buchungsauswahl'
 
 const KIND_LABEL: Record<string, string> = {
@@ -110,6 +113,17 @@ export function BuchungsauswahlTable({
     since:  sinceActive && lastInvoice ? lastInvoice.since : null,
     period: periodActive ? period : null,
   }), [tecList, search, dateFrom, dateTo, empFilter, structFilter, prefs.hideZero, sinceActive, lastInvoice, periodActive, period])
+
+  // Sortieren ist eine Vorliebe wie in den anderen Listen — sie blendet nichts aus.
+  const [sortKeyRaw, setSortKey] = useStickyState<BookingSortKey>('buchungsauswahl.sortKey', 'BOOKING_DATE')
+  const [sortDir,    setSortDir] = useStickyState<'asc' | 'desc'>('buchungsauswahl.sortDir', 'asc')
+  const sortKey = sortKeyOr(sortKeyRaw)
+  const rows = useMemo(() => sortBookings(filtered, sortKey, sortDir), [filtered, sortKey, sortDir])
+  function toggleSort(k: BookingSortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('asc') }
+  }
+  const sp = { sortKey, dir: sortDir, onSort: toggleSort }
 
   const filterActive = !!(search.trim() || dateFrom || dateTo || empFilter.size > 0 || structFilter.size > 0
     || prefs.hideZero || sinceActive || periodActive)
@@ -248,15 +262,15 @@ export function BuchungsauswahlTable({
                     <th scope="col">
                       <TriCheckbox state={visibleState} onChange={toggleVisible} label="Alle sichtbaren auswählen" />
                     </th>
-                    <th scope="col">Datum</th>
-                    <th scope="col" className="ba-wide">Mitarbeiter</th>
-                    <th scope="col">Beschreibung</th>
-                    <th scope="col" className="num ba-wide">Std.</th>
-                    <th scope="col" className="num">Betrag €</th>
+                    <SortTh label="Datum"        column="BOOKING_DATE"        {...sp} />
+                    <SortTh label="Mitarbeiter"  column="EMPLOYEE_SHORT_NAME" {...sp} className="ba-wide" />
+                    <SortTh label="Beschreibung" column="POSTING_DESCRIPTION" {...sp} />
+                    <SortTh label="Std."         column="HOURS"               {...sp} className="num ba-wide" />
+                    <SortTh label="Betrag €"     column="HOURLY_RATE_TOTAL"   {...sp} className="num" />
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(t => (
+                  {rows.map(t => (
                     <tr key={t.ID}>
                       <td>
                         <input type="checkbox" checked={selected.has(t.ID)} onChange={() => toggleTec(t.ID)}

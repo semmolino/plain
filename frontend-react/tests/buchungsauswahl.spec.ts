@@ -120,6 +120,30 @@ test.describe('Buchungsauswahl', () => {
     await expect(summary(page)).toContainText('5 Buchungen')
   })
 
+  test('Sortieren über die Spaltenköpfe, per Maus und Tastatur, bleibt gemerkt', async ({ page }) => {
+    await setup(page)
+    await openBookings(page)
+    const firstDesc = () => page.locator('.ba-table tbody tr').first().locator('td').nth(3)
+    await expect(firstDesc()).toContainText('Bestandsaufnahme')      // Standard: Datum aufsteigend
+
+    const betrag = page.getByRole('columnheader', { name: /Betrag/ })
+    await betrag.click()
+    await expect(betrag).toHaveAttribute('aria-sort', 'ascending')
+    await expect(firstDesc()).toContainText('Abstimmung Kulanz')     // 0 € vor 190 €, gleich teuer → früheres Datum
+    await betrag.press('Enter')
+    await expect(betrag).toHaveAttribute('aria-sort', 'descending')
+    await expect(firstDesc()).toContainText('Entwurf Schnitte')      // 380 €
+
+    // Sortieren blendet nichts aus und ändert die Auswahl nicht.
+    await expect(summary(page)).toContainText('5 Buchungen')
+    await expect(summary(page)).toContainText('5 ausgewählt')
+
+    page.on('dialog', d => void d.accept())
+    await page.reload()
+    await bar(page).getByRole('button', { name: 'Weiter', exact: true }).click()
+    await expect(page.getByRole('columnheader', { name: /Betrag/ })).toHaveAttribute('aria-sort', 'descending')
+  })
+
   test('Schlussrechnung: Buchungen der Positionen nach Aufwand, Abwählen mindert die Position', async ({ page }) => {
     await page.clock.setFixedTime(new Date('2026-09-24T10:30:00'))
     await mockPilot(page)
