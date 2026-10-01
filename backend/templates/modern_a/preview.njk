@@ -74,6 +74,7 @@
           <tr><td class="ml">Telefon</td><td class="mv">{{ sample.seller.contactPhone }}</td></tr>
           <tr><td class="ml" style="padding-top:3mm">Datum</td><td class="mv" style="padding-top:3mm">{{ sample.date | date_de }}</td></tr>
           <tr><td class="ml">Rechnungs-Nr.</td><td class="mv bold">{{ sample.number }}</td></tr>
+          {% if theme.header.showBauvorhaben != false %}<tr><td class="ml">Bauvorhaben</td><td class="mv">{{ sample.bauvorhaben }}</td></tr>{% endif %}
           <tr><td class="ml">Projekt</td><td class="mv">{{ sample.project }}</td></tr>
         </table>
       </div>

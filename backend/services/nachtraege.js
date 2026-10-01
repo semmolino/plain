@@ -888,11 +888,14 @@ async function buildNachtragPdfViewModel(supabase, { nachtragId, tenantId }) {
   const grossTotal = fmt2(totalNet * (100 + vatPercent) / 100);
 
   const employeeName = employee ? `${employee.FIRST_NAME ?? ''} ${employee.LAST_NAME ?? ''}`.trim() : '';
+  // Gesamtprojekt des Projekts als „Bauvorhaben" (Zeile im Kopf, abschaltbar)
+  const bauvorhaben = await gesamtprojekte.bauvorhabenForProject(supabase, { tenantId, projectId: nachtrag.PROJECT_ID });
   const sellerName = [company?.COMPANY_NAME_1, company?.COMPANY_NAME_2].filter(Boolean).join(' ');
 
   return {
     nachtrag,
     projectName:   project ? `${project.ABBR} — ${project.NAME}` : '',
+    bauvorhaben,
     categoryLabel: nachtrag.CATEGORY ? (CATEGORY_LABELS_PDF[nachtrag.CATEGORY] || nachtrag.CATEGORY) : '',
     employeeName,
     seller: {

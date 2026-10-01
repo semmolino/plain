@@ -1,6 +1,6 @@
 # Gesamtprojekte — mehrere Projekte als eine Einheit
 
-Stand 2026-09-30. Stufe 1 und Stufe 2 sind umgesetzt (Migration `0181`), Stufe 3 ist hier beschrieben.
+Stand 2026-10-01. Stufe 1 und Stufe 2 sind umgesetzt (Migration `0181`), von Stufe 3 der Nachtrag als eigenes Projekt (`0182`) und das Gesamtprojekt auf den Belegen.
 Offen aus Stufe 2 ist nur der optionale Teil „Angebot merkt sich das Gesamtprojekt" (Auftragsbestand).
 
 ## 1. Anforderung
@@ -121,6 +121,12 @@ Entscheidung 2026-10-01: gebaut werden „Nachtrag als eigenes Projekt" und das 
   - **Protokoll:** `NACHTRAG_RELEASE.TARGET_PROJECT_ID` hält fest, wohin eine Freigabe ging. Der Nachtrag selbst bleibt am Ursprungsprojekt.
   - **Rechte:** `nachtraege.release` und `projects.create`, dazu `projects.edit`, wenn erst ein Gesamtprojekt entsteht.
   - **Reihenfolge:** Rechte, Adresse und Kontakt werden geprüft, **bevor** geschrieben wird. Nach einer Ablehnung steht also kein halbes Projekt da.
+- **Gesamtprojekt auf Belegen** (`bauvorhabenForProject` in `services/gesamtprojekte.js`).
+  - **Zeile „Bauvorhaben: …"** mit dem Namen des Gesamtprojekts. Sie steht auf Rechnung, Abschlags-, Schluss- und Korrekturrechnung (`invoice.njk`) sowie auf Storno, Mahnung und Nachtrag, jeweils vor der Projektzeile. Bei Projekten ohne Gesamtprojekt erscheint nichts, für diese Belege ändert sich also nichts.
+  - **Abschaltbar** unter Einstellungen → Dokumentvorlagen (`theme.header.showBauvorhaben`, gilt mandantenweit wie Logo-Position). Vorlagen, die den Schlüssel nicht kennen, gelten als „an". Die Vorlagen prüfen deshalb `!= false`.
+  - **Platzhalter `{{bauvorhaben}}`** in E-Mail-Vorlagen (`emailTemplates.js`) und in Kopf-/Fußtexten der Rechnungen. Bei Angeboten bleibt er leer, weil sie zu keinem Gesamtprojekt gehören, und der Chip wird dort nicht angeboten.
+  - **E-Rechnung unverändert:** BT-11 (Projektreferenz) bleibt das Projekt. Ein eigenes EN-16931-Feld für ein Bauvorhaben gibt es nicht.
+  - **Fehlerverhalten:** Ein Lesefehler lässt nur die Zeile weg, der Beleg entsteht trotzdem. Er wird protokolliert (`[BAUVORHABEN]`). Im Deploy-Fenster fehlt die Spalte noch, dann bleibt die Zeile still leer.
 
 ## 10. Offene Punkte
 

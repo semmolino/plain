@@ -82,6 +82,7 @@ body {
   font-weight: 600;
   margin-bottom: 5mm;
 }
+.subject-line .subject-ref { font-weight: 400; }
 
 /* Invoice detail table */
 .inv-table {
@@ -178,7 +179,8 @@ body {
   <div class="doc-title">{{ mahnstufeLabel }}</div>
 
   {# Subject line #}
-  <div class="subject-line">Betreff: {{ mahnstufeLabel }} zu Rechnung {{ invoiceNumber }}</div>
+  <div class="subject-line">Betreff: {{ mahnstufeLabel }} zu Rechnung {{ invoiceNumber }}
+    {%- if bauvorhaben and theme.header.showBauvorhaben != false %}<br><span class="subject-ref">Bauvorhaben: {{ bauvorhaben }}</span>{% endif %}</div>
 
   {# Header text (from settings) #}
   {% if headerText %}<div class="text-block">{{ headerText }}</div>{% endif %}

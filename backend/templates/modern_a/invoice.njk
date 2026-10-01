@@ -366,6 +366,10 @@ table.data-table thead { display: table-header-group; }
     {% if inv.buyerReference %}
     <div class="rf"><span class="rl">Ihre Zeichen:</span><span>{{ inv.buyerReference }}</span></div>
     {% endif %}
+    {# Gesamtprojekt — nur wenn das Projekt einem angehoert; abschaltbar in der Dokumentvorlage #}
+    {% if bauvorhaben and theme.header.showBauvorhaben != false %}
+    <div class="rf"><span class="rl">Bauvorhaben:</span><span>{{ bauvorhaben }}</span></div>
+    {% endif %}
     {% if projectName %}
     <div class="rf"><span class="rl">Projekt:</span><span>{{ projectName }}</span></div>
     {% endif %}

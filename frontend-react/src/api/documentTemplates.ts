@@ -15,6 +15,8 @@ export interface ThemeHeader {
   showLogo:        boolean
   logoMaxHeightMm: number
   logoPosition:    LogoPosition
+  /** Zeile „Bauvorhaben: …" (Gesamtprojekt) auf Belegen; fehlt = an */
+  showBauvorhaben?: boolean
 }
 
 // Schaltbare Anhang-/Inhaltsabschnitte. Spiegel von services_theme_defaults.js.
@@ -40,7 +42,7 @@ export interface DocTheme {
 export const DEFAULT_THEME: DocTheme = {
   version: 2,
   brand:  { primaryColor: '#111827', accentColor: '#111827', fontFamily: 'system-sans', fontScale: 1 },
-  header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right' },
+  header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right', showBauvorhaben: true },
   blocks: {
     showProjectStructure: true, showTec: true, showHonorar: true, showPayments: true,
     order: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],

@@ -391,6 +391,25 @@ async function groupsByProjectIfMigrated(supabase, args) {
   }
 }
 
+/**
+ * Name des Gesamtprojekts fuer Belege — die Zeile „Bauvorhaben: …" auf PDFs
+ * und der Platzhalter {{bauvorhaben}}. Leer, wenn das Projekt zu keinem
+ * gehoert. Anders als bei Listen bricht ein Lesefehler hier NICHT ab: die
+ * Zeile ist eine Zusatzangabe, und ein Beleg, der deshalb nicht entsteht,
+ * waere der groessere Schaden. Er wird aber protokolliert, statt still zu
+ * verschwinden.
+ */
+async function bauvorhabenForProject(supabase, { tenantId, projectId }) {
+  if (!projectId || tenantId === undefined || tenantId === null) return "";
+  try {
+    const map = await groupsByProjectIfMigrated(supabase, { tenantId, projectIds: [projectId] });
+    return String(map.get(String(projectId))?.NAME || "").trim();
+  } catch (e) {
+    console.warn("[BAUVORHABEN]", e?.message || e);
+    return "";
+  }
+}
+
 // ── Rechenkern (rein, ohne Datenbank) ────────────────────────────────────────
 
 const num = (v) => {
@@ -437,6 +456,7 @@ module.exports = {
   setMembers,
   groupsByProject,
   groupsByProjectIfMigrated,
+  bauvorhabenForProject,
   suggestMemberAbbr,
   newProjectGroupAndAbbr,
   aggregateKpis,

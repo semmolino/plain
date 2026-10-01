@@ -1630,7 +1630,7 @@ function TextVorlagenSection() {
       {/* Platzhalter-Chips */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', margin: '12px 0' }}>
         <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Platzhalter einfügen:</span>
-        {TEXT_PLACEHOLDERS.map(p => (
+        {TEXT_PLACEHOLDERS.filter(p => !p.invoiceOnly || !activeType.startsWith('offer_')).map(p => (
           <button key={p.token} type="button" className="btn-small" onClick={() => insertToken(p.token)} title={p.token}>
             {p.label}
           </button>

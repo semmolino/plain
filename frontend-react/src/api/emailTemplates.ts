@@ -47,6 +47,7 @@ export const EMAIL_PLACEHOLDERS: EmailPlaceholder[] = [
   { token: '{{bezahlt}}',         label: 'Bereits bezahlt', hideFor: ['invoice_storno'] },
   { token: '{{offener_betrag}}',  label: 'Offener Betrag',  hideFor: ['invoice_storno'] },
   { token: '{{projekt}}',         label: 'Projekt' },
+  { token: '{{bauvorhaben}}',     label: 'Bauvorhaben' },
   { token: '{{kunde}}',           label: 'Kunde' },
   { token: '{{ansprechpartner}}', label: 'Ansprechpartner' },
   { token: '{{firma}}',           label: 'Eigene Firma' },

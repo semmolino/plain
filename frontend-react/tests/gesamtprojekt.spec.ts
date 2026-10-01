@@ -274,3 +274,40 @@ test.describe('Gesamtprojekte — Stufe 3: Nachtrag als eigenes Projekt', () => 
     expect(posts[0]).toMatchObject({ target: { kind: 'release_project', project_id: 9 } })
   })
 })
+
+test.describe('Gesamtprojekte — Stufe 3: Bauvorhaben auf Belegen', () => {
+  test('Dokumentvorlage: Zeile abschaltbar, Vorschau und Speichern tragen den Schalter', async ({ page }) => {
+    await mockGroups(page)
+    const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    // Gespeicherte Vorlage von vor dieser Einstellung: der Schlüssel fehlt — gilt als an
+    const saved = {
+      version: 2, brand: { primaryColor: '#111827', accentColor: '#111827', fontFamily: 'system-sans', fontScale: 1 },
+      header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right' }, blocks: {},
+    }
+    const previews: Record<string, unknown>[] = []
+    const puts: Record<string, unknown>[] = []
+    await page.route(/\/api\/v1\/document-templates\/branding(\?|$)/, r => {
+      if (r.request().method() === 'PUT') { puts.push(r.request().postDataJSON()); return r.fulfill(json({ data: { ok: true } })) }
+      return r.fulfill(json({ data: { theme: saved, blocksByCategory: {}, companyId: 1 } }))
+    })
+    await page.route(/\/api\/v1\/document-templates\/preview(\?|$)/, r => {
+      previews.push(r.request().postDataJSON())
+      return r.fulfill(json({ html: '<p>Vorschau</p>' }))
+    })
+    await page.route(/\/api\/v1\/mahnungen\/text-templates(\?|$)/, r => r.fulfill(json({ data: [] })))
+
+    await page.goto('/admin?tab=dokumentvorlagen')
+    const toggle = page.getByRole('checkbox', { name: 'Zeile „Bauvorhaben: …" auf Belegen' })
+    await expect(toggle).toBeChecked()
+    await toggle.uncheck()
+    await expect.poll(() => previews.some(p => (p.theme_json as { header: { showBauvorhaben?: boolean } }).header.showBauvorhaben === false)).toBe(true)
+    await page.getByRole('button', { name: 'Gestaltung speichern' }).click()
+    await expect.poll(() => puts.length).toBe(1)
+    expect(puts[0]).toMatchObject({ theme_json: { header: { showBauvorhaben: false, logoPosition: 'right' } } })
+
+    // Platzhalter in Kopf-/Fußtexten: bei Rechnungen ja, beim Angebot nicht (kein Gesamtprojekt)
+    await expect(page.getByRole('button', { name: 'Bauvorhaben', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Angebot', exact: true }).last().click()
+    await expect(page.getByRole('button', { name: 'Bauvorhaben', exact: true })).toHaveCount(0)
+  })
+})

@@ -99,10 +99,12 @@ export const TEXT_TEMPLATE_LABELS: Record<TextTemplateType, string> = {
 
 // Platzhalter für Kopf-/Fußtexte. Werden beim Rendern durch Belegwerte ersetzt
 // (Spiegel von backend/services_pdf_render.js applyPlaceholders).
-export const TEXT_PLACEHOLDERS: { token: string; label: string }[] = [
+// `invoiceOnly`: Angebote gehören zu keinem Gesamtprojekt, dort bliebe der Wert leer.
+export const TEXT_PLACEHOLDERS: { token: string; label: string; invoiceOnly?: boolean }[] = [
   { token: '{{belegnummer}}', label: 'Belegnummer' },
   { token: '{{belegdatum}}',  label: 'Belegdatum' },
   { token: '{{projekt}}',     label: 'Projekt' },
+  { token: '{{bauvorhaben}}', label: 'Bauvorhaben', invoiceOnly: true },
   { token: '{{kunde}}',       label: 'Kunde' },
   { token: '{{firma}}',       label: 'Eigene Firma' },
 ]

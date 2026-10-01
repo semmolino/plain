@@ -453,6 +453,20 @@ export const HELP = {
       </>
     ),
   },
+  'vorlagen.bauvorhaben': {
+    title: 'Bauvorhaben auf Belegen',
+    body: (
+      <>
+        Gehört ein Projekt zu einem <strong>Gesamtprojekt</strong>, steht dessen Name als Zeile
+        „Bauvorhaben: …" auf Rechnungen, Abschlags- und Schlussrechnungen, Stornos, Mahnungen und
+        Nachträgen. So ordnet dein Auftraggeber Rechnungen aus mehreren Verträgen (Stufen, Nachtrag
+        als eigener Vertrag) einem Vorhaben zu. Bei Projekten ohne Gesamtprojekt erscheint nichts.
+        <br /><br />
+        Der Name lässt sich auch als Platzhalter <code>{'{{bauvorhaben}}'}</code> in Kopf-/Fußtexten
+        und E-Mail-Vorlagen verwenden.
+      </>
+    ),
+  },
 
   'vorlagen.preset': {
     title: 'Stil-Vorlage',
@@ -1931,6 +1945,9 @@ export const HELP = {
         gleich zuordnen. Die Projektnummer kann dann vom Kürzel des Gesamtprojekts abgeleitet werden
         (z. B. 2026-014-02) — der Nummernkreis bleibt unberührt. Eine Kopie bleibt im selben
         Gesamtprojekt.
+        <br /><br />
+        Auf Rechnungen, Mahnungen und Nachträgen steht der Name als „Bauvorhaben: …" — abschaltbar
+        unter Einstellungen → Dokumentvorlagen.
       </>
     ),
   },

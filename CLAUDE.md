@@ -383,6 +383,10 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   vorgegebene (abgeleitete) Nummer auf Dubletten, **bevor** der Nummernkreis
   gezogen wird; `PROJECT_GROUP_ID` nur in die Zeile, wenn gewählt.
   Leistungsphasen je Gesamtprojekt: `/reports/phases/matrix?group_id=`.
+  Auf Belegen (Rechnung, Storno, Mahnung, Nachtrag) steht der Name als
+  „Bauvorhaben: …" und als Platzhalter `{{bauvorhaben}}` — beides **nur**
+  über `bauvorhabenForProject`; abschaltbar mit `theme.header.showBauvorhaben`
+  (Vorlagen prüfen `!= false`, alte Vorlagen kennen den Schlüssel nicht).
 - **Adressen als Arbeitsbereich** (`/adressen/:id?tab=kontakte|daten|verwendung`,
   `pages/adressen/AddressDetailPage.tsx`): Kopf mit Anschrift/Telefon/E-Mail,
   Reiter Kontakte · Adressdaten · Verwendet in. Bearbeitet wird **nur** dort

@@ -9,6 +9,7 @@ const nachtraegeSvc = require('./services/nachtraege');
 const monatsabschlussSvc = require('./services/monatsabschluss');
 const { openAmountsFor, withClaimCols } = require('./services/openAmount');
 const { discountsOf } = require('./services/documentDiscounts');
+const { bauvorhabenForProject } = require('./services/gesamtprojekte');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -672,6 +673,10 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
     if (con) contractName = [con.ABBR, con.NAME].filter(Boolean).join(' \u2013 ');
   }
 
+  // Gesamtprojekt als „Bauvorhaben" — der Kunde ordnet Rechnungen mehrerer
+  // Vertraege (Stufen, Nachtrag als eigener Vertrag) so einem Vorhaben zu.
+  const bauvorhaben = await bauvorhabenForProject(supabase, { tenantId, projectId: rawDoc.PROJECT_ID });
+
   // Appendix data
   const [projectStructureRows, projectPayments, tec] = await Promise.all([
     loadProjectStructureRows({ supabase, projectId: rawDoc.PROJECT_ID, docType, docId }),
@@ -892,6 +897,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
     buyerName2,
     projectName,
     contractName,
+    bauvorhaben,
     salutationLine,
     text1,
     text2,
@@ -961,6 +967,7 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
     belegnummer: vm.inv?.number ?? '',
     belegdatum:  fmtDateDE(vm.inv?.date),
     projekt:     vm.projectName ?? '',
+    bauvorhaben: vm.bauvorhaben ?? '',
     kunde:       vm.inv?.buyer?.name ?? '',
     firma:       vm.inv?.seller?.name ?? '',
   });
@@ -1042,6 +1049,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
     belegnummer: vm.offer?.ABBR ?? '',
     belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
     projekt:     vm.offer?.NAME ?? '',
+    bauvorhaben: '', // Angebote gehoeren zu keinem Gesamtprojekt — der Platzhalter bleibt leer
     kunde:       vm.buyer?.name ?? '',
     firma:       vm.seller?.name ?? '',
   });
@@ -1104,6 +1112,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
     belegnummer: vm.offer?.ABBR ?? '',
     belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
     projekt:     vm.offer?.NAME ?? '',
+    bauvorhaben: '', // Angebote gehoeren zu keinem Gesamtprojekt — der Platzhalter bleibt leer
     kunde:       vm.buyer?.name ?? '',
     firma:       vm.seller?.name ?? '',
   });
@@ -1294,6 +1303,7 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     mahnstufeLabel,
     invoiceNumber: vm.inv.number,
     invoiceDate:   vm.inv.date,
+    bauvorhaben:   vm.bauvorhaben || '',
     dueDate,
     daysOverdue,
     totalGross,
@@ -1699,6 +1709,7 @@ const PREVIEW_SAMPLE = {
               contactName: 'Dipl.-Ing. A. Muster', contactEmail: 'info@musterplanung.de', contactPhone: '030 1234567' },
   buyer:    { name: 'Bauherr Beispiel AG', street: 'Musterallee 7', postCode: '80331', city: 'München' },
   project:  'P-2026-014 – Neubau Verwaltungsgebäude',
+  bauvorhaben: 'Verwaltungszentrum Nord, Gesamtvorhaben',
   lines: [
     { pos: '1', desc: 'Leistungsphase 2 – Vorplanung',  qty: '1', price: '8.500,00', total: '8.500,00' },
     { pos: '2', desc: 'Leistungsphase 3 – Entwurfsplanung', qty: '1', price: '12.750,00', total: '12.750,00' },
@@ -1771,4 +1782,9 @@ async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice
   return { pdf, html };
 }
 
-module.exports = { renderDocumentPdf, renderOfferPdf, renderNachtragPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf, renderWipPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc };
+module.exports = {
+  renderDocumentPdf, renderOfferPdf, renderNachtragPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf,
+  renderWipPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc,
+  // Fuer Vorlagen-Tests: dieselbe Nunjucks-Umgebung samt Filtern, ohne Browser.
+  templateEnv: env,
+};

@@ -23,7 +23,10 @@ function defaultTheme() {
       fontFamily:   'system-sans', // Font-KEY (siehe services_theme_fonts.js), nicht CSS-Stack
       fontScale:    1,
     },
-    header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right' },
+    // showBauvorhaben: Zeile „Bauvorhaben: …" mit dem Gesamtprojekt (Rechnungen,
+    // Storno, Mahnung, Nachtrag). Erscheint nur bei Projekten in einem
+    // Gesamtprojekt — fuer alle anderen aendert der Standard nichts.
+    header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right', showBauvorhaben: true },
     footer: { showPageNumbers: true },
     // Schaltbare Anhang-/Inhaltsabschnitte (Default an → kein Beleg verliert
     // ohne Zutun Inhalte). Templates gaten mit `!= false`, daher robust auch ohne

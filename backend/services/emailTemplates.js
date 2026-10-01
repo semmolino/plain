@@ -15,6 +15,7 @@
  */
 
 const { openAmountsFor, withClaimCols } = require("./openAmount");
+const { bauvorhabenForProject } = require("./gesamtprojekte");
 
 const TABLE = "EMAIL_TEMPLATE";
 
@@ -238,6 +239,8 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
       .from("PROJECT").select("ABBR, NAME").eq("ID", doc.PROJECT_ID).maybeSingle();
     if (p) projekt = [p.ABBR, p.NAME].filter(Boolean).join(": ");
   }
+  // Gesamtprojekt — leer, wenn das Projekt keinem angehoert (wie auf dem PDF)
+  const bauvorhaben = await bauvorhabenForProject(supabase, { tenantId, projectId: doc.PROJECT_ID });
 
   // Eigener Firmenname: bevorzugt die am Beleg haengende Firma, sonst die
   // erste des Mandanten. TENANT_ID bleibt in beiden Faellen gesetzt (App-Layer
@@ -274,6 +277,7 @@ async function loadDocumentContext(supabase, { tenantId, docType, docId }) {
       bezahlt:         fmtEur(paid),
       offener_betrag:  open != null ? fmtEur(open) : "",
       projekt,
+      bauvorhaben,
       kunde:           doc.ADDRESS_NAME_1 || "",
       ansprechpartner: doc.CONTACT || "",
       firma,

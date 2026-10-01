@@ -218,6 +218,7 @@ export function DokumentvorlagenSection() {
     })
   }
   const setLogoSize = (mm: number) => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, logoMaxHeightMm: mm } })) }
+  const setShowBauvorhaben = (on: boolean) => { setMsg(null); setTheme(t => ({ ...t, header: { ...t.header, showBauvorhaben: on } })) }
   const applyPreset = (p: StylePreset) => { setMsg(null); setTheme(t => ({
     ...t,
     brand:  { ...t.brand, accentColor: p.accentColor, primaryColor: p.accentColor, fontFamily: p.fontFamily },
@@ -404,6 +405,24 @@ export function DokumentvorlagenSection() {
             <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
               Position und Größe gelten für alle Belege und Gesellschaften. Das Logo-Bild selbst
               lädst du oben je Unternehmen hoch.
+            </p>
+          </div>
+
+          {/* Kopfangaben: Gesamtprojekt als „Bauvorhaben" */}
+          <div className="admin-block">
+            <h3 className="admin-block-title" style={{ display: 'inline-flex', alignItems: 'center' }}>
+              Bauvorhaben <HelpHint id="vorlagen.bauvorhaben" />
+            </h3>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={theme.header.showBauvorhaben !== false}
+                onChange={e => setShowBauvorhaben(e.target.checked)}
+              />
+              Zeile „Bauvorhaben: …" auf Belegen
+            </label>
+            <p style={{ fontSize: 11, color: 'var(--text-3)', margin: '8px 0 0' }}>
+              Erscheint nur bei Projekten, die zu einem Gesamtprojekt gehören — mit dessen Namen.
             </p>
           </div>
 
