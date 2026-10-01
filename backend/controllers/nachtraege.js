@@ -112,7 +112,10 @@ async function release(req, res, supabase) {
   try {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'Ungültige ID' });
-    const data = await svc.release(supabase, { tenantId: req.tenantId, nachtragId: id, body: req.body, employeeId: req.employeeId });
+    // Ein eigenes Projekt aus dem Nachtrag braucht zusaetzlich projects.create
+    // (und projects.edit, wenn erst ein Gesamtprojekt entsteht) — geprueft im Service.
+    const can = (key) => !!req._permissionsUnrestricted || !!req.permissions?.has?.(key);
+    const data = await svc.release(supabase, { tenantId: req.tenantId, nachtragId: id, body: req.body, employeeId: req.employeeId, can });
     return res.json({ data });
   } catch (e) {
     return res.status(e?.status || 500).json({ error: e?.message || String(e) });

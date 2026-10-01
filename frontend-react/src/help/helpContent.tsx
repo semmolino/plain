@@ -1750,6 +1750,22 @@ export const HELP = {
       </>
     ),
   },
+  'nachtrag.eigenes_projekt': {
+    title: 'Nachtrag als eigenes Projekt',
+    body: (
+      <>
+        Normalerweise wandern freigegebene Positionen in das Projekt, zu dem der Nachtrag gehört. Ist der
+        Nachtrag aber ein <strong>eigener Vertrag</strong> — anderer Rechnungsempfänger, eigene Abrechnung —,
+        legt die Freigabe ein neues Projekt im <strong>Gesamtprojekt</strong> an und übernimmt die Positionen
+        dorthin.
+        <br /><br />
+        Firma, Typ, Team mit Stundensätzen und die Vertragskonditionen (Steuer, Skonto, Einbehalt) kommen vom
+        bisherigen Projekt; Auftraggeber und Rechnungsempfänger wählst du. Gehört das Projekt noch zu keinem
+        Gesamtprojekt, entsteht eins, und beide Projekte gehören dazu. Weitere Freigaben desselben Nachtrags
+        können in dieses neue Projekt gehen. Der Nachtrag selbst bleibt beim bisherigen Projekt.
+      </>
+    ),
+  },
   'nachtrag.freigabe': {
     title: 'Freigabe ins Projekt',
     body: (
@@ -1764,6 +1780,9 @@ export const HELP = {
         oder löschen</strong> — auch nicht, wenn sie gekürzt anerkannt wurde; Korrekturen laufen dann im
         Projekt. Positionen nach Aufwand starten im Projekt bei 0 und bringen ihre Schätzung als{' '}
         <strong>Plan</strong> mit, wie beim Beauftragen eines Angebots.
+        <br /><br />
+        Ist der Nachtrag ein eigener Vertrag — etwa mit einem anderen Rechnungsempfänger —, lässt er sich
+        stattdessen als <strong>eigenes Projekt</strong> im Gesamtprojekt freigeben.
       </>
     ),
   },

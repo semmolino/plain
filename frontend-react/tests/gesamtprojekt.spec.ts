@@ -213,3 +213,64 @@ test.describe('Gesamtprojekte — Stufe 2', () => {
     await expect(option).toContainText(GROUP.NAME)
   })
 })
+
+test.describe('Gesamtprojekte — Stufe 3: Nachtrag als eigenes Projekt', () => {
+  const RELEASED = { release_no: 2, amount_net: 4_920, approved_total_net: 17_720, status_code: 'PARTIALLY_COMMISSIONED',
+    group_structure_id: null, target_project: { ID: 9, ABBR: 'GP-2024-01-03', NAME: 'Fassadenvariante' }, group_created: false }
+
+  test('Freigabe als eigenes Projekt: Ziel, Vorbelegungen und Nutzlast', async ({ page }) => {
+    await mockGroups(page)
+    const posts: Record<string, unknown>[] = []
+    await page.route(/\/api\/v1\/nachtraege\/402\/release(\?|$)/, r => {
+      posts.push(r.request().postDataJSON())
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: RELEASED }) })
+    })
+    await page.goto('/nachtraege/402')
+    await page.getByRole('button', { name: 'Freigeben' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Nachtrag freigeben' })
+    await dialog.getByRole('radio', { name: /Als eigenes Projekt im Gesamtprojekt „Kita Sonnenblume/ }).check()
+    await expect(dialog.getByLabel('Projektname*')).not.toHaveValue('')
+    await dialog.getByLabel('Status*').selectOption({ index: 1 })
+    await expect(dialog.getByRole('radio', { name: /Abgeleitet: GP-2024-01-03/ })).toBeChecked()
+    await dialog.getByRole('button', { name: 'Freigeben und Projekt anlegen' }).click()
+    await expect(dialog).toBeHidden()
+    expect(posts[0]).toMatchObject({
+      target: { kind: 'new_project', project_manager_id: 1, address_id: 1, contact_id: 2, abbr_mode: 'derived' },
+    })
+    await expect(page.getByText('in das Projekt GP-2024-01-03 übernommen')).toBeVisible()
+    await expect(page.getByRole('link', { name: /Zum Projekt GP-2024-01-03/ })).toBeVisible()
+  })
+
+  test('ohne Recht „Projekte anlegen" bleibt das eigene Projekt gesperrt, mit Grund', async ({ page }) => {
+    await mockGroups(page, { permissions: ['projects.view', 'projects.edit', 'nachtraege.view', 'nachtraege.edit', 'nachtraege.release'] })
+    await page.goto('/nachtraege/402')
+    await page.getByRole('button', { name: 'Freigeben' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Nachtrag freigeben' })
+    await expect(dialog.getByRole('radio', { name: /Als eigenes Projekt/ })).toBeDisabled()
+    await expect(dialog).toContainText('Dafür fehlt das Recht, Projekte anzulegen.')
+    await expect(dialog.getByRole('radio', { name: /Ins Projekt P-2024-001/ })).toBeChecked()
+  })
+
+  test('frühere Freigabe in ein eigenes Projekt: Ziel in der Tabelle und als Wahl für die nächste', async ({ page }) => {
+    await mockGroups(page)
+    await page.route(/\/api\/v1\/nachtraege\/402\/releases(\?|$)/, r => r.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({ data: [{ ID: 1, NACHTRAG_ID: 402, RELEASE_NO: 1, RELEASE_KIND: 'PARTIAL', RELEASE_BASIS: 'WRITTEN',
+        AMOUNT_NET: 12_800, RELEASED_BY: 1, RELEASED_AT: '2026-09-10T11:00:00Z', NOTE: null,
+        TARGET_PROJECT_ID: 9, TARGET_PROJECT_ABBR: 'GP-2024-01-02', TARGET_PROJECT_NAME: 'Fassade, eigener Vertrag' }] }),
+    }))
+    const posts: Record<string, unknown>[] = []
+    await page.route(/\/api\/v1\/nachtraege\/402\/release(\?|$)/, r => {
+      posts.push(r.request().postDataJSON())
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { ...RELEASED, target_project: { ID: 9, ABBR: 'GP-2024-01-02' } } }) })
+    })
+    await page.goto('/nachtraege/402')
+    await expect(page.getByRole('link', { name: 'GP-2024-01-02' })).toBeVisible()
+    await page.getByRole('button', { name: 'Freigeben' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Nachtrag freigeben' })
+    await dialog.getByRole('radio', { name: /In GP-2024-01-02 · Fassade, eigener Vertrag — angelegt mit Freigabe 1/ }).check()
+    await dialog.getByRole('button', { name: 'Freigeben und ins Projekt übernehmen' }).click()
+    await expect.poll(() => posts.length).toBe(1)
+    expect(posts[0]).toMatchObject({ target: { kind: 'release_project', project_id: 9 } })
+  })
+})

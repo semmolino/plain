@@ -87,8 +87,8 @@ const MATRIX = {
   totals: cell(130_000, 58_000, 24_000),
 }
 
-export async function mockGroups(page: Page, { partial = false, empty = false } = {}): Promise<Calls> {
-  await mockPilot(page)
+export async function mockGroups(page: Page, { partial = false, empty = false, permissions }: { partial?: boolean; empty?: boolean; permissions?: string[] } = {}): Promise<Calls> {
+  await mockPilot(page, permissions ? { permissions } : {})
   const calls: Calls = { patches: [], deletes: 0, puts: [], posts: [], converts: [], copies: [], creates: [], matrixUrls: [] }
   const route = (re: string, h: (r: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
 

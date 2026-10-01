@@ -442,6 +442,13 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   steht einmal im Backend (`isReleased`) und einmal im Frontend (`nachtragStatus.ts`). Positionen
   nach Aufwand starten im Projekt bei 0 und bringen ihre Schätzung als Plan mit (wie beim
   Beauftragen); Rollen gehen **nicht** in die Projektstruktur, die hat keine Rollenspalten.
+  Die Freigabe hat ein **Ziel** (Migration `0182`): wie bisher das Projekt des Nachtrags, ein
+  **eigenes Projekt** im Gesamtprojekt (`createReleaseProject`: Firma, Team, Vertragskonditionen
+  vom Ursprung über `inheritedContractTerms`, Rechnungsempfänger aus dem Dialog; ohne
+  Gesamtprojekt entsteht eins) oder ein Projekt aus einer früheren Freigabe **desselben**
+  Nachtrags. `NACHTRAG_RELEASE.TARGET_PROJECT_ID` hält das fest; der Nachtrag bleibt an seinem
+  Projekt. Rechte: `projects.create` (+ `projects.edit`, wenn ein Gesamtprojekt entsteht), alles
+  geprüft vor dem ersten Schreiben.
 - **Abschlags- vs. Schlussrechnung**: handled by `INVOICE_TYPE` field; final invoices deduct all prior partial payments.
 - **Offener Betrag — eine Rechnung** (`backend/services/openAmount.js`): Forderung
   = Brutto **nach** Nachlass I/II (gespeichert ist `TOTAL_AMOUNT_GROSS` **vor**

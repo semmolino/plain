@@ -45,6 +45,11 @@ function computeSurcharges(revenueBasis, settings) {
   return { s1Eur, s2Eur, s3Eur, surchargesTotal: r2(s1Eur + s2Eur + s3Eur) };
 }
 
+const projekte = require('./projekte');
+const gesamtprojekte = require('./gesamtprojekte');
+const { assertOwnAddress, assertContactOfAddress } = require('./adressen');
+const { inheritedContractTerms, INHERITED_TERMS } = require('./contractDefaults');
+
 const VALID_TYPES      = new Set(['OWN', 'MANAGED']);
 const VALID_CATEGORIES = new Set(['CHANGED', 'ADDITIONAL', 'QUANTITY', 'SPECIAL', 'DISRUPTION', 'CONTENT', 'CIRCUMSTANCE']);
 const VALID_RECOMMENDATIONS = new Set(['ACCEPT', 'REDUCE', 'REJECT', 'QUERY']);
@@ -471,20 +476,124 @@ async function ensureNachtragContainer(supabase, { tenantId, projectId }) {
   return created.ID;
 }
 
+const toId = (v) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n > 0 ? n : null;
+};
+
+/**
+ * Nachtrag als eigenes Projekt (Migration 0182): legt ein Projekt im
+ * Gesamtprojekt des Ursprungsprojekts an — eigener Vertrag, eigener
+ * Rechnungsempfaenger. Vom Ursprungsprojekt kommen Firma, Typ, Abteilung,
+ * Team (Stundensaetze) und die Vertragskonditionen (Steuer, Skonto,
+ * Einbehalt); aus dem Dialog Name, Status, Leitung, Auftraggeber/Rechnungs-
+ * empfaenger und die Art der Nummer.
+ *
+ * Gehoert das Ursprungsprojekt noch zu keinem Gesamtprojekt, entsteht eins
+ * aus ihm (Name, Kuerzel, Auftraggeber, Leitung) — das aendert das
+ * Ursprungsprojekt und braucht deshalb zusaetzlich projects.edit.
+ *
+ * Alles, was abgelehnt werden kann, wird VOR dem ersten Schreiben geprueft:
+ * sonst stuende nach einem Fehler ein halbes Projekt da.
+ */
+async function createReleaseProject(supabase, { tenantId, nachtrag, target, can }) {
+  if (!can('projects.create')) {
+    throw { status: 403, message: 'Fehlende Berechtigung: projects.create — ein eigenes Projekt aus dem Nachtrag braucht das Recht, Projekte anzulegen.' };
+  }
+  const name      = String(target.name ?? '').trim() || nachtrag.NAME;
+  const statusId  = toId(target.project_status_id);
+  const managerId = toId(target.project_manager_id);
+  const addressId = toId(target.address_id);
+  const contactId = toId(target.contact_id);
+  if (!statusId || !managerId) throw { status: 400, message: 'Für das neue Projekt fehlen Status oder Projektleitung.' };
+  if (!addressId || !contactId) throw { status: 400, message: 'Für das neue Projekt fehlen Rechnungsempfänger oder Kontakt.' };
+  await assertOwnAddress(supabase, { tenantId, addressId });
+  await assertContactOfAddress(supabase, { tenantId, addressId, contactId });
+
+  const { data: src, error: srcErr } = await supabase.from('PROJECT')
+    .select('ID, ABBR, NAME, COMPANY_ID, PROJECT_TYPE_ID, DEPARTMENT_ID, PROJECT_MANAGER_ID, ADDRESS_ID, PROJECT_GROUP_ID')
+    .eq('ID', nachtrag.PROJECT_ID).eq('TENANT_ID', tenantId).maybeSingle();
+  if (srcErr) throw srcErr;
+  if (!src) throw { status: 404, message: 'Das Projekt des Nachtrags gibt es nicht (mehr).' };
+  if (!src.COMPANY_ID) throw { status: 400, message: 'Das Projekt des Nachtrags hat keine Firma — das neue Projekt kann keine Nummer bekommen.' };
+  if (!src.PROJECT_GROUP_ID && !can('projects.edit')) {
+    throw { status: 403, message: 'Das Projekt gehört noch zu keinem Gesamtprojekt. Es dafür anzulegen braucht das Recht „Projekte bearbeiten".' };
+  }
+  const { data: team, error: teamErr } = await supabase.from('EMPLOYEE2PROJECT')
+    .select('EMPLOYEE_ID, ROLE_ID, ROLE_ABBR, ROLE_NAME, HOURLY_RATE')
+    .eq('PROJECT_ID', src.ID).eq('TENANT_ID', tenantId);
+  if (teamErr) throw teamErr;
+  const { data: srcContract, error: cErr } = await supabase.from('CONTRACT')
+    .select(INHERITED_TERMS.join(', ')).eq('PROJECT_ID', src.ID).eq('TENANT_ID', tenantId).limit(1).maybeSingle();
+  if (cErr) throw cErr;
+
+  // Ab hier wird geschrieben.
+  let groupId = src.PROJECT_GROUP_ID;
+  let groupCreated = false;
+  if (!groupId) {
+    const { group } = await gesamtprojekte.createGroup(supabase, { tenantId, body: {
+      name: src.NAME || src.ABBR, abbr: src.ABBR,
+      address_id: src.ADDRESS_ID, manager_id: src.PROJECT_MANAGER_ID, project_ids: [src.ID],
+    } });
+    groupId = group.ID;
+    groupCreated = true;
+  }
+  // Abgeleitete Nummer erst jetzt — mit neuem Gesamtprojekt traegt das
+  // Ursprungsprojekt dessen Kuerzel und zaehlt als 01. Ohne Kuerzel: Nummernkreis.
+  const abbr = target.abbr_mode === 'derived'
+    ? await gesamtprojekte.suggestMemberAbbr(supabase, { tenantId, groupId })
+    : null;
+
+  const project = await projekte.createProject(supabase, { tenantId, body: {
+    company_id: src.COMPANY_ID, name,
+    project_status_id: statusId, project_manager_id: managerId,
+    project_type_id: src.PROJECT_TYPE_ID, department_id: src.DEPARTMENT_ID,
+    address_id: addressId, contact_id: contactId,
+    project_group_id: groupId,
+    ...(abbr ? { project_abbr: abbr } : {}),
+    employee2project: (team || []).map(t => ({
+      employee_id: t.EMPLOYEE_ID, role_id: t.ROLE_ID, role_abbr: t.ROLE_ABBR, role_name: t.ROLE_NAME, hourly_rate: t.HOURLY_RATE,
+    })),
+  } });
+
+  const terms = inheritedContractTerms(srcContract);
+  if (Object.keys(terms).length) {
+    const { error } = await supabase.from('CONTRACT').update(terms).eq('PROJECT_ID', project.ID).eq('TENANT_ID', tenantId);
+    if (error) throw { status: 500, message: 'Projekt angelegt, aber die Vertragskonditionen ließen sich nicht übernehmen: ' + error.message };
+  }
+  return { project: { ID: project.ID, ABBR: project.ABBR, NAME: project.NAME }, groupId, groupCreated };
+}
+
+/** Naechste freie Sortierposition unter einem Vater (null = oberste Ebene). */
+async function nextSortOrder(supabase, { tenantId, projectId, fatherId }) {
+  let q = supabase.from('PROJECT_STRUCTURE').select('SORT_ORDER')
+    .eq('PROJECT_ID', projectId).eq('TENANT_ID', tenantId);
+  q = fatherId == null ? q.is('FATHER_ID', null) : q.eq('FATHER_ID', fatherId);
+  const { data } = await q.order('SORT_ORDER', { ascending: false }).limit(1);
+  return Number(data?.[0]?.SORT_ORDER || 0);
+}
+
 /**
  * Gibt einen Nachtrag ganz oder teilweise frei und übernimmt die anerkannten
- * Positionen als Blätter in die PROJECT_STRUCTURE (unter einem Gruppenknoten
- * je Nachtrag, unterhalb des „Nachträge"-Containers).
+ * Positionen als Blätter in eine PROJECT_STRUCTURE.
  *
  * body = {
  *   release_kind:  'FULL' | 'PARTIAL' | 'PROVISIONAL',
  *   release_basis: 'WRITTEN' | 'ORAL' | 'ORDER',
  *   note: string,
- *   positions: [{ nachtrag_structure_id, approved_amount_net? }]   // Blatt-Positionen
+ *   positions: [{ nachtrag_structure_id, approved_amount_net? }],  // Blatt-Positionen
+ *   target: {                                                       // optional, Migration 0182
+ *     kind: 'origin'           — wie bisher: Projekt des Nachtrags, unter „Nachträge" › Nachtrag
+ *         | 'new_project'      — eigenes Projekt im Gesamtprojekt (createReleaseProject)
+ *         | 'release_project', — ein Projekt, das eine frühere Freigabe DIESES Nachtrags angelegt hat
+ *     project_id, name, project_status_id, project_manager_id, address_id, contact_id,
+ *     abbr_mode: 'range' | 'derived'
+ *   }
  * }
  * Ohne positions + release_kind 'FULL' → alle offenen Blatt-Positionen voll.
+ * `can(key)` = Recht des Aufrufers (ein eigenes Projekt braucht projects.create).
  */
-async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
+async function release(supabase, { tenantId, nachtragId, body, employeeId, can = () => false }) {
   const b = body || {};
   const nachtrag = await get(supabase, { tenantId, nachtragId });
 
@@ -524,10 +633,28 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
   }
   if (!selection.length) throw { status: 400, message: 'Keine (offenen) Positionen zur Freigabe ausgewählt.' };
 
-  // Container + Gruppenknoten je Nachtrag sicherstellen
-  const containerId = await ensureNachtragContainer(supabase, { tenantId, projectId: nachtrag.PROJECT_ID });
-  let groupId;
-  {
+  // Ziel bestimmen: Projekt und Vater der uebernommenen Positionen.
+  const t = b.target && typeof b.target === 'object' ? b.target : { kind: 'origin' };
+  let targetProjectId = nachtrag.PROJECT_ID;
+  let groupId = null;            // Vater-Knoten der Positionen (null = oberste Ebene)
+  let created = null;            // { project, groupId, groupCreated } bei neuem Projekt
+  if (t.kind === 'new_project') {
+    created = await createReleaseProject(supabase, { tenantId, nachtrag, target: t, can });
+    targetProjectId = created.project.ID;
+  } else if (t.kind === 'release_project') {
+    // Nur ein Projekt, das eine fruehere Freigabe DIESES Nachtrags angelegt
+    // hat — sonst liessen sich Positionen in beliebige Projekte schieben.
+    const pid = toId(t.project_id);
+    const { data: prev, error: pErr } = pid
+      ? await supabase.from('NACHTRAG_RELEASE').select('ID')
+        .eq('NACHTRAG_ID', nachtragId).eq('TENANT_ID', tenantId).eq('TARGET_PROJECT_ID', pid).limit(1)
+      : { data: [], error: null };
+    if (pErr) throw pErr;
+    if (!(prev || []).length) throw { status: 400, message: 'In dieses Projekt ist der Nachtrag nicht freigegeben worden.' };
+    targetProjectId = pid;
+  } else {
+    // Wie bisher: Container „Nachträge" + Gruppenknoten je Nachtrag im Projekt des Nachtrags.
+    const containerId = await ensureNachtragContainer(supabase, { tenantId, projectId: nachtrag.PROJECT_ID });
     const { data: existingGroup } = await supabase.from('PROJECT_STRUCTURE')
       .select('ID').eq('PROJECT_ID', nachtrag.PROJECT_ID).eq('NACHTRAG_ID', nachtragId).is('BILLING_TYPE_ID', null).limit(1).maybeSingle();
     if (existingGroup) {
@@ -545,9 +672,10 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
     }
   }
 
-  // Positionen als Blätter unter dem Gruppenknoten anlegen (BT1 mit Wert, BT2 startet bei 0)
+  // Positionen als Blätter anlegen (BT1 mit Wert, BT2 startet bei 0) — im
+  // eigenen Projekt auf oberster Ebene: dort ist das Projekt der Nachtrag.
   let releaseSum = 0;
-  let sortOrder  = 0;
+  let sortOrder  = await nextSortOrder(supabase, { tenantId, projectId: targetProjectId, fatherId: groupId });
   for (const { node, approvedAmount } of selection) {
     const isBt1 = Number(node.BILLING_TYPE_ID) === 1;
     const fullRevenue = fmt2(Number(node.REVENUE || 0));
@@ -564,7 +692,7 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
     // Beauftragen): das Element startet bei 0, die Budgetwarnung vergleicht
     // gegen den Plan.
     const row = {
-      ABBR: node.ABBR, NAME: node.NAME, PROJECT_ID: nachtrag.PROJECT_ID,
+      ABBR: node.ABBR, NAME: node.NAME, PROJECT_ID: targetProjectId,
       FATHER_ID: groupId, BILLING_TYPE_ID: node.BILLING_TYPE_ID, NACHTRAG_ID: nachtragId,
       REVENUE_BASIS: isBt1 ? revenue : 0, REVENUE: revenue, EXTRAS_PERCENT: extrasPct, EXTRAS: extras, COSTS: 0,
       REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
@@ -601,11 +729,19 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
   // NACHTRAG_RELEASE-Datensatz
   const { data: relRows } = await supabase.from('NACHTRAG_RELEASE').select('RELEASE_NO').eq('NACHTRAG_ID', nachtragId).order('RELEASE_NO', { ascending: false }).limit(1);
   const releaseNo = (relRows && relRows.length ? Number(relRows[0].RELEASE_NO) : 0) + 1;
-  await supabase.from('NACHTRAG_RELEASE').insert([{
+  const releaseRow = {
     TENANT_ID: tenantId, NACHTRAG_ID: nachtragId, RELEASE_NO: releaseNo,
     RELEASE_KIND: kind, RELEASE_BASIS: basis, AMOUNT_NET: releaseSum,
     RELEASED_BY: employeeId ?? null, NOTE: b.note ? String(b.note) : null,
-  }]);
+  };
+  const outside = targetProjectId !== nachtrag.PROJECT_ID;
+  let { error: relErr } = await supabase.from('NACHTRAG_RELEASE')
+    .insert([outside ? { ...releaseRow, TARGET_PROJECT_ID: targetProjectId } : releaseRow]);
+  // Deploy-Fenster (0182 noch nicht im Schema-Cache): die Freigabe trotzdem festhalten.
+  if (relErr && outside && /TARGET_PROJECT_ID/.test(String(relErr.message || ''))) {
+    ({ error: relErr } = await supabase.from('NACHTRAG_RELEASE').insert([releaseRow]));
+  }
+  if (relErr) throw { status: 500, message: 'Positionen übernommen, aber die Freigabe ließ sich nicht protokollieren: ' + relErr.message };
 
   // Kopf: freigegebene Summe fortschreiben + Status bestimmen
   const newApproved = fmt2(Number(nachtrag.AMOUNT_APPROVED_NET || 0) + releaseSum);
@@ -620,19 +756,43 @@ async function release(supabase, { tenantId, nachtragId, body, employeeId }) {
 
   await writeAudit(supabase, {
     tenantId, nachtragId, eventType: 'RELEASE', actorId: employeeId,
-    details: { releaseNo, kind, basis, amountNet: releaseSum, positions: selection.length, statusTo: targetCode },
+    details: {
+      releaseNo, kind, basis, amountNet: releaseSum, positions: selection.length, statusTo: targetCode,
+      ...(outside ? { targetProjectId, newProject: !!created, groupCreated: !!created?.groupCreated } : {}),
+    },
   });
 
-  return { release_no: releaseNo, amount_net: releaseSum, approved_total_net: newApproved, status_code: targetCode, group_structure_id: groupId };
+  let targetProject = null;
+  if (outside) {
+    targetProject = created?.project ?? (await supabase.from('PROJECT').select('ID, ABBR, NAME')
+      .eq('ID', targetProjectId).eq('TENANT_ID', tenantId).maybeSingle()).data ?? { ID: targetProjectId };
+  }
+  return {
+    release_no: releaseNo, amount_net: releaseSum, approved_total_net: newApproved, status_code: targetCode,
+    group_structure_id: groupId,
+    target_project: targetProject,
+    group_created: !!created?.groupCreated,
+  };
 }
 
 // ── Freigabe-Historie ────────────────────────────────────────────────────────
 
+/** Freigaben samt Zielprojekt (Nummer, Name), wenn sie in ein eigenes Projekt gingen. */
 async function listReleases(supabase, { tenantId, nachtragId }) {
   const { data, error } = await supabase.from('NACHTRAG_RELEASE')
     .select('*').eq('NACHTRAG_ID', nachtragId).eq('TENANT_ID', tenantId).order('RELEASE_NO', { ascending: true });
   if (error) throw error;
-  return data || [];
+  const rows = data || [];
+  const ids = [...new Set(rows.map(r => r.TARGET_PROJECT_ID).filter(Boolean))];
+  if (!ids.length) return rows;
+  const { data: projects, error: pErr } = await supabase.from('PROJECT')
+    .select('ID, ABBR, NAME').eq('TENANT_ID', tenantId).in('ID', ids);
+  if (pErr) throw pErr;
+  const byId = new Map((projects || []).map(p => [String(p.ID), p]));
+  return rows.map(r => {
+    const p = r.TARGET_PROJECT_ID ? byId.get(String(r.TARGET_PROJECT_ID)) : null;
+    return { ...r, TARGET_PROJECT_ABBR: p?.ABBR ?? null, TARGET_PROJECT_NAME: p?.NAME ?? null };
+  });
 }
 
 // ── Prüfbarkeit (reaktives NM) ───────────────────────────────────────────────

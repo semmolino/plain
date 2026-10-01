@@ -25,10 +25,14 @@ import {
   type Nachtrag, type NachtragStructureNode, type ReleasePayload, type ReleaseKind, type ReleaseBasis,
   type ReviewRecommendation, type AddNachtragStructureNodePayload,
 } from '@/api/nachtraege'
+import { fetchProjectListFull, type Project } from '@/api/projekte'
+import { PROJECT_GROUP_QUERY_KEYS } from '@/api/gesamtprojekte'
 import { fmtEur, money, NO_VALUE } from '@/utils/money'
 import { fmtHours } from '@/utils/zeit'
 import { StatusPill, type NachtragFrom } from './NachtraegeListe'
 import { isReleasedNode } from './nachtragStatus'
+import { useFreigabeZiel } from './freigabeZiel'
+import { FreigabeZielFelder } from './FreigabeZielFelder'
 
 const fmtDate = (v: string | null | undefined) => v ? new Date(v).toLocaleDateString('de-DE') : NO_VALUE
 
@@ -71,7 +75,7 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
   const canEdit    = usePermission('nachtraege.edit')
   const canReview  = usePermission('nachtraege.review')
 
-  const [msg, setMsg]                 = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [msg, setMsg]                 = useState<{ text: string; type: 'success' | 'error'; link?: { to: string; label: string } } | null>(null)
   const [posDialog, setPosDialog]     = useState<{ node: NachtragStructureNode | null } | null>(null)
   const [releaseOpen, setReleaseOpen] = useState(false)
   const [confirmDel, setConfirmDel]   = useState<{ kind: 'nachtrag' } | { kind: 'node'; node: NachtragStructureNode; branch: number } | null>(null)
@@ -80,11 +84,25 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
   const { data: statusData }  = useQuery({ queryKey: ['nachtrag-statuses'], queryFn: fetchNachtragStatuses })
   const { data: structData }  = useQuery({ queryKey: ['nachtrag-structure', nachtragId], queryFn: () => fetchNachtragStructure(nachtragId) })
   const { data: releaseData } = useQuery({ queryKey: ['nachtrag-releases', nachtragId], queryFn: () => fetchNachtragReleases(nachtragId) })
+  // Ursprungsprojekt (Gesamtprojekt, Leitung, Auftraggeber) — für die Freigabe als eigenes Projekt
+  const { data: projectsData } = useQuery({ queryKey: ['projects-full'], queryFn: fetchProjectListFull, retry: false, staleTime: 60_000 })
 
   const nachtrag = nData?.data
   const statuses = statusData?.data ?? []
   const nodes    = useMemo(() => structData?.data ?? [], [structData])
-  const releases = releaseData?.data ?? []
+  const releases = useMemo(() => releaseData?.data ?? [], [releaseData])
+  const sourceProject = projectsData?.data.find(p => p.ID === nachtrag?.PROJECT_ID)
+  /** Projekte, die frühere Freigaben dieses Nachtrags angelegt haben — mögliches Ziel weiterer Freigaben. */
+  const releaseProjects = useMemo(() => {
+    const m = new Map<number, { ID: number; ABBR: string | null; NAME: string | null; releaseNos: number[] }>()
+    for (const r of releases) {
+      if (!r.TARGET_PROJECT_ID) continue
+      const e = m.get(r.TARGET_PROJECT_ID) ?? { ID: r.TARGET_PROJECT_ID, ABBR: r.TARGET_PROJECT_ABBR ?? null, NAME: r.TARGET_PROJECT_NAME ?? null, releaseNos: [] }
+      e.releaseNos.push(r.RELEASE_NO)
+      m.set(r.TARGET_PROJECT_ID, e)
+    }
+    return [...m.values()]
+  }, [releases])
   const tree     = useMemo(() => inTreeOrder(nodes), [nodes])
   const curStatus = statuses.find(s => s.ID === nachtrag?.NACHTRAG_STATUS_ID)
 
@@ -114,7 +132,19 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
     mutationFn: (body: ReleasePayload) => releaseNachtrag(nachtragId, body),
     onSuccess: (res) => {
       setReleaseOpen(false); invalidateAll()
-      setMsg({ text: `Freigabe ${res.data.release_no}: ${fmtEur(res.data.amount_net)} ins Projekt übernommen.`, type: 'success' })
+      const tp = res.data.target_project
+      if (tp) {
+        // Neues Projekt (oder Gesamtprojekt): Listen und Gesamtprojekte neu laden
+        for (const k of PROJECT_GROUP_QUERY_KEYS) void qc.invalidateQueries({ queryKey: [...k] })
+        setMsg({
+          text: `Freigabe ${res.data.release_no}: ${fmtEur(res.data.amount_net)} in das Projekt ${tp.ABBR ?? `#${tp.ID}`} übernommen.`
+            + (res.data.group_created ? ' Dafür ist ein Gesamtprojekt entstanden, zu dem beide Projekte gehören.' : ''),
+          type: 'success',
+          link: { to: `/projekte?projectId=${tp.ID}&tab=struktur`, label: `Zum Projekt ${tp.ABBR ?? ''}`.trim() },
+        })
+      } else {
+        setMsg({ text: `Freigabe ${res.data.release_no}: ${fmtEur(res.data.amount_net)} ins Projekt übernommen.`, type: 'success' })
+      }
     },
   })
 
@@ -160,6 +190,11 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
       />
 
       <Message text={msg?.text ?? null} type={msg?.type} />
+      {msg?.link && (
+        <p className="nt-msg-link">
+          <Link to={msg.link.to} className="nt-project-link"><Folder size={13} strokeWidth={1.75} aria-hidden="true" /> {msg.link.label}</Link>
+        </p>
+      )}
 
       <dl className="nt-facts">
         <div><dt>Kategorie <HelpHint id="nachtrag.kategorie" size={12} /></dt><dd>{nachtrag.CATEGORY ? CATEGORY_LABELS[nachtrag.CATEGORY] : NO_VALUE}</dd></div>
@@ -276,6 +311,7 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
               <thead>
                 <tr>
                   <th scope="col" className="ls-th">Nr.</th><th scope="col" className="ls-th">Art</th><th scope="col" className="ls-th">Grundlage</th>
+                  <th scope="col" className="ls-th">Ziel</th>
                   <th scope="col" className="ls-th ls-col-num">Betrag (netto)</th><th scope="col" className="ls-th">Am</th><th scope="col" className="ls-th">Notiz</th>
                 </tr>
               </thead>
@@ -285,6 +321,13 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
                     <td className="ls-td">{r.RELEASE_NO}</td>
                     <td className="ls-td">{RELEASE_KIND_LABELS[r.RELEASE_KIND]}</td>
                     <td className="ls-td">{r.RELEASE_BASIS ? RELEASE_BASIS_LABELS[r.RELEASE_BASIS] : NO_VALUE}</td>
+                    <td className="ls-td">
+                      {r.TARGET_PROJECT_ID
+                        ? <Link to={`/projekte?projectId=${r.TARGET_PROJECT_ID}&tab=struktur`} className="nt-project-link">
+                            <Folder size={13} strokeWidth={1.75} aria-hidden="true" /> {r.TARGET_PROJECT_ABBR ?? `#${r.TARGET_PROJECT_ID}`}
+                          </Link>
+                        : 'Projekt des Nachtrags'}
+                    </td>
                     <td className="ls-td ls-col-num">{money(r.AMOUNT_NET)}</td>
                     <td className="ls-td">{fmtDate(r.RELEASED_AT)}</td>
                     <td className="ls-td nt-note">{r.NOTE || NO_VALUE}</td>
@@ -323,6 +366,9 @@ function NachtragSeite({ nachtragId }: { nachtragId: number }) {
         <Modal open onClose={() => setReleaseOpen(false)} title="Nachtrag freigeben" className="modal-wide">
           <ReleaseForm
             leaves={openLeaves}
+            nachtrag={nachtrag}
+            sourceProject={sourceProject}
+            releaseProjects={releaseProjects}
             submitting={releaseMut.isPending}
             error={releaseMut.error ? (releaseMut.error as Error).message : null}
             onCancel={() => setReleaseOpen(false)}
@@ -461,13 +507,19 @@ function PositionDialog({ nachtragId, node, nodes, onClose, onSaved }: {
 
 // ── Freigabe ──────────────────────────────────────────────────────────────────
 
-function ReleaseForm({ leaves, submitting, error, onCancel, onSubmit }: {
-  leaves:     NachtragStructureNode[]
-  submitting: boolean
-  error:      string | null
-  onCancel:   () => void
-  onSubmit:   (body: ReleasePayload) => void
+function ReleaseForm({ leaves, nachtrag, sourceProject, releaseProjects, submitting, error, onCancel, onSubmit }: {
+  leaves:          NachtragStructureNode[]
+  nachtrag:        Nachtrag
+  sourceProject:   Project | undefined
+  releaseProjects: { ID: number; ABBR: string | null; NAME: string | null; releaseNos: number[] }[]
+  submitting:      boolean
+  error:           string | null
+  onCancel:        () => void
+  onSubmit:        (body: ReleasePayload) => void
 }) {
+  const ziel = useFreigabeZiel({ nachtrag, source: sourceProject })
+  const canCreate       = usePermission('projects.create')
+  const canEditProjects = usePermission('projects.edit')
   const [checked, setChecked] = useState<Set<number>>(() => new Set(leaves.map(l => l.ID)))
   const [amounts, setAmounts] = useState<Record<number, string>>({})
   const [kind, setKind]       = useState<ReleaseKind>('PARTIAL')
@@ -490,9 +542,13 @@ function ReleaseForm({ leaves, submitting, error, onCancel, onSubmit }: {
       return { nachtrag_structure_id: l.ID, approved_amount_net: raw != null && raw !== '' ? Number(raw) : null }
     })
     if (!positions.length) { setErr('Bitte mindestens eine Position wählen.'); return }
+    if (ziel.missing.length) { setErr(`Für das neue Projekt fehlt noch: ${ziel.missing.join(', ')}.`); return }
     setErr(null)
-    onSubmit({ release_kind: kind, release_basis: basis, note: note.trim() || undefined, positions })
+    onSubmit({ release_kind: kind, release_basis: basis, note: note.trim() || undefined, positions, target: ziel.payload() })
   }
+
+  const projectLabel = sourceProject?.ABBR ?? 'des Nachtrags'
+  const submitLabel = ziel.form.kind === 'new_project' ? 'Freigeben und Projekt anlegen' : 'Freigeben und ins Projekt übernehmen'
 
   return (
     <div className="master-form nt-dialog">
@@ -500,6 +556,8 @@ function ReleaseForm({ leaves, submitting, error, onCancel, onSubmit }: {
         Die gewählten Positionen gehen ins Projekt und sind danach buch- und abrechenbar. Ein gekürzter Betrag
         („der Höhe nach") gilt als endgültig anerkannt; freigegebene Positionen lassen sich im Nachtrag nicht mehr ändern.
       </p>
+      <FreigabeZielFelder ziel={ziel} projectLabel={projectLabel} releaseProjects={releaseProjects}
+        canCreate={canCreate} canEditProjects={canEditProjects} />
       <div className="table-scroll">
         <table className="ls-table prl-table">
           <thead>
@@ -556,7 +614,7 @@ function ReleaseForm({ leaves, submitting, error, onCancel, onSubmit }: {
       <Message text={err ?? error} type="error" />
       <DialogFooter>
         <button type="button" className="btn-secondary" onClick={onCancel}>Abbrechen</button>
-        <button type="button" className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Gibt frei …' : 'Freigeben und ins Projekt übernehmen'}</button>
+        <button type="button" className="btn-primary" disabled={submitting} onClick={submit}>{submitting ? 'Gibt frei …' : submitLabel}</button>
       </DialogFooter>
     </div>
   )

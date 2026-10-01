@@ -103,12 +103,24 @@ Nebenbei geschlossen: `GET /reports/projects/timeline` beachtete den Reporting-S
 - **Projektwahl** (Strg+K im Projektkopf, Zeiterfassung, „Eigene Zeit"): Unter jedem Projekt steht das Gesamtprojekt, und die Suche findet es auch darüber. Das hilft beim Buchen auf den richtigen Vertrag. Die Liste für „Eigene Zeit" bleibt ohne Beträge.
 - **Nicht gebaut:** Dass sich schon das Angebot das Gesamtprojekt merkt (`OFFER.PROJECT_GROUP_ID`, offene Angebote als Auftragsbestand), ist bewusst ausgelassen. Es wäre eine weitere Spalte mit eigener Pflege, und beim Beauftragen wählt man das Gesamtprojekt ohnehin.
 
-## 9. Stufe 3 (optional)
+## 9. Stufe 3
 
-- **Nachtrag als eigenes Projekt im Gesamtprojekt freigeben.** Das ist die Alternative zum Einhängen in die Struktur, gedacht für einen eigenen Vertrag oder einen anderen Rechnungsempfänger. Heute hängt die Freigabe die Positionen in die bestehende `PROJECT_STRUCTURE` ein.
-- **Platzhalter „Bauvorhaben/Gesamtprojekt"** in PDF- und E-Mail-Vorlagen (z. B. „BV: …" auf der Rechnung).
-- **Spalte „Gesamtprojekt" im Datenimport** (Projekte).
-- **Budget und Budgetwarnung** auf Ebene des Gesamtprojekts.
+Entscheidung 2026-10-01: gebaut werden „Nachtrag als eigenes Projekt" und das Gesamtprojekt auf den Belegen. Spalte im Datenimport und Budgetwarnung je Gesamtprojekt werden **nicht** gebraucht.
+
+- **Nachtrag als eigenes Projekt** (Migration `0182`, `services/nachtraege.js` → `release`, `createReleaseProject`).
+  - **Ziel wählen:** Die Freigabe fragt, wohin die Positionen gehen.
+    - `origin`: wie bisher ins Projekt des Nachtrags, unter „Nachträge".
+    - `new_project`: ein eigenes Projekt im Gesamtprojekt.
+    - `release_project`: ein Projekt, das eine frühere Freigabe **dieses** Nachtrags angelegt hat. Ein beliebiges Projekt ist nicht wählbar.
+  - **Herkunft der Daten im neuen Projekt:**
+    - Vom Ursprungsprojekt: Firma, Typ, Abteilung und Team samt Stundensätzen.
+    - Vom Ursprungsvertrag: die Konditionen Steuer, Skonto, Einbehalt und Währung (`inheritedContractTerms` in `contractDefaults.js`).
+    - Aus dem Dialog: Auftraggeber und Rechnungsempfänger, vorbelegt mit der Adresse des Nachtrags. Ebenfalls Name, Status, Leitung und die abgeleitete Nummer.
+  - **Ohne Gesamtprojekt:** Gehört das Ursprungsprojekt noch zu keinem, entsteht eins aus ihm. Das Ursprungsprojekt trägt dann dessen Kürzel und zählt als 01.
+  - **Struktur:** Die Positionen stehen im neuen Projekt auf oberster Ebene.
+  - **Protokoll:** `NACHTRAG_RELEASE.TARGET_PROJECT_ID` hält fest, wohin eine Freigabe ging. Der Nachtrag selbst bleibt am Ursprungsprojekt.
+  - **Rechte:** `nachtraege.release` und `projects.create`, dazu `projects.edit`, wenn erst ein Gesamtprojekt entsteht.
+  - **Reihenfolge:** Rechte, Adresse und Kontakt werden geprüft, **bevor** geschrieben wird. Nach einer Ablehnung steht also kein halbes Projekt da.
 
 ## 10. Offene Punkte
 

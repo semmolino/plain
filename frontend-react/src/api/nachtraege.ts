@@ -105,6 +105,10 @@ export interface NachtragRelease {
   RELEASED_BY:   number | null
   RELEASED_AT:   string | null
   NOTE:          string | null
+  /** Freigabe in ein eigenes Projekt (Migration 0182); null = Projekt des Nachtrags. */
+  TARGET_PROJECT_ID?:   number | null
+  TARGET_PROJECT_ABBR?: string | null
+  TARGET_PROJECT_NAME?: string | null
 }
 
 export interface CreateNachtragPayload {
@@ -151,11 +155,26 @@ export interface AddNachtragStructureNodePayload {
   father_id?:       string | number | null
 }
 
+/**
+ * Wohin die Positionen gehen (Migration 0182):
+ *   origin          — Projekt des Nachtrags, unter „Nachträge" (wie bisher)
+ *   new_project     — eigenes Projekt im Gesamtprojekt (eigener Vertrag)
+ *   release_project — Projekt, das eine frühere Freigabe dieses Nachtrags angelegt hat
+ */
+export type ReleaseTarget =
+  | { kind: 'origin' }
+  | { kind: 'release_project'; project_id: number }
+  | {
+      kind: 'new_project'; name: string; project_status_id: number; project_manager_id: number
+      address_id: number; contact_id: number; abbr_mode: 'range' | 'derived'
+    }
+
 export interface ReleasePayload {
   release_kind:  ReleaseKind
   release_basis?: ReleaseBasis
   note?:         string
   positions?:    Array<{ nachtrag_structure_id: number; approved_amount_net?: number | null }>
+  target?:       ReleaseTarget
 }
 
 export interface ReleaseResult {
@@ -163,7 +182,11 @@ export interface ReleaseResult {
   amount_net:          number
   approved_total_net:  number
   status_code:         string
-  group_structure_id:  number
+  group_structure_id:  number | null
+  /** Gesetzt, wenn die Positionen in ein eigenes Projekt gingen */
+  target_project?:     { ID: number; ABBR?: string; NAME?: string } | null
+  /** Ein Gesamtprojekt ist dabei aus dem Ursprungsprojekt entstanden */
+  group_created?:      boolean
 }
 
 // ── API calls ─────────────────────────────────────────────────────────────────

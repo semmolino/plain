@@ -51,4 +51,29 @@ function contractDefaults(defaults) {
   return out;
 }
 
-module.exports = { contractDefaults };
+/** Konditionen, die ein Folgevertrag desselben Vorhabens erbt (Steuer, Skonto, Einbehalt, Währung). */
+const INHERITED_TERMS = [
+  "CURRENCY_ID", "VAT_ID", "VAT_CATEGORY", "VAT_EXEMPTION_REASON_CODE", "VAT_EXEMPTION_REASON_TEXT",
+  "CASH_DISCOUNT_PERCENT", "CASH_DISCOUNT_DAYS",
+  "SE_ENABLED", "SE_PERCENT", "SE_BASIS", "SE_LEGAL_REFERENCE",
+];
+
+/**
+ * Konditionen aus einem bestehenden Vertrag — für einen Vertrag, der aus einem
+ * anderen hervorgeht (Nachtrag als eigenes Projekt). Dort gelten die
+ * Bedingungen des Ursprungsvertrags, nicht die allgemeinen Vorbelegungen: ein
+ * Reverse-Charge-Auftrag oder ein vereinbarter Einbehalt bleibt, was er war.
+ * Rechnungsempfaenger gehoert NICHT dazu — der ist gerade der Grund für den
+ * eigenen Vertrag. Nur gesetzte Werte landen im Ergebnis.
+ *
+ * @param {Record<string, unknown>|null} source  CONTRACT-Zeile
+ */
+function inheritedContractTerms(source) {
+  const out = {};
+  for (const k of INHERITED_TERMS) {
+    if (source && source[k] !== undefined && source[k] !== null) out[k] = source[k];
+  }
+  return out;
+}
+
+module.exports = { contractDefaults, inheritedContractTerms, INHERITED_TERMS };
