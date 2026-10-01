@@ -18,11 +18,33 @@ und misst **1280 × 720**, nicht 1280 × 800 wie in den beiden Vorberichten ange
 alle Breitenbefunde ist das folgenlos (die Breite stimmt), für Höhenangaben nicht — die
 Zeilen „Seitenhöhe 720" unten sind der *Viewport*, nicht die Dokumenthöhe.
 
-**Zeitraum:** Zwischen dem Vormonatsbericht (`126af56`, 01.09.) und heute liegen
-**149 Commits an 13 Arbeitstagen**, davon 71 am Frontend — die UI-Pilot-Runden 4 bis 12.
-Das ist der bewegteste Monat dieser Reihe, und das prägt den Bericht: Der Bestand hat sich
-an mehreren Stellen deutlich verbessert, während **alle drei Fehler des Vormonats
-unverändert stehen**.
+**Zeitraum:** Zwischen dem Vormonatsbericht (`126af56`, 01.09.) und dem gemessenen Stand
+(`adb9742`) liegen **147 Commits an 12 Arbeitstagen**, davon **71 am Frontend** — die
+UI-Pilot-Runden 4 bis 12. Das ist der bewegteste Monat dieser Reihe, und das prägt den
+Bericht: Der Bestand hat sich an mehreren Stellen deutlich verbessert, während **alle drei
+Fehler des Vormonats unverändert stehen**.
+
+Die drei Zahlen sind der Commit-Bereich, nicht ein Datumsfilter — nachzurechnen mit:
+
+```bash
+git rev-list --count 126af56..adb9742                     # 147
+git rev-list --count 126af56..adb9742 -- frontend-react/  #  71
+git log --format=%ad --date=short 126af56..adb9742 | sort -u | wc -l   # 12
+```
+
+Der Unterschied ist nicht akademisch. Der Schritt „Vorgeschichte lesen" dieser Analyse
+schreibt `git log --since='5 weeks ago'` vor — ein **relatives** Fenster, das am 01.10.
+bis zum **27.08.** zurückreicht und damit die beiden Commits vom 01.09. mitzählt, darunter
+`126af56`: den Vormonatsbericht selbst, gegen den hier verglichen wird. Dieser Lauf hatte
+daraus zunächst 149 Commits und 13 Arbeitstage gebildet; gegen den Bereich nachgerechnet
+sind es 147 und 12. Die Frontend-Zahl 71 ist von der Grenze nicht betroffen und in beiden
+Verfahren gleich.
+
+**Für den nächsten Lauf:** `--since='5 weeks ago'` taugt zum Sichten der Vorgeschichte,
+nicht zum Zählen — das Fenster wandert mit dem Ausführungstag und schließt den
+Vergleichspunkt ein. Gezählt wird gegen den Commit-Bereich. (Gefunden hat das die
+Codex-Prüfung an diesem PR; dort genannte Werte — 204 Commits, 103 am Frontend — ließen
+sich nicht nachvollziehen, die Beanstandung der Nachvollziehbarkeit schon.)
 
 ---
 
