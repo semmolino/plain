@@ -299,6 +299,17 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   Auswahl der aufzulösenden Sicherheitseinbehalte einer Schlussrechnung merkt
   sich der Entwurf in `INVOICE.SE_RELEASE_ADVANCE_IDS` (Migration `0171`);
   maßgeblich beim Buchen bleibt, was der Buchungsaufruf mitschickt.
+  **Buchungsauswahl** (`components/rechnungen/BuchungsauswahlTable.tsx`, Logik in
+  `buchungsauswahl.ts`): Filter sind eine Ansicht, abgerechnet wird jede
+  angehakte Buchung — auch eine ausgeblendete (die Zählzeile sagt „davon n
+  ausgeblendet"); die einzige Brücke ist „Nur sichtbare auswählen".
+  „0-Beträge mitabrechnen" gilt für jede Sammelaktion und die Vorauswahl.
+  Gemerkt werden nur Vorlieben, nicht Suche/Datum/Mitarbeiter/Leistung.
+  Der Stichtag „Seit letzter Rechnung" kommt vom Server
+  (`services/bookingSelection.js`, in `GET …/tec` als `last_invoice`): letzte
+  gebuchte Abschlags-/Einzel-/(Teil-)Schlussrechnung des Vertrags, Ende des
+  Leistungszeitraums, sonst Belegdatum — Stornos und Korrekturen zählen nicht.
+  Die Schlussrechnung hat keine Buchungsauswahl.
 - **Projekt- und Angebotsstruktur** teilen Bedienung und Rechnung: Summen
   (Honorar-Basis, Zuschlaege, NK je Vater) rechnet **nur**
   `pages/projekte/struktur/strukturCalc.ts` (`aggregateTree`,

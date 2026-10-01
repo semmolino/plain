@@ -4,6 +4,7 @@ const { renderDocumentPdf } = require("../services_pdf_render");
 const svc = require("../services/invoices");
 const correction = require("../services/invoiceCorrection");
 const reissueSvc = require("../services/reissue");
+const selection = require("../services/bookingSelection");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { generateCiiXml } = require("../services_einvoice_cii");
 const { generateUblXml, generatePeppolXml } = require("../services_einvoice_ubl");
@@ -271,12 +272,16 @@ async function getTec(req, res, supabase) {
     const bt2Ids = (structures || []).filter((s) => Number(s.BILLING_TYPE_ID) === 2).map((s) => s.ID);
     if (bt2Ids.length === 0) return res.json({ data: [], hasBt2: false });
 
-    const { data: tecRows, error: tecErr } = await supabase
-      .from("BOOKING")
-      .select("ID, BOOKING_DATE, POSTING_DESCRIPTION, HOURLY_RATE_TOTAL, STRUCTURE_ID, ADVANCE_INVOICE_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR)")
-      .in("STRUCTURE_ID", bt2Ids)
-      .neq("STATUS", "DRAFT")
-      .order("BOOKING_DATE", { ascending: true });
+    const [{ data: tecRows, error: tecErr }, lastInvoice] = await Promise.all([
+      supabase
+        .from("BOOKING")
+        .select(selection.TEC_SELECT)
+        .eq("TENANT_ID", req.tenantId)
+        .in("STRUCTURE_ID", bt2Ids)
+        .neq("STATUS", "DRAFT")
+        .order("BOOKING_DATE", { ascending: true }),
+      selection.lastBilledDocument(supabase, { tenantId: req.tenantId, projectId: inv.PROJECT_ID, contractId: inv.CONTRACT_ID }),
+    ]);
     if (tecErr) throw new Error(tecErr.message);
 
     const out = (tecRows || [])
@@ -284,16 +289,9 @@ async function getTec(req, res, supabase) {
         if (!svc.isNullOrZero(t.ADVANCE_INVOICE_ID)) return false;
         return svc.isNullOrZero(t.INVOICE_ID) || String(t.INVOICE_ID) === String(id);
       })
-      .map((t) => ({
-        ID: t.ID,
-        BOOKING_DATE: t.BOOKING_DATE,
-        EMPLOYEE_SHORT_NAME: t.EMPLOYEE?.ABBR ?? "",
-        POSTING_DESCRIPTION: t.POSTING_DESCRIPTION ?? "",
-        HOURLY_RATE_TOTAL: svc.round2(t.HOURLY_RATE_TOTAL),
-        ASSIGNED: String(t.INVOICE_ID) === String(id),
-      }));
+      .map((t) => selection.tecEntry(t, String(t.INVOICE_ID) === String(id)));
 
-    return res.json({ data: out, hasBt2: true });
+    return res.json({ data: out, hasBt2: true, last_invoice: lastInvoice });
   } catch (e) {
     return res.status(500).json({ error: e?.message || String(e) });
   }

@@ -1,54 +1,91 @@
-import { useEffect, useMemo, useState } from 'react'
-import { FilterChip } from '@/components/ui/FilterChip'
+import { useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { InfoHint } from '@/components/ui/InfoHint'
-import type { TecEntry } from '@/api/rechnungen'
+import { FilterChip } from '@/components/ui/FilterChip'
+import { HelpHint } from '@/components/ui/HelpHint'
+import type { LastInvoice, TecEntry } from '@/api/rechnungen'
 import { fmtEur, money } from '@/utils/money'
+import { fmtDateDe, fmtHours } from '@/utils/zeit'
+import {
+  billable, filterBookings, idsOf, isZeroBooking, loadPrefs, outsidePeriod, savePref, summarize,
+  toggleRows, triState, withZeros, PREFS_KEY, type BookingPrefs, type Period, type TriState,
+} from './buchungsauswahl'
 
-const fmtDate = (v: string | null | undefined) => v ? v.slice(0, 10) : '—'
-
-// ── userbezogene Persistenz (wie ProjektlisteTab & andere Listen) ──────────────
-function lsGet<T>(key: string, fallback: T): T {
-  try { const v = localStorage.getItem(key); return v != null ? JSON.parse(v) as T : fallback } catch { return fallback }
+const KIND_LABEL: Record<string, string> = {
+  abschlag: 'Abschlagsrechnung', rechnung: 'Rechnung',
+  schlussrechnung: 'Schlussrechnung', teilschlussrechnung: 'Teilschlussrechnung',
 }
-function lsPut(key: string, val: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(val)) } catch { /* Speicher voll / privater Modus */ }
+
+function lastInvoiceTitle(li: LastInvoice): string {
+  const doc = `${KIND_LABEL[li.kind] ?? 'Rechnung'} ${li.number ?? ''}`.trim()
+  return li.period_end
+    ? `${doc}, Leistungszeitraum bis ${fmtDateDe(li.period_end)}`
+    : `${doc} vom ${fmtDateDe(li.date)}`
 }
 
-// Ein gemeinsamer Schlüssel für beide Rechnungswizards — die Filtereinstellungen
-// beziehen sich auf dieselbe Art von Daten (offene Buchungen) und bleiben so
-// über Rechnung und Abschlag hinweg konsistent gespeichert.
-const DEFAULT_KEY = 'plain:filt:tec-selection'
+function periodLabel(p: Period): string {
+  if (p.start && p.end) return `${fmtDateDe(p.start)} – ${fmtDateDe(p.end)}`
+  return p.start ? `ab ${fmtDateDe(p.start)}` : `bis ${fmtDateDe(p.end)}`
+}
+
+/** Häkchen mit Zwischenzustand („teils gewählt"). */
+function TriCheckbox({ state, onChange, label, disabled }: {
+  state: TriState; onChange: () => void; label?: string; disabled?: boolean
+}) {
+  return (
+    <input
+      type="checkbox"
+      ref={el => { if (el) el.indeterminate = state === 'some' }}
+      checked={state === 'all'}
+      onChange={onChange}
+      aria-label={label}
+      disabled={disabled}
+    />
+  )
+}
 
 /**
  * BuchungsauswahlTable — Auswahl der abzurechnenden Buchungen (BILLING_TYPE_ID = 2)
- * in den Rechnungswizards (Rechnung & Abschlag).
+ * in den Rechnungsassistenten (Abschlag, Einzelrechnung, Rechnungskorrektur).
  *
- * Bietet Filter über der langen Buchungsliste (Suche, Datum von/bis, Mitarbeiter,
- * 0-Beträge ausblenden). Die Filtereinstellungen werden userbezogen im
- * localStorage gespeichert — wie in den übrigen Listen.
+ * Oben die Filter — eine Ansicht, sie ändern nicht, was abgerechnet wird.
+ * Darunter die Auswahl: „Alle Buchungen", „0-Beträge mitabrechnen" und
+ * „Nur sichtbare auswählen", die einzige Brücke von der Ansicht zur Auswahl.
+ * Was ausgewählt, aber ausgeblendet ist, sagt die Zählzeile — vorher wurde es
+ * still mit abgerechnet.
  *
- * Wichtig: Filter sind nur eine *Ansicht*. Die Auswahl (`selected`) bleibt beim
- * Filtern erhalten; nur ausgewählte Buchungen werden später abgerechnet.
+ * Über Rechnungen hinweg gemerkt werden nur Vorlieben (0-Beträge, „Seit letzter
+ * Rechnung"); Suche, Datum, Mitarbeiter und Leistung gelten für diese Rechnung.
+ * Logik und Begründungen: `buchungsauswahl.ts`.
  */
-export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKey = DEFAULT_KEY }: {
+export function BuchungsauswahlTable({
+  tecList, selected, setSelected, lastInvoice = null, periodStart = '', periodEnd = '', storageKey = PREFS_KEY,
+}: {
   tecList: TecEntry[]
   selected: Set<number>
   setSelected: React.Dispatch<React.SetStateAction<Set<number>>>
+  /** Letzte gebuchte Rechnung des Vertrags — ohne sie gibt es den Filter „Seit letzter Rechnung" nicht. */
+  lastInvoice?: LastInvoice | null
+  /** Leistungszeitraum dieser Rechnung (YYYY-MM-DD) */
+  periodStart?: string
+  periodEnd?: string
   storageKey?: string
 }) {
-  const [search,   setSearch]   = useState(() => lsGet<string>(`${storageKey}:search`, ''))
-  const [dateFrom, setDateFrom] = useState(() => lsGet<string>(`${storageKey}:dateFrom`, ''))
-  const [dateTo,   setDateTo]   = useState(() => lsGet<string>(`${storageKey}:dateTo`, ''))
-  const [hideZero, setHideZero] = useState(() => lsGet<boolean>(`${storageKey}:hideZero`, false))
-  const [empFilter, setEmpFilter] = useState<Set<string>>(() =>
-    new Set(lsGet<string[]>(`${storageKey}:emp`, [])))
+  const [prefs, setPrefs] = useState<BookingPrefs>(() => loadPrefs(storageKey))
+  function setPref(name: keyof BookingPrefs, value: boolean) {
+    setPrefs(p => ({ ...p, [name]: value }))
+    savePref(storageKey, name, value)
+  }
 
-  useEffect(() => { lsPut(`${storageKey}:search`,   search)   }, [storageKey, search])
-  useEffect(() => { lsPut(`${storageKey}:dateFrom`, dateFrom) }, [storageKey, dateFrom])
-  useEffect(() => { lsPut(`${storageKey}:dateTo`,   dateTo)   }, [storageKey, dateTo])
-  useEffect(() => { lsPut(`${storageKey}:hideZero`, hideZero) }, [storageKey, hideZero])
-  useEffect(() => { lsPut(`${storageKey}:emp`,      [...empFilter]) }, [storageKey, empFilter])
+  const [search,       setSearch]       = useState('')
+  const [dateFrom,     setDateFrom]     = useState('')
+  const [dateTo,       setDateTo]       = useState('')
+  const [empFilter,    setEmpFilter]    = useState<Set<string>>(() => new Set())
+  const [structFilter, setStructFilter] = useState<Set<string>>(() => new Set())
+  const [inPeriodOnly, setInPeriodOnly] = useState(false)
+
+  const period = useMemo<Period | null>(
+    () => (periodStart || periodEnd ? { start: periodStart, end: periodEnd } : null),
+    [periodStart, periodEnd])
 
   const allEmployees = useMemo(() => {
     const s = new Set<string>()
@@ -56,35 +93,38 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
     return [...s].sort((a, b) => a.localeCompare(b, 'de'))
   }, [tecList])
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return tecList.filter(t => {
-      if (hideZero && (t.HOURLY_RATE_TOTAL ?? 0) === 0) return false
-      if (empFilter.size > 0 && !(t.EMPLOYEE_SHORT_NAME && empFilter.has(t.EMPLOYEE_SHORT_NAME))) return false
-      if (dateFrom || dateTo) {
-        const d = t.BOOKING_DATE ? t.BOOKING_DATE.slice(0, 10) : ''
-        if (!d) return false
-        if (dateFrom && d < dateFrom) return false
-        if (dateTo   && d > dateTo)   return false
-      }
-      if (q) {
-        const hay = `${t.POSTING_DESCRIPTION ?? ''} ${t.EMPLOYEE_SHORT_NAME ?? ''}`.toLowerCase()
-        if (!hay.includes(q)) return false
-      }
-      return true
-    })
-  }, [tecList, search, dateFrom, dateTo, hideZero, empFilter])
+  const allStructures = useMemo(() => {
+    const s = new Set<string>()
+    tecList.forEach(t => { if (t.STRUCTURE_LABEL) s.add(t.STRUCTURE_LABEL) })
+    return [...s].sort((a, b) => a.localeCompare(b, 'de', { numeric: true }))
+  }, [tecList])
+  const manyStructures = allStructures.length > 1
 
-  const filterActive = !!(search.trim() || dateFrom || dateTo || hideZero || empFilter.size > 0)
-  const visibleIds   = useMemo(() => filtered.map(t => t.ID), [filtered])
-  const allVisibleSelected = filtered.length > 0 && visibleIds.every(id => selected.has(id))
-  // Auswahl/Summe über die *gesamte* Liste — deckt sich mit der Zusammenfassung
-  // des Wizards, auch wenn ein Filter Zeilen ausblendet.
-  const selectedTotal    = tecList.reduce((n, t) => selected.has(t.ID) ? n + 1 : n, 0)
-  const selectedTotalSum = tecList.reduce((s, t) => selected.has(t.ID) ? s + (t.HOURLY_RATE_TOTAL ?? 0) : s, 0)
+  const zeroCount = useMemo(() => tecList.filter(isZeroBooking).length, [tecList])
+
+  const sinceActive  = prefs.sinceLast && !!lastInvoice
+  const periodActive = inPeriodOnly && !!period
+
+  const filtered = useMemo(() => filterBookings(tecList, {
+    search, dateFrom, dateTo, employees: empFilter, structures: structFilter, hideZero: prefs.hideZero,
+    since:  sinceActive && lastInvoice ? lastInvoice.since : null,
+    period: periodActive ? period : null,
+  }), [tecList, search, dateFrom, dateTo, empFilter, structFilter, prefs.hideZero, sinceActive, lastInvoice, periodActive, period])
+
+  const filterActive = !!(search.trim() || dateFrom || dateTo || empFilter.size > 0 || structFilter.size > 0
+    || prefs.hideZero || sinceActive || periodActive)
+  const visibleIds   = useMemo(() => idsOf(filtered), [filtered])
+  // Auswahl und Summe über die *ganze* Liste — deckt sich mit der Zusammenfassung des Assistenten.
+  const summary      = summarize(tecList, selected, visibleIds)
+  const allState     = triState(tecList, selected, prefs.includeZero)
+  const visibleState = triState(filtered, selected, prefs.includeZero)
+  const outside      = outsidePeriod(tecList, selected, period)
 
   function resetFilters() {
-    setSearch(''); setDateFrom(''); setDateTo(''); setHideZero(false); setEmpFilter(new Set())
+    setSearch(''); setDateFrom(''); setDateTo(''); setEmpFilter(new Set()); setStructFilter(new Set())
+    setInPeriodOnly(false)
+    if (prefs.hideZero)  setPref('hideZero', false)
+    if (prefs.sinceLast) setPref('sinceLast', false)
   }
 
   function toggleTec(id: number) {
@@ -95,97 +135,144 @@ export function BuchungsauswahlTable({ tecList, selected, setSelected, storageKe
     })
   }
 
-  // "Alle" wirkt nur auf die aktuell sichtbaren (gefilterten) Zeilen —
-  // die Auswahl ausgeblendeter Buchungen bleibt unangetastet.
-  function toggleAllVisible() {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (allVisibleSelected) visibleIds.forEach(id => next.delete(id))
-      else                    visibleIds.forEach(id => next.add(id))
-      return next
-    })
+  const toggleAll         = () => setSelected(allState === 'all' ? new Set() : idsOf(billable(tecList, prefs.includeZero)))
+  const toggleVisible     = () => setSelected(prev => toggleRows(prev, filtered, prefs.includeZero))
+  const selectOnlyVisible = () => setSelected(idsOf(billable(filtered, prefs.includeZero)))
+  const deselectOutside   = () => setSelected(prev => {
+    const next = new Set(prev)
+    outside.forEach(t => next.delete(t.ID))
+    return next
+  })
+  function setIncludeZero(include: boolean) {
+    setPref('includeZero', include)
+    setSelected(prev => withZeros(prev, tecList, include))
   }
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '14px 0 6px' }}>
-        <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Buchungen zuweisen</p>
-        <InfoHint title="Buchungen filtern">
-          Filter sind nur eine Ansicht auf die Liste — sie ändern <strong>nicht</strong>, was abgerechnet
-          wird. Abgerechnet werden ausschließlich die <strong>angehakten</strong> Buchungen, auch wenn sie
-          durch einen Filter gerade ausgeblendet sind. „Alle" oben in der Tabelle wählt jeweils nur die
-          aktuell sichtbaren Zeilen. Die Filtereinstellungen bleiben für dich gespeichert.
-        </InfoHint>
-      </div>
+      <p className="ba-title">Buchungen zuweisen <HelpHint id="invoice.buchungsauswahl" /></p>
 
       {tecList.length === 0 ? (
-        <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 8px' }}>
-          Keine offenen Buchungen für dieses Projekt vorhanden.
-        </p>
+        <p className="ba-empty">Keine offenen Buchungen für dieses Projekt vorhanden.</p>
       ) : (
         <>
+          {/* Filter: eine Ansicht auf die Liste */}
           <div className="list-toolbar">
             <input
               type="search"
               className="list-search"
-              placeholder="Beschreibung oder Mitarbeiter suchen …"
+              placeholder="Buchungen suchen …"
+              aria-label="Buchungen suchen (Beschreibung, Mitarbeiter, Leistung)"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
             <input type="date" className="inline-date-input" aria-label="Datum von"
               value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-            <span style={{ fontSize: 13, color: 'var(--text-3)' }}>–</span>
+            <span className="ba-muted">–</span>
             <input type="date" className="inline-date-input" aria-label="Datum bis"
               value={dateTo} onChange={e => setDateTo(e.target.value)} />
             <FilterChip label="Mitarbeiter" options={allEmployees} active={empFilter} onChange={setEmpFilter} />
+            {manyStructures && (
+              <FilterChip label="Leistung" options={allStructures} active={structFilter} onChange={setStructFilter} />
+            )}
+            {lastInvoice && (
+              <label className="list-checkbox-label" title={lastInvoiceTitle(lastInvoice)}>
+                <input type="checkbox" checked={prefs.sinceLast} onChange={e => setPref('sinceLast', e.target.checked)} />
+                Seit letzter Rechnung <span className="ba-muted">(nach {fmtDateDe(lastInvoice.since)})</span>
+              </label>
+            )}
+            {period && (
+              <label className="list-checkbox-label">
+                <input type="checkbox" checked={inPeriodOnly} onChange={e => setInPeriodOnly(e.target.checked)} />
+                Im Leistungszeitraum <span className="ba-muted">({periodLabel(period)})</span>
+              </label>
+            )}
             <label className="list-checkbox-label">
-              <input type="checkbox" checked={hideZero} onChange={e => setHideZero(e.target.checked)} />
+              <input type="checkbox" checked={prefs.hideZero} onChange={e => setPref('hideZero', e.target.checked)} />
               0-Beträge ausblenden
             </label>
             {filterActive && (
-              <button type="button" className="filter-chip-btn" onClick={resetFilters}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 'auto' }}>
-                <RotateCcw size={13} strokeWidth={2} /> Filter zurücksetzen
+              <button type="button" className="filter-chip-btn ba-reset" onClick={resetFilters}>
+                <RotateCcw size={13} strokeWidth={2} aria-hidden="true" /> Filter zurücksetzen
               </button>
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '0 0 6px' }}>
-            <span className="list-info">
-              {filterActive
-                ? `${filtered.length} von ${tecList.length} Buchungen`
-                : `${tecList.length} Buchungen`}
-            </span>
-            <span className="list-info">
-              {selectedTotal} ausgewählt{selectedTotal > 0 ? ` · ${fmtEur(selectedTotalSum)}` : ''}
-            </span>
+          {/* Auswahl: das wird abgerechnet */}
+          <div className="ba-bar" role="group" aria-label="Auswahl der Buchungen">
+            <label className="ba-check">
+              <TriCheckbox state={allState} onChange={toggleAll} />
+              Alle Buchungen
+            </label>
+            {zeroCount > 0 && (
+              <label className="ba-check">
+                <input type="checkbox" checked={prefs.includeZero} onChange={e => setIncludeZero(e.target.checked)} />
+                0-Beträge mitabrechnen <span className="ba-muted">({zeroCount})</span>
+              </label>
+            )}
+            {filterActive && filtered.length > 0 && (
+              <button type="button" className="filter-chip-btn" onClick={selectOnlyVisible}>
+                Nur sichtbare auswählen
+              </button>
+            )}
           </div>
+          <p className="list-info ba-summary" aria-live="polite">
+            <span>{filterActive ? `${filtered.length} von ${tecList.length} sichtbar` : `${tecList.length} Buchungen`}</span>
+            <span>· {summary.count} ausgewählt</span>
+            {summary.count > 0 && summary.hours > 0 && <span>· {fmtHours(summary.hours)} h</span>}
+            {summary.count > 0 && <span>· {fmtEur(summary.amount)}</span>}
+            {summary.hidden > 0 && (
+              <span className="ba-hidden">· davon {summary.hidden} ausgeblendet – werden mit abgerechnet</span>
+            )}
+          </p>
+          {outside.length > 0 && period && (
+            <p className="ba-warn">
+              <span>
+                {outside.length === 1 ? '1 ausgewählte Buchung liegt' : `${outside.length} ausgewählte Buchungen liegen`}
+                {' '}außerhalb des Leistungszeitraums ({periodLabel(period)}).
+              </span>
+              <button type="button" className="link-btn" onClick={deselectOutside}>Abwählen</button>
+            </p>
+          )}
 
           {filtered.length === 0 ? (
-            <p style={{ fontSize: 13, color: 'var(--text-3)', margin: '4px 0 8px' }}>
+            <p className="ba-empty">
               Kein Treffer für die aktuellen Filter.{' '}
-              <button type="button" onClick={resetFilters}
-                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', padding: 0, font: 'inherit' }}>
-                Filter zurücksetzen
-              </button>
+              <button type="button" className="link-btn" onClick={resetFilters}>Filter zurücksetzen</button>
             </p>
           ) : (
             <div className="list-section table-scroll">
-              <table className="master-table">
+              <table className="master-table ba-table">
                 <thead>
                   <tr>
-                    <th scope="col"><input type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible}
-                      aria-label="Alle sichtbaren auswählen" /></th>
-                    <th scope="col">Datum</th><th scope="col">Mitarbeiter</th><th scope="col">Beschreibung</th><th scope="col" className="num">Betrag €</th>
+                    <th scope="col">
+                      <TriCheckbox state={visibleState} onChange={toggleVisible} label="Alle sichtbaren auswählen" />
+                    </th>
+                    <th scope="col">Datum</th>
+                    <th scope="col" className="ba-wide">Mitarbeiter</th>
+                    <th scope="col">Beschreibung</th>
+                    <th scope="col" className="num ba-wide">Std.</th>
+                    <th scope="col" className="num">Betrag €</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(t => (
                     <tr key={t.ID}>
-                      <td><input type="checkbox" checked={selected.has(t.ID)} onChange={() => toggleTec(t.ID)} /></td>
-                      <td>{fmtDate(t.BOOKING_DATE)}</td>
-                      <td>{t.EMPLOYEE_SHORT_NAME ?? '—'}</td>
-                      <td>{t.POSTING_DESCRIPTION}</td>
+                      <td>
+                        <input type="checkbox" checked={selected.has(t.ID)} onChange={() => toggleTec(t.ID)}
+                          aria-label={`${fmtDateDe(t.BOOKING_DATE)} ${t.POSTING_DESCRIPTION ?? ''} auswählen`.trim()} />
+                      </td>
+                      <td className="ba-date">{fmtDateDe(t.BOOKING_DATE) || '—'}</td>
+                      <td className="ba-wide">{t.EMPLOYEE_SHORT_NAME || '—'}</td>
+                      <td>
+                        {t.POSTING_DESCRIPTION}
+                        {manyStructures && t.STRUCTURE_LABEL && <span className="ba-structure">{t.STRUCTURE_LABEL}</span>}
+                        {/* Am Handy statt der Spalten Mitarbeiter und Std. — sonst fiel der Betrag aus dem Bild. */}
+                        <span className="ba-meta-narrow">
+                          {[t.EMPLOYEE_SHORT_NAME, t.HOURS == null ? null : `${fmtHours(t.HOURS)} h`].filter(Boolean).join(' · ')}
+                        </span>
+                      </td>
+                      <td className="num ba-wide">{t.HOURS == null ? '—' : fmtHours(t.HOURS)}</td>
                       <td className="num">{money(t.HOURLY_RATE_TOTAL)}</td>
                     </tr>
                   ))}

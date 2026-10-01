@@ -148,8 +148,31 @@ export interface TecEntry {
   BOOKING_DATE:        string | null
   EMPLOYEE_SHORT_NAME: string | null
   POSTING_DESCRIPTION: string | null
-  HOURLY_RATE_TOTAL:              number | null
+  HOURLY_RATE_TOTAL:   number | null
+  /** null = keine Stundenbuchung (Pauschale, Stückleistung) */
+  HOURS?:              number | null
+  STRUCTURE_ID?:       number | null
+  /** „LP3 – Entwurfsplanung" */
+  STRUCTURE_LABEL?:    string
   ASSIGNED:            boolean
+}
+
+/** Letzte gebuchte Rechnung des Vertrags — Stichtag für „Seit letzter Rechnung"
+ *  (`services/bookingSelection.js`). */
+export interface LastInvoice {
+  kind:       'abschlag' | 'rechnung' | 'schlussrechnung' | 'teilschlussrechnung' | string
+  id:         number
+  number:     string | null
+  date:       string | null
+  period_end: string | null
+  /** Ende des Leistungszeitraums, sonst Belegdatum (YYYY-MM-DD) */
+  since:      string
+}
+
+export interface TecResponse {
+  data:          TecEntry[]
+  hasBt2:        boolean
+  last_invoice?: LastInvoice | null
 }
 
 export interface FinalPhase {
@@ -261,7 +284,7 @@ export const putInvoicePerformance = (id: number, amount: number) =>
   apiClient.put<{ data: BillingProposal }>(`/invoices/${id}/performance`, { amount })
 
 export const getInvoiceTec = (id: number) =>
-  apiClient.get<{ data: TecEntry[]; hasBt2: boolean }>(`/invoices/${id}/tec`)
+  apiClient.get<TecResponse>(`/invoices/${id}/tec`)
 
 export const postInvoiceTec = (id: number, body: {
   ids_assign: number[]; ids_unassign: number[]; performance_amount?: number
@@ -479,7 +502,7 @@ export const putPpPerformance = (id: number, amount: number) =>
   apiClient.put<{ data: BillingProposal }>(`/partial-payments/${id}/performance`, { amount })
 
 export const getPpTec = (id: number) =>
-  apiClient.get<{ data: TecEntry[]; hasBt2: boolean }>(`/partial-payments/${id}/tec`)
+  apiClient.get<TecResponse>(`/partial-payments/${id}/tec`)
 
 export const postPpTec = (id: number, body: {
   ids_assign: number[]; ids_unassign: number[]; performance_amount?: number

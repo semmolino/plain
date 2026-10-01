@@ -2174,6 +2174,27 @@ export const HELP = {
       </>
     ),
   },
+  'invoice.buchungsauswahl': {
+    title: 'Buchungen zuweisen',
+    body: (
+      <>
+        Abgerechnet werden die <strong>angehakten</strong> Buchungen, auch wenn ein Filter sie gerade
+        ausblendet; die Zeile darüber sagt dann „davon n ausgeblendet". Filter ändern nur die Ansicht.
+        Mit <strong>Nur sichtbare auswählen</strong> wird genau das gewählt, was die Filter zeigen, und
+        alles andere abgewählt. <strong>Alle Buchungen</strong> wählt die ganze Liste.
+        <br /><br />
+        <strong>0-Beträge mitabrechnen</strong> wählt alle Buchungen ohne Betrag auf einmal an oder ab
+        und gilt auch für „Alle" und „Nur sichtbare". Eine 0-€-Buchung erscheint im Stundennachweis der
+        Rechnung; bleibt sie abgewählt, bleibt sie offen und taucht bei der nächsten Rechnung wieder auf.
+        <br /><br />
+        <strong>Seit letzter Rechnung</strong> zeigt nur Buchungen nach dem Ende des Leistungszeitraums
+        der letzten gebuchten Rechnung zu diesem Vertrag (ohne Leistungszeitraum: nach ihrem
+        Rechnungsdatum). Es zählen Abschlags-, Einzel-, Teilschluss- und Schlussrechnungen, nicht
+        Stornos und Rechnungskorrekturen. 0-Beträge und „Seit letzter Rechnung" bleiben für dich
+        eingestellt; Suche, Datum, Mitarbeiter und Leistung gelten nur für diese Rechnung.
+      </>
+    ),
+  },
   'invoice.wizard.pruefen': {
     title: 'Prüfen und buchen',
     body: (

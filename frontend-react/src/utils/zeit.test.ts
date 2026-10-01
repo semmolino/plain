@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { localIsoDate, addDaysIso, previousWorkday, hoursBetween, parseHours, fmtHours, mondayOf, isoWeek } from './zeit'
+import { localIsoDate, addDaysIso, previousWorkday, hoursBetween, parseHours, fmtHours, fmtDateDe, mondayOf, isoWeek } from './zeit'
+
+describe('fmtDateDe', () => {
+  it('schreibt deutsch, auch mit Uhrzeit dahinter', () => {
+    expect(fmtDateDe('2026-09-30')).toBe('30.09.2026')
+    expect(fmtDateDe('2026-01-05T23:30:00Z')).toBe('05.01.2026')
+  })
+  it('ohne Datum leer', () => {
+    expect(fmtDateDe(null)).toBe('')
+    expect(fmtDateDe('')).toBe('')
+  })
+})
 
 describe('localIsoDate', () => {
   // 00:30 Ortszeit ist heute, auch wenn UTC noch gestern ist.

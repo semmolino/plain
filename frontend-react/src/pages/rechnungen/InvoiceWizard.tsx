@@ -15,10 +15,11 @@ import { HelpHint }     from '@/components/ui/HelpHint'
 import { ValidationModal } from '@/components/ui/ValidationModal'
 import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
 import { BuchungsauswahlTable } from '@/components/rechnungen/BuchungsauswahlTable'
+import { initialSelection, loadPrefs } from '@/components/rechnungen/buchungsauswahl'
 import {
   searchContracts,
   VAT_CATEGORY_LABELS,
-  type BillingProposal, type TecEntry, type VatCategory,
+  type BillingProposal, type LastInvoice, type TecEntry, type VatCategory,
   type ValidationResult,
 } from '@/api/rechnungen'
 import { ApiRequestError } from '@/api/client'
@@ -153,6 +154,7 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
   const [tecList,   setTecList]   = useState<TecEntry[]>([])
   const [selected,  setSelected]  = useState<Set<number>>(new Set())
   const [hasBt2,    setHasBt2]    = useState(false)
+  const [lastInvoice, setLastInvoice] = useState<LastInvoice | null>(null)
 
   // Step 3: discounts
   const [showDiscounts,  setShowDiscounts]  = useState(false)
@@ -338,10 +340,10 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
       setPerfInput(prev => prev !== '' ? prev : String(prop.data.performance_amount ?? ''))
       setTecList(tec.data)
       setHasBt2(tec.hasBt2 ?? tec.data.length > 0)
+      setLastInvoice(tec.last_invoice ?? null)
       // Ein fortgesetzter Entwurf behaelt seine Auswahl; ohne Zuordnung ist
-      // wie bisher alles vorgewaehlt.
-      const assigned = tec.data.filter(t => t.ASSIGNED)
-      setSelected(prev => prev.size > 0 ? prev : new Set((assigned.length ? assigned : tec.data).map(t => t.ID)))
+      // alles vorgewaehlt — 0-Betraege nur, wenn sie mitabgerechnet werden.
+      setSelected(prev => prev.size > 0 ? prev : initialSelection(tec.data, loadPrefs().includeZero))
       setTouched(false)
       setStep(2)
     },
@@ -446,6 +448,14 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
     }
   }
 
+  // Die Sammelaktionen der Buchungsauswahl („Nur sichtbare", „Abwählen")
+  // sind Knöpfe — sie lösen kein change-Ereignis aus, das `onChangeCapture`
+  // unten fangen könnte.
+  const changeSelection: React.Dispatch<React.SetStateAction<Set<number>>> = v => {
+    setSelected(v)
+    if (draftIdRef.current) setTouched(true)
+  }
+
   useRegisterDirty(`invoice-wizard-${kind}`, {
     dirty: !!draftId && step >= 1 && touched,
     label: `${noun} (Entwurf)`,
@@ -459,7 +469,7 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
 
   function clearDraftState() {
     setDraftId(null)
-    setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false)
+    setProposal(null); setPerfInput(''); setTecList([]); setSelected(new Set()); setHasBt2(false); setLastInvoice(null)
   }
 
   function submitStep0() {
@@ -800,7 +810,8 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
               )}
             </div>
             {hasBt2 && (
-              <BuchungsauswahlTable tecList={tecList} selected={selected} setSelected={setSelected} />
+              <BuchungsauswahlTable tecList={tecList} selected={selected} setSelected={changeSelection}
+                lastInvoice={lastInvoice} periodStart={bpStart} periodEnd={bpFinish} />
             )}
             <Message text={msg?.text ?? null} type={msg?.type} />
           </div>

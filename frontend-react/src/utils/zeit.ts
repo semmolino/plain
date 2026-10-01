@@ -57,6 +57,14 @@ export function fmtHours(h: number | null | undefined): string {
   return h == null ? '' : FMT_H.format(h)
 }
 
+/** „2026-09-30" (auch mit Uhrzeit dahinter) → „30.09.2026"; ohne Datum leer.
+ *  Über den String, nicht über `Date` — ein ISO-Datum ohne Zeit ist UTC und
+ *  stünde westlich von Greenwich einen Tag zu früh. */
+export function fmtDateDe(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? '')
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : ''
+}
+
 const FMT_DAY = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
 
 /** „Do., 24.09." */

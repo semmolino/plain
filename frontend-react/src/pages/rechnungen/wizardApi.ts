@@ -5,7 +5,7 @@ import {
   initInvoice, patchInvoice, getInvoice, getInvoiceBillingProposal,
   putInvoicePerformance, getInvoiceTec, postInvoiceTec, bookInvoice, bookInvoiceForce, deleteInvoice,
   openInvoicePdf, downloadInvoiceEinvoice,
-  type BillingProposal, type TecEntry,
+  type BillingProposal, type TecResponse,
 } from '@/api/rechnungen'
 
 /**
@@ -40,7 +40,7 @@ export interface WizardApi {
   patch:       (id: number, body: AnyBody) => Promise<unknown>
   proposal:    (id: number) => Promise<{ data: BillingProposal }>
   performance: (id: number, amount: number) => Promise<{ data: BillingProposal }>
-  tec:         (id: number) => Promise<{ data: TecEntry[]; hasBt2: boolean }>
+  tec:         (id: number) => Promise<TecResponse>
   assignTec:   (id: number, body: { ids_assign: number[]; ids_unassign: number[] }) => Promise<{ data: BillingProposal }>
   book:        (id: number) => Promise<unknown>
   bookForce:   (id: number) => Promise<unknown>
