@@ -309,7 +309,14 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   (`services/bookingSelection.js`, in `GET …/tec` als `last_invoice`): letzte
   gebuchte Abschlags-/Einzel-/(Teil-)Schlussrechnung des Vertrags, Ende des
   Leistungszeitraums, sonst Belegdatum — Stornos und Korrekturen zählen nicht.
-  Die Schlussrechnung hat keine Buchungsauswahl.
+  In der **Schlussrechnung** stehen die offenen Buchungen der gewählten
+  Positionen nach Aufwand unter den Positionen; `POST /final-invoices/:id/phases`
+  nimmt `booking_ids` mit, ordnet sie zu (`INVOICE_ID`) und zieht abgewählte
+  samt Nebenkosten von der Position ab (`phaseRemaining`, im Assistenten
+  `thisInvoiceOf`). Per Abschlag abgerechnete Buchungen bleiben in der Position
+  (Restrechnung, Schritt 4 zieht ab). Ohne `booking_ids` gelten alle offenen
+  als gewählt. Vorher ordnete die Schlussrechnung keine Buchung zu — sie
+  blieben offen und standen in der nächsten Einzelrechnung erneut zur Wahl.
 - **Projekt- und Angebotsstruktur** teilen Bedienung und Rechnung: Summen
   (Honorar-Basis, Zuschlaege, NK je Vater) rechnet **nur**
   `pages/projekte/struktur/strukturCalc.ts` (`aggregateTree`,

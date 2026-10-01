@@ -13,9 +13,11 @@ import { FormField }    from '@/components/ui/FormField'
 import { HelpHint }     from '@/components/ui/HelpHint'
 import { ValidationModal } from '@/components/ui/ValidationModal'
 import { AnlagenSection } from '@/components/rechnungen/AnlagenSection'
+import { BuchungsauswahlTable } from '@/components/rechnungen/BuchungsauswahlTable'
+import { billable, initialSelection, loadPrefs } from '@/components/rechnungen/buchungsauswahl'
 import {
   searchContracts,
-  initInvoice, patchInvoice, getInvoice,
+  initInvoice, patchInvoice, getInvoice, getInvoiceTec,
   getFinalInvoicePhases, saveFinalInvoicePhases,
   getFinalInvoiceDeductions, saveFinalInvoiceDeductions,
   bookFinalInvoice, bookFinalInvoiceForce, deleteInvoice,
@@ -23,7 +25,7 @@ import {
   fetchOpenSeForProject,
   VAT_CATEGORY_LABELS,
   type FinalPhase, type FinalDeduction, type FinalTotals,
-  type OpenSeEntry, type VatCategory, type ValidationResult,
+  type LastInvoice, type OpenSeEntry, type TecEntry, type VatCategory, type ValidationResult,
 } from '@/api/rechnungen'
 import { ApiRequestError } from '@/api/client'
 import { fetchActiveEmployees, searchProjectsApi } from '@/api/projekte'
@@ -136,6 +138,13 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   const [phases,       setPhases]       = useState<FinalPhase[]>([])
   const [phaseChecked, setPhaseChecked] = useState<Set<number>>(new Set())
   const [phaseTotals,  setPhaseTotals]  = useState<FinalTotals | null>(null)
+  // Offene Buchungen der Elemente nach Aufwand (GET /invoices/:id/tec) und ihre
+  // Auswahl — wie in Abschlag und Einzelrechnung. `tecLoaded` = Liste ist da;
+  // ohne sie geht keine Auswahl an den Server, sonst galten alle als abgewählt.
+  const [tecList,      setTecList]      = useState<TecEntry[]>([])
+  const [tecLoaded,    setTecLoaded]    = useState(false)
+  const [selected,     setSelected]     = useState<Set<number>>(new Set())
+  const [lastInvoice,  setLastInvoice]  = useState<LastInvoice | null>(null)
 
   // Step 3: deductions
   const [deductions,    setDeductions]    = useState<FinalDeduction[]>([])
@@ -365,9 +374,20 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     onSuccess: async () => {
       if (!draftId) return
       setMsg(null)
-      const res = await getFinalInvoicePhases(draftId)
+      const [res, tec] = await Promise.all([
+        getFinalInvoicePhases(draftId),
+        getInvoiceTec(draftId).catch(() => null),
+      ])
       setPhases(res.data)
       setPhaseChecked(prev => prev.size > 0 ? prev : new Set(res.data.filter(p => p.SELECTED && !p.CLOSED).map(p => p.ID)))
+      if (tec) {
+        setTecList(tec.data)
+        setLastInvoice(tec.last_invoice ?? null)
+        // Ein fortgesetzter Entwurf behält seine Zuordnung, sonst ist alles
+        // Abrechenbare gewählt — so rechnete die Schlussrechnung bisher.
+        if (!tecLoaded) setSelected(initialSelection(tec.data, loadPrefs().includeZero))
+        setTecLoaded(true)
+      }
       setTouched(false)
       setStep(2)
     },
@@ -375,8 +395,8 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   })
 
   const phasesMut = useMutation({
-    mutationFn: ({ id, ids }: { id: number; ids: number[] }) =>
-      saveFinalInvoicePhases(id, ids),
+    mutationFn: ({ id, ids, bookingIds }: { id: number; ids: number[]; bookingIds?: number[] }) =>
+      saveFinalInvoicePhases(id, ids, bookingIds),
     onSuccess: (res) => {
       setPhaseTotals({
         phaseTotal:      res.phaseTotal,
@@ -506,6 +526,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     setDraftId(null)
     savedSeReleaseRef.current = null
     setPhases([]); setPhaseChecked(new Set()); setPhaseTotals(null)
+    setTecList([]); setTecLoaded(false); setSelected(new Set()); setLastInvoice(null)
     setDeductions([]); setDeductAmounts({}); setDedSelected(new Set()); setDedTotals(null); setDedWarn(null)
   }
 
@@ -538,11 +559,20 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     setDedWarn(null)
   }
 
+  // Gewählte Buchungen nur der gewählten Positionen; ohne geladene Liste keine
+  // Angabe — dann rechnet der Server wie bisher mit allen offenen.
+  function phasesPayload(id: number) {
+    return {
+      id, ids: Array.from(phaseChecked),
+      bookingIds: tecLoaded ? phaseTec.filter(t => selected.has(t.ID)).map(t => t.ID) : undefined,
+    }
+  }
+
   async function submitPhases() {
     if (!draftId) return
     setMsg(null)
     try {
-      await phasesMut.mutateAsync({ id: draftId, ids: Array.from(phaseChecked) })
+      await phasesMut.mutateAsync(phasesPayload(draftId))
       await loadDeductions(draftId)
       setTouched(false)
       setStep(3)
@@ -563,7 +593,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   async function persistStep() {
     if (!draftId) return
     if (step === 1) await patchInvoice(draftId, step1Body())
-    if (step === 2) await phasesMut.mutateAsync({ id: draftId, ids: Array.from(phaseChecked) })
+    if (step === 2) await phasesMut.mutateAsync(phasesPayload(draftId))
     if (step === 3) await dedMut.mutateAsync({ id: draftId, items: deductionItems() })
     if (step === 4) await patchInvoice(draftId, step4Body())
     setTouched(false)
@@ -639,12 +669,53 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   const allPhasesChecked =
     selectablePhases.length > 0 && selectablePhases.every(p => phaseChecked.has(p.ID))
 
+  // Eine Position dazunehmen wählt ihre abrechenbaren Buchungen mit
+  // (0-Beträge nach der Vorliebe) — sonst stünde sie mit 0 € in der Rechnung.
+  function selectBookingsOf(ids: number[]) {
+    const add = new Set(ids)
+    const rows = billable(tecList.filter(t => t.STRUCTURE_ID != null && add.has(t.STRUCTURE_ID)), loadPrefs().includeZero)
+    if (rows.length > 0) setSelected(prev => new Set([...prev, ...rows.map(t => t.ID)]))
+  }
+
+  function togglePhase(id: number) {
+    const adding = !phaseChecked.has(id)
+    setPhaseChecked(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+    if (adding) selectBookingsOf([id])
+  }
+
   function toggleAllPhases() {
     if (allPhasesChecked) {
       setPhaseChecked(new Set())
     } else {
+      selectBookingsOf(selectablePhases.filter(p => !phaseChecked.has(p.ID)).map(p => p.ID))
       setPhaseChecked(new Set(selectablePhases.map(p => p.ID)))
     }
+  }
+
+  // Buchungen der gewählten Positionen — nur die stehen zur Auswahl.
+  const phaseTec = useMemo(
+    () => tecList.filter(t => t.STRUCTURE_ID != null && phaseChecked.has(t.STRUCTURE_ID)),
+    [tecList, phaseChecked])
+
+  // Abgewählte offene Buchungen je Position (Betrag ohne Nebenkosten)
+  const deselectedByPhase = useMemo(() => {
+    const m = new Map<number, number>()
+    for (const t of phaseTec) {
+      if (selected.has(t.ID) || t.STRUCTURE_ID == null) continue
+      m.set(t.STRUCTURE_ID, (m.get(t.STRUCTURE_ID) ?? 0) + (t.HOURLY_RATE_TOTAL ?? 0))
+    }
+    return m
+  }, [phaseTec, selected])
+
+  // Die Buchungsauswahl ändert über Knöpfe („Nur sichtbare", „Abwählen") —
+  // die lösen kein change-Ereignis für `onChangeCapture` aus.
+  const changeSelection: React.Dispatch<React.SetStateAction<Set<number>>> = v => {
+    setSelected(v)
+    if (draftIdRef.current) setTouched(true)
   }
 
   const allDedChecked =
@@ -676,8 +747,13 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   }).length
 
   // Dieser Rechnung = Leistungswert minus das, was Schlussrechnungen schon
-  // abgerechnet haben; Abschlaege zieht erst der naechste Schritt ab.
-  const thisInvoiceOf = (p: FinalPhase) => Math.max(0, (p.TOTAL_EARNED ?? 0) - (p.BILLED_FINAL ?? 0))
+  // abgerechnet haben; Abschlaege zieht erst der naechste Schritt ab. Bei
+  // Positionen nach Aufwand gehen abgewählte offene Buchungen samt Nebenkosten
+  // ab — dieselbe Rechnung wie `phaseRemaining` in services/finalInvoices.js.
+  const thisInvoiceOf = (p: FinalPhase) => {
+    const minus = r2((deselectedByPhase.get(p.ID) ?? 0) * (1 + (p.EXTRAS_PERCENT ?? 0) / 100))
+    return Math.max(0, r2((p.TOTAL_EARNED ?? 0) - (p.BILLED_FINAL ?? 0) - minus))
+  }
 
   const busy = initMut.isPending || patchMut.isPending || phasesMut.isPending || dedMut.isPending || bookMut.isPending || savingDraft
   const einvoiceFilled = [buyerRef, orderRef, accountingRef, remittance].filter(v => v.trim()).length + (vatCategory !== 'S' ? 1 : 0)
@@ -941,13 +1017,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
                           type="checkbox"
                           checked={checked}
                           aria-label={`${p.ABBR}${p.NAME ? ` ${p.NAME}` : ''} abrechnen`}
-                          onChange={() => {
-                            setPhaseChecked(prev => {
-                              const next = new Set(prev)
-                              if (next.has(p.ID)) next.delete(p.ID); else next.add(p.ID)
-                              return next
-                            })
-                          }}
+                          onChange={() => togglePhase(p.ID)}
                         />
                       </td>
                       <td>
@@ -971,6 +1041,13 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
             <p className="iw-note sw-after-table">
               {hiddenCount} vollständig abgerechnete oder geschlossene {hiddenCount === 1 ? 'Position wird' : 'Positionen werden'} nicht angezeigt.
             </p>
+          )}
+          {/* Offene Buchungen der gewählten Positionen nach Aufwand. Per Abschlag
+              schon abgerechnete stehen nicht darin — sie bleiben in der Position,
+              und Schritt 4 zieht den Abschlag ab. */}
+          {phaseTec.length > 0 && (
+            <BuchungsauswahlTable tecList={phaseTec} selected={selected} setSelected={changeSelection}
+              lastInvoice={lastInvoice} periodStart={bpStart} periodEnd={bpFinish} />
           )}
           <Message text={msg?.text ?? null} type={msg?.type} />
         </div>

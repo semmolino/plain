@@ -292,6 +292,9 @@ async function getPhases(supabase, { id, tenantId }) {
       ABBR: ps.ABBR ?? "",
       NAME: ps.NAME ?? "",
       BILLING_TYPE_ID: ps.BILLING_TYPE_ID,
+      // Fuer die Live-Rechnung im Assistenten: abgewaehlte Buchungen nehmen
+      // ihren Nebenkosten-Zuschlag mit (phaseRemaining).
+      EXTRAS_PERCENT: toNum(ps.EXTRAS_PERCENT),
       REVENUE_COMPLETION: revenue,
       EXTRAS_AMOUNT: extrasAmount,
       TOTAL_EARNED: totalEarned,
@@ -306,7 +309,73 @@ async function getPhases(supabase, { id, tenantId }) {
   });
 }
 
-async function savePhases(supabase, { id, tenantId, structureIds }) {
+// ---------------------------------------------------------------------------
+// Buchungen nach Aufwand in der Schlussrechnung — dieselbe Auswahl wie in
+// Abschlag und Einzelrechnung; die Liste liefert GET /invoices/:id/tec.
+//
+// Die Position eines Elements nach Aufwand bleibt, was sie war: Leistungsstand
+// (= Summe seiner Buchungen) minus fruehere Schlussrechnungen. Abschlaege zieht
+// erst der naechste Schritt ab (Restrechnung) — schon per Abschlag abgerechnete
+// Buchungen stehen deshalb weiter in der Position und nicht in der Auswahl.
+// Ab geht nur, was an OFFENEN Buchungen abgewaehlt ist (samt Nebenkosten-
+// Zuschlag); es bleibt offen fuer eine spaetere Rechnung.
+//
+// Vorher setzte die Schlussrechnung an keiner Buchung die INVOICE_ID: sie
+// rechnete die Buchungen ab, sie blieben aber offen und standen in der
+// naechsten Einzelrechnung noch einmal zur Auswahl.
+// ---------------------------------------------------------------------------
+const isNullish = (v) => v === null || v === undefined || String(v) === "0";
+
+/** Offene Buchungen der Elemente: in keinem Abschlag, in keiner oder dieser Rechnung. */
+async function openBookingsFor(supabase, { invoiceId, tenantId, structureIds }) {
+  if (structureIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("BOOKING")
+    .select("ID, STRUCTURE_ID, HOURLY_RATE_TOTAL, INVOICE_ID, ADVANCE_INVOICE_ID")
+    .eq("TENANT_ID", tenantId)
+    .in("STRUCTURE_ID", structureIds)
+    .neq("STATUS", "DRAFT");
+  if (error) throw new Error(error.message);
+  return (data || []).filter((b) =>
+    isNullish(b.ADVANCE_INVOICE_ID) && (isNullish(b.INVOICE_ID) || String(b.INVOICE_ID) === String(invoiceId)));
+}
+
+/** INVOICE_ID der Buchungen auf genau `chosenIds` bringen. */
+async function syncBookings(supabase, { invoiceId, tenantId, chosen }) {
+  const { data: mine, error } = await supabase
+    .from("BOOKING").select("ID").eq("INVOICE_ID", invoiceId).eq("TENANT_ID", tenantId);
+  if (error) throw new Error(error.message);
+  const keep = new Set(chosen.map((b) => String(b.ID)));
+  const release = (mine || []).map((b) => b.ID).filter((x) => !keep.has(String(x)));
+  if (release.length > 0) {
+    const { error: e } = await supabase.from("BOOKING").update({ INVOICE_ID: null })
+      .in("ID", release).eq("INVOICE_ID", invoiceId);
+    if (e) throw new Error(e.message);
+  }
+  const add = chosen.filter((b) => isNullish(b.INVOICE_ID)).map((b) => b.ID);
+  if (add.length > 0) {
+    const { error: e } = await supabase.from("BOOKING").update({ INVOICE_ID: parseInt(String(invoiceId), 10) })
+      .in("ID", add).eq("TENANT_ID", tenantId);
+    if (e) throw new Error(e.message);
+  }
+}
+
+/**
+ * Was eine Position in dieser Rechnung abrechnet. `deselected` = Summe der
+ * abgewaehlten offenen Buchungen (nur Elemente nach Aufwand), ihr Nebenkosten-
+ * Zuschlag geht mit ab. Gleiche Rechnung im Assistenten: `thisInvoiceOf`
+ * in SchlussrechnungWizard.tsx.
+ */
+function phaseRemaining({ totalEarned, billedFinal, deselected = 0, extrasPercent = 0 }) {
+  const minus = round2(toNum(deselected) * (1 + toNum(extrasPercent) / 100));
+  return Math.max(0, round2(totalEarned - billedFinal - minus));
+}
+
+/**
+ * @param bookingIds gewaehlte offene Buchungen; `null` = alle offenen der
+ *   gewaehlten Elemente (so rechnete die Schlussrechnung bisher).
+ */
+async function savePhases(supabase, { id, tenantId, structureIds, bookingIds = null }) {
   const { data: inv, error: invErr } = await supabase
     .from("INVOICE")
     .select("ID, STATUS_ID, TENANT_ID, CONTRACT_ID")
@@ -319,12 +388,29 @@ async function savePhases(supabase, { id, tenantId, structureIds }) {
   const { error: delErr } = await supabase.from("INVOICE_STRUCTURE").delete().eq("INVOICE_ID", id);
   if (delErr) throw new Error(delErr.message);
 
+  let chosen = [];
   if (structureIds.length > 0) {
     const { data: psRows, error: psErr } = await supabase
       .from("PROJECT_STRUCTURE")
-      .select("ID, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED")
+      .select("ID, BILLING_TYPE_ID, IS_INTERNAL, REVENUE_COMPLETION, EXTRAS_PERCENT, ADVANCE_INVOICED, INVOICED")
       .in("ID", structureIds);
     if (psErr) throw new Error(psErr.message);
+
+    // Dieselben Elemente wie die Auswahlliste (loadProjectStructuresForContext):
+    // nach Aufwand und nicht intern.
+    const bt2Ids = (psRows || [])
+      .filter((ps) => Number(ps.BILLING_TYPE_ID) === 2 && ps.IS_INTERNAL !== true)
+      .map((ps) => ps.ID);
+    const open = await openBookingsFor(supabase, { invoiceId: id, tenantId, structureIds: bt2Ids });
+    const wanted = bookingIds == null ? null : new Set(bookingIds.map(String));
+    chosen = open.filter((b) => !wanted || wanted.has(String(b.ID)));
+    const deselectedBy = new Map();
+    for (const b of open) {
+      if (wanted && !wanted.has(String(b.ID))) {
+        const sid = String(b.STRUCTURE_ID);
+        deselectedBy.set(sid, round2((deselectedBy.get(sid) || 0) + toNum(b.HOURLY_RATE_TOTAL)));
+      }
+    }
 
     // A2: dieselbe Quelle wie getPhases. Vorher stand hier ausschliesslich die
     // gecachte Spalte ps.INVOICED — wich sie vom neu gerechneten Wert ab, zeigte
@@ -343,7 +429,11 @@ async function savePhases(supabase, { id, tenantId, structureIds }) {
       const billedFinal = recomputed.ok
         ? round2(recomputed.invoiced.get(String(ps.ID)) || 0)
         : round2(toNum(ps.INVOICED));
-      const remaining = Math.max(0, round2(totalEarned - billedFinal));
+      const remaining = phaseRemaining({
+        totalEarned, billedFinal,
+        deselected: deselectedBy.get(String(ps.ID)) || 0,
+        extrasPercent: ps.EXTRAS_PERCENT,
+      });
       const remainingRevenue = totalEarned > 0 ? round2(remaining * revenue / totalEarned) : remaining;
       const remainingExtras = round2(remaining - remainingRevenue);
       return {
@@ -360,6 +450,9 @@ async function savePhases(supabase, { id, tenantId, structureIds }) {
       if (insErr) throw new Error(insErr.message);
     }
   }
+
+  // Auch ohne Positionen: was diesem Entwurf zugeordnet war, wird wieder frei.
+  await syncBookings(supabase, { invoiceId: id, tenantId, chosen });
 
   return recomputeTotal(supabase, id);
 }
@@ -845,6 +938,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
 module.exports = {
   getPhases,
   savePhases,
+  phaseRemaining,
   getDeductions,
   saveDeductions,
   refreshDeductions,

@@ -21,11 +21,16 @@ async function savePhases(req, res, supabase) {
   const structureIds = Array.isArray(b.structure_ids)
     ? b.structure_ids.map(Number).filter((n) => Number.isFinite(n))
     : [];
+  // Fehlt booking_ids, gelten alle offenen Buchungen als gewaehlt (aelterer Aufrufer).
+  const bookingIds = Array.isArray(b.booking_ids)
+    ? b.booking_ids.map(Number).filter((n) => Number.isFinite(n))
+    : null;
   try {
     const totals = await svc.savePhases(supabase, {
       id: req.params.id,
       tenantId: req.tenantId,
       structureIds,
+      bookingIds,
     });
     res.json({ ok: true, ...totals });
   } catch (err) {

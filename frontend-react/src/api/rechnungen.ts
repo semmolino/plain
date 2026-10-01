@@ -181,6 +181,8 @@ export interface FinalPhase {
   ABBR:           string
   NAME:            string | null
   BILLING_TYPE_ID:      number | null
+  /** Nebenkosten-Zuschlag in % — abgewählte Buchungen nehmen ihn mit */
+  EXTRAS_PERCENT?:      number | null
   REVENUE_COMPLETION:   number | null
   EXTRAS_AMOUNT:        number | null
   TOTAL_EARNED:         number | null
@@ -552,8 +554,10 @@ export function downloadPpPdfHybrid(
 export const getFinalInvoicePhases = (id: number) =>
   apiClient.get<{ data: FinalPhase[] }>(`/final-invoices/${id}/phases`)
 
-export const saveFinalInvoicePhases = (id: number, structure_ids: number[]) =>
-  apiClient.post<{ ok: boolean } & FinalTotals>(`/final-invoices/${id}/phases`, { structure_ids })
+/** `booking_ids` = gewählte offene Buchungen nach Aufwand; ohne sie gelten alle als gewählt. */
+export const saveFinalInvoicePhases = (id: number, structure_ids: number[], booking_ids?: number[]) =>
+  apiClient.post<{ ok: boolean } & FinalTotals>(`/final-invoices/${id}/phases`,
+    booking_ids ? { structure_ids, booking_ids } : { structure_ids })
 
 export const getFinalInvoiceDeductions = (id: number) =>
   apiClient.get<{ data: FinalDeduction[] }>(`/final-invoices/${id}/deductions`)

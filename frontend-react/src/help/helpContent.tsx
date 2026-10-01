@@ -2215,6 +2215,11 @@ export const HELP = {
         (Teil-)Schlussrechnungen schon abgerechnet haben. Abschlagsrechnungen zieht erst der nächste
         Schritt ab. Nach dem Buchen gelten die gewählten Positionen als <strong>abgeschlossen</strong> —
         eine Teilschlussrechnung wählt deshalb nur die fertigen Leistungsphasen.
+        <br /><br />
+        Bei Positionen <strong>nach Aufwand</strong> stehen darunter ihre offenen Buchungen zur Auswahl,
+        wie in Abschlag und Einzelrechnung. Eine abgewählte Buchung mindert die Position samt
+        Nebenkosten und bleibt offen. Buchungen, die schon ein Abschlag abgerechnet hat, stehen nicht in
+        der Liste: sie gehören zur Position, und der nächste Schritt zieht den Abschlag ab.
       </>
     ),
   },

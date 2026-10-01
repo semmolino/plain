@@ -120,6 +120,57 @@ test.describe('Buchungsauswahl', () => {
     await expect(summary(page)).toContainText('5 Buchungen')
   })
 
+  test('Schlussrechnung: Buchungen der Positionen nach Aufwand, Abwählen mindert die Position', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-09-24T10:30:00'))
+    await mockPilot(page)
+    const phase = (ID: number, ABBR: string, NAME: string, bt: number, earned: number, ext: number, sel: boolean, FATHER_ID: number | null = 101) => ({
+      ID, FATHER_ID, ABBR, NAME, BILLING_TYPE_ID: bt, EXTRAS_PERCENT: ext, REVENUE_COMPLETION: earned,
+      EXTRAS_AMOUNT: earned * ext / 100, TOTAL_EARNED: earned * (1 + ext / 100), BILLED_FINAL: 0, ALREADY_BILLED: 0,
+      AMOUNT_NET: null, AMOUNT_EXTRAS_NET: null, SELECTED: sel, CLOSED_BY_INVOICE_ID: null, CLOSED: false,
+    })
+    const PHASES = [
+      phase(101, 'Gebäude', 'Objektplanung', 1, 0, 0, false, null),
+      phase(102, 'LP1', 'Grundlagenermittlung', 1, 18_000, 0, true),
+      phase(110, 'BL', 'Besondere Leistungen', 2, 1_000, 10, true),
+      phase(111, 'NW', 'Nachweis Bauleitung', 2, 500, 0, false),
+    ]
+    const FINAL_TEC = [
+      { ...TEC[2], ID: 21, STRUCTURE_ID: 110, STRUCTURE_LABEL: 'BL – Besondere Leistungen', POSTING_DESCRIPTION: 'Brandschutzkonzept', HOURLY_RATE_TOTAL: 200 },
+      { ...TEC[2], ID: 22, STRUCTURE_ID: 110, STRUCTURE_LABEL: 'BL – Besondere Leistungen', POSTING_DESCRIPTION: 'Wärmeschutznachweis', HOURLY_RATE_TOTAL: 300 },
+      { ...TEC[2], ID: 23, STRUCTURE_ID: 111, STRUCTURE_LABEL: 'NW – Nachweis Bauleitung', POSTING_DESCRIPTION: 'Baustellentermin', HOURLY_RATE_TOTAL: 500 },
+    ]
+    const json = (body: unknown) => ({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+    await page.route(/\/api\/v1\/final-invoices\/701\/phases(\?|$)/, r => r.fulfill(json(r.request().method() === 'GET'
+      ? { data: PHASES }
+      : { ok: true, phaseTotal: 0, deductionsTotal: 0, totalNet: 0, vatPercent: 19, taxAmountNet: 0, totalGross: 0 })))
+    await page.route(/\/api\/v1\/invoices\/701\/tec(\?|$)/, r => r.fulfill(json({ data: FINAL_TEC, hasBt2: true, last_invoice: null })))
+
+    await page.goto('/rechnungen?tab=schluss&draftId=701')
+    await bar(page).getByRole('button', { name: 'Weiter', exact: true }).click()
+    const bl = page.getByRole('row', { name: /Besondere Leistungen abrechnen/ })
+    await expect(bl).toContainText('1.100,00')
+    // Nur die Buchungen der gewählten Positionen stehen zur Auswahl.
+    await expect(summary(page)).toContainText('2 Buchungen')
+    await expect(page.getByLabel(/Baustellentermin/)).toHaveCount(0)
+
+    // Abwählen mindert die Position samt 10 % Nebenkosten.
+    await page.getByLabel(/Brandschutzkonzept auswählen/).uncheck()
+    await expect(bl).toContainText('880,00')
+
+    // Eine Position dazunehmen wählt ihre Buchungen mit.
+    await page.getByRole('checkbox', { name: /NW Nachweis Bauleitung abrechnen/ }).check()
+    await expect(summary(page)).toContainText('3 Buchungen')
+    await expect(summary(page)).toContainText('2 ausgewählt')
+
+    const posts: Request[] = []
+    page.on('request', r => { if (r.method() === 'POST' && /final-invoices\/701\/phases/.test(r.url())) posts.push(r) })
+    await bar(page).getByRole('button', { name: 'Weiter', exact: true }).click()
+    await expect.poll(() => posts.length).toBe(1)
+    const body = posts[0].postDataJSON() as { structure_ids: number[]; booking_ids: number[] }
+    expect(body.structure_ids.sort()).toEqual([102, 110, 111])
+    expect(body.booking_ids.sort()).toEqual([22, 23])
+  })
+
   test('Handy: kein Querscrollen mit allen Filtern', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile')
     await setup(page)
