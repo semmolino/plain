@@ -210,4 +210,15 @@ function enrichSmtpError(err) {
   }
 }
 
-module.exports = { sendMail };
+/**
+ * Klartext-Mail als HTML-Fassung: Zeilenumbrueche bleiben, Markup nicht.
+ * Der Text enthaelt aufgeloeste Platzhalter (Kundennamen, Projekttitel) —
+ * ungeescapt wurde ein „<" darin zu HTML im Postfach des Empfaengers.
+ */
+function plainTextHtml(text) {
+  if (!text) return undefined;
+  const esc = String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return `<pre style="font-family:inherit;white-space:pre-wrap">${esc}</pre>`;
+}
+
+module.exports = { sendMail, plainTextHtml };

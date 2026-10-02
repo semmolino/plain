@@ -56,6 +56,9 @@ export interface MahnungStats {
 }
 
 export interface MahnungHistoryEntry {
+  id?:          number | null
+  /** Archivierte Kopie vorhanden (Migration 0183) — Altbestand hat keine. */
+  hasPdf?:      boolean
   mahnstufe:    number
   dateAction:   string
   emailSent:    boolean
@@ -139,6 +142,10 @@ export const fetchMahnungEmailPreview = (mahnungId: number) =>
 
 export const openMahnungPdf = (mahnungId: number) =>
   openPdfWithAuth(`/mahnungen/${mahnungId}/pdf`)
+
+/** Die Mahnung, wie sie verschickt bzw. ausgefertigt wurde — nicht neu erzeugt. */
+export const openMahnungHistoryPdf = (historyId: number) =>
+  openPdfWithAuth(`/mahnungen/history/${historyId}/pdf`)
 
 export const fetchMahnungHistory = (mahnungId: number) =>
   apiClient.get<{ data: MahnungHistoryEntry[] }>(`/mahnungen/${mahnungId}/history`)

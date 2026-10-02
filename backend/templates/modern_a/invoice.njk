@@ -401,6 +401,10 @@ Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
   {# Optional intro text #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
 
+  {# Kommentar aus dem Assistenten („erscheint auf der Rechnung") — steht
+     zugleich als Hinweis (BT-22) in der E-Rechnung. Bis 10/2026 nur dort. #}
+  {% if inv.comment %}<div class="text-block">{{ inv.comment }}</div>{% endif %}
+
   {# ── Calculation table ── #}
   <table class="calc-table">
 

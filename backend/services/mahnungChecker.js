@@ -2,6 +2,7 @@
 
 const { createNotification } = require("./notifications");
 const { openAmountsFor, withClaimCols } = require("./openAmount");
+const { localDateStr } = require("./notificationSchedule");
 
 const STUFE_LABELS = ['–', 'Zahlungserinnerung', '1. Mahnung', '2. Mahnung', '3. Mahnung'];
 
@@ -25,7 +26,7 @@ async function settledDocs(supabase, mahnungen) {
 }
 
 async function checkMahnungen(supabase) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   // Find open Mahnungen where NEXT_MAHNUNG_DATE is today or past
   const { data: mahnungen, error } = await supabase

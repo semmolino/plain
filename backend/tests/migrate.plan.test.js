@@ -161,6 +161,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0180 vermerkt, welche stornierte Rechnung ein neu ausgestellter Beleg ersetzt.
     // 0181 fuehrt Gesamtprojekte ein (PROJECT_GROUP, PROJECT.PROJECT_GROUP_ID).
     // 0182 merkt sich, in welches Projekt eine Nachtrags-Freigabe ging.
+    // 0183 haelt versandte Mahnungen als PDF fest (MAHNUNG_HISTORY.PDF_ASSET_ID).
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -210,6 +211,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0180_rechnung_neu_ausstellen.sql",
       "0181_gesamtprojekt.sql",
       "0182_nachtrag_eigenes_projekt.sql",
+      "0183_mahnung_archiv.sql",
     ]);
   });
 

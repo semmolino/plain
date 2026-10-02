@@ -502,6 +502,9 @@ export function DokumentvorlagenSection() {
               ref={previewIframeRef}
               title="Belegvorschau"
               srcDoc={previewHtml}
+              // Ohne Skripte: die Vorschau traegt Texte des Mandanten. `allow-same-origin`
+              // allein ist harmlos und noetig, damit wir die Hoehe messen koennen.
+              sandbox="allow-same-origin"
               scrolling="no"
               onLoad={handlePreviewLoad}
               style={{

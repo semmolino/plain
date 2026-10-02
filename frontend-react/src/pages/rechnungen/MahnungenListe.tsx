@@ -15,7 +15,7 @@ import { RecentList }     from '@/components/recents/RecentList'
 import { trackRecent }    from '@/api/recents'
 import { BatchEmailModal, type BatchEmailItem } from '@/components/ui/BatchEmailModal'
 import {
-  fetchMahnungen, upsertMahnung, sendMahnungEmail, openMahnungPdf,
+  fetchMahnungen, upsertMahnung, sendMahnungEmail, openMahnungPdf, openMahnungHistoryPdf,
   fetchMahnungSettings, fetchMahnungEmailPreview,
   type MahnungRow, type MahnungSettingsLevel,
 } from '@/api/mahnungen'
@@ -1018,12 +1018,22 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
                 : (
                   <ul className="mahnung-history-list">
                     {detailRow.history.map((h, i) => (
-                      <li key={i}>
+                      <li key={h.id ?? i}>
                         <span className={`mahnstufe-badge ms-${h.mahnstufe}`}>{STUFEN_LABELS[h.mahnstufe] ?? `Stufe ${h.mahnstufe}`}</span>
                         <div style={{ flex: 1 }}>
-                          <div>{new Date(h.dateAction).toLocaleDateString('de-DE')}{h.emailSent ? ' · ✉ ' + (h.emailTo ?? '') : ''}</div>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                            {new Date(h.dateAction).toLocaleDateString('de-DE')}
+                            {h.emailSent && <><span aria-hidden="true">·</span><Mail size={13} strokeWidth={1.75} aria-label="per E-Mail an" /> {h.emailTo ?? ''}</>}
+                          </div>
                           {h.feeAmount > 0 && <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Gebühr: {fmtEur(h.feeAmount)}</div>}
                         </div>
+                        {/* Archivierte Kopie — so, wie die Mahnung rausging (§ 257 HGB). */}
+                        {h.hasPdf && h.id != null && (
+                          <button type="button" className="row-action-btn" onClick={() => openMahnungHistoryPdf(h.id!)}
+                            title="Archivierte Mahnung öffnen" aria-label="Archivierte Mahnung öffnen">
+                            <FileText size={14} strokeWidth={1.75} />
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>

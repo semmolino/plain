@@ -2,6 +2,8 @@ const express = require("express");
 const svc     = require("../services/mahnungenService");
 const { renderMahnungPdf } = require("../services_pdf_render");
 const { requirePermission } = require("../middleware/permissions");
+const { localDateStr } = require("../services/notificationSchedule");
+const { streamPdfAsset } = require("../services/generatedAssets");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -95,6 +97,20 @@ module.exports = (supabase) => {
 
   // ── Dynamic routes ─────────────────────────────────────────────────────────
 
+  // GET /mahnungen/history/:historyId/pdf — die Mahnung, wie sie verschickt
+  // bzw. bei Setzen der Stufe ausgefertigt wurde (Archiv, Migration 0183).
+  // Steht vor den /:id-Routen; der Pfad ist ohnehin eindeutig.
+  router.get("/history/:historyId/pdf", async (req, res) => {
+    try {
+      const tenantId = tid(req);
+      const { assetId, row } = await svc.getHistoryPdfAsset(supabase, { historyId: Number(req.params.historyId), tenantId });
+      const day = String(row.DATE_ACTION || "").slice(0, 10);
+      await streamPdfAsset({ supabase, res, assetId, tenantId, dispositionName: `Mahnung_Stufe_${row.MAHNSTUFE}_${day}.pdf`, download: req.query.download === "1" });
+    } catch (e) {
+      res.status(e?.status || 500).json({ error: e?.message || String(e) });
+    }
+  });
+
   // GET /mahnungen/:id/history
   router.get("/:id/history", async (req, res) => {
     try {
@@ -159,7 +175,7 @@ module.exports = (supabase) => {
       });
 
       // Build filename: {Rechnungsnummer}_{YYYY-MM-DD}_{StufeLabel}
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localDateStr();
       let docNumber = `Mahnung_${req.params.id}`;
       if (mahnung.INVOICE_ID) {
         const { data: inv } = await supabase.from("INVOICE").select("INVOICE_NUMBER").eq("ID", mahnung.INVOICE_ID).maybeSingle();

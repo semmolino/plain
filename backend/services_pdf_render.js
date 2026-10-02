@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const fs   = require('fs');
+const objectStorage = require('./services/objectStorage');
 const nunjucks = require('nunjucks');
 const { loadInvoiceData } = require('./services_einvoice_data');
 const angeboteSvc = require('./services/angebote');
@@ -10,6 +10,8 @@ const monatsabschlussSvc = require('./services/monatsabschluss');
 const { openAmountsFor, withClaimCols } = require('./services/openAmount');
 const { discountsOf } = require('./services/documentDiscounts');
 const { bauvorhabenForProject } = require('./services/gesamtprojekte');
+// Tagesdatum in der App-Zeitzone (Briefdatum) — toISOString() ist UTC.
+const { localDateStr } = require('./services/notificationSchedule');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -18,22 +20,11 @@ function isTableMissingErr(err, tableName) {
   return msg.includes('relation') && msg.includes(String(tableName).toLowerCase()) && msg.includes('does not exist');
 }
 
-function deepMerge(base, patch) {
-  if (!patch || typeof patch !== 'object') return base;
-  const out = Array.isArray(base) ? [...base] : { ...(base || {}) };
-  for (const k of Object.keys(patch)) {
-    const pv = patch[k], bv = out[k];
-    if (pv && typeof pv === 'object' && !Array.isArray(pv) && bv && typeof bv === 'object' && !Array.isArray(bv)) {
-      out[k] = deepMerge(bv, pv);
-    } else {
-      out[k] = pv;
-    }
-  }
-  return out;
-}
-
 // Kanonische Theme-Defaults (v2) — gemeinsam mit services/documentTemplates.js.
+// Gerendert wird nur, was sanitizeTheme durchlaesst (services_theme_schema.js):
+// gespeicherte Themes sind Eingaben eines Mandanten, keine vertrauten Daten.
 const { defaultTheme } = require('./services_theme_defaults');
+const { sanitizeTheme } = require('./services_theme_schema');
 const { resolveFont, fontFaceCss } = require('./services_theme_fonts');
 
 // CSS-Farbe absichern (verhindert CSS-Injection ueber gespeicherte Themes).
@@ -184,24 +175,41 @@ function buildSellerFooterCols(seller) {
   ];
 }
 
-async function renderPdf({ html, footerCols }) {
+/**
+ * Ein Beleg = ein eigener, abgeschotteter Browser-Kontext.
+ *
+ * Die Vorlagen enthalten Daten des Mandanten (Texte, Namen, Gestaltung). Bis
+ * 10/2026 lief der Renderer mit JavaScript und offenem Netz: ein `url(...)` im
+ * CSS oder ein `<img src="http://…">` liess den SERVER Anfragen absetzen — ins
+ * interne Netz des Containers (PostgREST auf 127.0.0.1:3001) oder nach aussen.
+ * Jetzt: JavaScript aus, und jede Anfrage wird abgebrochen. Was ein Beleg
+ * braucht, steckt als data:-URI im HTML (Logo, Schriften, GiroCode) — die
+ * laufen nicht ueber das Netz und sind davon nicht betroffen.
+ */
+const RENDER_TIMEOUT_MS = 30_000;
+
+async function renderPdf({ html, footerCols, headerTemplate }) {
   const browser = await getBrowser();
-  const page    = await browser.newPage();
-  await page.setContent(html, { waitUntil: 'load' });
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  try {
+    await context.route('**/*', (route) => route.abort('blockedbyclient'));
+    const page = await context.newPage();
+    page.setDefaultTimeout(RENDER_TIMEOUT_MS);
+    await page.setContent(html, { waitUntil: 'load', timeout: RENDER_TIMEOUT_MS });
 
-  const { template: footerTemplate, marginBottom } = buildFooterTemplate(footerCols);
+    const { template: footerTemplate, marginBottom } = buildFooterTemplate(footerCols);
 
-  const pdf = await page.pdf({
-    format: 'A4',
-    printBackground: true,
-    margin: { top: '14mm', right: '20mm', bottom: marginBottom, left: '25mm' },
-    displayHeaderFooter: true,
-    headerTemplate: `<div></div>`,
-    footerTemplate,
-  });
-
-  await page.close();
-  return pdf;
+    return await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '14mm', right: '20mm', bottom: marginBottom, left: '25mm' },
+      displayHeaderFooter: true,
+      headerTemplate: headerTemplate || `<div></div>`,
+      footerTemplate,
+    });
+  } finally {
+    await context.close().catch(() => {});
+  }
 }
 
 // ── Nunjucks ──────────────────────────────────────────────────────────────────
@@ -255,14 +263,33 @@ function env() {
 
 // ── Asset / template loading ──────────────────────────────────────────────────
 
+// Bilder, die als data:-URI in den Beleg duerfen — dieselben wie beim Upload.
+// SVG ist dabei: als <img> fuehrt Chromium darin weder Skripte aus noch laedt
+// es Externes, und der Renderer hat ohnehin kein Netz.
+const IMAGE_MIME = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml']);
+
+/** Nur ein eingebettetes Bild ist ein Logo — kein Verweis, keine Adresse. */
+function safeImageDataUri(v) {
+  return typeof v === 'string' && /^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/.test(v) ? v : null;
+}
+
+/**
+ * Logo/Unterschrift aus einem ASSET — ueber die Objektablage, nicht ueber das
+ * Dateisystem. Vorher las diese Funktion `uploads/` direkt: auf Scalingo ist
+ * das nach jedem Deploy leer, und das Logo fehlte, sobald kein gecachter
+ * data-URI in TENANT_SETTINGS lag.
+ */
 async function loadLogoDataUri({ supabase, logoAssetId }) {
   if (!logoAssetId) return null;
-  const { data } = await supabase.from('ASSET').select('*').eq('ID', logoAssetId).maybeSingle();
-  if (!data) return null;
-  const filePath = path.join(__dirname, 'uploads', data.STORAGE_KEY);
-  if (!fs.existsSync(filePath)) return null;
-  const b64 = fs.readFileSync(filePath).toString('base64');
-  return `data:${data.MIME_TYPE};base64,${b64}`;
+  const { data } = await supabase.from('ASSET').select('STORAGE_KEY, MIME_TYPE').eq('ID', logoAssetId).maybeSingle();
+  if (!data || !data.STORAGE_KEY || !IMAGE_MIME.has(String(data.MIME_TYPE || '').toLowerCase())) return null;
+  try {
+    const buf = await objectStorage.getBuffer(data.STORAGE_KEY);
+    return buf ? `data:${data.MIME_TYPE};base64,${Buffer.from(buf).toString('base64')}` : null;
+  } catch (e) {
+    console.warn('[LOGO_ASSET]', e?.message || e);
+    return null;
+  }
 }
 
 async function resolveLogoDataUri({ supabase, tplLogoAssetId, tenantId, companyId }) {
@@ -270,7 +297,7 @@ async function resolveLogoDataUri({ supabase, tplLogoAssetId, tenantId, companyI
   if (companyId && tenantId) {
     const { data: cached } = await supabase.from('TENANT_SETTINGS').select('VALUE')
       .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_logo_data_uri`).maybeSingle();
-    if (cached?.VALUE) return cached.VALUE;
+    if (safeImageDataUri(cached?.VALUE)) return cached.VALUE;
     const { data: assetRow } = await supabase.from('TENANT_SETTINGS').select('VALUE')
       .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_logo_asset_id`).maybeSingle();
     if (assetRow?.VALUE) return loadLogoDataUri({ supabase, logoAssetId: parseInt(assetRow.VALUE, 10) });
@@ -280,7 +307,7 @@ async function resolveLogoDataUri({ supabase, tplLogoAssetId, tenantId, companyI
   if (tenantId) {
     const { data: cached } = await supabase.from('TENANT_SETTINGS').select('VALUE')
       .eq('TENANT_ID', tenantId).eq('KEY', 'logo_data_uri').maybeSingle();
-    if (cached?.VALUE) return cached.VALUE;
+    if (safeImageDataUri(cached?.VALUE)) return cached.VALUE;
     const { data: assetRow } = await supabase.from('TENANT_SETTINGS').select('VALUE')
       .eq('TENANT_ID', tenantId).eq('KEY', 'logo_asset_id').maybeSingle();
     if (assetRow?.VALUE) return loadLogoDataUri({ supabase, logoAssetId: parseInt(assetRow.VALUE, 10) });
@@ -295,7 +322,7 @@ async function resolveSignatureDataUri({ supabase, tenantId, companyId }) {
   if (!companyId || !tenantId) return null;
   const { data: cached } = await supabase.from('TENANT_SETTINGS').select('VALUE')
     .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_sig_data_uri`).maybeSingle();
-  if (cached?.VALUE) return cached.VALUE;
+  if (safeImageDataUri(cached?.VALUE)) return cached.VALUE;
   const { data: assetRow } = await supabase.from('TENANT_SETTINGS').select('VALUE')
     .eq('TENANT_ID', tenantId).eq('KEY', `co_${companyId}_sig_asset_id`).maybeSingle();
   if (assetRow?.VALUE) return loadLogoDataUri({ supabase, logoAssetId: parseInt(assetRow.VALUE, 10) });
@@ -948,7 +975,7 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
   if (!companyId) throw new Error('Company for document not found');
 
   const tpl = await loadTemplate({ supabase, companyId, docType, templateId });
-  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const theme = sanitizeTheme(tpl.THEME_JSON);
   const [logoDataUri, signatureDataUri] = await Promise.all([
     resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
@@ -1056,7 +1083,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
-  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const theme = sanitizeTheme(tpl.THEME_JSON);
   const [logoDataUri, signatureDataUri] = await Promise.all([
     resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
@@ -1094,7 +1121,7 @@ async function renderNachtragPdf({ supabase, nachtragId, tenantId }) {
   const vm = await nachtraegeSvc.buildNachtragPdfViewModel(supabase, { nachtragId, tenantId });
   const companyId = vm.nachtrag.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
-  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const theme = sanitizeTheme(tpl.THEME_JSON);
   const [logoDataUri, signatureDataUri] = await Promise.all([
     resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
@@ -1119,7 +1146,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
-  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const theme = sanitizeTheme(tpl.THEME_JSON);
   const [logoDataUri, signatureDataUri] = await Promise.all([
     resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
@@ -1131,7 +1158,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
     themeHead: buildThemeHead(theme),
     logoDataUri,
     signatureDataUri,
-    today: new Date().toISOString().slice(0, 10),
+    today: localDateStr(),
   };
 
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
@@ -1239,7 +1266,7 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     companyId ? loadTemplate({ supabase, companyId, docType, templateId: null }) : Promise.resolve({ THEME_JSON: {}, LOGO_ASSET_ID: null, LAYOUT_KEY: 'modern_a' }),
     resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId }),
   ]);
-  const theme = deepMerge(defaultTheme(), tpl.THEME_JSON || {});
+  const theme = sanitizeTheme(tpl.THEME_JSON);
 
   // Load Mahnung settings for this level
   let mahnstufeLabel = ['', 'Zahlungserinnerung', '1. Mahnung', '2. Mahnung', '3. Mahnung'][mahnstufe] || 'Mahnung';
@@ -1265,7 +1292,7 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
   }
 
   // Invoice details for the table
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
   const dueDate    = vm.inv.dueDate || '';
   const daysOverdue = dueDate
     ? Math.max(0, Math.floor((new Date(today) - new Date(dueDate)) / 86400000))
@@ -1317,6 +1344,7 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     footerText,
     docDate: today,
     theme,
+    themeHead: buildThemeHead(theme),
     logoDataUri,
   };
 
@@ -1755,7 +1783,7 @@ function applyCategoryBlocks(theme, category) {
 }
 
 async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice_rechnung', asPdf = false }) {
-  const mergedTheme = deepMerge(defaultTheme(), theme && typeof theme === 'object' ? theme : {});
+  const mergedTheme = sanitizeTheme(theme);
   const cat = APPENDIX_BY_CATEGORY[category] ? category : 'invoice_rechnung';
   const blocks = mergedTheme.blocks || {};
   const order = Array.isArray(blocks.order) ? blocks.order : [];
@@ -1787,4 +1815,6 @@ module.exports = {
   renderWipPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc,
   // Fuer Vorlagen-Tests: dieselbe Nunjucks-Umgebung samt Filtern, ohne Browser.
   templateEnv: env,
+  // Fuer den Abschottungstest (tests/pdfRenderSandbox.test.js).
+  renderHtmlToPdf: renderPdf,
 };

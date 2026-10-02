@@ -4,7 +4,7 @@ const express = require("express");
 const ctrl    = require("../controllers/invoices");
 const att     = require("../controllers/attachments");
 const { renderDocumentPdf } = require("../services_pdf_render");
-const { sendMail }          = require("../services/emailService");
+const { sendMail, plainTextHtml }          = require("../services/emailService");
 const emailTemplates        = require("../services/emailTemplates");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 const { requireDraftEdit } = require("../middleware/draftEdit");
@@ -96,7 +96,7 @@ module.exports = (supabase) => {
         tenantId,
         to,
         subject:     composed.subject,
-        html:        composed.body ? `<pre style="font-family:inherit;white-space:pre-wrap">${composed.body}</pre>` : undefined,
+        html:        plainTextHtml(composed.body),
         text:        composed.body,
         attachments: [{ filename: `${safeName}.pdf`, content: pdfBuffer, contentType: "application/pdf" }],
         copyToTenant: true,

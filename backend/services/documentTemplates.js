@@ -13,6 +13,9 @@ function isTableMissingErr(err, tableName) {
 // beim Anlegen einer Vorlage gespeicherte Form exakt der entspricht, die der
 // Renderer erwartet (frueher liefen hier zwei abweichende defaultTheme()).
 const { defaultTheme } = require("../services_theme_defaults");
+// Gespeichert wird nur, was das Schema durchlaesst — auch Werte, die der
+// Renderer spaeter ins CSS schreibt (services_theme_schema.js).
+const { sanitizeTheme } = require("../services_theme_schema");
 
 async function resolveCompanyId(supabase, tenantId) {
   const { data, error } = await supabase
@@ -98,7 +101,7 @@ async function createDocumentTemplate(supabase, { tenantId, name, doc_type, layo
   const companyId = await resolveCompanyId(supabase, tenantId);
   if (!companyId) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
 
-  const theme = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
+  const theme = sanitizeTheme(theme_json);
   const logoId = logo_asset_id ? parseInt(String(logo_asset_id), 10) : null;
 
   const insertRow = {
@@ -160,7 +163,7 @@ async function patchDocumentTemplate(supabase, { id, body, tenantId }) {
 
   if (name !== undefined) patch.NAME = String(name || "").trim() || null;
   if (layout_key !== undefined) patch.LAYOUT_KEY = String(layout_key || "").trim() || null;
-  if (theme_json !== undefined) patch.THEME_JSON = theme_json && typeof theme_json === "object" ? theme_json : {};
+  if (theme_json !== undefined) patch.THEME_JSON = sanitizeTheme(theme_json);
   if (logo_asset_id !== undefined) {
     const v = logo_asset_id === null || logo_asset_id === "" ? null : parseInt(String(logo_asset_id), 10);
     patch.LOGO_ASSET_ID = Number.isFinite(v) ? v : null;
@@ -321,7 +324,7 @@ async function getBrandingTheme(supabase, { tenantId }) {
   }
 
   // Gemeinsames Branding (brand/header/footer) aus der INVOICE-Default.
-  const theme = themeByType.INVOICE || def;
+  const theme = sanitizeTheme(themeByType.INVOICE || def);
 
   // Anhänge je BELEG-KATEGORIE. Bevorzugt theme.blocksByCategory; sonst Migration
   // aus alten per-DOC_TYPE-blocks (INVOICE -> Rechnung+Schluss, PP -> Abschlag,
@@ -358,7 +361,7 @@ async function saveBrandingTheme(supabase, { tenantId, theme_json, blocks_by_cat
   }
   // brand/header global; blocksByCategory identisch in JEDER DOC_TYPE-Default-Vorlage,
   // damit der Renderer (lädt je DOC_TYPE) immer die richtige Kategorie findet.
-  const theme = { ...shared, blocksByCategory };
+  const theme = sanitizeTheme({ ...shared, blocksByCategory });
   const nowIso = new Date().toISOString();
 
   for (const companyId of companyIds) {

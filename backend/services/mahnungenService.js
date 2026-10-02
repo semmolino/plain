@@ -1,10 +1,12 @@
 /**
  * Mahnungswesen (Dunning) — business logic
  */
-const { sendMail }         = require("./emailService");
+const { sendMail, plainTextHtml } = require("./emailService");
 const { renderMahnungPdf } = require("../services_pdf_render");
 const emailTemplates       = require("./emailTemplates");
 const { openAmountsFor, withClaimCols, TOL } = require("./openAmount");
+// Tagesdatum in der App-Zeitzone — toISOString() ist UTC, zwischen 0 und 2 Uhr also gestern.
+const { localDateStr } = require("./notificationSchedule");
 
 const DEFAULT_SETTINGS = [
   { mahnstufe: 1, label: "Zahlungserinnerung", days_after_due: 7,  days_after_prev: 0,  fee: 0  },
@@ -16,7 +18,7 @@ const DEFAULT_SETTINGS = [
 // ── List ─────────────────────────────────────────────────────────────────────
 
 async function listMahnungen(supabase, { tenantId }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   const [
     { data: invoices  },
@@ -50,7 +52,9 @@ async function listMahnungen(supabase, { tenantId }) {
 
     supabase
       .from("MAHNUNG_HISTORY")
-      .select("MAHNUNG_ID, MAHNSTUFE, DATE_ACTION, EMAIL_SENT, FEE_AMOUNT, EMAIL_TO, EMAIL_SUBJECT, EMPLOYEE_ID")
+      // "*" statt Spaltenliste: PDF_ASSET_ID (0183) gibt es erst nach dem
+      // postdeploy-Hook — bis dahin darf die Mahnliste nicht brechen.
+      .select("*")
       .eq("TENANT_ID", tenantId)
       .order("DATE_ACTION", { ascending: false }),
   ]);
@@ -156,7 +160,7 @@ async function listMahnungen(supabase, { tenantId }) {
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
 async function getMahnungStats(supabase, { tenantId }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   // Fetch all overdue invoices + PPs (same criteria as listMahnungen)
   const [
@@ -334,6 +338,8 @@ function buildRow(sourceType, sourceId, src, m, historyByMahnung, today) {
     inKlaerung:             m ? m.IN_KLAERUNG : false,
     notes:                  m ? m.NOTES : null,
     history: hist.map(h => ({
+      id:            h.ID ?? null,
+      hasPdf:        !!h.PDF_ASSET_ID,
       mahnstufe:     h.MAHNSTUFE,
       dateAction:    h.DATE_ACTION,
       emailSent:     h.EMAIL_SENT,
@@ -401,23 +407,87 @@ async function upsertMahnung(supabase, { body, tenantId, employeeId }) {
     // Get fee from settings
     const { data: settings } = await supabase
       .from("MAHNUNG_SETTINGS")
-      .select("FEE")
+      .select("FEE, LABEL")
       .eq("TENANT_ID", tenantId)
       .eq("MAHNSTUFE", newStufe)
       .maybeSingle();
     const fee = settings ? Number(settings.FEE) : 0;
 
-    await supabase.from("MAHNUNG_HISTORY").insert({
+    const { data: hist } = await supabase.from("MAHNUNG_HISTORY").insert({
       TENANT_ID:   tenantId,
       MAHNUNG_ID:  mahnungId,
       MAHNSTUFE:   newStufe,
       EMPLOYEE_ID: employeeId || null,
       EMAIL_SENT:  false,
       FEE_AMOUNT:  fee,
-    });
+    }).select("ID").maybeSingle();
+
+    // Ausfertigung dieser Stufe archivieren — so gibt es auch fuer den
+    // gedruckten Brief eine Kopie. Ein Fehler hier darf das Setzen der Stufe
+    // nicht kippen; verbindlich archiviert wird beim Versand.
+    try {
+      const mahnung = { ID: mahnungId, MAHNSTUFE: newStufe, INVOICE_ID: invoice_id || null, PP_ID: pp_id || null };
+      const { asset } = await renderAndArchive(supabase, {
+        mahnung, tenantId, fileName: archiveFileName(mahnung, settings?.LABEL, localDateStr()),
+      });
+      await linkPdf(supabase, { historyId: hist?.ID, assetId: asset?.ID, tenantId });
+    } catch (e) {
+      console.warn("[MAHNUNG_ARCHIV] Stufe gesetzt, PDF nicht archiviert:", e?.message || e);
+    }
   }
 
   return { id: mahnungId };
+}
+
+// ── Archiv: die Mahnung, wie sie rausging ─────────────────────────────────────
+//
+// Kopien versandter Geschaeftsbriefe sind sechs Jahre aufzubewahren (§ 257 HGB).
+// Ein spaeterer PDF-Abruf rendert mit dem heutigen Datum und dem heutigen
+// offenen Betrag — das ist eine neue Mahnung, keine Kopie. Deshalb liegt das
+// PDF jeder Mahnstufe und jedes Versands als ASSET (PDF_DUNNING) am
+// Verlaufseintrag (MAHNUNG_HISTORY.PDF_ASSET_ID, Migration 0183).
+
+const { storeGeneratedPdfAsAsset, bestEffortDeleteAsset } = require("./generatedAssets");
+
+async function companyOfMahnung(supabase, { mahnung, tenantId }) {
+  const [table, id] = mahnung.INVOICE_ID ? ["INVOICE", mahnung.INVOICE_ID] : ["ADVANCE_INVOICE", mahnung.PP_ID];
+  const { data } = await supabase.from(table).select("COMPANY_ID").eq("ID", id).eq("TENANT_ID", tenantId).maybeSingle();
+  if (!data?.COMPANY_ID) throw { status: 500, message: "Firma des Belegs nicht gefunden — Mahnung kann nicht archiviert werden." };
+  return data.COMPANY_ID;
+}
+
+async function renderAndArchive(supabase, { mahnung, tenantId, fileName }) {
+  const pdfBuffer = await renderMahnungPdf(supabase, {
+    invoiceId: mahnung.INVOICE_ID || null,
+    ppId:      mahnung.PP_ID || null,
+    mahnstufe: mahnung.MAHNSTUFE,
+    tenantId,
+  });
+  const companyId = await companyOfMahnung(supabase, { mahnung, tenantId });
+  const asset = await storeGeneratedPdfAsAsset({ supabase, companyId, fileName, pdfBuffer, assetType: "PDF_DUNNING" });
+  return { pdfBuffer, asset };
+}
+
+/** Verweis am Verlaufseintrag. Fehlt die Spalte noch (Deploy-Fenster vor 0183), nur warnen. */
+async function linkPdf(supabase, { historyId, assetId, tenantId }) {
+  if (!historyId || !assetId) return;
+  const { error } = await supabase.from("MAHNUNG_HISTORY")
+    .update({ PDF_ASSET_ID: assetId }).eq("ID", historyId).eq("TENANT_ID", tenantId);
+  if (error) console.warn("[MAHNUNG_ARCHIV] Verweis nicht gespeichert:", error.message);
+}
+
+function archiveFileName(mahnung, label, today) {
+  const stufe = String(label || `Mahnstufe_${mahnung.MAHNSTUFE}`).replace(/\s+/g, "_");
+  return `Mahnung_${stufe}_${today}.pdf`;
+}
+
+/** Archiviertes PDF eines Verlaufseintrags (fuer GET /mahnungen/history/:id/pdf). */
+async function getHistoryPdfAsset(supabase, { historyId, tenantId }) {
+  const { data, error } = await supabase.from("MAHNUNG_HISTORY")
+    .select("*").eq("ID", historyId).eq("TENANT_ID", tenantId).maybeSingle();
+  if (error || !data) throw { status: 404, message: "Verlaufseintrag nicht gefunden" };
+  if (!data.PDF_ASSET_ID) throw { status: 404, message: "Für diesen Eintrag gibt es keine archivierte Mahnung." };
+  return { assetId: data.PDF_ASSET_ID, row: data };
 }
 
 // ── Send Email ────────────────────────────────────────────────────────────────
@@ -464,33 +534,32 @@ async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, em
   const to = emailTo || composed.to;
   if (!to) throw { status: 400, message: "Keine E-Mail-Adresse hinterlegt" };
 
-  // Generate PDF
-  const pdfBuffer = await renderMahnungPdf(supabase, {
-    invoiceId: mahnung.INVOICE_ID || null,
-    ppId:      mahnung.PP_ID || null,
-    mahnstufe: mahnung.MAHNSTUFE,
-    tenantId,
-  });
-
-  // Derive filename
-  const today = new Date().toISOString().slice(0, 10);
-  const stufeLabel = settings ? settings.LABEL.replace(/\s/g, "_") : `Mahnstufe_${mahnung.MAHNSTUFE}`;
-  const filename = `Mahnung_${stufeLabel}_${today}.pdf`;
+  // PDF erzeugen und VOR dem Versand archivieren: keine Mahnung ohne Kopie.
+  // Scheitert die Ablage, geht nichts raus.
+  const today = localDateStr();
+  const filename = archiveFileName(mahnung, settings?.LABEL, today);
+  const { pdfBuffer, asset } = await renderAndArchive(supabase, { mahnung, tenantId, fileName: filename });
 
   // Send (aus dem eigenen Postfach des Mandanten, sofern konfiguriert)
-  await sendMail({
-    supabase,
-    tenantId,
-    to,
-    subject: composed.subject,
-    html:    composed.body ? `<pre style="font-family:inherit;white-space:pre-wrap">${composed.body}</pre>` : undefined,
-    text:    composed.body,
-    attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
-    copyToTenant: true,
-  });
+  try {
+    await sendMail({
+      supabase,
+      tenantId,
+      to,
+      subject: composed.subject,
+      html:    plainTextHtml(composed.body),
+      text:    composed.body,
+      attachments: [{ filename, content: pdfBuffer, contentType: "application/pdf" }],
+      copyToTenant: true,
+    });
+  } catch (e) {
+    // Nicht verschickt — dann ist es auch keine Kopie eines Geschaeftsbriefs.
+    await bestEffortDeleteAsset({ supabase, asset });
+    throw e;
+  }
 
   // Log to history
-  await supabase.from("MAHNUNG_HISTORY").insert({
+  const { data: hist } = await supabase.from("MAHNUNG_HISTORY").insert({
     TENANT_ID:     tenantId,
     MAHNUNG_ID:    mahnungId,
     MAHNSTUFE:     mahnung.MAHNSTUFE,
@@ -499,7 +568,8 @@ async function sendMahnungEmail(supabase, { mahnungId, emailTo, emailSubject, em
     EMAIL_SUBJECT: composed.subject,
     EMAIL_SENT:    true,
     FEE_AMOUNT:    fee,
-  });
+  }).select("ID").maybeSingle();
+  await linkPdf(supabase, { historyId: hist?.ID, assetId: asset?.ID, tenantId });
 
   // Update last mahnung date
   await supabase.from("MAHNUNG").update({
@@ -592,13 +662,14 @@ async function saveTextTemplate(supabase, { tenantId, documentType, headerText, 
 async function getMahnungHistory(supabase, { mahnungId, tenantId }) {
   const { data, error } = await supabase
     .from("MAHNUNG_HISTORY")
-    .select("ID, MAHNSTUFE, DATE_ACTION, EMAIL_TO, EMAIL_SUBJECT, EMAIL_SENT, FEE_AMOUNT")
+    .select("*")   // PDF_ASSET_ID erst nach 0183 — siehe listMahnungen
     .eq("MAHNUNG_ID", mahnungId)
     .eq("TENANT_ID", tenantId)
     .order("DATE_ACTION", { ascending: false });
   if (error) throw error;
   return (data || []).map(h => ({
     id:           h.ID,
+    hasPdf:       !!h.PDF_ASSET_ID,
     mahnstufe:    h.MAHNSTUFE,
     dateAction:   h.DATE_ACTION,
     emailTo:      h.EMAIL_TO,
@@ -618,5 +689,6 @@ module.exports = {
   getTextTemplates,
   saveTextTemplate,
   getMahnungHistory,
+  getHistoryPdfAsset,
   getMahnungStats,
 };
