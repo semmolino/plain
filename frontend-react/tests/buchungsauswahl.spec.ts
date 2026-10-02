@@ -9,11 +9,11 @@ import { mockPilot } from './fixtures/pilotData'
  */
 
 const TEC = [
-  { ID: 1, BOOKING_DATE: '2026-07-28', EMPLOYEE_SHORT_NAME: 'SM', POSTING_DESCRIPTION: 'Bestandsaufnahme',   HOURLY_RATE_TOTAL: 190, HOURS: 2,   STRUCTURE_ID: 2, STRUCTURE_LABEL: 'LP2 – Vorplanung', ASSIGNED: false },
-  { ID: 2, BOOKING_DATE: '2026-08-05', EMPLOYEE_SHORT_NAME: 'SM', POSTING_DESCRIPTION: 'Abstimmung Kulanz',  HOURLY_RATE_TOTAL: 0,   HOURS: 1.5, STRUCTURE_ID: 2, STRUCTURE_LABEL: 'LP2 – Vorplanung', ASSIGNED: false },
-  { ID: 3, BOOKING_DATE: '2026-08-12', EMPLOYEE_SHORT_NAME: 'AB', POSTING_DESCRIPTION: 'Entwurf Grundrisse', HOURLY_RATE_TOTAL: 285, HOURS: 3,   STRUCTURE_ID: 3, STRUCTURE_LABEL: 'LP3 – Entwurfsplanung', ASSIGNED: false },
-  { ID: 4, BOOKING_DATE: '2026-08-20', EMPLOYEE_SHORT_NAME: 'AB', POSTING_DESCRIPTION: 'Rückfrage Statik',   HOURLY_RATE_TOTAL: 0,   HOURS: 0.5, STRUCTURE_ID: 3, STRUCTURE_LABEL: 'LP3 – Entwurfsplanung', ASSIGNED: false },
-  { ID: 5, BOOKING_DATE: '2026-09-03', EMPLOYEE_SHORT_NAME: 'SM', POSTING_DESCRIPTION: 'Entwurf Schnitte',   HOURLY_RATE_TOTAL: 380, HOURS: 4,   STRUCTURE_ID: 3, STRUCTURE_LABEL: 'LP3 – Entwurfsplanung', ASSIGNED: false },
+  { ID: 1, BOOKING_DATE: '2026-07-28', EMPLOYEE_SHORT_NAME: 'SM', POSTING_DESCRIPTION: 'Bestandsaufnahme',   HOURLY_RATE_TOTAL: 190, HOURS: 2, HOURLY_RATE: 95,   STRUCTURE_ID: 2, STRUCTURE_LABEL: 'LP2 – Vorplanung', ASSIGNED: false },
+  { ID: 2, BOOKING_DATE: '2026-08-05', EMPLOYEE_SHORT_NAME: 'SM', POSTING_DESCRIPTION: 'Abstimmung Kulanz',  HOURLY_RATE_TOTAL: 0,   HOURS: 1.5, HOURLY_RATE: 0, STRUCTURE_ID: 2, STRUCTURE_LABEL: 'LP2 – Vorplanung', ASSIGNED: false },
+  { ID: 3, BOOKING_DATE: '2026-08-12', EMPLOYEE_SHORT_NAME: 'AB', POSTING_DESCRIPTION: 'Entwurf Grundrisse', HOURLY_RATE_TOTAL: 285, HOURS: 3, HOURLY_RATE: 95,   STRUCTURE_ID: 3, STRUCTURE_LABEL: 'LP3 – Entwurfsplanung', ASSIGNED: false },
+  { ID: 4, BOOKING_DATE: '2026-08-20', EMPLOYEE_SHORT_NAME: 'AB', POSTING_DESCRIPTION: 'Rückfrage Statik',   HOURLY_RATE_TOTAL: 0,   HOURS: 0.5, HOURLY_RATE: 0, STRUCTURE_ID: 3, STRUCTURE_LABEL: 'LP3 – Entwurfsplanung', ASSIGNED: false },
+  { ID: 5, BOOKING_DATE: '2026-09-03', EMPLOYEE_SHORT_NAME: 'SM', POSTING_DESCRIPTION: 'Entwurf Schnitte',   HOURLY_RATE_TOTAL: 380, HOURS: 4, HOURLY_RATE: 95,   STRUCTURE_ID: 3, STRUCTURE_LABEL: 'LP3 – Entwurfsplanung', ASSIGNED: false },
 ]
 const LAST_INVOICE = { kind: 'abschlag', id: 499, number: 'AR-2026-006', date: '2026-08-05', period_end: '2026-07-31', since: '2026-07-31' }
 
@@ -142,6 +142,22 @@ test.describe('Buchungsauswahl', () => {
     await page.reload()
     await bar(page).getByRole('button', { name: 'Weiter', exact: true }).click()
     await expect(page.getByRole('columnheader', { name: /Betrag/ })).toHaveAttribute('aria-sort', 'descending')
+  })
+
+  test('Stundensatz je Buchung: eigene Spalte, sortierbar — am Handy in der Zeile', async ({ page }, info) => {
+    await setup(page)
+    await openBookings(page)
+    const first = page.locator('.ba-table tbody tr').first()
+    if (info.project.name === 'desktop') {
+      const satz = page.getByRole('columnheader', { name: /Stundensatz/ })
+      await expect(satz).toBeVisible()
+      await expect(first.locator('td').nth(5)).toHaveText(/95,00\s€/)
+      await satz.click()
+      await expect(satz).toHaveAttribute('aria-sort', 'ascending')
+      await expect(first.locator('td').nth(3)).toContainText('Abstimmung Kulanz')   // 0 € vor 95 €, gleich → früheres Datum
+    } else {
+      await expect(first.locator('.ba-meta-narrow')).toHaveText(/2 h à 95,00\s€/)
+    }
   })
 
   test('Schlussrechnung: Buchungen der Positionen nach Aufwand, Abwählen mindert die Position', async ({ page }) => {

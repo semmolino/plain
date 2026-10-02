@@ -60,9 +60,9 @@ export function filterBookings(list: TecEntry[], f: BookingFilters): TecEntry[] 
 
 // ── Sortierung über die Spaltenköpfe ─────────────────────────────────────────
 
-export type BookingSortKey = 'BOOKING_DATE' | 'EMPLOYEE_SHORT_NAME' | 'POSTING_DESCRIPTION' | 'HOURS' | 'HOURLY_RATE_TOTAL'
-const SORT_KEYS: readonly BookingSortKey[] = ['BOOKING_DATE', 'EMPLOYEE_SHORT_NAME', 'POSTING_DESCRIPTION', 'HOURS', 'HOURLY_RATE_TOTAL']
-const NUMERIC_SORT_KEYS: readonly BookingSortKey[] = ['HOURS', 'HOURLY_RATE_TOTAL']
+export type BookingSortKey = 'BOOKING_DATE' | 'EMPLOYEE_SHORT_NAME' | 'POSTING_DESCRIPTION' | 'HOURS' | 'HOURLY_RATE' | 'HOURLY_RATE_TOTAL'
+const SORT_KEYS: readonly BookingSortKey[] = ['BOOKING_DATE', 'EMPLOYEE_SHORT_NAME', 'POSTING_DESCRIPTION', 'HOURS', 'HOURLY_RATE', 'HOURLY_RATE_TOTAL']
+const NUMERIC_SORT_KEYS: readonly BookingSortKey[] = ['HOURS', 'HOURLY_RATE', 'HOURLY_RATE_TOTAL']
 
 /** Ein gespeicherter Schlüssel, den es nicht (mehr) gibt, fällt aufs Datum zurück. */
 export const sortKeyOr = (k: unknown): BookingSortKey =>

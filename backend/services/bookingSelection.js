@@ -12,7 +12,7 @@ const NON_HOUR_KINDS = new Set(["UNIT", "LUMP_COST", "LUMP_REVENUE"]);
 
 // Spalten, die `tecEntry` braucht.
 const TEC_SELECT =
-  "ID, BOOKING_DATE, POSTING_DESCRIPTION, QUANTITY_EXT, HOURLY_RATE_TOTAL, BOOKING_KIND, STRUCTURE_ID, " +
+  "ID, BOOKING_DATE, POSTING_DESCRIPTION, QUANTITY_EXT, HOURLY_RATE, HOURLY_RATE_TOTAL, BOOKING_KIND, STRUCTURE_ID, " +
   "ADVANCE_INVOICE_ID, INVOICE_ID, EMPLOYEE:EMPLOYEE_ID(ABBR), STRUCTURE:STRUCTURE_ID(ABBR, NAME)";
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
@@ -27,6 +27,9 @@ function tecEntry(t, assigned) {
     HOURLY_RATE_TOTAL: round2(t.HOURLY_RATE_TOTAL),
     // null = keine Stundenbuchung (Pauschale, Stueckleistung)
     HOURS: NON_HOUR_KINDS.has(t.BOOKING_KIND) ? null : round2(t.QUANTITY_EXT),
+    // Stundensatz der Buchung; bei Pauschale/Stueckleistung keiner (dort ist es
+    // ein Einzelpreis bzw. der Betrag selbst, kein Satz je Stunde)
+    HOURLY_RATE: NON_HOUR_KINDS.has(t.BOOKING_KIND) || t.HOURLY_RATE == null ? null : round2(t.HOURLY_RATE),
     STRUCTURE_ID: t.STRUCTURE_ID ?? null,
     STRUCTURE_LABEL: s ? [s.ABBR, s.NAME].filter(Boolean).join(" – ") : "",
     ASSIGNED: !!assigned,

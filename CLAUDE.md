@@ -304,6 +304,9 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   angehakte Buchung — auch eine ausgeblendete (die Zählzeile sagt „davon n
   ausgeblendet"); die einzige Brücke ist „Nur sichtbare auswählen".
   „0-Beträge mitabrechnen" gilt für jede Sammelaktion und die Vorauswahl.
+  Spalten Std., Stundensatz und Betrag kommen aus  —
+  eine Quelle für Abschlag, Einzelrechnung/Korrektur und Schlussrechnung;
+  Pauschalen und Stückleistungen haben weder Stunden noch Stundensatz (null).
   Gemerkt werden nur Vorlieben, nicht Suche/Datum/Mitarbeiter/Leistung.
   Der Stichtag „Seit letzter Rechnung" kommt vom Server
   (`services/bookingSelection.js`, in `GET …/tec` als `last_invoice`): letzte

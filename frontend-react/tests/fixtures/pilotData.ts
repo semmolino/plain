@@ -369,6 +369,7 @@ const PP_TEC = Array.from({ length: 40 }, (_, i) => ({
   EMPLOYEE_SHORT_NAME: EMPLOYEES[i % 6].ABBR,
   POSTING_DESCRIPTION: TEXTS[i % TEXTS.length],
   HOURLY_RATE_TOTAL: r2([2, 3.5, 1.5, 6, 4][i % 5] * 95),
+  HOURLY_RATE: 95,
   ASSIGNED: false,
 }))
 

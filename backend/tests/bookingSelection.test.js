@@ -99,21 +99,27 @@ describe("lastBilledDocument", () => {
 
 describe("tecEntry", () => {
   const base = {
-    ID: 3, BOOKING_DATE: "2026-09-02", POSTING_DESCRIPTION: "Planung", QUANTITY_EXT: 2.5, HOURLY_RATE_TOTAL: 262.5,
+    ID: 3, BOOKING_DATE: "2026-09-02", POSTING_DESCRIPTION: "Planung", QUANTITY_EXT: 2.5, HOURLY_RATE: 105, HOURLY_RATE_TOTAL: 262.5,
     BOOKING_KIND: "WORK", STRUCTURE_ID: 40, EMPLOYEE: { ABBR: "SM" }, STRUCTURE: { ABBR: "LP3", NAME: "Entwurfsplanung" },
   };
 
-  it("liefert Stunden und die Leistung", () => {
+  it("liefert Stunden, Stundensatz und die Leistung", () => {
     expect(tecEntry(base, true)).toEqual({
       ID: 3, BOOKING_DATE: "2026-09-02", EMPLOYEE_SHORT_NAME: "SM", POSTING_DESCRIPTION: "Planung",
-      HOURLY_RATE_TOTAL: 262.5, HOURS: 2.5, STRUCTURE_ID: 40, STRUCTURE_LABEL: "LP3 – Entwurfsplanung", ASSIGNED: true,
+      HOURLY_RATE_TOTAL: 262.5, HOURS: 2.5, HOURLY_RATE: 105, STRUCTURE_ID: 40, STRUCTURE_LABEL: "LP3 – Entwurfsplanung", ASSIGNED: true,
     });
   });
 
-  it("Pauschalen und Stueckleistungen haben keine Stunden", () => {
+  it("Pauschalen und Stueckleistungen haben weder Stunden noch Stundensatz", () => {
     for (const kind of ["UNIT", "LUMP_COST", "LUMP_REVENUE"]) {
-      expect(tecEntry({ ...base, BOOKING_KIND: kind, QUANTITY_EXT: 3 }, false).HOURS).toBeNull();
+      const e = tecEntry({ ...base, BOOKING_KIND: kind, QUANTITY_EXT: 3 }, false);
+      expect(e.HOURS).toBeNull();
+      expect(e.HOURLY_RATE).toBeNull();
     }
+  });
+
+  it("fehlender Satz bleibt leer statt 0 €", () => {
+    expect(tecEntry({ ...base, HOURLY_RATE: null }, false).HOURLY_RATE).toBeNull();
   });
 
   it("Altbestand ohne Buchungsart zaehlt als Stunden; fehlende Werte werden 0", () => {

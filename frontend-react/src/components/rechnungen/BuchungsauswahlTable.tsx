@@ -266,6 +266,7 @@ export function BuchungsauswahlTable({
                     <SortTh label="Mitarbeiter"  column="EMPLOYEE_SHORT_NAME" {...sp} className="ba-wide" />
                     <SortTh label="Beschreibung" column="POSTING_DESCRIPTION" {...sp} />
                     <SortTh label="Std."         column="HOURS"               {...sp} className="num ba-wide" />
+                    <SortTh label="Stundensatz"  column="HOURLY_RATE"         {...sp} className="num ba-wide" />
                     <SortTh label="Betrag €"     column="HOURLY_RATE_TOTAL"   {...sp} className="num" />
                   </tr>
                 </thead>
@@ -281,12 +282,16 @@ export function BuchungsauswahlTable({
                       <td>
                         {t.POSTING_DESCRIPTION}
                         {manyStructures && t.STRUCTURE_LABEL && <span className="ba-structure">{t.STRUCTURE_LABEL}</span>}
-                        {/* Am Handy statt der Spalten Mitarbeiter und Std. — sonst fiel der Betrag aus dem Bild. */}
+                        {/* Am Handy statt der Spalten Mitarbeiter, Std. und Stundensatz — sonst fiel der Betrag aus dem Bild. */}
                         <span className="ba-meta-narrow">
-                          {[t.EMPLOYEE_SHORT_NAME, t.HOURS == null ? null : `${fmtHours(t.HOURS)} h`].filter(Boolean).join(' · ')}
+                          {[
+                            t.EMPLOYEE_SHORT_NAME,
+                            t.HOURS == null ? null : `${fmtHours(t.HOURS)} h${t.HOURLY_RATE == null ? '' : ` à ${fmtEur(t.HOURLY_RATE)}`}`,
+                          ].filter(Boolean).join(' · ')}
                         </span>
                       </td>
                       <td className="num ba-wide">{t.HOURS == null ? '—' : fmtHours(t.HOURS)}</td>
+                      <td className="num ba-wide">{t.HOURLY_RATE == null ? '—' : money(t.HOURLY_RATE)}</td>
                       <td className="num">{money(t.HOURLY_RATE_TOTAL)}</td>
                     </tr>
                   ))}

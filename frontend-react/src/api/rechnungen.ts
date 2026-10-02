@@ -151,6 +151,8 @@ export interface TecEntry {
   HOURLY_RATE_TOTAL:   number | null
   /** null = keine Stundenbuchung (Pauschale, Stückleistung) */
   HOURS?:              number | null
+  /** Stundensatz der Buchung; null bei Pauschale und Stückleistung */
+  HOURLY_RATE?:        number | null
   STRUCTURE_ID?:       number | null
   /** „LP3 – Entwurfsplanung" */
   STRUCTURE_LABEL?:    string
