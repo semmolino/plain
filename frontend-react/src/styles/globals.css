@@ -3205,8 +3205,6 @@ th.doc-actions, td.doc-actions {
 .mahnung-history-list li { padding: 6px 0; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
 .days-warn { color: #92400e; }
 .days-crit { color: #b91c1c; font-weight: 600; }
-.text-template-type-btn { padding: 5px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 13px; background: transparent; }
-.text-template-type-btn.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
 [data-theme="dark"] .mahnstufe-badge.ms-4 { background: rgba(127,29,29,0.2);  color: #fca5a5; }
 
 /* ── Unternehmenskennzahlen ───────────────────────────────────────────────── */
@@ -4699,6 +4697,127 @@ fieldset:disabled .ws-check { cursor: default; }
 .st-table abbr { text-decoration: none; }
 .st-row-actions { display: inline-flex; gap: 2px; justify-content: flex-end; }
 .st-row-actions-cell { width: 1%; white-space: nowrap; text-align: right; }
+
+/* ── Dokumentvorlagen (Einstellungen, Vorlagen-Plan Stufe 2) ──────────────
+   Gestaltung und Aufbau links, Vorschau rechts; darunter eine Spalte. Die
+   Bausteine (Aufbau-Editor, Anhänge, Platzhalter) nutzt auch der
+   Rechnungsassistent — deshalb hier und nicht im Seitenteil. */
+.dv-page { max-width: 1280px; display: flex; flex-direction: column; gap: var(--space-3); }
+.dv-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+@media (min-width: 1100px) {
+  .dv-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+  .dv-side { position: sticky; top: var(--space-3); }
+}
+.dv-controls { min-width: 0; }
+.dv-texte { display: flex; flex-direction: column; gap: var(--space-4); max-width: 960px; }
+.dv-side { min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.dv-empty { margin: 0; font-size: 13px; color: var(--text-2); max-width: 60ch; }
+.dv-hint { margin: var(--space-2) 0 0; font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: var(--space-1); flex-wrap: wrap; }
+.dv-check { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 13px; cursor: pointer; min-height: 44px; }
+.dv-seg { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.dv-seg .btn-small { display: inline-flex; align-items: center; gap: 5px; }
+.dv-select {
+  height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--text); font-size: 13px; max-width: 100%;
+}
+.dv-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: var(--radius-pill); background: var(--warning); vertical-align: middle; }
+
+/* Stil-Vorlagen und Hausfarbe */
+.dv-presets { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.dv-preset {
+  padding: 5px; border-radius: var(--radius-md); background: transparent; cursor: pointer;
+  border: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 5px;
+  font-size: 12px; color: var(--text);
+}
+.dv-preset.active { border: 2px solid var(--text); font-weight: 700; }
+.dv-thumb {
+  width: 132px; height: 92px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 8px; display: flex; flex-direction: column; gap: 5px;
+}
+.dv-swatches { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dv-swatch {
+  width: 44px; height: 44px; border-radius: var(--radius-md); cursor: pointer; padding: 0;
+  border: 1px solid var(--border); display: inline-flex; align-items: center; justify-content: center;
+}
+.dv-swatch.active { border: 2px solid var(--text); box-shadow: inset 0 0 0 2px var(--surface); }
+.dv-swatch--custom { border-style: dashed; background: var(--surface); color: var(--text-3); position: relative; overflow: hidden; }
+.dv-swatch--custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+/* Belegart im Aufbau */
+.dv-cat { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-4); }
+.dv-cat .form-group { margin: 0; min-width: min(100%, 280px); }
+.dv-cat label, .dv-preview-pick label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.dv-cat select, .dv-preview-pick select {
+  height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--surface); color: var(--text); font-size: 14px; width: 100%;
+}
+.dv-cat-state { margin: 0 0 6px; font-size: 13px; color: var(--text-2); display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.dv-cat-state .btn-small { display: inline-flex; align-items: center; gap: 5px; }
+.dv-preview-pick { margin: 0; }
+
+/* Bausteinliste (Aufbau, Anhänge) */
+.dv-layout { display: flex; flex-direction: column; }
+.dv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dv-row { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.dv-row[draggable="true"] { cursor: grab; }
+.dv-row--drag { opacity: .5; }
+.dv-row--hidden .dv-row-label { color: var(--text-3); }
+.dv-row-main { display: flex; align-items: center; gap: var(--space-2); padding: 2px var(--space-2); min-height: 44px; }
+.dv-grip { color: var(--text-4); display: inline-flex; flex-shrink: 0; }
+.dv-grip--off { visibility: hidden; }
+.dv-row-label { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: 13px; color: var(--text); }
+.dv-row-label input { margin: 0; }
+.dv-lock { display: inline-flex; color: var(--text-3); }
+.dv-badge { font-size: 11px; color: var(--text-3); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 0 6px; }
+.dv-row-actions { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.dv-row-actions .row-action-btn.dv-on { color: var(--accent); background: var(--accent-bg); }
+.dv-row-text { padding: 0 var(--space-2) var(--space-2) calc(var(--space-2) + 22px); display: flex; flex-direction: column; gap: var(--space-2); }
+.dv-pagebreak {
+  display: flex; align-items: center; gap: 6px; padding: 2px var(--space-2); font-size: 11px; color: var(--text-3);
+  border-bottom: 1px dashed var(--border);
+}
+.dv-layout-add { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-2); }
+.dv-layout-add .btn-small { display: inline-flex; align-items: center; gap: 4px; }
+@media (max-width: 599px) {
+  /* Beschriftung und Knöpfe in einer Zeile, solange die Beschriftung Platz hat */
+  .dv-row-main { flex-wrap: wrap; padding: var(--space-1) var(--space-2); }
+  .dv-row-label { flex: 1 1 72px; }
+  .dv-row-actions { margin-left: auto; }
+  /* Zahlungshinweis: Auswahl über die volle Breite, Knöpfe darunter */
+  .dv-row-actions:has(> .dv-select) { flex-basis: 100%; }
+  .dv-row-actions > .dv-select { flex: 1 1 100%; min-width: 0; order: -1; }
+  .dv-row-text { padding-left: var(--space-2); }
+}
+
+/* Platzhalter */
+.dv-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dv-chips-label { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; color: var(--text-2); }
+.dv-chip {
+  min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-pill);
+  background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer;
+}
+.dv-chip:hover { background: var(--hover-bg); }
+@media (max-width: 1023px) { .dv-chip { min-height: 44px; } }
+
+/* Vorschau — das Papier bleibt im Dark-Theme weiß (gedrucktes Papier) */
+.dv-preview { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.dv-preview-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.dv-preview-state { font-weight: 400; color: var(--text-3); }
+.dv-preview-error { margin: 0; font-size: 13px; color: var(--danger-strong); }
+.dv-preview-paper { width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: white; }
+.dv-preview-paper iframe { border: none; display: block; transform-origin: top left; }
+.dv-preview-note { margin: 0; font-size: 11px; color: var(--text-3); text-align: center; }
+
+/* Textbausteine */
+.dv-snippets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.dv-snippet { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.dv-snippet-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.dv-snippet-meta { font-size: 12px; color: var(--text-3); }
+.dv-snippet-text { color: var(--text-2); white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dv-sn-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 var(--space-3); }
+@media (min-width: 600px) { .dv-sn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.dv-sn-grid select { width: 100%; }
+@media (max-width: 1023px) { .text-template-type-btn { min-height: 44px; } }
 /* Einzeilige Liste (Abteilungen, Projekttypen) */
 .st-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border-4); max-width: 560px; }
 .st-list-row { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid var(--border-4); }

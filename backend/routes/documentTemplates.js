@@ -11,6 +11,10 @@ module.exports = (supabase) => {
   // Hinweis: Das tatsaechliche PDF-Rendering liest DOCUMENT_TEMPLATE direkt im
   // Render-Service (services_pdf_render.js) und ist davon NICHT betroffen — normale
   // Nutzer koennen weiterhin PDFs erzeugen, nur die Vorlagen-Pflege ist gegated.
+  // Katalog (Belegarten, Bausteine, Platzhalter): statische Beschreibung, die
+  // auch Textbausteine und Rechnungsassistent brauchen — vor dem Vorlagen-Recht.
+  router.get("/catalog", (req, res) => ctrl.getCatalog(req, res, supabase));
+
   router.use(requirePermission("settings.document_templates.edit"));
 
   router.post("/preview",           (req, res) => ctrl.previewDocumentTemplate(req, res, supabase));

@@ -50,24 +50,43 @@ const APPENDICES = {
 const INVOICE_BODY = ["letterhead", "reference", "title", "salutation", "intro", "comment", "amounts", "closing", "payment"];
 const INVOICE_APPENDICES = ["showPayments", "showProjectStructure", "showTec", "showHonorar"];
 
+// textType:     TEXT_TEMPLATE.DOCUMENT_TYPE des Standard-Kopf-/Fusstexts
+//               (textFallback, solange die Kategorie keinen eigenen hat)
+// defaults:     Ausgangslage vor jeder Einstellung (hidden, payment)
 const CATEGORIES = {
-  invoice_rechnung:    { label: "Rechnung",            template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES },
-  invoice_abschlags:   { label: "Abschlagsrechnung",   template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES },
-  invoice_teilschluss: { label: "Teilschlussrechnung", template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES, parent: "invoice_schluss" },
-  invoice_schluss:     { label: "Schlussrechnung",     template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES },
-  invoice_korrektur:   { label: "Rechnungskorrektur",  template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES, parent: "invoice_rechnung" },
+  invoice_rechnung:    { label: "Rechnung",            template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES,
+                         textType: "invoice_rechnung" },
+  invoice_abschlags:   { label: "Abschlagsrechnung",   template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES,
+                         textType: "invoice_abschlags" },
+  invoice_teilschluss: { label: "Teilschlussrechnung", template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES,
+                         parent: "invoice_schluss", textType: "invoice_teilschluss", textFallback: "invoice_schluss" },
+  invoice_schluss:     { label: "Schlussrechnung",     template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES,
+                         textType: "invoice_schluss" },
+  // Eine Korrektur mindert eine Forderung — „Bitte überweisen Sie −1.190 €" stand
+  // bis 10/2026 trotzdem darauf.
+  invoice_korrektur:   { label: "Rechnungskorrektur",  template: "invoice.njk", body: INVOICE_BODY, appendices: INVOICE_APPENDICES,
+                         parent: "invoice_rechnung", textType: "invoice_korrektur", defaults: { payment: "never" } },
   invoice_storno:      { label: "Stornorechnung",      template: "storno.njk",
-                         body: ["letterhead", "reference", "title", "salutation", "intro", "amounts", "closing"], appendices: [] },
+                         body: ["letterhead", "reference", "title", "salutation", "intro", "amounts", "closing"], appendices: [],
+                         textType: "invoice_storno" },
+  // Texte der Mahnung stehen je Mahnstufe unter Einstellungen → Mahnungen.
+  // Anrede anfangs aus: viele Mahntexte beginnen selbst mit einer.
   mahnung:             { label: "Zahlungserinnerung und Mahnung", template: "mahnung.njk",
-                         body: ["letterhead", "title", "intro", "invoiceRef", "amounts", "closing"], appendices: [] },
+                         body: ["letterhead", "title", "salutation", "intro", "invoiceRef", "amounts", "payment", "closing"], appendices: [],
+                         textType: null, defaults: { hidden: ["salutation"], payment: "always" } },
   offer_angebot:       { label: "Angebot",             template: "offer.njk",
                          body: ["letterhead", "title", "intro", "positions", "amounts", "closing", "signature"],
-                         appendices: ["showHonorar", "showOrderSheet"] },
+                         appendices: ["showHonorar", "showOrderSheet"], textType: "offer_angebot" },
   offer_ab:            { label: "Auftragsbestätigung", template: "auftragsbestaetigung.njk",
-                         body: ["letterhead", "title", "intro", "scope", "amounts", "referenceBox", "closing", "signature"], appendices: [] },
+                         body: ["letterhead", "title", "intro", "scope", "amounts", "referenceBox", "closing", "signature"], appendices: [],
+                         textType: "offer_auftragsbestaetigung" },
   nachtrag:            { label: "Nachtrag",            template: "nachtrag.njk",
-                         body: ["letterhead", "title", "reason", "positions", "amounts", "closing"], appendices: [] },
+                         body: ["letterhead", "title", "intro", "reason", "positions", "amounts", "closing"], appendices: [],
+                         textType: "nachtrag" },
 };
+
+/** Alle Textvorlagen-Typen (TEXT_TEMPLATE.DOCUMENT_TYPE), die es geben darf. */
+const TEXT_TYPES = [...new Set(Object.values(CATEGORIES).map((c) => c.textType).filter(Boolean))];
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const TEXT_KEY = /^text:[a-z0-9]{1,24}$/;
@@ -121,10 +140,10 @@ function resolveLayout(category, overrides = [], context = {}) {
   const key = categoryOf(category);
   const cat = CATEGORIES[key];
   let order = [...cat.body];
-  const hidden = new Set();
+  const hidden = new Set((cat.defaults && cat.defaults.hidden) || []);
   const pageBreaks = new Set();
   const texts = {};
-  let payment = "auto";
+  let payment = (cat.defaults && cat.defaults.payment) || "auto";
   let introText = null;
   let closingText = null;
 
@@ -188,13 +207,36 @@ function describeCategory(category) {
   const key = categoryOf(category);
   const cat = CATEGORIES[key];
   return {
-    key, label: cat.label, parent: cat.parent || null,
+    key, label: cat.label, parent: cat.parent || null, textType: cat.textType || null,
+    defaults: { hidden: (cat.defaults && cat.defaults.hidden) || [], payment: (cat.defaults && cat.defaults.payment) || "auto" },
     body: cat.body.map((k) => ({ key: k, label: BLOCKS[k].label, locked: !!BLOCKS[k].locked, fixed: !!BLOCKS[k].fixed, modes: BLOCKS[k].modes || null })),
     appendices: cat.appendices.map((k) => ({ key: k, label: APPENDICES[k] })),
   };
 }
 
+/** Standard-Textvorlagen in der Reihenfolge, in der sie gesucht werden. */
+function textTypeChain(category) {
+  const cat = CATEGORIES[categoryOf(category)];
+  return [cat.textType, cat.textFallback].filter(Boolean);
+}
+
+/**
+ * Alles, was die Oberflaeche ueber den Aufbau wissen muss — GET
+ * /document-templates/catalog. Die Playwright-Tests nehmen dieselbe Funktion
+ * als Antwort, damit ihr Mock nicht von der Registry wegdriftet.
+ */
+function documentCatalog() {
+  const { PLACEHOLDERS } = require("./documentPlaceholders");
+  const textTypes = [];
+  for (const [key, c] of Object.entries(CATEGORIES)) {
+    if (!c.textType) continue;
+    const fb = c.textFallback ? Object.values(CATEGORIES).find((x) => x.textType === c.textFallback) : null;
+    textTypes.push({ type: c.textType, category: key, label: c.label, fallbackLabel: fb ? fb.label : null });
+  }
+  return { categories: Object.keys(CATEGORIES).map(describeCategory), placeholders: PLACEHOLDERS, textTypes };
+}
+
 module.exports = {
-  BLOCKS, APPENDICES, CATEGORIES,
-  resolveLayout, sanitizeLayoutOverride, invoiceCategory, categoryChain, describeCategory,
+  BLOCKS, APPENDICES, CATEGORIES, TEXT_TYPES, textTypeChain,
+  resolveLayout, sanitizeLayoutOverride, invoiceCategory, categoryChain, describeCategory, documentCatalog,
 };

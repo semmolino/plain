@@ -91,6 +91,10 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1
 
   {% if nachtrag.CLAIM_BASIS %}<div class="info-line"><span class="info-label">Anspruchsgrundlage:</span> {{ nachtrag.CLAIM_BASIS }}</div>{% endif %}
 {% endset %}
+{% set blk_intro %}
+  {# Kopftext (Textvorlage „Nachtrag“) #}
+  {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
+{% endset %}
 {% set blk_reason %}
   {% if nachtrag.REASON %}<div class="text-block">{{ nachtrag.REASON }}</div>{% endif %}
 {% endset %}
@@ -129,12 +133,13 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1
 {% endset %}
 {% set blk_closing %}
   <div class="closing">
-    <p>Wir bitten um Prüfung und Beauftragung dieses Nachtrags.</p>
+    {# Fußtext der Textvorlage „Nachtrag“, sonst der bisherige Satz #}
+    {% if text2 %}<div class="text-block">{{ text2 }}</div>{% else %}<p>Wir bitten um Prüfung und Beauftragung dieses Nachtrags.</p>{% endif %}
     {% if signatureDataUri %}<img class="signature" src="{{ signatureDataUri }}" alt="">{% endif %}
     <div class="sign-name">{{ seller.name }}</div>
   </div>
 {% endset %}
-{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, reason: blk_reason, positions: blk_positions, amounts: blk_amounts, closing: blk_closing }) }}
+{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, intro: blk_intro, reason: blk_reason, positions: blk_positions, amounts: blk_amounts, closing: blk_closing }) }}
 
 </body>
 </html>

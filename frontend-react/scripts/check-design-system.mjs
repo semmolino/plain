@@ -277,7 +277,7 @@ const COLOR_EXEMPT = new Map([
   ['src/theme/chartTheme.ts',                      'Canvas: Chart.js kennt keine CSS-Variablen'],
   ['src/components/layout/ThemeOptions.tsx',       'Vorschau-Swatches zeigen die Themes selbst'],
   ['src/api/documentTemplates.ts',                 'PDF-Vorlagen: Werte landen im Dokument'],
-  ['src/pages/admin/DokumentvorlagenSection.tsx',  'PDF-Akzentpalette + Papier-Vorschau + srcdoc'],
+  ['src/pages/admin/dokumentvorlagen/GestaltungPanel.tsx', 'PDF-Akzentpalette + Papier-Vorschau der Stil-Vorlagen'],
   ['src/pages/admin/RollenSection.tsx',            'Vorgabefarbe einer Rolle, wird gespeichert'],
   ['src/pages/admin/AbwesenheitsartenSection.tsx', 'Vorgabefarbe einer Abwesenheitsart, wird gespeichert'],
 ])

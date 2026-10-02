@@ -110,6 +110,15 @@ async function previewDocumentTemplate(req, res, supabase) {
   }
 }
 
+// ── Katalog: Kategorien, Bausteine, Platzhalter ──────────────────────────────
+// Die Einstellungen holen den Aufbau je Belegart von hier statt eine Kopie der
+// Registry zu pflegen (services/documentLayout.js → documentCatalog).
+const { documentCatalog } = require("../services/documentLayout");
+
+async function getCatalog(_req, res) {
+  res.json({ data: documentCatalog() });
+}
+
 // ── Branding (vereinfachter Pfad fuer den Branding-Tab) ──────────────────────
 // Eine Marke fuer alle Belegtypen: liest/schreibt das Default-Theme gesammelt.
 async function getBranding(req, res, supabase) {
@@ -147,4 +156,5 @@ module.exports = {
   previewDocumentTemplate,
   getBranding,
   saveBranding,
+  getCatalog,
 };

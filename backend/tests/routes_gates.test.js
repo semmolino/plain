@@ -43,6 +43,7 @@ describe("Routen-Gates", () => {
   describe.each([
     ["buchungen.js",      ["/timer/draft", "/timer/confirm", "/timer/draft/:id"]],
     ["budgetWarnings.js", ["/projects/:projectId/mute", "/projects/:projectId/rules", "/rules/:ruleId"]],
+    ["documentTexts.js",  ["/", "/:id"]],
   ])("%s", (datei, pflichtPfade) => {
     it("alle mutierenden Endpunkte tragen ein Permission-Gate", () => {
       const ungegatet = routerZeilen(datei)

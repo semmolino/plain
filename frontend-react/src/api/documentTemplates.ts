@@ -1,6 +1,11 @@
 import { apiClient } from './client'
 
-// ── Theme-Form (Spiegel von backend/services_theme_defaults.js) ──────────────
+// ── Gestaltung der Belege (Spiegel von backend/services_theme_schema.js) ─────
+//
+// Welche Belegarten es gibt, welche Bausteine sie haben und welche Platzhalter
+// gelten, steht NICHT hier, sondern kommt vom Server (fetchCatalog) — aus
+// services/documentLayout.js und documentPlaceholders.js. Vorher führte das
+// Frontend eigene Listen, und neue Belegarten kamen in den Einstellungen nie an.
 
 export type LogoPosition = 'left' | 'center' | 'right'
 
@@ -19,15 +24,21 @@ export interface ThemeHeader {
   showBauvorhaben?: boolean
 }
 
-// Schaltbare Anhang-/Inhaltsabschnitte. Spiegel von services_theme_defaults.js.
-export type AppendixKey = 'showProjectStructure' | 'showTec' | 'showHonorar' | 'showPayments'
+/** Anhänge (eigene Seiten): Schalter je Anhang plus Reihenfolge. */
+export type ThemeBlocks = Record<string, boolean | string[] | undefined> & { order?: string[] }
 
-export interface ThemeBlocks {
-  showProjectStructure: boolean
-  showTec:              boolean
-  showHonorar:          boolean
-  showPayments:         boolean
-  order?:               AppendixKey[]
+export type PaymentMode = 'auto' | 'always' | 'never'
+
+/** Abweichender Aufbau des Hauptteils (Vorlage, Projekt oder Beleg). */
+export interface LayoutOverride {
+  order?:      string[]
+  hidden?:     string[]
+  pageBreaks?: string[]
+  payment?:    PaymentMode
+  /** eigene Textblöcke: Schlüssel "text:<id>" → Text */
+  texts?:      Record<string, string>
+  introText?:  string
+  closingText?: string
 }
 
 export interface DocTheme {
@@ -36,6 +47,8 @@ export interface DocTheme {
   header:   ThemeHeader
   blocks:   ThemeBlocks
   footer?:  Record<string, unknown>
+  blocksByCategory?: Record<string, ThemeBlocks>
+  bodyByCategory?:   Record<string, LayoutOverride>
 }
 
 // Kanonische Defaults — entsprechen exakt dem heutigen Look (Null-Regression).
@@ -50,13 +63,57 @@ export const DEFAULT_THEME: DocTheme = {
   footer: { showPageNumbers: true },
 }
 
-// Reihenfolge + Labels der schaltbaren Anhänge (für den „Inhalte & Anhänge"-Block).
-export const APPENDIX_BLOCKS: { key: AppendixKey; label: string }[] = [
-  { key: 'showProjectStructure', label: 'Projektübersicht' },
-  { key: 'showTec',              label: 'Stundennachweis' },
-  { key: 'showHonorar',          label: 'HOAI-/Kalkulationsübersicht' },
-  { key: 'showPayments',         label: 'Zahlungsübersicht' },
-]
+// ── Katalog vom Server ───────────────────────────────────────────────────────
+
+export interface BlockInfo {
+  key:    string
+  label:  string
+  /** Pflichtbaustein: verschiebbar, nicht ausblendbar */
+  locked: boolean
+  /** steht immer zuerst (Briefkopf) */
+  fixed:  boolean
+  modes:  PaymentMode[] | null
+}
+
+export interface CategoryInfo {
+  key:        string
+  label:      string
+  /** erbt Einstellungen von dieser Kategorie, solange sie keine eigenen hat */
+  parent:     string | null
+  textType:   string | null
+  defaults:   { hidden: string[]; payment: PaymentMode }
+  body:       BlockInfo[]
+  appendices: { key: string; label: string }[]
+}
+
+export interface PlaceholderInfo {
+  token: string
+  label: string
+  /** wo der Platzhalter einen Wert hat (invoice | offer | mahnung | nachtrag); fehlt = überall */
+  scope?: string[]
+}
+
+export interface TextTypeInfo {
+  type:          string
+  category:      string
+  label:         string
+  fallbackLabel: string | null
+}
+
+export interface DocCatalog {
+  categories:   CategoryInfo[]
+  placeholders: PlaceholderInfo[]
+  textTypes:    TextTypeInfo[]
+}
+
+/** Belegfamilie einer Kategorie — bestimmt, welche Platzhalter dort Werte haben. */
+export function familyOf(category: string): string {
+  if (category.startsWith('invoice_')) return 'invoice'
+  if (category.startsWith('offer_')) return 'offer'
+  return category
+}
+
+// ── Stil-Vorlagen, Schriften, Logo ───────────────────────────────────────────
 
 // Stil-Vorlagen (Ebene 1): 1-Klick-Looks, die Farbe + Schrift + Logo-Position
 // gemeinsam setzen. Danach lässt sich alles einzeln nachjustieren.
@@ -82,41 +139,6 @@ export const LOGO_SIZES: { id: string; label: string; mm: number }[] = [
   { id: 'gross',  label: 'Groß',   mm: 28 },
 ]
 
-export type DocTemplateType = 'INVOICE' | 'ADVANCE_INVOICE' | 'OFFER'
-
-export const DOC_TYPE_LABELS: Record<DocTemplateType, string> = {
-  INVOICE:         'Rechnungen',
-  ADVANCE_INVOICE: 'Abschlagsrechnungen',
-  OFFER:           'Angebote',
-}
-
-// Welche Anhänge je Belegtyp konfigurierbar sind. Spiegel von
-// backend/services_pdf_render.js (APPENDIX_BY_DOCTYPE).
-export const APPENDIX_BLOCKS_BY_TYPE: Record<DocTemplateType, AppendixKey[]> = {
-  INVOICE:         ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
-  ADVANCE_INVOICE: ['showProjectStructure', 'showTec', 'showHonorar', 'showPayments'],
-  OFFER:           ['showHonorar'],
-}
-
-// Beleg-Kategorien für „Inhalte & Anhänge" — feiner als DOC_TYPE (INVOICE umfasst
-// Rechnung UND Schluss-/Teilschlussrechnung, die getrennte Inhalte haben).
-// Spiegel von backend/services_pdf_render.js (APPENDIX_BY_CATEGORY).
-export type DocCategory = 'invoice_rechnung' | 'invoice_schluss' | 'invoice_abschlags' | 'offer_angebot'
-
-export const DOC_CATEGORY_LABELS: Record<DocCategory, string> = {
-  invoice_rechnung:  'Rechnung',
-  invoice_schluss:   'Schluss-/Teilschlussrechnung',
-  invoice_abschlags: 'Abschlagsrechnung',
-  offer_angebot:     'Angebot',
-}
-
-export const APPENDIX_BLOCKS_BY_CATEGORY: Record<DocCategory, AppendixKey[]> = {
-  invoice_rechnung:  ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
-  invoice_schluss:   ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
-  invoice_abschlags: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
-  offer_angebot:     ['showHonorar'],
-}
-
 // Schriftauswahl — Keys spiegeln backend/services_theme_fonts.js (FONTS).
 // system-* = generische Familien; alle anderen werden serverseitig als Webfont
 // eingebettet (PDF + Vorschau identisch).
@@ -135,11 +157,15 @@ export const FONT_OPTIONS: { key: string; label: string; group: 'sans' | 'serif'
 
 // ── API ──────────────────────────────────────────────────────────────────────
 
+export const fetchCatalog = () =>
+  apiClient.get<{ data: DocCatalog }>('/document-templates/catalog')
+
 export const fetchBranding = () =>
-  apiClient.get<{ data: { theme: DocTheme; blocksByCategory: Record<DocCategory, ThemeBlocks>; companyId: number } }>('/document-templates/branding')
+  apiClient.get<{ data: { theme: DocTheme; companyId: number } }>('/document-templates/branding')
 
-export const saveBranding = (theme_json: DocTheme, blocks_by_category: Record<DocCategory, ThemeBlocks>) =>
-  apiClient.put<{ data: { ok: boolean } }>('/document-templates/branding', { theme_json, blocks_by_category })
+/** Speichert die ganze Gestaltung: Marke, Aufbau je Kategorie, Anhänge je Kategorie. */
+export const saveBranding = (theme_json: DocTheme) =>
+  apiClient.put<{ data: { ok: boolean } }>('/document-templates/branding', { theme_json, blocks_by_category: theme_json.blocksByCategory ?? {} })
 
-export const previewBranding = (theme_json: DocTheme, category: DocCategory) =>
+export const previewBranding = (theme_json: DocTheme, category: string) =>
   apiClient.post<{ html: string }>('/document-templates/preview', { theme_json, category })

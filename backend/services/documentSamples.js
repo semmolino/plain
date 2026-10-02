@@ -193,7 +193,9 @@ const SAMPLES = {
 
   mahnung: () => ({
     seller: seller(),
-    buyer: { name1: "Bauherr Beispiel AG", name2: "", street: "Musterallee 7", postCode: "80331", city: "München" },
+    buyer: { name1: "Bauherr Beispiel AG", name2: "z. Hd. Frau Kerstin Ludwig", street: "Musterallee 7", postCode: "80331", city: "München" },
+    salutationLine: "Sehr geehrte Frau Ludwig,",
+    epcQrDataUri: null,
     mahnstufeLabel: "1. Mahnung",
     invoiceNumber: "RE-2026-0042", invoiceDate: "2026-09-30", bauvorhaben: BAUVORHABEN,
     dueDate: "2026-10-30", daysOverdue: 14,

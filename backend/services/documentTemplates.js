@@ -342,24 +342,24 @@ async function getBrandingTheme(supabase, { tenantId }) {
     invoice_abschlags: pick("invoice_abschlags", "ADVANCE_INVOICE"),
     offer_angebot:     pick("offer_angebot",     "OFFER"),
   };
+  // Alle uebrigen Kategorien (Teilschluss, Korrektur, Storno, Mahnung,
+  // Auftragsbestaetigung, Nachtrag) nur, wenn sie eine eigene Einstellung
+  // haben — sonst erben sie (documentLayout.categoryChain).
+  for (const [cat, v] of Object.entries(stored)) if (!blocksByCategory[cat]) blocksByCategory[cat] = v;
 
-  return { theme, blocksByCategory, companyId };
+  return { theme: { ...theme, blocksByCategory }, blocksByCategory, companyId };
 }
-
-const APPENDIX_CATEGORIES = ['invoice_rechnung', 'invoice_schluss', 'invoice_abschlags', 'offer_angebot'];
 
 async function saveBrandingTheme(supabase, { tenantId, theme_json, blocks_by_category }) {
   const companyIds = await resolveCompanyIds(supabase, tenantId);
   if (companyIds.length === 0) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
 
-  const def = defaultTheme();
-  const shared = theme_json && typeof theme_json === "object" ? theme_json : def;
-  const bbc = blocks_by_category && typeof blocks_by_category === "object" ? blocks_by_category : {};
-  const blocksByCategory = {};
-  for (const cat of APPENDIX_CATEGORIES) {
-    blocksByCategory[cat] = bbc[cat] && typeof bbc[cat] === "object" ? { ...def.blocks, ...bbc[cat] } : { ...def.blocks };
-  }
-  // brand/header global; blocksByCategory identisch in JEDER DOC_TYPE-Default-Vorlage,
+  const shared = theme_json && typeof theme_json === "object" ? theme_json : defaultTheme();
+  // Anhaenge je Kategorie: ausdruecklich uebergeben oder im Theme selbst. Eine
+  // Kategorie ohne Eintrag erbt beim Rendern (Teilschluss → Schluss …).
+  const blocksByCategory = blocks_by_category && typeof blocks_by_category === "object"
+    ? blocks_by_category : shared.blocksByCategory;
+  // brand/header/Aufbau global; identisch in JEDER DOC_TYPE-Default-Vorlage,
   // damit der Renderer (lädt je DOC_TYPE) immer die richtige Kategorie findet.
   const theme = sanitizeTheme({ ...shared, blocksByCategory });
   const nowIso = new Date().toISOString();

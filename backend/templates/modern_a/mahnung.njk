@@ -125,6 +125,16 @@ body {
 .totals-table tr.sep td.line { border-top: 0.5pt solid #9ca3af; }
 .totals-table tr.total-row td { font-weight: 700; font-size: 11pt; border-top: 1pt solid #1a1a1a; padding-top: 2mm; }
 
+/* Anrede und Zahlungshinweis (wie in der Rechnung) */
+.salutation { font-size: 10pt; margin-bottom: 3mm; line-height: 1.5; }
+.payment-note-row { display: flex; align-items: flex-start; gap: 6mm; margin: 2mm 0 5mm; page-break-inside: avoid; }
+.payment-note-text { flex: 1; }
+.payment-note { font-size: 9.5pt; color: #374151; line-height: 1.5; }
+.payment-note strong { color: #1a1a1a; }
+.payment-qr { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; }
+.payment-qr img { width: 28mm; height: 28mm; display: block; }
+.payment-qr-caption { font-size: 7pt; color: #6b7280; margin-top: 1mm; text-align: center; }
+
 /* Footer is rendered by Playwright footerTemplate */
 </style>
 {% include "modern_a/_theme_head.njk" %}
@@ -186,6 +196,10 @@ body {
   {# Subject line #}
   <div class="subject-line">Betreff: {{ mahnstufeLabel }} zu Rechnung {{ invoiceNumber }}
     {%- if bauvorhaben and theme.header.showBauvorhaben != false %}<br><span class="subject-ref">Bauvorhaben: {{ bauvorhaben }}</span>{% endif %}</div>
+{% endset %}
+{% set blk_salutation %}
+  {# Anrede — wie in der Rechnung; anfangs aus (documentLayout: mahnung.defaults) #}
+  {% if salutationLine %}<div class="salutation">{{ salutationLine }}</div>{% endif %}
 {% endset %}
 {% set blk_intro %}
   {# Header text (from settings) #}
@@ -261,11 +275,30 @@ body {
     </tbody>
   </table>
 {% endset %}
+{% set blk_payment %}
+  {# Zahlungshinweis + GiroCode über den jetzt fälligen Betrag #}
+  {% if totalDue and totalDue > 0 %}
+  <div class="payment-note-row">
+    <div class="payment-note-text">
+      <div class="payment-note">
+        Bitte überweisen Sie <strong>{{ totalDue | money }}</strong> unter Angabe der Rechnungsnummer <strong>{{ invoiceNumber }}</strong>{% if seller.iban %} auf folgendes Konto:<br>
+        IBAN: <strong>{{ seller.iban }}</strong>{% if seller.bic %} &nbsp;&middot;&nbsp; BIC: <strong>{{ seller.bic }}</strong>{% endif %}{% else %}.{% endif %}
+      </div>
+    </div>
+    {% if epcQrDataUri %}
+    <div class="payment-qr">
+      <img src="{{ epcQrDataUri }}" alt="GiroCode">
+      <div class="payment-qr-caption">GiroCode</div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+{% endset %}
 {% set blk_closing %}
   {# Footer text (from settings) #}
   {% if footerText %}<div class="text-block">{{ footerText }}</div>{% endif %}
 {% endset %}
-{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, intro: blk_intro, invoiceRef: blk_invoiceRef, amounts: blk_amounts, closing: blk_closing }) }}
+{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, salutation: blk_salutation, intro: blk_intro, invoiceRef: blk_invoiceRef, amounts: blk_amounts, payment: blk_payment, closing: blk_closing }) }}
 
 </body>
 </html>

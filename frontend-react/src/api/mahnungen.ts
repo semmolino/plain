@@ -83,35 +83,6 @@ export interface TextTemplate {
   footerText:   string | null
 }
 
-export type TextTemplateType =
-  | 'invoice_abschlags'
-  | 'invoice_rechnung'
-  | 'invoice_schluss'
-  | 'invoice_storno'
-  | 'offer_angebot'
-  | 'offer_auftragsbestaetigung'
-
-export const TEXT_TEMPLATE_LABELS: Record<TextTemplateType, string> = {
-  invoice_abschlags: 'Abschlags-/Anzahlungsrechnung',
-  invoice_rechnung:  'Rechnung',
-  invoice_schluss:   'Schluss-/Teilschlussrechnung',
-  invoice_storno:    'Stornierung',
-  offer_angebot:              'Angebot',
-  offer_auftragsbestaetigung: 'Auftragsbestätigung',
-}
-
-// Platzhalter für Kopf-/Fußtexte. Werden beim Rendern durch Belegwerte ersetzt
-// (Spiegel von backend/services_pdf_render.js applyPlaceholders).
-// `invoiceOnly`: Angebote gehören zu keinem Gesamtprojekt, dort bliebe der Wert leer.
-export const TEXT_PLACEHOLDERS: { token: string; label: string; invoiceOnly?: boolean }[] = [
-  { token: '{{belegnummer}}', label: 'Belegnummer' },
-  { token: '{{belegdatum}}',  label: 'Belegdatum' },
-  { token: '{{projekt}}',     label: 'Projekt' },
-  { token: '{{bauvorhaben}}', label: 'Bauvorhaben', invoiceOnly: true },
-  { token: '{{kunde}}',       label: 'Kunde' },
-  { token: '{{firma}}',       label: 'Eigene Firma' },
-]
-
 // ── API functions ─────────────────────────────────────────────────────────────
 
 export const fetchMahnungen = () =>

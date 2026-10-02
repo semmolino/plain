@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { hideDevtools } from './fixtures/demoData'
 import { GROUP, mockGroups } from './fixtures/gesamtprojektData'
+import { CATALOG } from './fixtures/dokumentvorlagenData'
 
 /**
  * Gesamtprojekte (Migration 0181, docs/GESAMTPROJEKT_CONCEPT.md): Liste,
@@ -296,18 +297,24 @@ test.describe('Gesamtprojekte — Stufe 3: Bauvorhaben auf Belegen', () => {
     })
     await page.route(/\/api\/v1\/mahnungen\/text-templates(\?|$)/, r => r.fulfill(json({ data: [] })))
 
+    await page.route(/\/api\/v1\/document-templates\/catalog(\?|$)/, r => r.fulfill(json({ data: CATALOG })))
+    await page.route(/\/api\/v1\/document-texts(\?|$)/, r => r.fulfill(json({ data: [] })))
+
     await page.goto('/admin?tab=dokumentvorlagen')
-    const toggle = page.getByRole('checkbox', { name: 'Zeile „Bauvorhaben: …" auf Belegen' })
+    const toggle = page.getByRole('checkbox', { name: /Zeile „Bauvorhaben: …“ auf Belegen/ })
     await expect(toggle).toBeChecked()
     await toggle.uncheck()
     await expect.poll(() => previews.some(p => (p.theme_json as { header: { showBauvorhaben?: boolean } }).header.showBauvorhaben === false)).toBe(true)
-    await page.getByRole('button', { name: 'Gestaltung speichern' }).click()
+    await page.getByRole('region', { name: 'Seitenaktionen' }).getByRole('button', { name: 'Speichern' }).click()
     await expect.poll(() => puts.length).toBe(1)
     expect(puts[0]).toMatchObject({ theme_json: { header: { showBauvorhaben: false, logoPosition: 'right' } } })
 
     // Platzhalter in Kopf-/Fußtexten: bei Rechnungen ja, beim Angebot nicht (kein Gesamtprojekt)
+    const bereich = page.getByLabel('Bereich', { exact: true })
+    if (await bereich.isVisible()) await bereich.selectOption({ label: 'Texte' })
+    else await page.getByRole('button', { name: 'Texte', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Bauvorhaben', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Angebot', exact: true }).last().click()
+    await page.getByRole('button', { name: 'Angebot', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Bauvorhaben', exact: true })).toHaveCount(0)
   })
 })

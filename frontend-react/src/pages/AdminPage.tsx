@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from 'react'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { RollenSection } from '@/pages/admin/RollenSection'
-import { DokumentvorlagenSection } from '@/pages/admin/DokumentvorlagenSection'
+import { DokumentvorlagenPage } from '@/pages/admin/DokumentvorlagenPage'
 import { ImportSection } from '@/pages/admin/ImportSection'
 import { StammdatenPage } from '@/pages/admin/StammdatenPage'
 import { VorbelegungenPage } from '@/pages/admin/VorbelegungenPage'
@@ -34,9 +34,8 @@ import { useCtrlS } from '@/hooks/useCtrlS'
 import { useAssetBlobUrl } from '@/hooks/useAssetBlobUrl'
 import { fetchNumberRanges, saveNumberRanges, fetchNumberRangeTemplates, saveNumberRangeTemplate } from '@/api/numberRanges'
 import {
-  fetchMahnungSettings, saveMahnungSettings, fetchTextTemplates, saveTextTemplate,
-  TEXT_TEMPLATE_LABELS, TEXT_PLACEHOLDERS,
-  type MahnungSettingsLevel, type TextTemplate, type TextTemplateType,
+  fetchMahnungSettings, saveMahnungSettings,
+  type MahnungSettingsLevel,
 } from '@/api/mahnungen'
 import {
   fetchOverhead, saveOverhead, copyOverheadFromYear,
@@ -1547,129 +1546,6 @@ function MahnungsEinstellungenSection() {
       {msg && <Message type={msg.type === 'ok' ? 'success' : 'error'} text={msg.text} />}
       <button className="btn btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending} style={{ marginTop: 8 }}>
         {saveMut.isPending ? 'Speichern…' : 'Einstellungen speichern'}
-      </button>
-      <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>oder Strg+S</span>
-    </div>
-  )
-}
-
-// ── Textvorlagen ──────────────────────────────────────────────────────────────
-
-function TextVorlagenSection() {
-  const qc = useQueryClient()
-  const { data: raw, isLoading } = useQuery({ queryKey: ['text-templates'], queryFn: () => fetchTextTemplates().then(r => r.data) })
-
-  const types = Object.keys(TEXT_TEMPLATE_LABELS) as TextTemplateType[]
-  const [activeType, setActiveType] = useState<TextTemplateType>('invoice_abschlags')
-  const [drafts, setDrafts]         = useState<Record<string, TextTemplate>>({})
-  const [msg, setMsg]               = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
-  const [activeField, setActiveField] = useState<'headerText' | 'footerText'>('headerText')
-  const headerRef = useRef<HTMLTextAreaElement>(null)
-  const footerRef = useRef<HTMLTextAreaElement>(null)
-
-  useEffect(() => {
-    if (!raw) return
-    const m: Record<string, TextTemplate> = {}
-    for (const t of raw) m[t.documentType] = t
-    setDrafts(m)
-  }, [raw])
-
-  const saveMut = useMutation({
-    mutationFn: () => saveTextTemplate(activeType, {
-      headerText: drafts[activeType]?.headerText ?? null,
-      footerText: drafts[activeType]?.footerText ?? null,
-    }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['text-templates'] }); setMsg({ type: 'ok', text: 'Gespeichert.' }) },
-    onError:   (e: Error) => setMsg({ type: 'err', text: e.message }),
-  })
-
-  useCtrlS(() => saveMut.mutate(), true)
-
-  function updateDraft(field: 'headerText' | 'footerText', value: string) {
-    setDrafts(d => ({ ...d, [activeType]: { ...d[activeType], documentType: activeType, [field]: value || null } }))
-    setMsg(null)
-  }
-
-  const current = drafts[activeType] ?? { documentType: activeType, headerText: null, footerText: null }
-
-  function insertToken(token: string) {
-    const el = activeField === 'headerText' ? headerRef.current : footerRef.current
-    const cur = current[activeField] ?? ''
-    if (el) {
-      const start = el.selectionStart
-      const end   = el.selectionEnd
-      updateDraft(activeField, cur.slice(0, start) + token + cur.slice(end))
-      requestAnimationFrame(() => { el.focus(); const pos = start + token.length; el.setSelectionRange(pos, pos) })
-    } else {
-      updateDraft(activeField, cur + token)
-    }
-  }
-
-  if (isLoading) return <p className="empty-note">Lade…</p>
-
-  return (
-    <div style={{ maxWidth: 720 }}>
-      <p style={{ fontSize: 13, color: 'var(--text-3)', marginBottom: 16 }}>
-        Hinterlegen Sie Standardtexte für Rechnungs- und Angebots-PDFs. Diese erscheinen als Kopf- und Fußtext
-        auf dem Dokument, sofern beim Erstellen des Belegs kein eigener Text eingetragen wurde.
-      </p>
-
-      {/* Type selector */}
-      <div className="text-template-types">
-        {types.map(t => (
-          <button
-            key={t}
-            className={`text-template-type-btn${activeType === t ? ' active' : ''}`}
-            onClick={() => { setActiveType(t); setMsg(null) }}
-          >
-            {TEXT_TEMPLATE_LABELS[t]}
-          </button>
-        ))}
-      </div>
-
-      {/* Platzhalter-Chips */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', margin: '12px 0' }}>
-        <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Platzhalter einfügen:</span>
-        {TEXT_PLACEHOLDERS.filter(p => !p.invoiceOnly || !activeType.startsWith('offer_')).map(p => (
-          <button key={p.token} type="button" className="btn-small" onClick={() => insertToken(p.token)} title={p.token}>
-            {p.label}
-          </button>
-        ))}
-        <InfoHint title="Platzhalter">
-          Diese Felder werden beim Erzeugen des PDFs automatisch durch die echten Werte des Belegs ersetzt
-          (z. B. <code>{'{{belegnummer}}'}</code> → die Rechnungs-/Angebotsnummer). Klicke zuerst in das Kopf-
-          oder Fußtextfeld und dann auf einen Platzhalter — er wird an der Cursorposition eingefügt.
-        </InfoHint>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Kopftext (text1 — erscheint vor der Positionstabelle)</label>
-        <textarea
-          ref={headerRef}
-          className="form-control"
-          rows={5}
-          value={current.headerText ?? ''}
-          onFocus={() => setActiveField('headerText')}
-          onChange={e => updateDraft('headerText', e.target.value)}
-          placeholder="Optional. z.B. Anrede, Hinweistext…"
-        />
-      </div>
-      <div className="form-group">
-        <label className="form-label">Fußtext (text2 — erscheint nach der Positionstabelle)</label>
-        <textarea
-          ref={footerRef}
-          className="form-control"
-          rows={5}
-          value={current.footerText ?? ''}
-          onFocus={() => setActiveField('footerText')}
-          onChange={e => updateDraft('footerText', e.target.value)}
-          placeholder="Optional. z.B. Zahlungshinweis, Bankdaten, Grußformel…"
-        />
-      </div>
-
-      {msg && <Message type={msg.type === 'ok' ? 'success' : 'error'} text={msg.text} />}
-      <button className="btn btn-primary" onClick={() => saveMut.mutate()} disabled={saveMut.isPending}>
-        {saveMut.isPending ? 'Speichern…' : 'Textvorlage speichern'}
       </button>
       <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-3)' }}>oder Strg+S</span>
     </div>
@@ -3479,16 +3355,7 @@ function AdminPageBody() {
         {tab === 'monatsabschluss'       && <MonatsabschlussSection />}
         {tab === 'kostensatz'            && <KostensatzSection />}
         {tab === 'mahnungseinstellungen' && <MahnungsEinstellungenSection />}
-        {tab === 'dokumentvorlagen'      && (
-          <>
-            <Can permission="settings.document_templates.edit"><DokumentvorlagenSection /></Can>
-            <Can permission="settings.text_templates.edit">
-              <hr style={{ margin: '32px 0', border: 0, borderTop: '1px solid var(--border)' }} />
-              <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 12px' }}>Texte — Kopf- &amp; Fußzeilen</h2>
-              <TextVorlagenSection />
-            </Can>
-          </>
-        )}
+        {tab === 'dokumentvorlagen'      && <DokumentvorlagenPage />}
         {tab === 'benachrichtigungen'    && <BenachrichtigungenSection />}
         {tab === 'rollen'                && <RollenSection />}
         {tab === 'engagement'            && <EngagementSection />}

@@ -25,7 +25,8 @@ function isTableMissingErr(err, tableName) {
 // gespeicherte Themes sind Eingaben eines Mandanten, keine vertrauten Daten.
 const { defaultTheme } = require('./services_theme_defaults');
 const { sanitizeTheme } = require('./services_theme_schema');
-const { CATEGORIES, resolveLayout, categoryChain, invoiceCategory } = require('./services/documentLayout');
+const { CATEGORIES, resolveLayout, categoryChain, invoiceCategory, textTypeChain } = require('./services/documentLayout');
+const { resolvePlaceholders } = require('./services/documentPlaceholders');
 const { sampleViewModel } = require('./services/documentSamples');
 const { resolveFont, fontFaceCss } = require('./services_theme_fonts');
 
@@ -985,16 +986,9 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
 
   const vm = await buildPdfViewModel({ supabase, docType, docId, tenantId, previewReleasePpIds });
 
-  // Inject text template (header/footer) if invoice has no manual texts
-  await injectTextTemplate(supabase, vm, tenantId);
-  applyPlaceholders(vm, {
-    belegnummer: vm.inv?.number ?? '',
-    belegdatum:  fmtDateDE(vm.inv?.date),
-    projekt:     vm.projectName ?? '',
-    bauvorhaben: vm.bauvorhaben ?? '',
-    kunde:       vm.inv?.buyer?.name ?? '',
-    firma:       vm.inv?.seller?.name ?? '',
-  });
+  const category = invoiceCategory(vm.inv.invoiceType, docType);
+  // Standard-Kopf-/Fusstext, wenn der Beleg keinen eigenen traegt
+  await injectStandardTexts(supabase, vm, tenantId, category);
 
   // EPC / GiroCode QR — only for payable documents (not storno)
   // When SE is in play (withheld or released), use securityRetention.payable so the
@@ -1055,8 +1049,7 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
   }
 
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
-  const category  = invoiceCategory(vm.inv.invoiceType, docType);
-  const ctx = documentContext({ category, vm, theme, logoDataUri, signatureDataUri });
+  const ctx = documentContext({ category, vm, theme, logoDataUri, signatureDataUri, placeholders: invoicePlaceholders(vm) });
   const html = env().render(path.join(layoutKey, CATEGORIES[category].template), ctx);
 
   const footerCols = buildSellerFooterCols(vm.inv.seller);
@@ -1068,15 +1061,7 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
 
 async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
-  await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_angebot');
-  applyPlaceholders(vm, {
-    belegnummer: vm.offer?.ABBR ?? '',
-    belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
-    projekt:     vm.offer?.NAME ?? '',
-    bauvorhaben: '', // Angebote gehoeren zu keinem Gesamtprojekt — der Platzhalter bleibt leer
-    kunde:       vm.buyer?.name ?? '',
-    firma:       vm.seller?.name ?? '',
-  });
+  await injectStandardTexts(supabase, vm, tenantId, 'offer_angebot');
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
@@ -1105,7 +1090,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   }
 
   const honorarTotalSum = honorarCalcs.reduce((sum, hc) => sum + (hc.gesamthonorar || 0), 0);
-  const context = documentContext({ category: 'offer_angebot', vm: { ...vm, honorarCalcs, honorarTotalSum }, theme, logoDataUri, signatureDataUri });
+  const context = documentContext({ category: 'offer_angebot', vm: { ...vm, honorarCalcs, honorarTotalSum }, theme, logoDataUri, signatureDataUri, placeholders: offerPlaceholders(vm) });
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
@@ -1122,7 +1107,14 @@ async function renderNachtragPdf({ supabase, nachtragId, tenantId }) {
     resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
-  const context = documentContext({ category: 'nachtrag', vm, theme, logoDataUri, signatureDataUri });
+  await injectStandardTexts(supabase, vm, tenantId, 'nachtrag');
+  const n = vm.nachtrag || {};
+  const context = documentContext({ category: 'nachtrag', vm, theme, logoDataUri, signatureDataUri, placeholders: {
+    belegnummer: n.ABBR ?? '', belegdatum: fmtDateDE(n.SUBMITTED_DATE || n.CREATED_AT),
+    betrag: moneyText(vm.grossTotal), projekt: vm.projectName ?? '', bauvorhaben: vm.bauvorhaben ?? '',
+    kunde: vm.buyer?.name ?? '', anrede: vm.salutationLine ?? '',
+    ansprechpartner: vm.employeeName ?? '', firma: vm.seller?.name ?? '',
+  } });
   const html = env().render(path.join('modern_a', 'nachtrag.njk'), context);
   const pdf = await renderPdf({ html });
   return { pdf, nachtrag: vm.nachtrag };
@@ -1130,15 +1122,7 @@ async function renderNachtragPdf({ supabase, nachtragId, tenantId }) {
 
 async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const vm = await angeboteSvc.buildOfferPdfViewModel(supabase, { offerId, tenantId });
-  await injectOfferTextTemplate(supabase, vm, tenantId, 'offer_auftragsbestaetigung');
-  applyPlaceholders(vm, {
-    belegnummer: vm.offer?.ABBR ?? '',
-    belegdatum:  fmtDateDE(vm.offer?.OFFER_DATE),
-    projekt:     vm.offer?.NAME ?? '',
-    bauvorhaben: '', // Angebote gehoeren zu keinem Gesamtprojekt — der Platzhalter bleibt leer
-    kunde:       vm.buyer?.name ?? '',
-    firma:       vm.seller?.name ?? '',
-  });
+  await injectStandardTexts(supabase, vm, tenantId, 'offer_ab');
 
   const companyId = vm.offer.COMPANY_ID;
   const tpl = await loadTemplate({ supabase, companyId, docType: 'OFFER', templateId: null });
@@ -1148,7 +1132,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
 
-  const context = documentContext({ category: 'offer_ab', vm: { ...vm, today: localDateStr() }, theme, logoDataUri, signatureDataUri });
+  const context = documentContext({ category: 'offer_ab', vm: { ...vm, today: localDateStr() }, theme, logoDataUri, signatureDataUri, placeholders: offerPlaceholders(vm) });
 
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'auftragsbestaetigung.njk'), context);
@@ -1157,73 +1141,57 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   return { pdf, offer: vm.offer };
 }
 
-// ── Text Template injection ───────────────────────────────────────────────────
+// ── Standard-Kopf-/Fusstexte (TEXT_TEMPLATE) ──────────────────────────────────
+//
+// Je Kategorie ein Textvorlagen-Typ, mit Rueckfall (Teilschluss → Schluss):
+// textTypeChain in services/documentLayout.js. Je Feld fuellt der erste Typ der
+// Kette, der einen Text hat — und nur, wenn der Beleg selbst keinen traegt.
+// Vorher bekam die Rechnungskorrektur gar keinen Standardtext und der Nachtrag
+// keinen eigenen.
 
-/** Map INVOICE_TYPE value → TEXT_TEMPLATE.DOCUMENT_TYPE key */
-function textTemplateTypeForDoc(invoiceType) {
-  switch (invoiceType) {
-    case 'partial_payment':     return 'invoice_abschlags';
-    case 'rechnung':            return 'invoice_rechnung';
-    case 'schlussrechnung':
-    case 'teilschlussrechnung': return 'invoice_schluss';
-    case 'stornorechnung':      return 'invoice_storno';
-    default:                    return null;
-  }
-}
-
-async function injectTextTemplate(supabase, vm, tenantId) {
-  const docType = textTemplateTypeForDoc(vm.inv?.invoiceType);
-  if (!docType || !tenantId) return;
+async function injectStandardTexts(supabase, vm, tenantId, category) {
+  const chain = textTypeChain(category);
+  if (!chain.length || !tenantId) return;
   try {
     const { data } = await supabase
       .from('TEXT_TEMPLATE')
-      .select('HEADER_TEXT, FOOTER_TEXT')
+      .select('DOCUMENT_TYPE, HEADER_TEXT, FOOTER_TEXT')
       .eq('TENANT_ID', tenantId)
-      .eq('DOCUMENT_TYPE', docType)
-      .maybeSingle();
-    if (!data) return;
-    if (!vm.text1 && data.HEADER_TEXT) vm.text1 = data.HEADER_TEXT;
-    if (!vm.text2 && data.FOOTER_TEXT) vm.text2 = data.FOOTER_TEXT;
+      .in('DOCUMENT_TYPE', chain);
+    const byType = new Map((data || []).map((r) => [r.DOCUMENT_TYPE, r]));
+    const first = (col) => { for (const t of chain) { const v = byType.get(t)?.[col]; if (v) return v; } return null; };
+    if (!vm.text1) vm.text1 = first('HEADER_TEXT') || vm.text1;
+    if (!vm.text2) vm.text2 = first('FOOTER_TEXT') || vm.text2;
   } catch (e) {
-    // TEXT_TEMPLATE table may not exist yet (before migration) — silent fail
     if (!isTableMissingErr(e, 'text_template')) console.warn('[TEXT_TEMPLATE]', e.message);
   }
 }
 
-// Angebot/Auftragsbestaetigung: Standard-Kopf-/Fusstext aus TEXT_TEMPLATE, wenn
-// am Angebot selbst kein eigener Text (OFFER_TEXT_1/2) hinterlegt ist.
-async function injectOfferTextTemplate(supabase, vm, tenantId, documentType) {
-  if (!documentType || !tenantId) return;
-  try {
-    const { data } = await supabase
-      .from('TEXT_TEMPLATE')
-      .select('HEADER_TEXT, FOOTER_TEXT')
-      .eq('TENANT_ID', tenantId)
-      .eq('DOCUMENT_TYPE', documentType)
-      .maybeSingle();
-    if (!data) return;
-    if (!vm.text1 && data.HEADER_TEXT) vm.text1 = data.HEADER_TEXT;
-    if (!vm.text2 && data.FOOTER_TEXT) vm.text2 = data.FOOTER_TEXT;
-  } catch (e) {
-    if (!isTableMissingErr(e, 'text_template')) console.warn('[OFFER_TEXT_TEMPLATE]', e.message);
-  }
+// Platzhalter-Werte je Belegfamilie (Liste: services/documentPlaceholders.js).
+const moneyText = (v) => (v == null || v === '' ? '' : fmtMoney(v));
+const dateRange = (a, b) => [fmtDateDE(a), fmtDateDE(b)].filter(Boolean).join('–');
+
+function invoicePlaceholders(vm) {
+  return {
+    belegnummer: vm.inv?.number ?? '', belegdatum: fmtDateDE(vm.inv?.date),
+    betrag: moneyText(vm.payAmount), faellig: fmtDateDE(vm.inv?.dueDate),
+    leistungszeitraum: dateRange(vm.inv?.billingPeriodStart, vm.inv?.billingPeriodEnd),
+    projekt: vm.projectName ?? '', vertrag: vm.contractName ?? '', bauvorhaben: vm.bauvorhaben ?? '',
+    kunde: vm.inv?.buyer?.name ?? '', anrede: vm.salutationLine ?? '',
+    ansprechpartner: vm.inv?.seller?.contactName ?? '', firma: vm.inv?.seller?.name ?? '',
+  };
 }
 
-// ── Platzhalter in Kopf-/Fusstexten ───────────────────────────────────────────
-// Ersetzt {{token}} im Kopf-/Fusstext durch konkrete Belegwerte. Unbekannte
-// Tokens bleiben unveraendert stehen (kein versehentliches Loeschen). Additiv:
-// Texte ohne Platzhalter bleiben exakt gleich -> keine Regression.
-function resolvePlaceholders(text, values) {
-  if (!text || typeof text !== 'string') return text;
-  return text.replace(/\{\{\s*([\wäöüÄÖÜ]+)\s*\}\}/g, (m, key) => {
-    const k = String(key).toLowerCase();
-    return Object.prototype.hasOwnProperty.call(values, k) ? (values[k] == null ? '' : String(values[k])) : m;
-  });
-}
-
-function applyPlaceholders(vm, values) {
-  if (vm.text1) vm.text1 = resolvePlaceholders(vm.text1, values);
-  if (vm.text2) vm.text2 = resolvePlaceholders(vm.text2, values);
+function offerPlaceholders(vm) {
+  const c = vm.contact || {};
+  const e = vm.employee || {};
+  return {
+    belegnummer: vm.offer?.ABBR ?? '', belegdatum: fmtDateDE(vm.offer?.OFFER_DATE),
+    betrag: moneyText(vm.grossTotal), gueltig_bis: fmtDateDE(vm.offer?.VALID_UNTIL),
+    projekt: vm.offer?.NAME ?? '', kunde: vm.buyer?.name ?? '',
+    anrede: buildSalutationLine({ salutation: c.SALUTATION, namePart: [c.TITLE, c.LAST_NAME].filter(Boolean).join(' ') }),
+    ansprechpartner: [e.FIRST_NAME, e.LAST_NAME].filter(Boolean).join(' '), firma: vm.seller?.name ?? '',
+  };
 }
 
 // ── Mahnung PDF ───────────────────────────────────────────────────────────────
@@ -1311,7 +1279,8 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     seller:         vm.inv.seller,
     buyer: {
       name1:    vm.inv.buyer.name,
-      name2:    '',
+      // „z. Hd. …“ wie auf der Rechnung — vorher fehlte die Zeile in der Mahnung.
+      name2:    vm.buyerName2 || '',
       street:   vm.inv.buyer.street,
       postCode: vm.inv.buyer.postCode,
       city:     vm.inv.buyer.city,
@@ -1332,10 +1301,21 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     headerText,
     footerText,
     docDate: today,
+    salutationLine: vm.salutationLine || '',
+    // GiroCode über den jetzt fälligen Betrag (offen + Gebühr)
+    epcQrDataUri: await buildEpcQrDataUri({
+      bic: vm.inv.seller.bic, iban: vm.inv.seller.iban, name: vm.inv.seller.name,
+      amount: totalDue, reference: vm.inv.number,
+    }),
   };
 
   const html = env().render(path.join('modern_a', 'mahnung.njk'),
-    documentContext({ category: 'mahnung', vm: context, theme, logoDataUri }));
+    documentContext({ category: 'mahnung', vm: context, theme, logoDataUri, placeholders: {
+      belegnummer: vm.inv.number ?? '', belegdatum: fmtDateDE(vm.inv.date), faellig: fmtDateDE(dueDate),
+      betrag: moneyText(totalDue), projekt: vm.projectName ?? '', vertrag: vm.contractName ?? '',
+      bauvorhaben: vm.bauvorhaben ?? '', kunde: vm.inv.buyer?.name ?? '', anrede: vm.salutationLine ?? '',
+      ansprechpartner: vm.inv.seller?.contactName ?? '', firma: vm.inv.seller?.name ?? '', mahnstufe: mahnstufeLabel,
+    } }));
   return renderPdf({ html, footerCols: buildSellerFooterCols(context.seller) });
 }
 
@@ -1723,16 +1703,36 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
 // (categoryChain): wer dort nichts eigens eingestellt hat, sieht wie bisher die
 // Einstellung der Elternkategorie.
 
-function documentContext({ category, vm, theme, logoDataUri = null, signatureDataUri = null, overrides = [] }) {
+function documentContext({ category, vm, theme, logoDataUri = null, signatureDataUri = null, overrides = [], placeholders = null }) {
   const t = { ...theme };
   const chain = categoryChain(category);
   const appxCat = chain.find((c) => t.blocksByCategory && t.blocksByCategory[c]);
   t.blocks = { ...defaultTheme().blocks, ...(appxCat ? t.blocksByCategory[appxCat] : (t.blocks || {})) };
+  // Eine Kategorie mit eigenem Zahlungs-Standard (Korrektur: nie, Mahnung:
+  // immer) erbt den Schalter nicht — sonst bekaeme die Korrektur mit jeder
+  // Anpassung der Rechnung wieder „Bitte überweisen Sie −1.190 €".
+  const ownPayment = CATEGORIES[chain[0]].defaults && CATEGORIES[chain[0]].defaults.payment;
   const bodyLevels = chain.slice().reverse()
-    .map((c) => t.bodyByCategory && t.bodyByCategory[c])
+    .map((c) => {
+      const o = t.bodyByCategory && t.bodyByCategory[c];
+      if (!o || c === chain[0] || !ownPayment) return o;
+      const { payment: _inherited, ...rest } = o;
+      return rest;
+    })
     .filter(Boolean);
   const layout = resolveLayout(category, [...bodyLevels, ...overrides], { hasClosingText: !!(vm && vm.text2) });
-  return { ...vm, theme: t, themeHead: buildThemeHead(t), logoDataUri, signatureDataUri, layout };
+  const out = { ...vm, theme: t, themeHead: buildThemeHead(t), logoDataUri, signatureDataUri, layout };
+  // Eigener Kopf-/Fusstext aus Projekt oder Beleg (Stufe 3) ersetzt den Standard.
+  if (layout.introText !== null) out.text1 = layout.introText;
+  if (layout.closingText !== null) out.text2 = layout.closingText;
+  // Platzhalter in allen Texten — auch in eigenen Textbloecken und Mahntexten.
+  if (placeholders) {
+    for (const k of ['text1', 'text2', 'headerText', 'footerText']) {
+      if (out[k]) out[k] = resolvePlaceholders(out[k], placeholders);
+    }
+    for (const b of layout.body) if (b.kind === 'text' && b.text) b.text = resolvePlaceholders(b.text, placeholders);
+  }
+  return out;
 }
 
 // ── Vorschau in Einstellungen → Dokumentvorlagen ─────────────────────────────
@@ -1756,10 +1756,14 @@ async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice
     ]);
   } catch (_) { /* Logo optional — Vorschau funktioniert auch ohne */ }
 
-  if (vm.inv && vm.payAmount > 0) {
+  // GiroCode wie im echten Beleg: Rechnung über den Zahlbetrag, Mahnung über
+  // den jetzt fälligen Betrag.
+  const qrSeller = vm.inv ? vm.inv.seller : vm.seller;
+  const qrAmount = vm.inv ? vm.payAmount : vm.totalDue;
+  if (qrSeller && qrAmount > 0) {
     vm.epcQrDataUri = await buildEpcQrDataUri({
-      bic: vm.inv.seller.bic, iban: vm.inv.seller.iban, name: vm.inv.seller.name,
-      amount: vm.payAmount, reference: vm.inv.number,
+      bic: qrSeller.bic, iban: qrSeller.iban, name: qrSeller.name,
+      amount: qrAmount, reference: vm.inv ? vm.inv.number : vm.invoiceNumber,
     });
   }
 

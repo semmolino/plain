@@ -480,19 +480,88 @@ export const HELP = {
     ),
   },
   'vorlagen.anhaenge': {
-    title: 'Inhalte & Anhänge',
+    title: 'Anhänge',
     body: (
       <>
-        Lege fest, welche zusätzlichen Seiten an deine Belege angehängt werden:
-        <strong> Projektübersicht</strong> (Leistungsstand je Projektelement),
-        <strong> Stundennachweis</strong> (erfasste Stunden aus den Buchungen),
-        <strong> HOAI-/Kalkulationsübersicht</strong> und
-        <strong> Zahlungsübersicht</strong> (bisherige Abschläge). Die Auswahl ist
-        <strong> je Belegtyp</strong> (Rechnungen, Abschlagsrechnungen, Angebote)
-        getrennt einstellbar — Rechnung, Schluss-/Teilschlussrechnung, Abschlagsrechnung
-        und Angebot können also unterschiedliche Anhänge haben. Die <strong>Reihenfolge</strong>
-        legst du über die Pfeile fest. Ein Anhang erscheint nur, wenn er hier aktiv ist
-        <em> und</em> tatsächlich Daten dafür vorliegen. Bereits gebuchte Belege bleiben unverändert.
+        Zusätzliche Seiten nach dem Beleg: <strong>Projektübersicht</strong> (Leistungsstand je
+        Projektelement), <strong>Stundennachweis</strong> (erfasste Stunden),
+        <strong> HOAI-/Kalkulationsübersicht</strong>, <strong>Zahlungsübersicht</strong> (bisherige
+        Abschläge) und beim Angebot das <strong>Bestellblatt</strong>. Einstellbar je Belegart;
+        Reihenfolge per Ziehen oder Pfeil. Ein Anhang erscheint nur, wenn er an ist
+        <em> und</em> Daten dafür vorliegen. Bereits gebuchte Belege bleiben unverändert.
+      </>
+    ),
+  },
+  'vorlagen.aufbau': {
+    title: 'Aufbau des Belegs',
+    body: (
+      <>
+        Die Bausteine des Belegs von oben nach unten. Verschieben per Ziehen oder mit den Pfeilen,
+        <strong> Auge</strong> blendet aus, die <strong>Schere</strong> setzt einen Seitenumbruch davor.
+        Bausteine mit <strong>Schloss</strong> tragen Pflichtangaben einer Rechnung (§ 14 UStG) —
+        Titel, Beträge, Leistungen —, sie lassen sich verschieben, aber nicht ausblenden. Der
+        Briefkopf mit Anschrift steht immer oben.
+        <br /><br />
+        <strong>Textblock</strong> fügt einen eigenen Text an beliebiger Stelle ein, frei oder aus
+        einem Textbaustein; ein leerer Textblock erscheint nicht.
+      </>
+    ),
+  },
+  'vorlagen.zahlungshinweis': {
+    title: 'Zahlungshinweis',
+    body: (
+      <>
+        „Bitte überweisen Sie … bis …" samt GiroCode zum Scannen mit der Banking-App.
+        <strong> Automatisch</strong> heißt: nur, solange der Beleg keinen Fußtext hat — viele Büros
+        schreiben die Zahlungsbedingungen selbst in den Fußtext. <strong>Immer</strong> zeigt ihn
+        zusätzlich, <strong>Nie</strong> lässt ihn weg. Die Rechnungskorrektur hat nie einen, die
+        Mahnung immer — beide übernehmen diese Einstellung nicht von der Rechnung.
+      </>
+    ),
+  },
+  'vorlagen.erben': {
+    title: 'Übernommene Einstellung',
+    body: (
+      <>
+        Teilschlussrechnungen richten sich nach der Schlussrechnung, Rechnungskorrekturen nach der
+        Rechnung — solange sie keine eigene Einstellung haben. Wer dort etwas ändert, ändert es für
+        beide. Sobald du hier abweichst, gilt für diese Belegart die eigene Einstellung;
+        „Wie …" stellt die Übernahme wieder her.
+      </>
+    ),
+  },
+  'vorlagen.platzhalter': {
+    title: 'Platzhalter',
+    body: (
+      <>
+        Platzhalter wie <code>{'{{belegnummer}}'}</code> oder <code>{'{{leistungszeitraum}}'}</code> werden
+        beim Erzeugen des PDFs durch die Werte des Belegs ersetzt. In das Textfeld klicken, dann den
+        Platzhalter wählen — er landet an der Cursorposition. Angeboten werden nur Platzhalter, die
+        in dieser Belegart einen Wert haben; hat ein Beleg keinen (z. B. keinen Leistungszeitraum),
+        bleibt die Stelle leer.
+      </>
+    ),
+  },
+  'vorlagen.standardtexte': {
+    title: 'Standardtexte',
+    body: (
+      <>
+        Kopftext (vor den Positionen) und Fußtext (nach den Beträgen), mit denen jeder neue Beleg
+        dieser Art startet. Im Beleg selbst lassen sie sich abweichend eintragen. Die
+        Teilschlussrechnung nimmt den Text der Schlussrechnung, solange sie keinen eigenen hat.
+        Die Texte der Mahnstufen stehen unter Einstellungen → Mahnungen.
+      </>
+    ),
+  },
+  'vorlagen.textbausteine': {
+    title: 'Textbausteine',
+    body: (
+      <>
+        Texte, die du öfter brauchst — Gewährleistung, Abnahme, Hinweis zur Schlusszahlung. Ein
+        Baustein für <strong>alle Belegarten</strong> oder nur für eine. <strong>Verwendung</strong>
+        sagt, wo er angeboten wird: als Kopftext, als Fußtext oder als eigener Textblock. Übernommen
+        wird der Text, nicht ein Verweis: ändert sich der Baustein, bleiben Belege, die ihn schon
+        enthalten, wie sie sind.
       </>
     ),
   },

@@ -7,6 +7,7 @@ const emailTemplates       = require("./emailTemplates");
 const { openAmountsFor, withClaimCols, TOL } = require("./openAmount");
 // Tagesdatum in der App-Zeitzone — toISOString() ist UTC, zwischen 0 und 2 Uhr also gestern.
 const { localDateStr } = require("./notificationSchedule");
+const { TEXT_TYPES } = require("./documentLayout");
 
 const DEFAULT_SETTINGS = [
   { mahnstufe: 1, label: "Zahlungserinnerung", days_after_due: 7,  days_after_prev: 0,  fee: 0  },
@@ -647,6 +648,12 @@ async function getTextTemplates(supabase, { tenantId }) {
 }
 
 async function saveTextTemplate(supabase, { tenantId, documentType, headerText, footerText }) {
+  // Nur Typen, die eine Belegart auch liest (documentLayout.TEXT_TYPES) —
+  // vorher nahm der Endpunkt jeden Namen an und legte tote Zeilen an.
+  if (!TEXT_TYPES.includes(documentType)) throw { status: 400, message: "Unbekannte Textvorlage." };
+  const clip = (v) => (typeof v === "string" ? v.slice(0, 4000) : null);
+  headerText = clip(headerText) || null;
+  footerText = clip(footerText) || null;
   const { error } = await supabase.from("TEXT_TEMPLATE").upsert({
     TENANT_ID:     tenantId,
     DOCUMENT_TYPE: documentType,

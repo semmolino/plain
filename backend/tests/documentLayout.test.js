@@ -48,8 +48,8 @@ describe("resolveLayout", () => {
   });
 
   it("unbekannte Bausteine einer Kategorie fallen weg", () => {
-    const l = resolveLayout("mahnung", [{ order: ["payment", "comment", "closing"] }]);
-    expect(l.body.map((b) => b.key)).not.toContain("payment");
+    const l = resolveLayout("mahnung", [{ order: ["positions", "comment", "closing"] }]);
+    expect(l.body.map((b) => b.key)).not.toContain("positions");
     expect(l.body.map((b) => b.key)).not.toContain("comment");
   });
 
@@ -126,6 +126,16 @@ describe("Wirkung in den Vorlagen", () => {
       (vm) => { vm.text2 = "Eigener Fußtext"; });
     expect(html).toContain("Eigener Fußtext");
     expect(html).toContain("Bitte überweisen Sie");
+  });
+
+  it("Korrektur erbt den Aufbau der Rechnung, aber nie deren Zahlungshinweis", () => {
+    const theme = { bodyByCategory: { invoice_rechnung: { hidden: ["reference"], payment: "always" } } };
+    const html = render("invoice_korrektur", theme);
+    expect(html).not.toContain('class="ref-block"');
+    expect(html).not.toContain("Bitte überweisen Sie");
+    // eine eigene Einstellung der Korrektur gilt weiterhin
+    expect(render("invoice_korrektur", { bodyByCategory: { ...theme.bodyByCategory, invoice_korrektur: { payment: "always" } } }))
+      .toContain("Bitte überweisen Sie");
   });
 
   it("Seitenumbruch vor den Beträgen", () => {
