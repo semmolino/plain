@@ -202,7 +202,7 @@ function buildSellerFooterCols(seller) {
  */
 const RENDER_TIMEOUT_MS = 30_000;
 
-async function renderPdf({ html, footerCols, headerTemplate, readable = false }) {
+async function renderPdf({ html, footerCols, headerTemplate, readable = false, bare = false }) {
   const browser = await getBrowser();
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {
@@ -210,6 +210,10 @@ async function renderPdf({ html, footerCols, headerTemplate, readable = false })
     const page = await context.newPage();
     page.setDefaultTimeout(RENDER_TIMEOUT_MS);
     await page.setContent(html, { waitUntil: 'load', timeout: RENDER_TIMEOUT_MS });
+
+    // bare: eine Seite ohne Raender, Kopf- und Fusszeile, ohne Hintergrund —
+    // fuer Ueberlagerungen wie den Folgeseitenkopf (services/pdfFinish.js)
+    if (bare) return await page.pdf({ format: 'A4', printBackground: false, margin: { top: '0', right: '0', bottom: '0', left: '0' } });
 
     const { template: footerTemplate, marginBottom } = buildFooterTemplate(footerCols, { readable });
 
@@ -235,7 +239,25 @@ async function renderPdf({ html, footerCols, headerTemplate, readable = false })
 async function renderLetterPdf({ supabase, tenantId, html, footerCols, theme, follow }) {
   const finish = await finishOptions({ supabase, tenantId, theme, follow });
   const pdf = await renderPdf({ html, footerCols: finish.hideFooter ? [] : footerCols, readable: readableFooter(theme) });
-  return finishPdf(pdf, finish);
+  // Folgeseitenkopf als eigene Chromium-Seite in der Schrift des Belegs —
+  // erst gerendert, wenn es eine Folgeseite gibt (finishPdf ruft die Funktion).
+  const followHeaderPdf = finish.followHeader
+    ? () => renderPdf({ html: followHeaderHtml(finish.followHeader, theme), bare: true })
+    : null;
+  return finishPdf(pdf, { ...finish, followHeaderPdf });
+}
+
+/** Eine transparente A4-Seite mit nur dem Folgeseitenkopf. */
+function followHeaderHtml(text, theme) {
+  const fontKey = theme && theme.brand && theme.brand.fontFamily;
+  const esc = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<!doctype html><html lang="de"><head><meta charset="utf-8"><style>
+${fontFaceCss(fontKey)}
+@page { size: A4; margin: 0; }
+html, body { margin: 0; padding: 0; background: transparent; }
+.fh { position: absolute; top: 6.5mm; left: 25mm; right: 20mm; font-family: ${resolveFont(fontKey).stack};
+      font-size: 7.5pt; color: #8c8c8c; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style></head><body><div class="fh">${esc}</div></body></html>`;
 }
 
 /** „Rechnung RE-2026-0042 · Stadt Musterstadt" fuer den Kopf der Folgeseiten. */

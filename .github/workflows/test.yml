@@ -43,6 +43,34 @@ jobs:
         env:
           JWT_SECRET: test-secret-ci
 
+  pdfa:
+    name: PDF/A-3b (veraPDF)
+    runs-on: ubuntu-latest
+
+    # Das ZUGFeRD-Hybrid-PDF nennt sich PDF/A-3b — das muss stimmen, sonst
+    # weisen strenge Empfaenger die E-Rechnung ab. Rendert Musterbelege wie im
+    # Betrieb (Standard und alle Gestaltungsoptionen) und prueft sie mit
+    # veraPDF. Hintergrund: docs/PDFA3_MACHBARKEIT.md
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci --prefix backend
+
+      - name: veraPDF-Pruefung
+        run: bash scripts/pdfa-check.sh
+
   rename-guard:
     name: Umbenennung (Altnamen-Waechter)
     runs-on: ubuntu-latest

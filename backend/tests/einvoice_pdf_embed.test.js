@@ -52,3 +52,58 @@ describe("embedXmlIntoPdf", () => {
     expect(reloaded.getTitle()).toBe("Rechnung 1");
   });
 });
+
+// PDF/A-3b (10/2026): die Bausteine, die veraPDF beim Chromium-PDF vermisste.
+// Die volle Pruefung laeuft in CI mit veraPDF (scripts/pdfa-check.sh) — hier
+// nur die Struktur, damit ein Rueckbau sofort auffaellt.
+describe("embedXmlIntoPdf — PDF/A-3b", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const zlib = require("zlib");
+  const { PDFName, PDFRawStream, PDFArray } = require("pdf-lib");
+
+  async function load() {
+    const { hybrid } = await embedAndDump({ author: "Musterplanung GmbH", producer: "plan&simple" });
+    return PDFDocument.load(hybrid, { updateMetadata: false });
+  }
+  const xmpOf = (doc) => {
+    const st = doc.context.lookup(doc.catalog.get(PDFName.of("Metadata")));
+    return { st, xml: Buffer.from(st.getContents()).toString("utf8") };
+  };
+
+  it("OutputIntent GTS_PDFA1 mit dem unveränderten sRGB-Profil des ICC", async () => {
+    const doc = await load();
+    const intents = doc.catalog.lookup(PDFName.of("OutputIntents"), PDFArray);
+    const oi = intents.lookup(0);
+    expect(String(oi.get(PDFName.of("S")))).toBe("/GTS_PDFA1");
+    const icc = doc.context.lookup(oi.get(PDFName.of("DestOutputProfile")));
+    expect(icc).toBeInstanceOf(PDFRawStream);
+    expect(String(icc.dict.get(PDFName.of("N")))).toBe("3");
+    const bytes = zlib.inflateSync(Buffer.from(icc.getContents()));
+    expect(bytes.equals(fs.readFileSync(path.join(__dirname, "..", "assets", "icc", "sRGB2014.icc")))).toBe(true);
+  });
+
+  it("XMP: PDF/A-Kennung 3B, Erweiterungsschema für fx, ungefiltert", async () => {
+    const { st, xml } = xmpOf(await load());
+    expect(st.dict.get(PDFName.of("Filter"))).toBeUndefined();
+    expect(xml).toContain("<pdfaid:part>3</pdfaid:part>");
+    expect(xml).toContain("<pdfaid:conformance>B</pdfaid:conformance>");
+    expect(xml).toContain("<pdfaSchema:namespaceURI>urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#</pdfaSchema:namespaceURI>");
+    for (const p of ["DocumentFileName", "DocumentType", "Version", "ConformanceLevel"]) {
+      expect(xml).toContain(`<pdfaProperty:name>${p}</pdfaProperty:name>`);
+    }
+  });
+
+  it("Info und XMP stimmen überein; Datei-ID im Trailer", async () => {
+    const doc = await load();
+    const { xml } = xmpOf(doc);
+    expect(doc.getProducer()).toBe("plan&simple");
+    expect(xml).toContain("<pdf:Producer>plan&amp;simple</pdf:Producer>");
+    expect(doc.getAuthor()).toBe("Musterplanung GmbH");
+    const created = doc.getCreationDate().toISOString().replace(/\.\d{3}Z$/, "Z");
+    expect(xml).toContain(`<xmp:CreateDate>${created}</xmp:CreateDate>`);
+    const id = doc.context.trailerInfo.ID;
+    expect(id).toBeDefined();
+    expect(id.size()).toBe(2);
+  });
+});

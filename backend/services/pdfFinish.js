@@ -15,14 +15,19 @@
  *                Chromium nicht bedruckt.
  *   Folgeseiten  „Rechnung RE-… · Empfaenger" oben ab Seite 2. Chromiums
  *                Kopfzeile erscheint auf jeder Seite und laesst sich ohne
- *                JavaScript nicht auf Folgeseiten beschraenken.
+ *                JavaScript nicht auf Folgeseiten beschraenken. Der Kopf kommt
+ *                deshalb als eigene, transparente Chromium-Seite (Schrift des
+ *                Belegs, eingebettet — PDF/A verlangt das) und wird hier auf
+ *                die Folgeseiten gelegt. Bis 10/2026 zeichnete pdf-lib ihn mit
+ *                Helvetica als Standardschrift: nicht eingebettet, also kein
+ *                PDF/A, und nicht die Schrift des Belegs.
  *
  * Ohne Optionen kommt das PDF unveraendert zurueck — das bisherige Aussehen
  * kostet keinen zweiten Durchlauf.
  */
 
 const {
-  PDFDocument, StandardFonts, rgb,
+  PDFDocument, rgb,
   pushGraphicsState, popGraphicsState, concatTransformationMatrix, drawObject,
 } = require("pdf-lib");
 const storage = require("./objectStorage");
@@ -49,24 +54,16 @@ function underlay(doc, page, embedded) {
   page.node.normalizedEntries().Contents.insert(0, ref);
 }
 
-/** Zeichen, die die Standardschrift (WinAnsi) nicht kennt, fallen weg. */
-function winAnsiSafe(font, text) {
-  let out = "";
-  for (const ch of String(text || "")) {
-    try { font.encodeText(ch); out += ch; } catch (_) { out += ch === "−" ? "-" : ""; }
-  }
-  return out;
-}
-
 /**
  * @param pdfBytes  Buffer/Uint8Array aus page.pdf()
  * @param opts      { letterhead?: { bytes, pages: 'first'|'all' },
  *                    foldMarks?: { din: 'A'|'B'|'none' },
- *                    followHeader?: string }
+ *                    followHeaderPdf?: Buffer | () => Promise<Buffer> — eine Seite,
+ *                      ab Seite 2 darueber; als Funktion erst bei mehr als einer Seite erzeugt }
  */
 async function finishPdf(pdfBytes, opts = {}) {
-  const { letterhead, foldMarks, followHeader } = opts;
-  if (!(letterhead && letterhead.bytes) && !foldMarks && !followHeader) return pdfBytes;
+  const { letterhead, foldMarks, followHeaderPdf } = opts;
+  if (!(letterhead && letterhead.bytes) && !foldMarks && !followHeaderPdf) return pdfBytes;
 
   const doc = await PDFDocument.load(pdfBytes);
   const pages = doc.getPages();
@@ -91,12 +88,10 @@ async function finishPdf(pdfBytes, opts = {}) {
     line(PUNCH_MM, 7);
   }
 
-  if (followHeader && pages.length > 1) {
-    const font = await doc.embedFont(StandardFonts.Helvetica);
-    const text = winAnsiSafe(font, followHeader).slice(0, 140);
-    for (const p of pages.slice(1)) {
-      p.drawText(text, { x: 25 * MM, y: p.getHeight() - 9 * MM, size: 7.5, font, color: GREY });
-    }
+  if (followHeaderPdf && pages.length > 1) {
+    const bytes = typeof followHeaderPdf === "function" ? await followHeaderPdf() : followHeaderPdf;
+    const [hdr] = await doc.embedPdf(bytes, [0]);
+    for (const p of pages.slice(1)) p.drawPage(hdr, { x: 0, y: 0, width: p.getWidth(), height: p.getHeight() });
   }
 
   return Buffer.from(await doc.save());

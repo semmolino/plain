@@ -529,6 +529,10 @@ export const HELP = {
         Beleg — auf der ersten oder auf allen Seiten. Steht Logo oder Fußzeile schon darauf, blende
         das Logo unter „Schrift und Logo" aus und lass die Fußzeile weg. Interne Berichte
         (Honorar, Monatsabschluss) bleiben ohne Briefpapier.
+        <br /><br />
+        Für E-Rechnungen im ZUGFeRD-Format (PDF/A-3) wird das Briefpapier Teil des Belegs: Es sollte
+        selbst PDF/A-tauglich sein — Schriften eingebettet, Farben in RGB. Die Druckerei oder das
+        Grafikprogramm kann es so exportieren („PDF/A").
       </>
     ),
   },

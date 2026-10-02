@@ -96,21 +96,28 @@ describe("PDF-Nachbearbeitung", () => {
   });
 
   it("„alle Seiten“ legt es überall unter; Folgeseitenkopf nur ab Seite 2; Falzmarken nur auf Seite 1", async () => {
+    // Der Kopf kommt als eigene Seite (im Betrieb aus Chromium, Schrift eingebettet)
     const out = await PDFDocument.load(await finishPdf(await contentPdf(3), {
       letterhead: { bytes: await letterheadPdf(), pages: "all" },
-      followHeader: "Rechnung RE-1 · Müller − Söhne",
+      followHeaderPdf: async () => contentPdf(1),
       foldMarks: { din: "B" },
     }));
     const pages = out.getPages().map((p) => streams(out, p));
     for (const ps of pages) expect(ps[0]).toMatch(/\/PsLetterhead\S* Do/);
-    const hexRech = Buffer.from("Rechnung RE-1").toString("hex").toUpperCase();
-    expect(pages[0].join("").toUpperCase()).not.toContain(hexRech);
-    expect(pages[1].join("").toUpperCase()).toContain(hexRech);
-    expect(pages[2].join("").toUpperCase()).toContain(hexRech);
+    const header = (ps) => (ps.join("\n").match(/\/EmbeddedPdfPage\S* Do/g) || []).length;
+    expect(header(pages[0])).toBe(0);
+    expect(header(pages[1])).toBe(1);
+    expect(header(pages[2])).toBe(1);
     // drei Linien (zwei Falz-, eine Lochmarke) auf Seite 1, keine danach
     const lines = (ps) => (ps.join("\n").match(/ l\n/g) || []).length;
     expect(lines(pages[0])).toBe(3);
     expect(lines(pages[1])).toBe(0);
+  });
+
+  it("einseitiger Beleg: der Folgeseitenkopf wird gar nicht erst gerendert", async () => {
+    const render = jest.fn(async () => contentPdf(1));
+    await finishPdf(await contentPdf(1), { followHeaderPdf: render });
+    expect(render).not.toHaveBeenCalled();
   });
 
   it("ein kaputtes Briefpapier verhindert den Beleg nicht", async () => {

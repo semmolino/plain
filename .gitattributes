@@ -16,3 +16,7 @@ Aptfile text eol=lf
 # als geaendert anzeigen.
 node_modules/** -text
 **/node_modules/** -text
+
+# Farbprofile sind Binaerdaten — jede Zeilenend-Umwandlung zerstoert sie
+# (das ICC-Profil muss fuer PDF/A byte-genau bleiben).
+*.icc binary

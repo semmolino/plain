@@ -1,69 +1,50 @@
-# PDF/A-3 für ZUGFeRD-Hybridbelege — Machbarkeit
+# PDF/A-3b für ZUGFeRD-Hybridbelege
 
-Stand: 02.10.2026 · Vorlagen-Plan Stufe 5, Punkt S5 · Entscheidung D7: „nach Machbarkeitsprüfung, vor 2027"
+Stand: 02.10.2026 · Vorlagen-Plan Stufe 5, Punkt S5 · **umgesetzt und mit veraPDF nachgewiesen**
 
-## Kurzfassung
+## Ergebnis
 
-- **Machbar ohne neues Programm.** Das PDF aus Chromium lässt sich mit pdf-lib (schon im Projekt) zu PDF/A-3b nachbearbeiten. Ghostscript wäre der zweite Weg, er ist aber schlechter (siehe unten).
-- **Nicht umgesetzt** ist es noch, weil zwei Dinge fehlen, die ich nicht ohne Zustimmung aus dem Netz hole:
-  1. ein **sRGB-ICC-Profil** für den OutputIntent;
-  2. **veraPDF** (Java), um die Konformität zu *prüfen*.
+Das ZUGFeRD-/Factur-X-Hybrid-PDF ist **PDF/A-3b-konform**. Geprüft wurde mit veraPDF 1.30 (Greenfield), Profil PDF/A-3B, alle 146 Regeln bestanden:
+- für das bisherige Aussehen (Standard);
+- für alle Gestaltungsoptionen aus Stufe 4 zusammen: Webfont, Stile „Klar“ und „Architektur“, DIN-Anschriftfeld A und B, Falz- und Lochmarken, Folgeseitenkopf;
+- für die Profile EN 16931 und XRechnung.
 
-  Ohne Prüfung wäre „PDF/A-3b-konform" eine Behauptung. Strenge Empfänger weisen genau so etwas ab.
-- **Betroffen ist nur das Hybrid-PDF (ZUGFeRD).** Die reine E-Rechnung (XRechnung UBL/CII) ist XML und davon unabhängig. Sie erfüllt die Pflicht ab 2027/28 bereits.
+Die Prüfung läuft dauerhaft in CI (Job `pdfa`, `scripts/pdfa-check.sh`). Jede Änderung, die die PDF/A-Eigenschaft bricht, fällt dort auf.
 
-## Ausgangslage
+## Was veraPDF vorher beanstandete — und die Lösung
 
-`services_einvoice_pdf_embed.js` bettet das CII-XML in das Chromium-PDF ein:
-- als Associated File mit `AFRelationship=Alternative`,
-- dazu XMP mit Factur-X-Namensraum.
+Vorher scheiterten sechs Regeln. Schriften und Transparenz aus Chromium bestanden schon.
 
-Das Ergebnis ist ein gültiges Hybrid-PDF, aber kein PDF/A-3. Das steht auch so im Code. Die meisten Empfänger lesen das XML trotzdem. Validatoren wie veraPDF oder der ZUGFeRD-Validator des FeRD melden aber Fehler.
-
-## Was PDF/A-3b verlangt — und wie das Chromium-PDF dasteht
-
-| Anforderung | Stand heute | Weg |
+| Regel | Befund | Lösung (`services_einvoice_pdf_embed.js`) |
 |---|---|---|
-| Alle Schriften eingebettet | ✓ Chromium (Skia) bettet Teilmengen als CIDFontType2 samt ToUnicode ein | — |
-| Keine Verschlüsselung, kein JavaScript | ✓ | — |
-| OutputIntent mit ICC-Profil (sRGB) | ✗ fehlt | pdf-lib: `/OutputIntents` mit `GTS_PDFA1` und eingebettetem sRGB-Profil |
-| XMP mit `pdfaid:part=3`, `pdfaid:conformance=B` | ✗ (nur Factur-X-XMP) | in `buildXmp` ergänzen |
-| XMP und Info-Dictionary deckungsgleich (Titel, Producer, Erstellungsdatum) | teilweise | beide aus denselben Werten setzen |
-| Trailer-`/ID` | unklar | pdf-lib setzt beim Speichern eine, prüfen |
-| Eingebettete Datei mit `AFRelationship`, `/Subtype`, `/ModDate` | ✓ weitgehend | `/Params /ModDate` prüfen |
-| Transparenz | in PDF/A-2/3 erlaubt, braucht aber einen Ausgabefarbraum | durch den sRGB-OutputIntent abgedeckt |
-| Annotationen mit Druck-Flag | Belege haben keine Links | ggf. `/F 4` setzen |
+| 6.2.4.3-2 (1992×) | DeviceRGB ohne Ausgabefarbraum | OutputIntent `GTS_PDFA1` mit dem sRGB-Profil des ICC (`backend/assets/icc/sRGB2014.icc`) |
+| 6.2.10-2 | Transparenzgruppe ohne Farbraum | ebenfalls durch den OutputIntent |
+| 6.6.4-1 | PDF/A-Kennung fehlt | XMP `pdfaid:part=3`, `pdfaid:conformance=B` |
+| 6.6.2.3.1-1/-2 | Factur-X-Felder ohne Schema | XMP-Erweiterungsschema für den `fx`-Namensraum |
+| 6.1.3-1 | Datei-ID im Trailer fehlt | `/ID` im Trailer |
 
-## Wege
+Dazu kommt ein Zeitpunkt für Info-Dictionary, XMP und Anhang. PDF/A verlangt, dass beide Metadaten übereinstimmen.
 
-**A. Ghostscript** (`-dPDFA=3 -sColorConversionStrategy=RGB`, installierbar über den apt-Buildpack/`Aptfile`)
-- **+** bringt ICC-Profil und PDF/A-Logik mit.
-- **−** Schreibt das PDF komplett neu: Schriften werden umgewandelt, und das Aussehen kann sich ändern. Die „Stand vom Buchen"-Garantie hinge dann an einem zweiten Renderer.
-- **−** AGPL-Lizenz. Ein unverändertes Binary per Aufruf gilt meist als unkritisch, muss aber geprüft werden.
-- **−** Rund 30 MB mehr im Container und ein zusätzlicher Prozess pro Beleg.
+**Folgeseitenkopf (Stufe 4):** Er wurde mit Helvetica als Standardschrift gezeichnet. Die ist nicht eingebettet, also war das kein PDF/A. Jetzt rendert Chromium ihn als eigene transparente Seite in der Schrift des Belegs, und pdf-lib legt sie auf die Folgeseiten (`services/pdfFinish.js`). Gerendert wird nur, wenn es eine Folgeseite gibt.
 
-**B. pdf-lib-Nachbearbeitung** (empfohlen) — die Ergänzungen aus der Tabelle oben.
-- **+** kein neues Programm;
-- **+** das Aussehen bleibt Byte für Byte das des Chromium-PDFs;
-- **+** derselbe Ort wie die Briefpapier-Nachbearbeitung (`services/pdfFinish.js`).
-- **−** Die Konformität hängt an Details von Chromium. Deshalb gehört **veraPDF als Prüfschritt** dazu.
+## Grenzen
 
-**C. Externer Dienst** — ein Beleg verließe dafür den Server. Für Rechnungsdaten nicht empfohlen.
+- **Briefpapier:** Ein eigenes Briefpapier-PDF wird Teil des Belegs. Damit das Ganze PDF/A bleibt, muss es selbst PDF/A-tauglich sein: Schriften eingebettet, Farben in RGB, keine Transparenz ohne Farbraum. Prüfen lässt sich das, indem man ein Hybrid-PDF mit dem Briefpapier durch veraPDF schickt.
+- **Gebuchte Belege:** Ihr Hybrid-PDF entsteht aus dem archivierten PDF. Belege, die vor dieser Änderung gebucht wurden, enthalten den Folgeseitenkopf nicht. Stufe 4 war noch nicht ausgerollt, es gibt also keine Altfälle mit Helvetica.
+- **Konformität ist ein Nachweis am Muster.** Der CI-Job prüft die Vorlagen mit Beispieldaten, nicht jeden einzelnen Beleg. Inhalte, die die Musterbelege nicht haben, also eigene Anhänge oder Bilder in Texten, prüft er nicht mit.
 
-## Empfehlung und was dafür nötig ist
+## Lokal prüfen
 
-Weg B, abgesichert durch eine Prüfung in CI:
+veraPDF braucht Java ≥ 11. Das Skript installiert veraPDF bei Bedarf nach `$VERAPDF_DIR` (Standard `~/verapdf`):
 
-1. Das **sRGB-ICC-Profil** ins Repo legen, z. B. `sRGB2014.icc` vom ICC (color.org). Die Lizenz erlaubt die Weitergabe. → braucht deine Zustimmung zum Download.
-2. **veraPDF** in CI, als Docker-Image `verapdf/cli` oder Java plus veraPDF-Greenfield. Der Job rendert die Musterbelege aus `einvoice/referenceDocument.js` als Hybrid-PDF und prüft gegen das Profil PDF/A-3B. → braucht deine Zustimmung, CI zu erweitern.
-3. Umsetzung in `services_einvoice_pdf_embed.js`: OutputIntent, pdfaid im XMP, Metadaten-Gleichlauf, Trailer-ID.
-4. Erst wenn der Job grün ist: den Hinweis „KEIN strict PDF/A-3" im Code entfernen und das Hybrid-PDF als PDF/A-3b ausweisen.
+```bash
+bash scripts/pdfa-check.sh
+```
 
-Aufwand: ca. 1–2 Tage einschließlich CI-Job, sofern veraPDF keine Chromium-Eigenheit meldet, die tiefer geht (z. B. Type3-Schriften für Sonderzeichen). Das zeigt erst der erste Prüflauf.
+Nur die Musterbelege erzeugen: `node backend/scripts/pdfa-sample.js <ordner>`.
 
-## Zeitplan
+## Quellen
 
-- Empfang von E-Rechnungen: Pflicht seit 2025.
-- Versand: ab 2027 für Unternehmen mit mehr als 800 000 € Vorjahresumsatz, ab 2028 für alle.
-- ZUGFeRD ab Profil EN 16931 erfüllt die Pflicht, **wenn** das XML gültig ist. Die PDF/A-Eigenschaft ist Teil des ZUGFeRD-Standards.
-- Wer heute Hybrid-PDFs verschickt, sollte deshalb vor 2027 auf PDF/A-3b umstellen. Die reine XRechnung ist davon nicht betroffen.
+- sRGB-Profil: https://registry.color.org/rgb-registry/srgbprofiles (ICC, frei weitergebbar, unverändert)
+- veraPDF: https://software.verapdf.org/releases/verapdf-installer.zip
+- Factur-X/ZUGFeRD: XMP-Erweiterungsschema nach Factur-X 1.0 / ZUGFeRD 2.x
