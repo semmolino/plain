@@ -127,12 +127,15 @@ export async function downloadWithAuth(path: string, fileName: string, body?: Fo
  * Fetch a PDF with the auth header and open it inline in a new browser tab.
  * @param path  API path (e.g. /invoices/1/pdf?preview=1)
  */
-export async function openPdfWithAuth(path: string): Promise<void> {
+export async function openPdfWithAuth(path: string, jsonBody?: unknown): Promise<void> {
   const token = useAuthStore.getState().token
   const headers: Record<string, string> = {}
   if (token) headers['Authorization'] = `Bearer ${token}`
 
-  const res = await fetch(`${API_BASE}${path}`, { headers })
+  // Mit jsonBody ein POST — z. B. die Vorschau einer noch nicht gespeicherten Gestaltung.
+  const res = jsonBody === undefined
+    ? await fetch(`${API_BASE}${path}`, { headers })
+    : await fetch(`${API_BASE}${path}`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(jsonBody) })
   if (!res.ok) {
     let message = `HTTP ${res.status}`
     try {

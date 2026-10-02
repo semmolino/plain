@@ -176,3 +176,43 @@ test('Handy: Bereich als Auswahl, kein seitliches Scrollen', async ({ page }) =>
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
   expect(overflow).toBeLessThanOrEqual(2)
 })
+
+test.describe('Seitenaufbau und Briefpapier (Stufe 4)', () => {
+  test('Stil-Vorlage, DIN 5008, Falzmarken und Briefpapier gehen mit dem Speichern', async ({ page }) => {
+    const state = await setup(page)
+    await page.goto('/admin?tab=dokumentvorlagen&sub=gestaltung')
+    // Standard ist das bisherige Aussehen
+    await expect(page.getByLabel('Anschriftfeld')).toHaveValue('none')
+
+    // Stil-Vorlage (setzt Stil, Farbe, Schrift, Logo) — nicht der Stil-Knopf gleichen Namens
+    await page.locator('.dv-preset').filter({ hasText: 'Klar' }).click()
+    await page.getByLabel('Anschriftfeld').selectOption('B')
+    await page.getByLabel('Falz- und Lochmarken').check()
+
+    await page.locator('input[type=file][accept="application/pdf"]').setInputFiles({
+      name: 'briefbogen.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.7\n%%EOF'),
+    })
+    await expect(page.getByText('briefbogen.pdf')).toBeVisible()
+    expect(state.uploads[0]).toContain('LETTERHEAD')
+    await page.getByLabel(/Fußzeile mit Anschrift, Bank und Steuer weglassen/).check()
+
+    await bar(page).getByRole('button', { name: 'Speichern' }).click()
+    await expect.poll(() => state.puts.length).toBe(1)
+    expect(state.puts[0]).toMatchObject({ theme_json: {
+      layout: { style: 'klar', din: 'B', foldMarks: true, followHeader: false },
+      letterhead: { assetId: 77, pages: 'first', hideFooter: true },
+      brand: { fontFamily: 'inter' },
+    } })
+  })
+
+  test('„Als PDF ansehen" schickt die ungespeicherte Gestaltung', async ({ page }) => {
+    const state = await setup(page)
+    await page.goto('/admin?tab=dokumentvorlagen&sub=gestaltung')
+    await page.getByLabel('Belegart, Nummer und Empfänger oben auf Folgeseiten').check()
+    const popup = page.waitForEvent('popup')
+    await page.getByRole('button', { name: 'Als PDF ansehen' }).click()
+    await popup
+    expect(state.pdfPreviews[0]).toMatchObject({ category: 'invoice_rechnung', theme_json: { layout: { followHeader: true } } })
+    expect(state.puts).toHaveLength(0)
+  })
+})

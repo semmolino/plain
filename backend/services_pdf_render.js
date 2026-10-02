@@ -28,6 +28,8 @@ const { sanitizeTheme } = require('./services_theme_schema');
 const { CATEGORIES, resolveLayout, categoryChain, invoiceCategory, textTypeChain, layoutLevels } = require('./services/documentLayout');
 const { loadDocumentLayouts, cleanOverride } = require('./services/documentLayoutStore');
 const { readPdfAssetBuffer } = require('./services/generatedAssets');
+const { layoutCss, readableFooter } = require('./services_theme_styles');
+const { finishPdf, finishOptions } = require('./services/pdfFinish');
 const { resolvePlaceholders } = require('./services/documentPlaceholders');
 const { sampleViewModel } = require('./services/documentSamples');
 const { resolveFont, fontFaceCss } = require('./services_theme_fonts');
@@ -54,7 +56,7 @@ ${fontFaceCss(brand.fontFamily)}
 body{ font-family: var(--brand-font) !important; }
 .doc-title, .metaBlock .title{ color: var(--brand-accent) !important; }
 .logo-area{ justify-content: ${justify} !important; }
-</style>`;
+${layoutCss(t)}</style>`;
 }
 
 function fmtMoney(v) {
@@ -123,11 +125,15 @@ async function getBrowser() {
   return _browserPromise;
 }
 
-function buildFooterTemplate(footerCols) {
+function buildFooterTemplate(footerCols, { readable = false } = {}) {
+  // Bisher 7 px (rund 5 pt) — am Ausdruck kaum lesbar. Die neuen Stile setzen
+  // 7 pt; „Standard" bleibt, wie er war (keine stille Umstellung).
+  const fs = readable ? '7pt' : '7px';
+  const fsBold = readable ? '7.5pt' : '7.5px';
   if (!footerCols || !Array.isArray(footerCols) || footerCols.length === 0) {
     return {
       template: `
-        <div style="font-size:7.5px;width:100%;padding:0 20mm 0 25mm;color:#9ca3af;display:flex;justify-content:flex-end;align-items:center;">
+        <div style="font-size:${fsBold};width:100%;padding:0 20mm 0 25mm;color:#9ca3af;display:flex;justify-content:flex-end;align-items:center;">
           <div style="white-space:nowrap;">Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>
         </div>`,
       marginBottom: '16mm',
@@ -137,20 +143,20 @@ function buildFooterTemplate(footerCols) {
     const rowsHtml = (col.rows || []).map(r => {
       const text = String(r.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       return r.bold
-        ? `<strong style="display:block;font-size:7.5px;font-weight:700;color:#374151;">${text}</strong>`
+        ? `<strong style="display:block;font-size:${fsBold};font-weight:700;color:#374151;">${text}</strong>`
         : `<span style="color:#6b7280;">${text}</span><br>`;
     }).join('');
     return `<div style="flex:1;min-width:0;">${rowsHtml}</div>`;
   }).join('');
   return {
     template: `
-      <div style="width:100%;padding:2mm 20mm 0 25mm;border-top:0.5pt solid #d1d5db;display:flex;gap:5mm;font-size:7px;line-height:1.55;box-sizing:border-box;">
+      <div style="width:100%;padding:2mm 20mm 0 25mm;border-top:0.5pt solid #d1d5db;display:flex;gap:5mm;font-size:${fs};line-height:1.55;box-sizing:border-box;">
         ${colsHtml}
-        <div style="white-space:nowrap;color:#9ca3af;font-size:7px;text-align:right;flex-shrink:0;padding-top:0.5mm;">
+        <div style="white-space:nowrap;color:#9ca3af;font-size:${fs};text-align:right;flex-shrink:0;padding-top:0.5mm;">
           Seite <span class="pageNumber"></span>&nbsp;/&nbsp;<span class="totalPages"></span>
         </div>
       </div>`,
-    marginBottom: '22mm',
+    marginBottom: readable ? '25mm' : '22mm',
   };
 }
 
@@ -193,7 +199,7 @@ function buildSellerFooterCols(seller) {
  */
 const RENDER_TIMEOUT_MS = 30_000;
 
-async function renderPdf({ html, footerCols, headerTemplate }) {
+async function renderPdf({ html, footerCols, headerTemplate, readable = false }) {
   const browser = await getBrowser();
   const context = await browser.newContext({ javaScriptEnabled: false });
   try {
@@ -202,7 +208,7 @@ async function renderPdf({ html, footerCols, headerTemplate }) {
     page.setDefaultTimeout(RENDER_TIMEOUT_MS);
     await page.setContent(html, { waitUntil: 'load', timeout: RENDER_TIMEOUT_MS });
 
-    const { template: footerTemplate, marginBottom } = buildFooterTemplate(footerCols);
+    const { template: footerTemplate, marginBottom } = buildFooterTemplate(footerCols, { readable });
 
     return await page.pdf({
       format: 'A4',
@@ -215,6 +221,23 @@ async function renderPdf({ html, footerCols, headerTemplate }) {
   } finally {
     await context.close().catch(() => {});
   }
+}
+
+/**
+ * Ein Brief (Rechnung, Angebot, Mahnung …) als PDF, samt Seitenaufbau aus dem
+ * Theme: Fusszeile in der Groesse des Stils, Briefpapier, Falzmarken,
+ * Folgeseitenkopf (services/pdfFinish.js). Interne Berichte (Honorar, WIP,
+ * Monatsabschluss) gehen weiter direkt ueber renderPdf.
+ */
+async function renderLetterPdf({ supabase, tenantId, html, footerCols, theme, follow }) {
+  const finish = await finishOptions({ supabase, tenantId, theme, follow });
+  const pdf = await renderPdf({ html, footerCols: finish.hideFooter ? [] : footerCols, readable: readableFooter(theme) });
+  return finishPdf(pdf, finish);
+}
+
+/** „Rechnung RE-2026-0042 · Stadt Musterstadt" fuer den Kopf der Folgeseiten. */
+function followText(title, number, recipient) {
+  return [[title, number].filter(Boolean).join(' '), recipient].filter(Boolean).join(' · ');
 }
 
 // ── Nunjucks ──────────────────────────────────────────────────────────────────
@@ -1081,12 +1104,15 @@ async function buildDocumentHtml({ supabase, docType, docId, tenantId, templateI
   });
   const html = env().render(path.join(layoutKey, CATEGORIES[category].template), ctx);
 
-  return { html, footerCols: buildSellerFooterCols(vm.inv.seller), template: tpl, theme, projectLayout, ctx };
+  return { html, footerCols: buildSellerFooterCols(vm.inv.seller), template: tpl, theme, projectLayout, ctx, category };
 }
 
 async function renderDocumentPdf(args) {
-  const { html, footerCols, template, theme, projectLayout } = await buildDocumentHtml(args);
-  const pdf = await renderPdf({ html, footerCols });
+  const { html, footerCols, template, theme, projectLayout, ctx, category } = await buildDocumentHtml(args);
+  const pdf = await renderLetterPdf({
+    supabase: args.supabase, tenantId: args.tenantId, html, footerCols, theme,
+    follow: followText(ctx.stornoTitle || CATEGORIES[category].label, ctx.inv?.number, ctx.inv?.buyer?.name),
+  });
   // projectLayout: der Stand, mit dem gerendert wurde — die Buchung friert ihn ein.
   return { pdf, template, theme, projectLayout };
 }
@@ -1167,7 +1193,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
-  const pdf = await renderPdf({ html });
+  const pdf = await renderLetterPdf({ supabase, tenantId, html, theme, follow: followText('Angebot', vm.offer?.ABBR, vm.buyer?.name) });
   return { pdf, offer: vm.offer };
 }
 
@@ -1189,7 +1215,7 @@ async function renderNachtragPdf({ supabase, nachtragId, tenantId }) {
     ansprechpartner: vm.employeeName ?? '', firma: vm.seller?.name ?? '',
   } });
   const html = env().render(path.join('modern_a', 'nachtrag.njk'), context);
-  const pdf = await renderPdf({ html });
+  const pdf = await renderLetterPdf({ supabase, tenantId, html, theme, follow: followText('Nachtrag', vm.nachtrag?.ABBR, vm.buyer?.name) });
   return { pdf, nachtrag: vm.nachtrag };
 }
 
@@ -1210,7 +1236,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'auftragsbestaetigung.njk'), context);
 
-  const pdf = await renderPdf({ html });
+  const pdf = await renderLetterPdf({ supabase, tenantId, html, theme, follow: followText('Auftragsbestätigung', vm.offer?.ABBR, vm.buyer?.name) });
   return { pdf, offer: vm.offer };
 }
 
@@ -1389,7 +1415,10 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
       bauvorhaben: vm.bauvorhaben ?? '', kunde: vm.inv.buyer?.name ?? '', anrede: vm.salutationLine ?? '',
       ansprechpartner: vm.inv.seller?.contactName ?? '', firma: vm.inv.seller?.name ?? '', mahnstufe: mahnstufeLabel,
     } }));
-  return renderPdf({ html, footerCols: buildSellerFooterCols(context.seller) });
+  return renderLetterPdf({
+    supabase, tenantId, html, theme, footerCols: buildSellerFooterCols(context.seller),
+    follow: followText(mahnstufeLabel, vm.inv.number, vm.inv.buyer?.name),
+  });
 }
 
 async function renderMonatsabschlussPdf({ supabase, tenantId }) {
@@ -1835,7 +1864,10 @@ async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice
   const ctx = documentContext({ category: cat, vm, theme: mergedTheme, logoDataUri, signatureDataUri });
   const html = env().render(path.join('modern_a', CATEGORIES[cat].template), ctx);
   if (!asPdf) return { html };
-  const pdf = await renderPdf({ html, footerCols: buildSellerFooterCols(vm.inv ? vm.inv.seller : vm.seller) });
+  const pdf = await renderLetterPdf({
+    supabase, tenantId, html, theme: mergedTheme, footerCols: buildSellerFooterCols(vm.inv ? vm.inv.seller : vm.seller),
+    follow: followText(CATEGORIES[cat].label, vm.inv ? vm.inv.number : (vm.offer?.ABBR || vm.invoiceNumber), vm.inv ? vm.inv.buyer?.name : vm.buyer?.name),
+  });
   return { pdf, html };
 }
 

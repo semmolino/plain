@@ -18,6 +18,9 @@ module.exports = (supabase) => {
   router.use(requirePermission("settings.document_templates.edit"));
 
   router.post("/preview",           (req, res) => ctrl.previewDocumentTemplate(req, res, supabase));
+  // Dieselbe Vorschau als PDF — mit Briefpapier, Falzmarken und Folgeseitenkopf,
+  // die es nur im PDF gibt („/pdf" zaehlt im Limiter als teuer).
+  router.post("/preview/pdf",       (req, res) => ctrl.previewDocumentTemplatePdf(req, res, supabase));
   router.get("/branding",           (req, res) => ctrl.getBranding(req, res, supabase));
   router.put("/branding",           (req, res) => ctrl.saveBranding(req, res, supabase));
   router.get("/",                   (req, res) => ctrl.listDocumentTemplates(req, res, supabase));

@@ -73,6 +73,7 @@ module.exports = (supabase) => {
     LOGO:               "settings.company.edit",
     SIGNATURE:          "settings.company.edit",
     TENANT_HERO:        "settings.company.edit",            // Login-Branding
+    LETTERHEAD:         "settings.document_templates.edit", // Briefpapier (PDF) der Dokumentvorlagen
     INVOICE_ATTACHMENT: "invoices.edit",
   };
 

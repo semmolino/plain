@@ -25,6 +25,8 @@ const { CATEGORIES: LAYOUT_CATEGORIES, APPENDICES, sanitizeLayoutOverride } = re
 const APPENDIX_KEYS = Object.keys(APPENDICES);
 const CATEGORIES = Object.keys(LAYOUT_CATEGORIES);
 
+const LAYOUT_STYLES = ['standard', 'klar', 'kompakt', 'architektur'];
+
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 function color(v, fallback) {
@@ -61,6 +63,8 @@ function sanitizeTheme(raw) {
   const brand = isObj(t.brand) ? t.brand : {};
   const header = isObj(t.header) ? t.header : {};
   const footer = isObj(t.footer) ? t.footer : {};
+  const layout = isObj(t.layout) ? t.layout : {};
+  const letterhead = isObj(t.letterhead) ? t.letterhead : {};
 
   const out = {
     version: def.version,
@@ -80,6 +84,19 @@ function sanitizeTheme(raw) {
     },
     footer: {
       showPageNumbers: bool(footer.showPageNumbers, def.footer.showPageNumbers),
+    },
+    layout: {
+      style:        oneOf(layout.style, LAYOUT_STYLES, def.layout.style),
+      din:          oneOf(layout.din, ['none', 'B', 'A'], def.layout.din),
+      foldMarks:    bool(layout.foldMarks, def.layout.foldMarks),
+      followHeader: bool(layout.followHeader, def.layout.followHeader),
+    },
+    letterhead: {
+      // Nur eine positive ganze Zahl — ob das Asset dem Mandanten gehoert und
+      // ein PDF ist, prueft der Renderer beim Laden (services/pdfFinish.js).
+      assetId:    Number.isInteger(letterhead.assetId) && letterhead.assetId > 0 ? letterhead.assetId : null,
+      pages:      oneOf(letterhead.pages, ['first', 'all'], def.letterhead.pages),
+      hideFooter: bool(letterhead.hideFooter, def.letterhead.hideFooter),
     },
     blocks: sanitizeBlocks(t.blocks, def.blocks),
   };
@@ -101,4 +118,4 @@ function sanitizeTheme(raw) {
   return out;
 }
 
-module.exports = { sanitizeTheme, APPENDIX_KEYS, CATEGORIES };
+module.exports = { sanitizeTheme, APPENDIX_KEYS, CATEGORIES, LAYOUT_STYLES };

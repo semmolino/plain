@@ -28,6 +28,18 @@ function defaultTheme() {
     // Gesamtprojekt — fuer alle anderen aendert der Standard nichts.
     header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right', showBauvorhaben: true },
     footer: { showPageNumbers: true },
+    // Seitenaufbau (Vorlagen-Plan Stufe 4). Standard = das bisherige Aussehen:
+    //   style       standard | klar | kompakt | architektur
+    //   din         none (Anschrift fliesst wie bisher) | B | A (DIN 5008,
+    //               Anschriftfeld fest fuer den Fensterumschlag)
+    //   foldMarks   Falz- und Lochmarken am linken Rand
+    //   followHeader Belegart, Nummer und Empfaenger oben auf Folgeseiten
+    layout: { style: 'standard', din: 'none', foldMarks: false, followHeader: false },
+    // Briefpapier: eigenes PDF als Hintergrund (Asset LETTERHEAD).
+    //   pages       first | all
+    //   hideFooter  Fusszeile mit Anschrift/Bank/Steuer weglassen, weil sie auf
+    //               dem Briefpapier steht (Seitenzahl bleibt)
+    letterhead: { assetId: null, pages: 'first', hideFooter: false },
     // Schaltbare Anhang-/Inhaltsabschnitte (Default an → kein Beleg verliert
     // ohne Zutun Inhalte). Templates gaten mit `!= false`, daher robust auch ohne
     // explizit gesetzte Flags.

@@ -22,6 +22,8 @@ export interface DvState {
   textPuts:  { type: string; body: Record<string, unknown> }[]
   snippets:  Record<string, unknown>[]
   snippetCalls: { method: string; url: string; body: Record<string, unknown> | null }[]
+  uploads:   string[]
+  pdfPreviews: Record<string, unknown>[]
 }
 
 export async function mockDokumentvorlagen(page: Page, init: Partial<Pick<DvState, 'theme' | 'texts' | 'snippets'>> = {}): Promise<DvState> {
@@ -30,7 +32,7 @@ export async function mockDokumentvorlagen(page: Page, init: Partial<Pick<DvStat
       version: 2, brand: { primaryColor: '#111827', accentColor: '#111827', fontFamily: 'system-sans', fontScale: 1 },
       header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right', showBauvorhaben: true }, blocks: {},
     },
-    puts: [], previews: [], textPuts: [], snippetCalls: [],
+    puts: [], previews: [], textPuts: [], snippetCalls: [], uploads: [], pdfPreviews: [],
     texts: init.texts ?? {},
     snippets: init.snippets ?? [],
   }
@@ -46,6 +48,14 @@ export async function mockDokumentvorlagen(page: Page, init: Partial<Pick<DvStat
       return route.fulfill(json({ data: { ok: true } }))
     }
     return route.fulfill(json({ data: { theme: state.theme, blocksByCategory: state.theme.blocksByCategory ?? {}, companyId: 1 } }))
+  })
+  await r('document-templates/preview/pdf', route => {
+    state.pdfPreviews.push(route.request().postDataJSON())
+    return route.fulfill({ status: 200, contentType: 'application/pdf', body: '%PDF-1.7\n%%EOF' })
+  })
+  await r('assets/upload', route => {
+    state.uploads.push(route.request().postData() ?? '')
+    return route.fulfill(json({ data: { ID: 77 }, url: '/assets/77' }))
   })
   await r('document-templates/preview', route => {
     state.previews.push(route.request().postDataJSON())

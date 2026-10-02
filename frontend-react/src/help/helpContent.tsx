@@ -472,10 +472,40 @@ export const HELP = {
     title: 'Stil-Vorlage',
     body: (
       <>
-        Ein fertiger Look als Startpunkt: ein Klick setzt <strong>Hausfarbe</strong>,
+        Ein fertiger Look als Startpunkt: ein Klick setzt <strong>Stil</strong>, <strong>Hausfarbe</strong>,
         <strong> Schrift</strong> und <strong>Logo-Position</strong> gemeinsam. Danach
         kannst du jedes Detail einzeln anpassen — die Stil-Vorlage ist nur die
-        Ausgangsbasis, keine feste Bindung.
+        Ausgangsbasis, keine feste Bindung. „Standard" ist das bisherige Aussehen;
+        gebuchte Belege behalten ihre Gestaltung ohnehin.
+      </>
+    ),
+  },
+  'vorlagen.seitenaufbau': {
+    title: 'Seitenaufbau',
+    body: (
+      <>
+        <strong>Stil</strong>: Satzbild des Belegs — Abstände, Titelgröße, Linien, Tabellenköpfe.
+        Die neuen Stile setzen auch die Fußzeile in einer lesbaren Größe (7 pt).
+        <br /><br />
+        <strong>Anschriftfeld nach DIN 5008</strong>: Die Anschrift steht an fester Stelle, so dass sie
+        im Fenster eines Umschlags erscheint — Form B 45 mm, Form A 27 mm vom oberen Rand, der
+        Infoblock (Datum, Nummer, Kontakt) rechts daneben. „Fließend" ist das bisherige Verhalten:
+        die Anschrift rückt mit der Logogröße.
+        <br /><br />
+        <strong>Falz- und Lochmarken</strong> am linken Rand helfen beim Falten und Lochen.
+        <strong> Folgeseiten</strong> tragen oben Belegart, Nummer und Empfänger, damit eine
+        einzelne Seite zuordenbar bleibt. Beides siehst du mit „Als PDF ansehen".
+      </>
+    ),
+  },
+  'vorlagen.briefpapier': {
+    title: 'Briefpapier',
+    body: (
+      <>
+        Hast du gestaltetes Geschäftspapier, lade es als PDF hoch: die erste Seite liegt hinter jedem
+        Beleg — auf der ersten oder auf allen Seiten. Steht Logo oder Fußzeile schon darauf, blende
+        das Logo unter „Schrift und Logo" aus und lass die Fußzeile weg. Interne Berichte
+        (Honorar, Monatsabschluss) bleiben ohne Briefpapier.
       </>
     ),
   },

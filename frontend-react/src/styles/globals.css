@@ -4807,6 +4807,13 @@ fieldset:disabled .ws-check { cursor: default; }
 .dv-preview-paper { width: 100%; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: white; }
 .dv-preview-paper iframe { border: none; display: block; transform-origin: top left; }
 .dv-preview-note { margin: 0; font-size: 11px; color: var(--text-3); text-align: center; }
+.dv-pdf-btn { align-self: center; display: inline-flex; align-items: center; gap: 4px; }
+
+/* Seitenaufbau und Briefpapier (Stufe 4) */
+.dv-checks { display: flex; flex-direction: column; gap: 0; }
+.dv-letterhead { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
+.dv-letterhead-file { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); margin-right: auto; }
+.dv-letterhead .btn-small, .form-section .dv-letterhead + .btn-small { display: inline-flex; align-items: center; gap: 4px; }
 
 /* Textbausteine */
 .dv-snippets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }

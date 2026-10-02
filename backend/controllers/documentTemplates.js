@@ -110,6 +110,21 @@ async function previewDocumentTemplate(req, res, supabase) {
   }
 }
 
+async function previewDocumentTemplatePdf(req, res, supabase) {
+  try {
+    const theme = req.body?.theme_json && typeof req.body.theme_json === "object" ? req.body.theme_json : {};
+    const category = String(req.body?.category || "invoice_rechnung");
+    const { pdf } = await pdfRender.renderPreviewDoc({ supabase, tenantId: req.tenantId, theme, category, asPdf: true });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'inline; filename="Vorschau.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(Buffer.from(pdf));
+  } catch (err) {
+    const status = err.status || 500;
+    res.status(status).json({ error: err.message || String(err) });
+  }
+}
+
 // ── Katalog: Kategorien, Bausteine, Platzhalter ──────────────────────────────
 // Die Einstellungen holen den Aufbau je Belegart von hier statt eine Kopie der
 // Registry zu pflegen (services/documentLayout.js → documentCatalog).
@@ -157,4 +172,5 @@ module.exports = {
   getBranding,
   saveBranding,
   getCatalog,
+  previewDocumentTemplatePdf,
 };

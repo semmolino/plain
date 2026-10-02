@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, openPdfWithAuth } from './client'
 
 // ── Gestaltung der Belege (Spiegel von backend/services_theme_schema.js) ─────
 //
@@ -24,6 +24,31 @@ export interface ThemeHeader {
   showBauvorhaben?: boolean
 }
 
+export type LayoutStyle = 'standard' | 'klar' | 'kompakt' | 'architektur'
+export type DinForm = 'none' | 'B' | 'A'
+
+/** Seitenaufbau (Stufe 4) — Spiegel von services_theme_schema.js */
+export interface ThemeLayout {
+  style:        LayoutStyle
+  din:          DinForm
+  foldMarks:    boolean
+  followHeader: boolean
+}
+
+/** Briefpapier: eigenes PDF als Hintergrund */
+export interface ThemeLetterhead {
+  assetId:    number | null
+  pages:      'first' | 'all'
+  hideFooter: boolean
+}
+
+export const LAYOUT_STYLES: { id: LayoutStyle; label: string; hint: string }[] = [
+  { id: 'standard',    label: 'Standard',    hint: 'Das bisherige Aussehen.' },
+  { id: 'klar',        label: 'Klar',        hint: 'Viel Weißraum, feine Linien, Summen hinterlegt.' },
+  { id: 'kompakt',     label: 'Kompakt',     hint: 'Dicht gesetzt — für lange Positionslisten und Stundennachweise.' },
+  { id: 'architektur', label: 'Architektur', hint: 'Große Titel, Akzentlinie, Versalien als Etiketten.' },
+]
+
 /** Anhänge (eigene Seiten): Schalter je Anhang plus Reihenfolge. */
 export type ThemeBlocks = Record<string, boolean | string[] | undefined> & { order?: string[] }
 
@@ -47,6 +72,8 @@ export interface DocTheme {
   header:   ThemeHeader
   blocks:   ThemeBlocks
   footer?:  Record<string, unknown>
+  layout?:  ThemeLayout
+  letterhead?: ThemeLetterhead
   blocksByCategory?: Record<string, ThemeBlocks>
   bodyByCategory?:   Record<string, LayoutOverride>
 }
@@ -61,6 +88,8 @@ export const DEFAULT_THEME: DocTheme = {
     order: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
   },
   footer: { showPageNumbers: true },
+  layout: { style: 'standard', din: 'none', foldMarks: false, followHeader: false },
+  letterhead: { assetId: null, pages: 'first', hideFooter: false },
 }
 
 // ── Katalog vom Server ───────────────────────────────────────────────────────
@@ -123,13 +152,17 @@ export interface StylePreset {
   accentColor: string
   fontFamily:  string
   logoPosition: LogoPosition
+  layoutStyle:  LayoutStyle
 }
+// Die ersten vier zeigen die neuen Layout-Stile (Stufe 4); „Standard" ist das
+// bisherige Aussehen. Eine Vorlage ändert nichts, bis jemand sie wählt.
 export const STYLE_PRESETS: StylePreset[] = [
-  { id: 'standard',  label: 'Standard',  accentColor: '#111827', fontFamily: 'system-sans',      logoPosition: 'right'  },
-  { id: 'modern',    label: 'Modern',    accentColor: '#1e3a5f', fontFamily: 'inter',            logoPosition: 'left'   },
-  { id: 'klassisch', label: 'Klassisch', accentColor: '#3f3f46', fontFamily: 'source-serif',     logoPosition: 'right'  },
-  { id: 'elegant',   label: 'Elegant',   accentColor: '#7c2d12', fontFamily: 'playfair-display', logoPosition: 'center' },
-  { id: 'frisch',    label: 'Frisch',    accentColor: '#0f766e', fontFamily: 'montserrat',       logoPosition: 'left'   },
+  { id: 'standard',    label: 'Standard',    accentColor: '#111827', fontFamily: 'system-sans',      logoPosition: 'right',  layoutStyle: 'standard' },
+  { id: 'klar',        label: 'Klar',        accentColor: '#1e3a5f', fontFamily: 'inter',            logoPosition: 'left',   layoutStyle: 'klar' },
+  { id: 'kompakt',     label: 'Kompakt',     accentColor: '#0f766e', fontFamily: 'open-sans',        logoPosition: 'right',  layoutStyle: 'kompakt' },
+  { id: 'architektur', label: 'Architektur', accentColor: '#3f3f46', fontFamily: 'montserrat',       logoPosition: 'left',   layoutStyle: 'architektur' },
+  { id: 'klassisch',   label: 'Klassisch',   accentColor: '#3f3f46', fontFamily: 'source-serif',     logoPosition: 'right',  layoutStyle: 'standard' },
+  { id: 'elegant',     label: 'Elegant',     accentColor: '#7c2d12', fontFamily: 'playfair-display', logoPosition: 'center', layoutStyle: 'klar' },
 ]
 
 // Logo-Größe (Höhe in mm) — wird in den Templates als max-height genutzt.
@@ -169,3 +202,7 @@ export const saveBranding = (theme_json: DocTheme) =>
 
 export const previewBranding = (theme_json: DocTheme, category: string) =>
   apiClient.post<{ html: string }>('/document-templates/preview', { theme_json, category })
+
+/** Dieselbe Vorschau als PDF in neuem Tab — mit Briefpapier, Falzmarken und Folgeseitenkopf. */
+export const openBrandingPdf = (theme_json: DocTheme, category: string) =>
+  openPdfWithAuth('/document-templates/preview/pdf', { theme_json, category })

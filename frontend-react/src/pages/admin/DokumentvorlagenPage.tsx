@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { FileText } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ActionBar } from '@/components/ui/ActionBar'
@@ -12,7 +13,7 @@ import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { usePermission } from '@/store/permissionsStore'
 import { useToast } from '@/store/toastStore'
 import {
-  DEFAULT_THEME, fetchBranding, fetchCatalog, previewBranding, saveBranding,
+  DEFAULT_THEME, fetchBranding, fetchCatalog, openBrandingPdf, previewBranding, saveBranding,
   type DocCatalog, type DocTheme,
 } from '@/api/documentTemplates'
 import { fetchDocumentTexts } from '@/api/documentTexts'
@@ -126,6 +127,10 @@ function DesignArea({ sub, active, catalog, category, onCategory }: {
           </div>
         )}
         <DocPreview requestKey={previewKey} load={() => previewBranding(theme, category).then(r => r.html)} />
+        {/* Briefpapier, Falzmarken und Folgeseitenkopf gibt es nur im PDF */}
+        <button type="button" className="btn-small dv-pdf-btn" onClick={() => void openBrandingPdf(theme, category).catch((e: Error) => toast.error(e.message))}>
+          <FileText size={13} strokeWidth={2} /> Als PDF ansehen
+        </button>
       </div>
       <ActionBar
         dirty={dirty}
