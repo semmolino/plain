@@ -806,11 +806,12 @@ async function putCompany(req, res, supabase) {
 const ADDR_OPTIONAL_DB_COLS = [
   "PEPPOL_ENDPOINT_ID", "PEPPOL_SCHEME_ID",
   "ADDRESS_TYPE", "TAX_NUMBER", "PHONE", "EMAIL", "WEBSITE", "NOTES",
+  "IS_CONSUMER",   // 0186: Verbraucher — Verzugszinsen 5 statt 9 Prozentpunkte, keine Pauschale
 ];
 
 // Baut aus dem Request-Body das Set optionaler Adress-Spalten.
 function buildAddrOptionalCols(body) {
-  const { peppol_endpoint_id, peppol_scheme_id, address_type, tax_number, phone, email, website, notes } = body || {};
+  const { peppol_endpoint_id, peppol_scheme_id, address_type, tax_number, phone, email, website, notes, is_consumer } = body || {};
   const cols = {};
   if (peppol_endpoint_id !== undefined) cols.PEPPOL_ENDPOINT_ID = (peppol_endpoint_id || "").toString().trim() || null;
   if (peppol_scheme_id   !== undefined) cols.PEPPOL_SCHEME_ID   = (peppol_scheme_id   || "").toString().trim() || null;
@@ -823,6 +824,7 @@ function buildAddrOptionalCols(body) {
   if (email      !== undefined) cols.EMAIL      = (email      || "").toString().trim() || null;
   if (website    !== undefined) cols.WEBSITE    = (website    || "").toString().trim() || null;
   if (notes      !== undefined) cols.NOTES      = (notes      || "").toString().trim() || null;
+  if (is_consumer !== undefined) cols.IS_CONSUMER = is_consumer === true || is_consumer === "true";
   return cols;
 }
 
@@ -941,7 +943,7 @@ async function searchAddresses(req, res, supabase) {
 // Basis- und Voll-Spaltensatz für ADDRESS-Reads (Voll enthält additive Spalten
 // aus 0061/0099 — bei fehlender Migration wird auf Basis zurückgefallen).
 const ADDR_BASE_SELECT = 'ID, ADDRESS_NAME_1, ADDRESS_NAME_2, STREET, POST_CODE, CITY, POST_OFFICE_BOX, COUNTRY_ID, CUSTOMER_NUMBER, "TAX-ID", BUYER_REFERENCE';
-const ADDR_FULL_SELECT = ADDR_BASE_SELECT + ', PEPPOL_ENDPOINT_ID, PEPPOL_SCHEME_ID, ADDRESS_TYPE, TAX_NUMBER, PHONE, EMAIL, WEBSITE, NOTES';
+const ADDR_FULL_SELECT = ADDR_BASE_SELECT + ', PEPPOL_ENDPOINT_ID, PEPPOL_SCHEME_ID, ADDRESS_TYPE, TAX_NUMBER, PHONE, EMAIL, WEBSITE, NOTES, IS_CONSUMER';
 
 // Normalisiert eine ADDRESS-Row: TAX_ID-Alias + Land-Name auflösen.
 function normalizeAddress(r, countryMap) {

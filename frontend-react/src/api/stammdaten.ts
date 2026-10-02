@@ -26,6 +26,8 @@ export interface Address {
   EMAIL:            string | null
   WEBSITE:          string | null
   NOTES:            string | null
+  /** Verbraucher (Migration 0186) — fehlt vor dem Deploy-Hook */
+  IS_CONSUMER?:     boolean | null
   COUNTRY:          string
 }
 
@@ -69,6 +71,8 @@ export interface AddressPayload {
   email?: string
   website?: string
   notes?: string
+  /** 'true' = Privatperson (Verbraucher) */
+  is_consumer?: string
 }
 
 export interface ContactPayload {

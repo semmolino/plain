@@ -4,6 +4,8 @@ const { renderMahnungPdf } = require("../services_pdf_render");
 const { requirePermission } = require("../middleware/permissions");
 const { localDateStr } = require("../services/notificationSchedule");
 const { streamPdfAsset } = require("../services/generatedAssets");
+const { readDefaults, writeDefaults } = require("../services/tenantDefaults");
+const { defaultStufeLabel } = require("../services/mahnstufen");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -20,7 +22,12 @@ module.exports = (supabase) => {
   router.get("/settings", async (req, res) => {
     try {
       const data = await svc.getSettings(supabase, { tenantId: tid(req) });
-      res.json({ data });
+      // Basiszinssatz fuer Verzugszinsen (TENANT_SETTINGS, services/tenantDefaults.js)
+      const d = await readDefaults(supabase, tid(req)).catch(() => ({}));
+      res.json({ data, baseRate: {
+        percent: d.dunning_base_rate_percent != null ? Number(d.dunning_base_rate_percent) : null,
+        since:   d.dunning_base_rate_since ?? null,
+      } });
     } catch (e) {
       res.status(e?.status || 500).json({ error: e?.message || String(e) });
     }
@@ -30,6 +37,13 @@ module.exports = (supabase) => {
   router.put("/settings", requirePermission("settings.dunning_config.edit"), async (req, res) => {
     try {
       const result = await svc.saveSettings(supabase, { tenantId: tid(req), levels: req.body.levels });
+      const br = req.body && req.body.baseRate;
+      if (br && typeof br === "object") {
+        await writeDefaults(supabase, tid(req), {
+          dunning_base_rate_percent: br.percent ?? null,
+          dunning_base_rate_since:   br.since ?? null,
+        }, (perm) => req.hasPermission(perm));
+      }
       res.json(result);
     } catch (e) {
       res.status(e?.status || 500).json({ error: e?.message || String(e) });
@@ -184,8 +198,7 @@ module.exports = (supabase) => {
         const { data: pp } = await supabase.from("ADVANCE_INVOICE").select("ADVANCE_INVOICE_NUMBER").eq("ID", mahnung.PP_ID).maybeSingle();
         if (pp?.ADVANCE_INVOICE_NUMBER) docNumber = pp.ADVANCE_INVOICE_NUMBER;
       }
-      const stufeLabels = ['Keine', 'Zahlungserinnerung', '1_Mahnung', '2_Mahnung', '3_Mahnung'];
-      const stufeLabel  = stufeLabels[mahnung.MAHNSTUFE] || `Stufe_${mahnung.MAHNSTUFE}`;
+      const stufeLabel  = defaultStufeLabel(mahnung.MAHNSTUFE).replace(/\.?\s+/g, '_');
       const safeName    = docNumber.replace(/[/\\?%*:|"<>\s]/g, '-');
       const filename    = `${safeName}_${today}_${stufeLabel}.pdf`;
 

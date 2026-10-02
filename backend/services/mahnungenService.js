@@ -8,12 +8,13 @@ const { openAmountsFor, withClaimCols, TOL } = require("./openAmount");
 // Tagesdatum in der App-Zeitzone — toISOString() ist UTC, zwischen 0 und 2 Uhr also gestern.
 const { localDateStr } = require("./notificationSchedule");
 const { TEXT_TYPES } = require("./documentLayout");
+const { defaultStufeLabel } = require("./mahnstufen");
 
 const DEFAULT_SETTINGS = [
-  { mahnstufe: 1, label: "Zahlungserinnerung", days_after_due: 7,  days_after_prev: 0,  fee: 0  },
-  { mahnstufe: 2, label: "1. Mahnung",          days_after_due: 14, days_after_prev: 14, fee: 0  },
-  { mahnstufe: 3, label: "2. Mahnung",          days_after_due: 21, days_after_prev: 14, fee: 20 },
-  { mahnstufe: 4, label: "3. Mahnung",          days_after_due: 28, days_after_prev: 14, fee: 40 },
+  { mahnstufe: 1, label: defaultStufeLabel(1), days_after_due: 7,  days_after_prev: 0,  fee: 0  },
+  { mahnstufe: 2, label: defaultStufeLabel(2), days_after_due: 14, days_after_prev: 14, fee: 0  },
+  { mahnstufe: 3, label: defaultStufeLabel(3), days_after_due: 21, days_after_prev: 14, fee: 20 },
+  { mahnstufe: 4, label: defaultStufeLabel(4), days_after_due: 28, days_after_prev: 14, fee: 40 },
 ];
 
 // ── List ─────────────────────────────────────────────────────────────────────
@@ -604,6 +605,8 @@ async function getSettings(supabase, { tenantId }) {
       fee:           Number(row.FEE),
       headerText:    row.HEADER_TEXT,
       footerText:    row.FOOTER_TEXT,
+      chargeInterest: row.CHARGE_INTEREST === true,
+      chargeFlatFee:  row.CHARGE_FLAT_FEE === true,
     } : {
       mahnstufe:     def.mahnstufe,
       label:         def.label,
@@ -612,6 +615,8 @@ async function getSettings(supabase, { tenantId }) {
       fee:           def.fee,
       headerText:    null,
       footerText:    null,
+      chargeInterest: false,
+      chargeFlatFee:  false,
     };
   });
 }
@@ -619,7 +624,7 @@ async function getSettings(supabase, { tenantId }) {
 async function saveSettings(supabase, { tenantId, levels }) {
   if (!Array.isArray(levels)) throw { status: 400, message: "levels array erforderlich" };
   for (const lv of levels) {
-    await supabase.from("MAHNUNG_SETTINGS").upsert({
+    const row = {
       TENANT_ID:      tenantId,
       MAHNSTUFE:      lv.mahnstufe,
       LABEL:          lv.label,
@@ -628,7 +633,19 @@ async function saveSettings(supabase, { tenantId, levels }) {
       FEE:            lv.fee,
       HEADER_TEXT:    lv.headerText ?? null,
       FOOTER_TEXT:    lv.footerText ?? null,
-    }, { onConflict: "TENANT_ID,MAHNSTUFE" });
+    };
+    // Verzugszinsen/-pauschale (Migration 0186) nur, wenn mitgeschickt — so
+    // speichert eine aeltere Oberflaeche weiter, ohne die Schalter zu loeschen.
+    if (typeof lv.chargeInterest === "boolean") row.CHARGE_INTEREST = lv.chargeInterest;
+    if (typeof lv.chargeFlatFee === "boolean") row.CHARGE_FLAT_FEE = lv.chargeFlatFee;
+    let { error } = await supabase.from("MAHNUNG_SETTINGS").upsert(row, { onConflict: "TENANT_ID,MAHNSTUFE" });
+    if (error && /CHARGE_(INTEREST|FLAT_FEE)/.test(error.message || "")) {
+      // Web-Container vor dem postdeploy-Hook: ohne die neuen Spalten speichern
+      delete row.CHARGE_INTEREST;
+      delete row.CHARGE_FLAT_FEE;
+      ({ error } = await supabase.from("MAHNUNG_SETTINGS").upsert(row, { onConflict: "TENANT_ID,MAHNSTUFE" }));
+    }
+    if (error) throw { status: 500, message: error.message };
   }
   return { ok: true };
 }

@@ -14,7 +14,7 @@ export function emptyAddr(defaultCountryId = ''): AddressPayload {
     post_code: '', city: '', country_id: defaultCountryId, address_type: '',
     phone: '', email: '', website: '',
     customer_number: '', tax_id: '', tax_number: '',
-    buyer_reference: '', peppol_endpoint_id: '', peppol_scheme_id: '', notes: '',
+    buyer_reference: '', peppol_endpoint_id: '', peppol_scheme_id: '', notes: '', is_consumer: '',
   }
 }
 
@@ -47,6 +47,7 @@ export function addressToPayload(a: Address): AddressPayload {
     peppol_endpoint_id: a.PEPPOL_ENDPOINT_ID ?? '',
     peppol_scheme_id:   a.PEPPOL_SCHEME_ID   ?? '',
     notes:              a.NOTES           ?? '',
+    is_consumer:        a.IS_CONSUMER ? 'true' : '',
   }
 }
 

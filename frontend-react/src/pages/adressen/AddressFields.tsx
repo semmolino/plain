@@ -109,6 +109,11 @@ export function AddressFields({ vals, set, countries, prefix, invalid, compact =
             {ADDRESS_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
         </div>
+        <label className="ws-check form-section-wide">
+          <input type="checkbox" checked={vals.is_consumer === 'true'} onChange={e => set('is_consumer', e.target.checked ? 'true' : '')} />
+          <span>Privatperson (Verbraucher)</span>
+          <HelpHint id="addresses.consumer" size={13} />
+        </label>
         {text('street', 'Straße')}
         {text('post_office_box', 'Postfach')}
         {text('post_code', 'PLZ', { inputMode: 'numeric', autoComplete: 'postal-code' })}

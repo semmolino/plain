@@ -1483,22 +1483,41 @@ function KostensatzSection() {
 
 function MahnungsEinstellungenSection() {
   const qc = useQueryClient()
-  const { data: raw, isLoading } = useQuery({ queryKey: ['mahnung-settings'], queryFn: () => fetchMahnungSettings().then(r => r.data) })
+  const { data: raw, isLoading } = useQuery({ queryKey: ['mahnung-settings-full'], queryFn: () => fetchMahnungSettings() })
 
   const [levels, setLevels] = useState<MahnungSettingsLevel[]>([])
+  const [rate, setRate]     = useState<{ percent: string; since: string }>({ percent: '', since: '' })
   const [msg,    setMsg]    = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-  useEffect(() => { if (raw) setLevels(raw) }, [raw])
+  useEffect(() => {
+    if (!raw) return
+    setLevels(raw.data)
+    setRate({
+      percent: raw.baseRate?.percent != null ? String(raw.baseRate.percent).replace('.', ',') : '',
+      since:   raw.baseRate?.since ?? '',
+    })
+  }, [raw])
+
+  const anyInterest = levels.some(l => l.chargeInterest)
+  // Basiszinssatz älter als ein halbes Jahr: er hat sich vermutlich geändert
+  const rateStale = !!rate.since && Date.now() - Date.parse(rate.since) > 183 * 86400000
 
   const saveMut = useMutation({
-    mutationFn: () => saveMahnungSettings(levels),
-    onSuccess:  () => { qc.invalidateQueries({ queryKey: ['mahnung-settings'] }); setMsg({ type: 'ok', text: 'Einstellungen gespeichert.' }) },
+    mutationFn: () => saveMahnungSettings(levels, {
+      percent: rate.percent.trim() === '' ? null : Number(rate.percent.replace(',', '.')),
+      since:   rate.since || null,
+    }),
+    onSuccess:  () => {
+      qc.invalidateQueries({ queryKey: ['mahnung-settings'] })
+      qc.invalidateQueries({ queryKey: ['mahnung-settings-full'] })
+      setMsg({ type: 'ok', text: 'Einstellungen gespeichert.' })
+    },
     onError:    (e: Error) => setMsg({ type: 'err', text: e.message }),
   })
 
   useCtrlS(() => saveMut.mutate(), true)
 
-  function update(i: number, field: keyof MahnungSettingsLevel, value: string | number | null) {
+  function update(i: number, field: keyof MahnungSettingsLevel, value: string | number | boolean | null) {
     setLevels(lv => lv.map((l, idx) => idx === i ? { ...l, [field]: value } : l))
     setMsg(null)
   }
@@ -1511,6 +1530,24 @@ function MahnungsEinstellungenSection() {
         <span>Bezeichnungen, Gebühren und Texte für jede Mahnstufe. Diese Einstellungen gelten für alle Mahnungs-PDFs.</span>
         <HelpHint id="dunning.process" />
       </p>
+
+      <div className="mz-rate">
+        <div className="form-group">
+          <label htmlFor="mz-rate" className="form-label">Basiszinssatz (%) <HelpHint id="dunning.verzugszinsen" size={13} /></label>
+          <input id="mz-rate" type="text" inputMode="decimal" className="form-control" value={rate.percent} placeholder="z. B. 1,27"
+            onChange={e => { setRate(r => ({ ...r, percent: e.target.value })); setMsg(null) }} />
+        </div>
+        <div className="form-group">
+          <label htmlFor="mz-since" className="form-label">gültig seit</label>
+          <input id="mz-since" type="date" className="form-control" value={rate.since}
+            onChange={e => { setRate(r => ({ ...r, since: e.target.value })); setMsg(null) }} />
+        </div>
+        <p className="form-field-hint mz-rate-hint">
+          Für Verzugszinsen. Den aktuellen Wert veröffentlicht die Deutsche Bundesbank zum 1. Januar und 1. Juli.
+          {anyInterest && rate.percent.trim() === '' && <strong> Ohne Basiszinssatz rechnen die Mahnungen keine Zinsen.</strong>}
+          {rateStale && <strong> Der hinterlegte Wert ist älter als ein halbes Jahr — bitte prüfen.</strong>}
+        </p>
+      </div>
 
       {levels.map((lv, i) => (
         <div key={lv.mahnstufe} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 12 }}>
@@ -1531,6 +1568,16 @@ function MahnungsEinstellungenSection() {
               <input type="number" className="form-control" value={lv.mahnstufe === 1 ? lv.daysAfterDue : lv.daysAfterPrev} min={0}
                 onChange={e => update(i, lv.mahnstufe === 1 ? 'daysAfterDue' : 'daysAfterPrev', parseInt(e.target.value) || 0)} />
             </div>
+          </div>
+          <div className="mz-switches">
+            <label className="ws-check">
+              <input type="checkbox" checked={!!lv.chargeInterest} onChange={e => update(i, 'chargeInterest', e.target.checked)} />
+              <span>Verzugszinsen berechnen</span>
+            </label>
+            <label className="ws-check">
+              <input type="checkbox" checked={!!lv.chargeFlatFee} onChange={e => update(i, 'chargeFlatFee', e.target.checked)} />
+              <span>Verzugspauschale 40 € (nur gegenüber Unternehmern)</span>
+            </label>
           </div>
           <div className="form-group" style={{ margin: '0 0 8px' }}>
             <label className="form-label">Kopftext (erscheint vor der Rechnungstabelle)</label>

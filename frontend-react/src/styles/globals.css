@@ -4826,6 +4826,13 @@ fieldset:disabled .ws-check { cursor: default; }
 .dv-sn-grid select { width: 100%; }
 @media (max-width: 1023px) { .text-template-type-btn { min-height: 44px; } }
 
+/* Mahnungseinstellungen: Basiszinssatz und Schalter je Stufe (Stufe 5) */
+.mz-rate { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 var(--space-4); margin-bottom: var(--space-4); }
+@media (min-width: 600px) { .mz-rate { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.mz-rate .form-group { margin: 0; }
+.mz-rate-hint { grid-column: 1 / -1; margin: 6px 0 0; }
+.mz-switches { display: flex; flex-wrap: wrap; gap: 0 var(--space-4); margin: 0 0 8px; }
+
 /* Aufbau dieses Belegs (Rechnungsassistenten, Stufe 3) */
 .ba-panel { margin-top: var(--space-4); }
 .ba-texts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 var(--space-4); }

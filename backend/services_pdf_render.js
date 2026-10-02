@@ -30,6 +30,9 @@ const { loadDocumentLayouts, cleanOverride } = require('./services/documentLayou
 const { readPdfAssetBuffer } = require('./services/generatedAssets');
 const { layoutCss, readableFooter } = require('./services_theme_styles');
 const { finishPdf, finishOptions } = require('./services/pdfFinish');
+const { verzugszinsen, verzugspauschale } = require('./services/verzugszinsen');
+const { readDefaults } = require('./services/tenantDefaults');
+const { defaultStufeLabel } = require('./services/mahnstufen');
 const { resolvePlaceholders } = require('./services/documentPlaceholders');
 const { sampleViewModel } = require('./services/documentSamples');
 const { resolveFont, fontFaceCss } = require('./services_theme_fonts');
@@ -246,7 +249,9 @@ let _nunjucksEnv = null;
 
 function env() {
   if (_nunjucksEnv) return _nunjucksEnv;
-  const loader = new nunjucks.FileSystemLoader(path.join(__dirname, 'templates'), { noCache: true });
+  // In Produktion aendern sich die Vorlagen nicht — jeder Beleg las sie bisher
+  // trotzdem neu von der Platte. Entwicklung und Tests behalten das Neuladen.
+  const loader = new nunjucks.FileSystemLoader(path.join(__dirname, 'templates'), { noCache: process.env.NODE_ENV !== 'production' });
   const e = new nunjucks.Environment(loader, { autoescape: true });
 
   e.addFilter('date_de', d => fmtDateDE(d));
@@ -260,6 +265,8 @@ function env() {
   });
 
   e.addFilter('money', v => fmtMoney(v));
+  // Zahl deutsch, bis zu zwei Nachkommastellen (Zinssaetze: „10,27")
+  e.addFilter('num_de', v => (Number.isFinite(Number(v)) ? Number(v).toLocaleString('de-DE', { maximumFractionDigits: 2 }) : ''));
 
   // Fläche in ha — deutsche Zahlformatierung mit "ha" Suffix
   e.addFilter('area_ha', v => {
@@ -1313,8 +1320,9 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
   // Load company template for theme + logo
   const { data: docMeta } = await supabase
     .from(docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE')
-    .select('COMPANY_ID')
+    .select('*')
     .eq('ID', docId)
+    .eq('TENANT_ID', tenantId)
     .maybeSingle();
   const companyId = docMeta?.COMPANY_ID;
 
@@ -1325,21 +1333,25 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
   const theme = sanitizeTheme(tpl.THEME_JSON);
 
   // Load Mahnung settings for this level
-  let mahnstufeLabel = ['', 'Zahlungserinnerung', '1. Mahnung', '2. Mahnung', '3. Mahnung'][mahnstufe] || 'Mahnung';
+  let mahnstufeLabel = defaultStufeLabel(mahnstufe);
   let feeAmount = 0;
+  let chargeInterest = false;
+  let chargeFlatFee = false;
   let headerText = null;
   let footerText = null;
 
   try {
     const { data: settings } = await supabase
       .from('MAHNUNG_SETTINGS')
-      .select('LABEL, FEE, HEADER_TEXT, FOOTER_TEXT')
+      .select('*')
       .eq('TENANT_ID', tenantId)
       .eq('MAHNSTUFE', mahnstufe)
       .maybeSingle();
     if (settings) {
       mahnstufeLabel = settings.LABEL || mahnstufeLabel;
       feeAmount      = Number(settings.FEE || 0);
+      chargeInterest = settings.CHARGE_INTEREST === true;
+      chargeFlatFee  = settings.CHARGE_FLAT_FEE === true;
       headerText     = settings.HEADER_TEXT || null;
       footerText     = settings.FOOTER_TEXT || null;
     }
@@ -1371,7 +1383,30 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
   const paidGross     = o ? o.paid : 0;
   const adjustedGross = o ? o.adjusted : 0;
   const openAmount    = o ? Math.max(0, o.open) : totalGross;
-  const totalDue = Math.round((openAmount + feeAmount) * 100) / 100;
+
+  // Verzugszinsen und -pauschale (§ 288 BGB, Migration 0186) — nur, wenn die
+  // Mahnstufe sie einschaltet. Verbraucher: 5 statt 9 Prozentpunkte, keine
+  // Pauschale. Ohne hinterlegten Basiszinssatz keine Zinsen.
+  let interest = null;
+  let flatFee = 0;
+  let baseRate = null;
+  if (chargeInterest || chargeFlatFee) {
+    const addrId = docMeta && (docMeta.INVOICE_ADDRESS_ID || docMeta.ADVANCE_INVOICE_ADDRESS_ID);
+    let consumer = false;
+    if (addrId) {
+      const { data: addr } = await supabase.from('ADDRESS').select('*').eq('ID', addrId).eq('TENANT_ID', tenantId).maybeSingle();
+      consumer = !!(addr && addr.IS_CONSUMER === true);
+    }
+    if (chargeInterest) {
+      const d = await readDefaults(supabase, tenantId).catch(() => ({}));
+      if (d.dunning_base_rate_percent != null) {
+        baseRate = { percent: Number(d.dunning_base_rate_percent), since: d.dunning_base_rate_since || null };
+        interest = verzugszinsen({ open: openAmount, dueDate, today, basePercent: baseRate.percent, consumer });
+      }
+    }
+    if (chargeFlatFee) flatFee = verzugspauschale({ consumer });
+  }
+  const totalDue = Math.round((openAmount + feeAmount + (interest ? interest.amount : 0) + flatFee) * 100) / 100;
 
   // Build mahnung-specific context
   const context = {
@@ -1396,6 +1431,9 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     adjustedGross,
     openAmount,
     feeAmount,
+    interest,
+    baseRate,
+    flatFee,
     totalDue,
     headerText,
     footerText,

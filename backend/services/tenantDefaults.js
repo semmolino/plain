@@ -51,6 +51,9 @@ const SPEC = {
   wip_target_cost_ratio_percent: { perm: D, kind: "num",  min: 0, max: 500,            label: "Zielkostenquote" },
   kpi_cpi_watch_threshold:       { perm: D, kind: "num",  min: 0.1, max: 5,            label: "Schwelle „beobachten“" },
   kpi_cpi_critical_threshold:    { perm: D, kind: "num",  min: 0.1, max: 5,            label: "Schwelle „Handlungsbedarf“" },
+  // Basiszinssatz fuer Verzugszinsen (§ 247 BGB) — aendert sich zum 1.1./1.7.
+  dunning_base_rate_percent:     { perm: "settings.dunning_config.edit", kind: "num",  min: -10, max: 20, label: "Basiszinssatz (%)" },
+  dunning_base_rate_since:       { perm: "settings.dunning_config.edit", kind: "date",                       label: "Basiszinssatz gültig seit" },
   "tenant.theme_default":        { perm: C, kind: "slug",                              label: "Standard-Theme" },
   "tenant.hero_asset_id":        { perm: C, kind: "asset",                             label: "Anmeldebild" },
 };
@@ -90,6 +93,9 @@ async function normalize(supabase, tenantId, key, raw) {
       return v;
     case "text":
       if (v.length > s.max) throw bad(`${s.label}: höchstens ${s.max} Zeichen.`);
+      return v;
+    case "date":
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || Number.isNaN(Date.parse(`${v}T00:00:00Z`))) throw bad(`${s.label}: bitte ein Datum.`);
       return v;
     case "slug":
       if (!/^[a-z0-9-]{1,40}$/.test(v)) throw bad(`${s.label}: ungültiger Wert.`);

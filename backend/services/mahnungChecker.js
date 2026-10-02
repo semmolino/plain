@@ -4,7 +4,7 @@ const { createNotification } = require("./notifications");
 const { openAmountsFor, withClaimCols } = require("./openAmount");
 const { localDateStr } = require("./notificationSchedule");
 
-const STUFE_LABELS = ['–', 'Zahlungserinnerung', '1. Mahnung', '2. Mahnung', '3. Mahnung'];
+const { defaultStufeLabel } = require('./mahnstufen');
 
 /** IDs der Belege, deren offener Betrag erledigt ist (openAmount.js). */
 async function settledDocs(supabase, mahnungen) {
@@ -84,7 +84,7 @@ async function checkMahnungen(supabase) {
       if (pp?.ADVANCE_INVOICE_NUMBER) docNumber = pp.ADVANCE_INVOICE_NUMBER;
     }
 
-    const stufeLabel = STUFE_LABELS[m.MAHNSTUFE] || `Stufe ${m.MAHNSTUFE}`;
+    const stufeLabel = defaultStufeLabel(m.MAHNSTUFE);
 
     try {
       await createNotification(supabase, {

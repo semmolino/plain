@@ -75,6 +75,16 @@ export interface MahnungSettingsLevel {
   fee:           number
   headerText:    string | null
   footerText:    string | null
+  /** Verzugszinsen in dieser Stufe (Migration 0186) */
+  chargeInterest?: boolean
+  /** 40-€-Verzugspauschale in dieser Stufe — nur gegenüber Unternehmern */
+  chargeFlatFee?:  boolean
+}
+
+/** Basiszinssatz (§ 247 BGB) für Verzugszinsen — ändert sich zum 1.1. und 1.7. */
+export interface BaseRate {
+  percent: number | null
+  since:   string | null
 }
 
 export interface TextTemplate {
@@ -122,10 +132,10 @@ export const fetchMahnungHistory = (mahnungId: number) =>
   apiClient.get<{ data: MahnungHistoryEntry[] }>(`/mahnungen/${mahnungId}/history`)
 
 export const fetchMahnungSettings = () =>
-  apiClient.get<{ data: MahnungSettingsLevel[] }>('/mahnungen/settings')
+  apiClient.get<{ data: MahnungSettingsLevel[]; baseRate?: BaseRate }>('/mahnungen/settings')
 
-export const saveMahnungSettings = (levels: MahnungSettingsLevel[]) =>
-  apiClient.put<{ ok: boolean }>('/mahnungen/settings', { levels })
+export const saveMahnungSettings = (levels: MahnungSettingsLevel[], baseRate?: BaseRate) =>
+  apiClient.put<{ ok: boolean }>('/mahnungen/settings', baseRate ? { levels, baseRate } : { levels })
 
 export const fetchTextTemplates = () =>
   apiClient.get<{ data: TextTemplate[] }>('/mahnungen/text-templates')

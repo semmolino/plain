@@ -121,6 +121,7 @@ body {
 .totals-table td.lbl { color: #374151; }
 .totals-table td.amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 6mm; }
 .totals-table tr.fee-row td { font-size: 9.5pt; color: #6b7280; }
+.totals-table .interest-note { font-size: 7.5pt; color: #9ca3af; margin-top: 0.5mm; }
 .totals-table tr.sep td { padding: 0; height: 2mm; }
 .totals-table tr.sep td.line { border-top: 0.5pt solid #9ca3af; }
 .totals-table tr.total-row td { font-weight: 700; font-size: 11pt; border-top: 1pt solid #1a1a1a; padding-top: 2mm; }
@@ -265,6 +266,20 @@ body {
       <tr class="fee-row">
         <td class="lbl">Mahnkostenpauschale ({{ mahnstufeLabel }})</td>
         <td class="amt">{{ feeAmount | money }}</td>
+      </tr>
+      {% endif %}
+      {% if interest and interest.amount > 0 %}
+      <tr class="fee-row">
+        <td class="lbl">Verzugszinsen {{ interest.ratePercent | num_de }}&nbsp;% p.&nbsp;a. für {{ interest.days }} Tage
+          <div class="interest-note">Basiszinssatz {{ baseRate.percent | num_de }}&nbsp;%{% if baseRate.since %} (seit {{ baseRate.since | date_de }}){% endif %} zzgl. {{ interest.points }} Prozentpunkte, § 288 BGB</div>
+        </td>
+        <td class="amt">{{ interest.amount | money }}</td>
+      </tr>
+      {% endif %}
+      {% if flatFee and flatFee > 0 %}
+      <tr class="fee-row">
+        <td class="lbl">Verzugspauschale nach § 288 Abs. 5 BGB</td>
+        <td class="amt">{{ flatFee | money }}</td>
       </tr>
       {% endif %}
       <tr class="sep"><td class="line" colspan="2"></td></tr>

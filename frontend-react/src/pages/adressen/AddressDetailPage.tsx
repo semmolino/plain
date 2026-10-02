@@ -325,7 +325,7 @@ function KontakteTab({ address, contacts }: { address: Address; contacts: Contac
 const FIELDS: AddressField[] = [
   'address_name_1', 'address_name_2', 'address_type', 'street', 'post_office_box', 'post_code', 'city', 'country_id',
   'phone', 'email', 'website', 'customer_number', 'tax_id', 'tax_number',
-  'buyer_reference', 'peppol_endpoint_id', 'peppol_scheme_id', 'notes',
+  'buyer_reference', 'peppol_endpoint_id', 'peppol_scheme_id', 'notes', 'is_consumer',
 ]
 
 function DatenTab({ address }: { address: Address }) {

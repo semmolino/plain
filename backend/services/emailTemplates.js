@@ -16,6 +16,7 @@
 
 const { openAmountsFor, withClaimCols } = require("./openAmount");
 const { bauvorhabenForProject } = require("./gesamtprojekte");
+const { defaultStufeLabel } = require("./mahnstufen");
 
 const TABLE = "EMAIL_TEMPLATE";
 
@@ -336,10 +337,9 @@ async function composeMahnungEmail(supabase, { tenantId, mahnung, subject, body 
     .eq("MAHNSTUFE", mahnung.MAHNSTUFE)
     .maybeSingle();
 
-  const FALLBACK_LABELS = { 1: "Zahlungserinnerung", 2: "1. Mahnung", 3: "2. Mahnung", 4: "3. Mahnung" };
   const values = {
     ...ctx.values,
-    mahnstufe:         lv?.LABEL || FALLBACK_LABELS[mahnung.MAHNSTUFE] || `Mahnstufe ${mahnung.MAHNSTUFE}`,
+    mahnstufe:         lv?.LABEL || defaultStufeLabel(mahnung.MAHNSTUFE),
     mahngebuehr:       fmtEur(lv?.FEE ?? 0),
     tage_ueberfaellig: String(daysBetweenToday(ctx.dueDate)),
   };

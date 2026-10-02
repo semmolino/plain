@@ -407,6 +407,29 @@ export const HELP = {
       </>
     ),
   },
+  'dunning.verzugszinsen': {
+    title: 'Verzugszinsen und Verzugspauschale',
+    body: (
+      <>
+        Je Mahnstufe einschaltbar. Zinsen: Basiszinssatz plus 9 Prozentpunkte gegenüber Unternehmern,
+        plus 5 gegenüber Verbrauchern (§ 288 BGB) — für jeden Tag ab der Fälligkeit bis zum Mahndatum,
+        auf den offenen Betrag. Die Pauschale von 40 € gibt es nur gegenüber Unternehmern. Wer
+        Verbraucher ist, markierst du an der Adresse („Privatperson"). Satz, Tage und Rechenweg stehen
+        auf der Mahnung. Der Basiszinssatz ändert sich halbjährlich — ohne hinterlegten Wert rechnet
+        plan&simple keine Zinsen.
+      </>
+    ),
+  },
+  'addresses.consumer': {
+    title: 'Privatperson (Verbraucher)',
+    body: (
+      <>
+        Für Mahnungen mit Verzugszinsen: Gegenüber Verbrauchern gelten 5 statt 9 Prozentpunkte über dem
+        Basiszinssatz, und die Verzugspauschale von 40 € darf nicht berechnet werden (§ 288 BGB).
+        Private Bauherren hier markieren — Firmen, Behörden und Vereine nicht.
+      </>
+    ),
+  },
   'addresses.notes': {
     title: 'Notizen',
     body: (
