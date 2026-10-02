@@ -154,7 +154,7 @@ async function reissue(supabase, { kind, id, tenantId, can = () => true }) {
   for (const [k, v] of Object.entries(orig)) {
     // Erzeugte Dokumente und Snapshots bleiben am Original; den Aufbau dieses
     // Belegs (Textbloecke, Kopftext …) nimmt der Ersatz mit (Migration 0185).
-    if (SKIP.has(k) || (/^document_/i.test(k) && k !== "DOCUMENT_LAYOUT_JSON")) continue;
+    if (SKIP.has(k) || (/^document_/i.test(k) && k !== "DOCUMENT_LAYOUT_JSON" && k !== "DOCUMENT_TEMPLATE_ID")) continue;
     copy[k] = k in m.reset ? m.reset[k] : v;
   }
   const today = isoToday();

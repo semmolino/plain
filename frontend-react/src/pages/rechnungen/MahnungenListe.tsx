@@ -16,7 +16,7 @@ import { trackRecent }    from '@/api/recents'
 import { BatchEmailModal, type BatchEmailItem } from '@/components/ui/BatchEmailModal'
 import {
   fetchMahnungen, upsertMahnung, sendMahnungEmail, openMahnungPdf, openMahnungHistoryPdf,
-  fetchMahnungSettings, fetchMahnungEmailPreview,
+  fetchMahnungSettings, fetchMahnungEmailPreview, MAHNSTUFE_LABELS,
   type MahnungRow, type MahnungSettingsLevel,
 } from '@/api/mahnungen'
 import { fetchEmailTemplates } from '@/api/emailTemplates'
@@ -30,13 +30,7 @@ import { fmtEur, money } from '@/utils/money'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const STUFEN_LABELS: Record<number, string> = {
-  0: '–',
-  1: 'Zahlungserinnerung',
-  2: '1. Mahnung',
-  3: '2. Mahnung',
-  4: '3. Mahnung',
-}
+const STUFEN_LABELS: Record<number, string> = { 0: '–', ...MAHNSTUFE_LABELS }
 
 function fmtDate(d: string | null) {
   if (!d) return '–'
@@ -281,13 +275,7 @@ export function MahnungenListe({ openMahnung }: { openMahnung?: { sourceType: st
     return ['0', '1', '2', '3', '4'].filter(s => used.has(s))
   }, [rawData])
 
-  const stufeLabels: Record<string, string> = {
-    '0': '– Keine Mahnung',
-    '1': 'Zahlungserinnerung',
-    '2': '1. Mahnung',
-    '3': '2. Mahnung',
-    '4': '3. Mahnung',
-  }
+  const stufeLabels: Record<string, string> = { '0': '– Keine Mahnung', ...MAHNSTUFE_LABELS }
 
   // Gesamtprojekt je Projekt — aus der geteilten Projektliste. Ohne
   // projects.view bleibt sie leer und der Filter erscheint nicht.

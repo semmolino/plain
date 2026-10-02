@@ -13,6 +13,8 @@ const base = (kind: LayoutDocKind, id: number) => (kind === 'invoice' ? `/invoic
 export interface DocumentLayoutInfo {
   category:       string
   booked:         boolean
+  /** Vorlagen-Variante dieses Belegs (null = Standard) */
+  templateId?:    number | null
   projectId:      number | null
   /** darf den Aufbau für das ganze Projekt merken (projects.edit) */
   canEditProject: boolean
@@ -32,10 +34,13 @@ export interface DocumentLayoutSave {
   /** null entfernt die Ebene, weglassen lässt sie stehen */
   document?: LayoutOverride | null
   project?:  LayoutOverride | null
+  /** Vorlagen-Variante; null = Standard */
+  templateId?: number | null
 }
 
-export const fetchDocumentLayout = (kind: LayoutDocKind, id: number) =>
-  apiClient.get<{ data: DocumentLayoutInfo }>(`${base(kind, id)}/layout`)
+/** Mit `templateId` die Ebenen einer anderen Vorlage — zum Umschalten vor dem Speichern. */
+export const fetchDocumentLayout = (kind: LayoutDocKind, id: number, templateId?: number | null) =>
+  apiClient.get<{ data: DocumentLayoutInfo }>(`${base(kind, id)}/layout${templateId !== undefined ? `?template_id=${templateId ?? ''}` : ''}`)
 
 export const saveDocumentLayout = (kind: LayoutDocKind, id: number, body: DocumentLayoutSave) =>
   apiClient.put<{ data: { ok: boolean } }>(`${base(kind, id)}/layout`, body)

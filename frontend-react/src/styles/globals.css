@@ -4809,6 +4809,13 @@ fieldset:disabled .ws-check { cursor: default; }
 .dv-preview-note { margin: 0; font-size: 11px; color: var(--text-3); text-align: center; }
 .dv-pdf-btn { align-self: center; display: inline-flex; align-items: center; gap: 4px; }
 
+/* Vorlagen-Varianten (Stufe 5) */
+.dv-variants { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-2) var(--space-3); margin-bottom: var(--space-3); }
+.dv-variants .form-group { margin: 0; min-width: min(100%, 260px); }
+.dv-variants select { height: 40px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font-size: 14px; width: 100%; }
+.dv-variants-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.dv-variants-actions .btn-small { display: inline-flex; align-items: center; gap: 4px; }
+
 /* Seitenaufbau und Briefpapier (Stufe 4) */
 .dv-checks { display: flex; flex-direction: column; gap: 0; }
 .dv-letterhead { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-2); }
@@ -4835,6 +4842,8 @@ fieldset:disabled .ws-check { cursor: default; }
 
 /* Aufbau dieses Belegs (Rechnungsassistenten, Stufe 3) */
 .ba-panel { margin-top: var(--space-4); }
+.ba-variant { max-width: 360px; }
+.ba-variant select { width: 100%; }
 .ba-texts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 var(--space-4); }
 @media (min-width: 900px) { .ba-texts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .ba-text-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: 6px; }

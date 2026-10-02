@@ -1,8 +1,12 @@
 import { useState } from 'react'
-import { FileText } from 'lucide-react'
+import { FileText, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ActionBar } from '@/components/ui/ActionBar'
+import { DialogFooter } from '@/components/ui/DialogFooter'
+import { HelpHint } from '@/components/ui/HelpHint'
+import { Modal } from '@/components/ui/Modal'
+import { useGuardedAction } from '@/hooks/useDirtyGuard'
 import { LimitBanner } from '@/components/ui/LimitBanner'
 import { Message } from '@/components/ui/Message'
 import { DocPreview } from '@/components/vorlagen/DocPreview'
@@ -13,7 +17,8 @@ import { useIsNarrow } from '@/hooks/useIsNarrow'
 import { usePermission } from '@/store/permissionsStore'
 import { useToast } from '@/store/toastStore'
 import {
-  DEFAULT_THEME, fetchBranding, fetchCatalog, openBrandingPdf, previewBranding, saveBranding,
+  DEFAULT_THEME, archiveVariant, createVariant, fetchBranding, fetchCatalog, fetchVariant, fetchVariants,
+  openBrandingPdf, previewBranding, saveBranding, saveVariant,
   type DocCatalog, type DocTheme,
 } from '@/api/documentTemplates'
 import { fetchDocumentTexts } from '@/api/documentTexts'
@@ -54,8 +59,10 @@ function mergeTheme(t?: Partial<DocTheme> | null): DocTheme {
 }
 
 /** Gestaltung + Aufbau: ein gemeinsamer Entwurf über dem gespeicherten Theme. */
-function DesignArea({ sub, active, catalog, category, onCategory }: {
+function DesignArea({ sub, active, catalog, category, onCategory, variantId }: {
   sub:        'gestaltung' | 'aufbau'
+  /** bearbeitete Variante; null = Standard */
+  variantId:  number | null
   /** sichtbar — nur dann gilt Strg+S hier */
   active:     boolean
   catalog:    DocCatalog
@@ -65,7 +72,11 @@ function DesignArea({ sub, active, catalog, category, onCategory }: {
   const qc = useQueryClient()
   const toast = useToast()
   const [confirm, confirmDialog] = useConfirm()
-  const { data, isLoading, error } = useQuery({ queryKey: ['doc-branding'], queryFn: () => fetchBranding().then(r => r.data) })
+  const themeKey = variantId ? ['doc-variant', variantId] : ['doc-branding']
+  const { data, isLoading, error } = useQuery({
+    queryKey: themeKey,
+    queryFn: () => (variantId ? fetchVariant(variantId).then(r => ({ theme: r.data.theme })) : fetchBranding().then(r => r.data)),
+  })
   const { data: snippets } = useQuery({ queryKey: ['document-texts'], queryFn: () => fetchDocumentTexts().then(r => r.data) })
   const [edits, setEdits] = useState<DocTheme | null>(null)
   const [pending, setPending] = useState(false)
@@ -83,10 +94,11 @@ function DesignArea({ sub, active, catalog, category, onCategory }: {
   async function save() {
     setPending(true); setErr(null)
     try {
-      await saveBranding(theme)
-      await qc.invalidateQueries({ queryKey: ['doc-branding'] })
+      if (variantId) await saveVariant(variantId, { theme_json: theme })
+      else await saveBranding(theme)
+      await qc.invalidateQueries({ queryKey: themeKey })
       setEdits(null)
-      toast.success('Dokumentvorlage gespeichert. Gilt für alle neuen Belege.')
+      toast.success(variantId ? 'Vorlage gespeichert. Gilt für neue Belege, die sie wählen.' : 'Dokumentvorlage gespeichert. Gilt für alle neuen Belege.')
     } catch (e) {
       setErr((e as Error)?.message || 'Speichern fehlgeschlagen')
       throw e
@@ -147,6 +159,104 @@ function DesignArea({ sub, active, catalog, category, onCategory }: {
   )
 }
 
+/**
+ * Welche Vorlage bearbeitet wird: der Standard oder eine benannte Variante
+ * (Stufe 5, D3). Varianten wählt man je Beleg im Rechnungsassistenten.
+ */
+function VariantBar({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [confirm, confirmDialog] = useConfirm()
+  const { data } = useQuery({ queryKey: ['doc-variants'], queryFn: () => fetchVariants().then(r => r.data) })
+  const variants = Array.isArray(data) ? data : []
+  const current = variants.find(v => v.id === value) ?? null
+  const [dialog, setDialog] = useState<'new' | 'rename' | null>(null)
+  const [name, setName] = useState('')
+  const [copyFrom, setCopyFrom] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+
+  const mut = useMutation({
+    mutationFn: async () => {
+      if (dialog === 'rename' && current) { await saveVariant(current.id, { name }); return current.id }
+      return (await createVariant(name, Number(copyFrom) || null)).data.id
+    },
+    onSuccess: async (id) => {
+      await qc.invalidateQueries({ queryKey: ['doc-variants'] })
+      toast.success(dialog === 'rename' ? 'Vorlage umbenannt.' : 'Vorlage angelegt.')
+      setDialog(null)
+      if (dialog === 'new') onChange(id)
+    },
+    onError: (e: Error) => setErr(e.message),
+  })
+
+  async function remove() {
+    if (!current) return
+    const ok = await confirm({
+      title: 'Vorlage entfernen?',
+      message: `„${current.name}“ steht dann nicht mehr zur Wahl. Gebuchte Belege behalten ihre Gestaltung; Entwürfe, die sie tragen, rendern weiter damit.`,
+      confirmLabel: 'Entfernen',
+    })
+    if (!ok) return
+    try {
+      await archiveVariant(current.id)
+      await qc.invalidateQueries({ queryKey: ['doc-variants'] })
+      onChange(null)
+    } catch (e) { toast.error((e as Error).message) }
+  }
+
+  return (
+    <div className="dv-variants">
+      <div className="form-group">
+        <label htmlFor="dv-variant" className="ws-label-help">Vorlage <HelpHint id="vorlagen.varianten" size={13} /></label>
+        <select id="dv-variant" value={value ?? ''} onChange={e => onChange(Number(e.target.value) || null)}>
+          <option value="">Standard</option>
+          {variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+        </select>
+      </div>
+      <div className="dv-variants-actions">
+        <button type="button" className="btn-small" onClick={() => { setName(''); setCopyFrom(value ? String(value) : ''); setErr(null); setDialog('new') }}>
+          <Plus size={13} strokeWidth={2} /> Neue Vorlage
+        </button>
+        {current && (
+          <>
+            <button type="button" className="btn-small" onClick={() => { setName(current.name); setErr(null); setDialog('rename') }}>
+              <Pencil size={13} strokeWidth={2} /> Umbenennen
+            </button>
+            <button type="button" className="btn-small" onClick={() => void remove()}>
+              <Trash2 size={13} strokeWidth={2} /> Entfernen
+            </button>
+          </>
+        )}
+      </div>
+
+      <Modal open={dialog !== null} onClose={() => setDialog(null)} title={dialog === 'rename' ? 'Vorlage umbenennen' : 'Neue Vorlage'}>
+        <div className="form-group">
+          <label htmlFor="dv-variant-name">Name</label>
+          <input id="dv-variant-name" className="form-control" maxLength={80} value={name} autoFocus
+            onChange={e => { setName(e.target.value); setErr(null) }} placeholder="z. B. Öffentliche Auftraggeber" />
+        </div>
+        {dialog === 'new' && (
+          <div className="form-group">
+            <label htmlFor="dv-variant-copy">Ausgangspunkt</label>
+            <select id="dv-variant-copy" value={copyFrom} onChange={e => setCopyFrom(e.target.value)}>
+              <option value="">Kopie des Standards</option>
+              {variants.map(v => <option key={v.id} value={v.id}>Kopie von „{v.name}“</option>)}
+            </select>
+          </div>
+        )}
+        <Message type="error" text={err} />
+        <DialogFooter>
+          <button type="button" className="btn-secondary" onClick={() => setDialog(null)}>Abbrechen</button>
+          <button type="button" className="btn-primary" disabled={!name.trim() || mut.isPending} onClick={() => mut.mutate()}>
+            {mut.isPending ? 'Speichert …' : dialog === 'rename' ? 'Umbenennen' : 'Anlegen'}
+          </button>
+        </DialogFooter>
+      </Modal>
+      {confirmDialog}
+    </div>
+  )
+}
+
 export function DokumentvorlagenPage() {
   const [params, setParams] = useSearchParams()
   const narrow = useIsNarrow()
@@ -159,13 +269,15 @@ export function DokumentvorlagenPage() {
   const { data: catalog, error } = useQuery({ queryKey: ['doc-catalog'], queryFn: () => fetchCatalog().then(r => r.data), staleTime: 10 * 60_000 })
   const category = catalog?.categories.some(c => c.key === params.get('cat')) ? params.get('cat')! : 'invoice_rechnung'
   const textType = params.get('type') ?? catalog?.textTypes[0]?.type ?? ''
+  const variantId = Number(params.get('v')) || null
+  const guarded = useGuardedAction()
 
   // Gestaltung, Aufbau und Texte bleiben eingehängt: ein Wechsel des Unterreiters
   // verliert nichts, gefragt wird erst beim Verlassen der Seite.
   function setParam(changes: Record<string, string>) {
     const p = new URLSearchParams(params)
     p.set('tab', 'dokumentvorlagen')
-    for (const [k, v] of Object.entries(changes)) p.set(k, v)
+    for (const [k, v] of Object.entries(changes)) { if (v) p.set(k, v); else p.delete(k) }
     setParams(p, { replace: true })
   }
 
@@ -193,7 +305,8 @@ export function DokumentvorlagenPage() {
         <>
           {canDesign && (
             <div hidden={sub === 'texte'}>
-              <DesignArea sub={sub === 'aufbau' ? 'aufbau' : 'gestaltung'} active={sub !== 'texte'} catalog={catalog} category={category} onCategory={c => setParam({ cat: c })} />
+              <VariantBar value={variantId} onChange={v => guarded(() => setParam({ v: v ? String(v) : '' }))} />
+              <DesignArea key={variantId ?? 'std'} variantId={variantId} sub={sub === 'aufbau' ? 'aufbau' : 'gestaltung'} active={sub !== 'texte'} catalog={catalog} category={category} onCategory={c => setParam({ cat: c })} />
             </div>
           )}
           {canTexts && (

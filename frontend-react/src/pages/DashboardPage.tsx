@@ -67,7 +67,7 @@ import {
   fetchMonthBalance, fetchRunningBalance,
   type DayBooking, type RunningMonth,
 } from '@/api/mitarbeiter'
-import { fetchMahnungStats, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
+import { fetchMahnungStats, MAHNSTUFE_LABELS, type MahnungStats, type MahnungSuggestion } from '@/api/mahnungen'
 import { fetchDashboardOpenSe, fetchDashboardArbzgStats } from '@/api/reports'
 import { usePermission } from '@/store/permissionsStore'
 import { RecentMixedList } from '@/components/recents/RecentList'
@@ -653,9 +653,7 @@ function GeschaeftsleitungView({
   )
 }
 
-const STUFEN_LABELS_DASH: Record<number, string> = {
-  0: 'Keine', 1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung', 4: '3. Mahnung',
-}
+const STUFEN_LABELS_DASH: Record<number, string> = { 0: 'Keine', ...MAHNSTUFE_LABELS }
 
 
 function SuggestionRow({ s, navigate }: { s: MahnungSuggestion; navigate: ReturnType<typeof useNavigate> }) {

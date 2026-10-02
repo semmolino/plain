@@ -77,10 +77,11 @@ export function BelegAufbau({ ctl, disabled, canPreview = true, beforePreview, r
   const { cat, info, layers, state } = ctl
 
   const ownDiff = differs(state, layers.project)
-  const hint = ctl.remember ? 'für das Projekt gemerkt'
-    : ownDiff ? 'eigener Aufbau'
-    : info.project ? 'wie im Projekt'
-    : 'wie die Vorlage'
+  const variant = ctl.variants.find(v => v.id === ctl.templateId)
+  const hint = [
+    ctl.templateId ? `Vorlage „${variant?.name ?? 'entfernt'}“` : null,
+    ctl.remember ? 'für das Projekt gemerkt' : ownDiff ? 'eigener Aufbau' : info.project ? 'wie im Projekt' : 'wie die Vorlage',
+  ].filter(Boolean).join(' · ')
   const forPos = (pos: DocumentText['position']) => ctl.snippets.filter(s => s.position === pos && (!s.category || s.category === cat.key))
 
   async function removeProject() {
@@ -95,6 +96,16 @@ export function BelegAufbau({ ctl, disabled, canPreview = true, beforePreview, r
   return (
     <>
       <Disclosure className="ba-panel" title="Aufbau und Texte dieses Belegs" hint={hint} help={<HelpHint id="vorlagen.beleg_aufbau" />}>
+        {(ctl.variants.length > 0 || ctl.templateId) && (
+          <div className="form-group ba-variant">
+            <label htmlFor="ba-variant" className="ws-label-help">Vorlage <HelpHint id="vorlagen.varianten" size={13} /></label>
+            <select id="ba-variant" value={ctl.templateId ?? ''} disabled={disabled} onChange={e => ctl.setTemplate(Number(e.target.value) || null)}>
+              <option value="">Standard</option>
+              {ctl.variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+              {ctl.templateId && !variant && <option value={ctl.templateId}>(entfernte Vorlage)</option>}
+            </select>
+          </div>
+        )}
         <div className="ba-texts">
           <BelegText id="ba-intro" label="Kopftext" value={state.introText} fallback={layers.project.introText ?? info.standardTexts.intro}
             isOwn={state.introText !== layers.project.introText}

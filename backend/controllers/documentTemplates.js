@@ -125,6 +125,31 @@ async function previewDocumentTemplatePdf(req, res, supabase) {
   }
 }
 
+// ── Vorlagen-Varianten (D3) ──────────────────────────────────────────────────
+const fail = (res, err) => res.status(err?.status || 500).json({ error: err?.message || String(err) });
+
+async function listVariants(req, res, supabase) {
+  try { res.json({ data: await svc.listVariants(supabase, { tenantId: req.tenantId }) }); } catch (e) { fail(res, e); }
+}
+async function getVariant(req, res, supabase) {
+  try { res.json({ data: await svc.getVariant(supabase, { tenantId: req.tenantId, id: Number(req.params.id) }) }); } catch (e) { fail(res, e); }
+}
+async function createVariant(req, res, supabase) {
+  try {
+    const b = req.body || {};
+    res.status(201).json({ data: await svc.createVariant(supabase, { tenantId: req.tenantId, name: b.name, copyFrom: b.copy_from ? Number(b.copy_from) : null }) });
+  } catch (e) { fail(res, e); }
+}
+async function saveVariant(req, res, supabase) {
+  try {
+    const b = req.body || {};
+    res.json({ data: await svc.saveVariant(supabase, { tenantId: req.tenantId, id: Number(req.params.id), name: b.name, theme_json: b.theme_json }) });
+  } catch (e) { fail(res, e); }
+}
+async function archiveVariant(req, res, supabase) {
+  try { res.json({ data: await svc.archiveVariant(supabase, { tenantId: req.tenantId, id: Number(req.params.id) }) }); } catch (e) { fail(res, e); }
+}
+
 // ── Katalog: Kategorien, Bausteine, Platzhalter ──────────────────────────────
 // Die Einstellungen holen den Aufbau je Belegart von hier statt eine Kopie der
 // Registry zu pflegen (services/documentLayout.js → documentCatalog).
@@ -173,4 +198,5 @@ module.exports = {
   saveBranding,
   getCatalog,
   previewDocumentTemplatePdf,
+  listVariants, getVariant, createVariant, saveVariant, archiveVariant,
 };

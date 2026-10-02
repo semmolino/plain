@@ -24,6 +24,8 @@ export interface DvState {
   snippetCalls: { method: string; url: string; body: Record<string, unknown> | null }[]
   uploads:   string[]
   pdfPreviews: Record<string, unknown>[]
+  variants:  { id: number; name: string; theme: Record<string, unknown>; active: boolean }[]
+  variantCalls: { method: string; url: string; body: Record<string, unknown> | null }[]
 }
 
 export async function mockDokumentvorlagen(page: Page, init: Partial<Pick<DvState, 'theme' | 'texts' | 'snippets'>> = {}): Promise<DvState> {
@@ -32,7 +34,7 @@ export async function mockDokumentvorlagen(page: Page, init: Partial<Pick<DvStat
       version: 2, brand: { primaryColor: '#111827', accentColor: '#111827', fontFamily: 'system-sans', fontScale: 1 },
       header: { showLogo: true, logoMaxHeightMm: 20, logoPosition: 'right', showBauvorhaben: true }, blocks: {},
     },
-    puts: [], previews: [], textPuts: [], snippetCalls: [], uploads: [], pdfPreviews: [],
+    puts: [], previews: [], textPuts: [], snippetCalls: [], uploads: [], pdfPreviews: [], variants: [], variantCalls: [],
     texts: init.texts ?? {},
     snippets: init.snippets ?? [],
   }
@@ -40,6 +42,27 @@ export async function mockDokumentvorlagen(page: Page, init: Partial<Pick<DvStat
   const r = (re: string, h: (route: Route) => unknown) => page.route(new RegExp(`/api/v1/${re}(\\?|$)`), h)
 
   await r('document-templates/catalog', route => route.fulfill(json({ data: CATALOG })))
+  await r('document-templates/variants(/\\d+)?', route => {
+    const req = route.request()
+    const m = req.method()
+    const body = m === 'GET' || m === 'DELETE' ? null : req.postDataJSON()
+    state.variantCalls.push({ method: m, url: req.url(), body })
+    const id = Number(req.url().match(/variants\/(\d+)/)?.[1])
+    const v = state.variants.find(x => x.id === id)
+    if (m === 'POST') {
+      const nv = { id: 500 + state.variants.length, name: body!.name as string, theme: { ...state.theme }, active: true }
+      state.variants.push(nv)
+      return route.fulfill(json({ data: { id: nv.id, name: nv.name } }, 201))
+    }
+    if (m === 'PUT' && v) {
+      if (body!.name) v.name = body!.name as string
+      if (body!.theme_json) v.theme = body!.theme_json as Record<string, unknown>
+      return route.fulfill(json({ data: { ok: true } }))
+    }
+    if (m === 'DELETE' && v) { v.active = false; return route.fulfill(json({ data: { ok: true } })) }
+    if (id && v) return route.fulfill(json({ data: { id: v.id, name: v.name, active: v.active, theme: v.theme } }))
+    return route.fulfill(json({ data: state.variants.filter(x => x.active).map(x => ({ id: x.id, name: x.name })) }))
+  })
   await r('document-templates/branding', route => {
     if (route.request().method() === 'PUT') {
       const body = route.request().postDataJSON()

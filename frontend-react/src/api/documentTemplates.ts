@@ -206,3 +206,24 @@ export const previewBranding = (theme_json: DocTheme, category: string) =>
 /** Dieselbe Vorschau als PDF in neuem Tab — mit Briefpapier, Falzmarken und Folgeseitenkopf. */
 export const openBrandingPdf = (theme_json: DocTheme, category: string) =>
   openPdfWithAuth('/document-templates/preview/pdf', { theme_json, category })
+
+// ── Vorlagen-Varianten (Stufe 5, D3) ─────────────────────────────────────────
+// Benannte Vorlagen neben dem Standard, z. B. „Öffentliche Auftraggeber" —
+// je Beleg im Rechnungsassistenten wählbar.
+
+export interface VariantInfo { id: number; name: string; updatedAt?: string }
+
+export const fetchVariants = () =>
+  apiClient.get<{ data: VariantInfo[] }>('/document-templates/variants')
+
+export const fetchVariant = (id: number) =>
+  apiClient.get<{ data: { id: number; name: string; active: boolean; theme: DocTheme } }>(`/document-templates/variants/${id}`)
+
+export const createVariant = (name: string, copyFrom: number | null) =>
+  apiClient.post<{ data: VariantInfo }>('/document-templates/variants', { name, copy_from: copyFrom })
+
+export const saveVariant = (id: number, body: { name?: string; theme_json?: DocTheme }) =>
+  apiClient.put<{ data: { ok: boolean } }>(`/document-templates/variants/${id}`, body)
+
+export const archiveVariant = (id: number) =>
+  apiClient.delete<{ data: { ok: boolean } }>(`/document-templates/variants/${id}`)

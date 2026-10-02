@@ -364,10 +364,15 @@ async function resolveSignatureDataUri({ supabase, tenantId, companyId }) {
   return null;
 }
 
-async function loadTemplate({ supabase, companyId, docType, templateId }) {
+async function loadTemplate({ supabase, companyId, docType, templateId, tenantId = null }) {
   if (templateId) {
+    // Eine Vorlage per ID (Variante oder beim Buchen festgehaltener Stand) nur
+    // aus dem eigenen Mandanten — die ID kommt teils aus der Anfrage
+    // (?template_id=). Fremd oder unbekannt: der Standard der Belegart.
     const { data } = await supabase.from('DOCUMENT_TEMPLATE').select('*').eq('ID', templateId).maybeSingle();
-    if (data) return data;
+    const own = data && (String(data.COMPANY_ID) === String(companyId)
+      || (tenantId != null && data.TENANT_ID != null && String(data.TENANT_ID) === String(tenantId)));
+    if (own) return data;
   }
   const { data } = await supabase
     .from('DOCUMENT_TEMPLATE').select('*')
@@ -1003,7 +1008,7 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
 //
 // `layoutPreview` ({ document?, project? }): ungespeicherte Abweichungen aus
 // dem Assistenten, nur fuer die Vorschau.
-async function buildDocumentHtml({ supabase, docType, docId, tenantId, templateId, previewReleasePpIds = [], layoutPreview = null }) {
+async function buildDocumentHtml({ supabase, docType, docId, tenantId, templateId, templateChoice, previewReleasePpIds = [], layoutPreview = null }) {
   if (tenantId === undefined || tenantId === null || tenantId === '') {
     throw new Error('renderDocumentPdf: tenantId ist erforderlich');
   }
@@ -1021,7 +1026,10 @@ async function buildDocumentHtml({ supabase, docType, docId, tenantId, templateI
   if (!companyId) throw new Error('Company for document not found');
 
   const booked = String(docMeta.STATUS_ID) === '2';
-  const tpl = await loadTemplate({ supabase, companyId, docType, templateId });
+  // Vorlage: ausdruecklich angefragt, sonst die des Belegs (Variante, D3).
+  // templateChoice (Vorschau im Assistenten): null heisst ausdruecklich Standard.
+  const chosen = templateChoice !== undefined ? templateChoice : (templateId || docMeta.DOCUMENT_TEMPLATE_ID || null);
+  const tpl = await loadTemplate({ supabase, companyId, docType, templateId: chosen, tenantId });
   const snapTheme = booked && docMeta.DOCUMENT_THEME_SNAPSHOT_JSON && typeof docMeta.DOCUMENT_THEME_SNAPSHOT_JSON === 'object'
     ? docMeta.DOCUMENT_THEME_SNAPSHOT_JSON : null;
   const theme = sanitizeTheme(snapTheme || tpl.THEME_JSON);
@@ -1152,7 +1160,7 @@ async function layoutTextNotes({ supabase, tenantId, docType, docId }) {
   const { data: doc } = await supabase.from(table).select('*').eq('ID', docId).eq('TENANT_ID', tenantId).maybeSingle();
   if (!doc) return [];
   const { projectLayout, documentLayout, category } = await loadDocumentLayouts({ supabase, tenantId, table, doc });
-  const tpl = await loadTemplate({ supabase, companyId: doc.COMPANY_ID, docType, templateId: null });
+  const tpl = await loadTemplate({ supabase, companyId: doc.COMPANY_ID, docType, templateId: doc.DOCUMENT_TEMPLATE_ID || null, tenantId });
   const snap = String(doc.STATUS_ID) === '2' && doc.DOCUMENT_THEME_SNAPSHOT_JSON && typeof doc.DOCUMENT_THEME_SNAPSHOT_JSON === 'object'
     ? doc.DOCUMENT_THEME_SNAPSHOT_JSON : null;
   const theme = sanitizeTheme(snap || tpl.THEME_JSON);

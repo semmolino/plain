@@ -87,6 +87,11 @@ export interface BaseRate {
   since:   string | null
 }
 
+/** Bezeichnungen der Mahnstufen, solange das Büro keine eigenen hat — wie services/mahnstufen.js */
+export const MAHNSTUFE_LABELS: Record<number, string> = {
+  1: 'Zahlungserinnerung', 2: '1. Mahnung', 3: '2. Mahnung', 4: '3. Mahnung',
+}
+
 export interface TextTemplate {
   documentType: string
   headerText:   string | null

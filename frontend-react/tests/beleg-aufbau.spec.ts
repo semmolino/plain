@@ -21,6 +21,7 @@ async function setup(page: Page, { canEditProject = true, project = null as Reco
     if (/\/invoices\/601(\/(layout|book|pdf\/preview))?(\?|$)/.test(r.url()) && r.method() !== 'GET') log(r)
   })
   await page.route(/\/api\/v1\/document-templates\/catalog(\?|$)/, r => r.fulfill(json({ data: CATALOG })))
+  await page.route(/\/api\/v1\/document-templates\/variants(\?|$)/, r => r.fulfill(json({ data: [{ id: 501, name: 'Öffentliche AG' }] })))
   await page.route(/\/api\/v1\/document-texts(\?|$)/, r => r.fulfill(json({ data: [
     { id: 1, label: 'Gewährleistung', text: 'Die Gewährleistung beginnt mit der Abnahme.', category: null, position: 'free', sortOrder: 0 },
     { id: 2, label: 'Öffentlicher AG', text: 'Gemäß Vertrag vom {{vertrag}} berechnen wir:', category: 'invoice_rechnung', position: 'intro', sortOrder: 0 },
@@ -105,7 +106,22 @@ test('Vorschau zeigt den ungespeicherten Stand', async ({ page }) => {
   const dlg = page.getByRole('dialog', { name: 'Vorschau dieses Belegs' })
   await expect(dlg.frameLocator('iframe').getByText('Beleg-Vorschau')).toBeVisible()
   const prev = calls.find(c => /pdf\/preview/.test(c.url))!
-  expect(prev.body).toEqual({ document: { hidden: ['salutation'] } })
+  // templateId: die gewählte Vorlage, null = ausdrücklich Standard
+  expect(prev.body).toEqual({ document: { hidden: ['salutation'] }, templateId: null })
   // nichts gespeichert, nur angesehen
   expect(calls.filter(c => c.method === 'PUT')).toHaveLength(0)
+})
+
+test('Vorlagen-Variante je Beleg: Ebenen der Variante laden, mit dem Schritt speichern', async ({ page }) => {
+  const calls = await setup(page)
+  const layoutGets: string[] = []
+  page.on('request', r => { if (r.method() === 'GET' && /\/invoices\/601\/layout/.test(r.url())) layoutGets.push(r.url()) })
+  await toReview(page)
+  await page.getByLabel('Vorlage', { exact: true }).selectOption({ label: 'Öffentliche AG' })
+  await expect.poll(() => layoutGets.some(u => /template_id=501/.test(u))).toBe(true)
+  await expect(page.locator('.ba-panel .disclosure-hint')).toContainText('Vorlage „Öffentliche AG“')
+
+  await saveDraft(page)
+  await expect.poll(() => calls.filter(c => c.method === 'PUT').length).toBe(1)
+  expect(calls.find(c => c.method === 'PUT')!.body).toMatchObject({ templateId: 501 })
 })

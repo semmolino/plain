@@ -107,6 +107,17 @@ async function saveLayouts({ supabase, tenantId, table, id, body, canEditProject
     if (error) throw error;
   }
 
+  if (Object.prototype.hasOwnProperty.call(b, "templateId")) {
+    // Vorlagen-Variante (D3): null = Standard, sonst eine aktive des Mandanten
+    let templateId = null;
+    if (b.templateId !== null && b.templateId !== "") {
+      const { assertUsableVariant } = require("./documentTemplates");
+      templateId = await assertUsableVariant(supabase, { tenantId, id: Number(b.templateId) });
+    }
+    const { error } = await supabase.from(table).update({ DOCUMENT_TEMPLATE_ID: templateId }).eq("ID", id).eq("TENANT_ID", tenantId);
+    if (error) throw error;
+  }
+
   if (Object.prototype.hasOwnProperty.call(b, "document")) {
     const { error } = await supabase
       .from(table)

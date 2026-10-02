@@ -406,7 +406,116 @@ async function saveBrandingTheme(supabase, { tenantId, theme_json, blocks_by_cat
   return { ok: true };
 }
 
+// ---------------------------------------------------------------------------
+// Vorlagen-Varianten (Vorlagen-Plan Stufe 5, Entscheidung D3)
+//
+// Neben dem „Standard" (die Default-Vorlage je Belegart, gepflegt ueber
+// getBrandingTheme/saveBrandingTheme) kann ein Buero benannte Varianten
+// fuehren — z. B. „Oeffentliche Auftraggeber". Eine Variante ist EINE Zeile
+// mit DOC_TYPE 'VARIANT' und einem vollstaendigen Theme; der Lebenszyklus
+// darunter (Entwurf/Veroeffentlicht/Version) bleibt verborgen. 'VARIANT'
+// statt einer Belegart, damit loadTemplate() sie nie als Standard einer
+// Belegart findet. Gewaehlt wird je Beleg (INVOICE/ADVANCE_INVOICE.
+// DOCUMENT_TEMPLATE_ID); beim Buchen friert der Theme-Snapshot sie ein.
+// Entfernen archiviert nur: Entwuerfe, die sie noch tragen, rendern weiter.
+// ---------------------------------------------------------------------------
+
+const VARIANT = "VARIANT";
+
+function cleanVariantName(raw) {
+  const name = String(raw ?? "").trim().replace(/\s+/g, " ");
+  if (!name) throw { status: 400, message: "Bitte einen Namen angeben." };
+  if (name.length > 80) throw { status: 400, message: "Der Name ist zu lang (höchstens 80 Zeichen)." };
+  if (/^standard$/i.test(name)) throw { status: 400, message: "„Standard“ ist die Vorlage ohne Variante." };
+  return name;
+}
+
+async function listVariants(supabase, { tenantId }) {
+  const companyIds = await resolveCompanyIds(supabase, tenantId);
+  if (!companyIds.length) return [];
+  const { data, error } = await supabase
+    .from("DOCUMENT_TEMPLATE")
+    .select("ID, NAME, UPDATED_AT, IS_ACTIVE")
+    .in("COMPANY_ID", companyIds)
+    .eq("DOC_TYPE", VARIANT)
+    .eq("IS_ACTIVE", true)
+    .order("NAME", { ascending: true });
+  if (error) throw error;
+  return (data || []).map((r) => ({ id: r.ID, name: r.NAME, updatedAt: r.UPDATED_AT }));
+}
+
+async function loadVariantRow(supabase, { tenantId, id }) {
+  await assertTemplateInTenant(supabase, id, tenantId);
+  const { data, error } = await supabase.from("DOCUMENT_TEMPLATE").select("*").eq("ID", id).maybeSingle();
+  if (error) throw error;
+  if (!data || data.DOC_TYPE !== VARIANT) throw { status: 404, message: "Vorlage nicht gefunden." };
+  return data;
+}
+
+async function getVariant(supabase, { tenantId, id }) {
+  const row = await loadVariantRow(supabase, { tenantId, id });
+  return { id: row.ID, name: row.NAME, active: row.IS_ACTIVE !== false, theme: sanitizeTheme(row.THEME_JSON) };
+}
+
+async function assertVariantNameFree(supabase, tenantId, name, exceptId = null) {
+  const taken = (await listVariants(supabase, { tenantId }))
+    .some((v) => v.name.toLowerCase() === name.toLowerCase() && v.id !== exceptId);
+  if (taken) throw { status: 409, message: `Eine Vorlage „${name}“ gibt es schon.` };
+}
+
+/** Neue Variante als Kopie des Standards (oder einer anderen Variante). */
+async function createVariant(supabase, { tenantId, name, copyFrom = null }) {
+  const clean = cleanVariantName(name);
+  await assertVariantNameFree(supabase, tenantId, clean);
+  const companyId = await resolveCompanyId(supabase, tenantId);
+  if (!companyId) throw { status: 404, message: "Kein Unternehmen für diesen Mandanten gefunden." };
+  const theme = copyFrom
+    ? (await getVariant(supabase, { tenantId, id: copyFrom })).theme
+    : (await getBrandingTheme(supabase, { tenantId })).theme;
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase.from("DOCUMENT_TEMPLATE").insert([{
+    COMPANY_ID: companyId, NAME: clean, DOC_TYPE: VARIANT,
+    STATUS: "PUBLISHED", VERSION: 1, FAMILY_ID: null,
+    LAYOUT_KEY: "modern_a", THEME_JSON: sanitizeTheme(theme), LOGO_ASSET_ID: null,
+    IS_DEFAULT: false, IS_ACTIVE: true, PUBLISHED_AT: nowIso, UPDATED_AT: nowIso,
+  }]).select("ID, NAME").maybeSingle();
+  if (error) throw error;
+  return { id: data.ID, name: data.NAME };
+}
+
+async function saveVariant(supabase, { tenantId, id, name, theme_json }) {
+  const row = await loadVariantRow(supabase, { tenantId, id });
+  if (row.IS_ACTIVE === false) throw { status: 409, message: "Die Vorlage ist entfernt." };
+  const patch = { UPDATED_AT: new Date().toISOString() };
+  if (name !== undefined) {
+    patch.NAME = cleanVariantName(name);
+    await assertVariantNameFree(supabase, tenantId, patch.NAME, row.ID);
+  }
+  if (theme_json !== undefined) patch.THEME_JSON = sanitizeTheme(theme_json);
+  const { error } = await supabase.from("DOCUMENT_TEMPLATE").update(patch).eq("ID", row.ID);
+  if (error) throw error;
+  return { ok: true };
+}
+
+async function archiveVariant(supabase, { tenantId, id }) {
+  const row = await loadVariantRow(supabase, { tenantId, id });
+  const nowIso = new Date().toISOString();
+  const { error } = await supabase.from("DOCUMENT_TEMPLATE")
+    .update({ IS_ACTIVE: false, STATUS: "ARCHIVED", ARCHIVED_AT: nowIso, UPDATED_AT: nowIso })
+    .eq("ID", row.ID);
+  if (error) throw error;
+  return { ok: true };
+}
+
+/** Fuer die Auswahl je Beleg: nur eine (aktive) Variante des eigenen Mandanten. */
+async function assertUsableVariant(supabase, { tenantId, id }) {
+  const row = await loadVariantRow(supabase, { tenantId, id });
+  if (row.IS_ACTIVE === false) throw { status: 409, message: "Diese Vorlage ist entfernt." };
+  return row.ID;
+}
+
 module.exports = {
+  VARIANT, listVariants, getVariant, createVariant, saveVariant, archiveVariant, assertUsableVariant,
   listDocumentTemplates,
   createDocumentTemplate,
   patchDocumentTemplate,

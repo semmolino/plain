@@ -560,6 +560,19 @@ export const HELP = {
       </>
     ),
   },
+  'vorlagen.varianten': {
+    title: 'Vorlagen',
+    body: (
+      <>
+        Neben dem <strong>Standard</strong> kannst du benannte Vorlagen führen — etwa „Öffentliche
+        Auftraggeber" mit DIN-Anschriftfeld und eigenem Aufbau, oder „Kurzform" ohne Anhänge. Eine
+        neue Vorlage startet als Kopie; Gestaltung und Aufbau stellst du darin ein wie im Standard.
+        Welche Vorlage ein Beleg nimmt, wählst du im Rechnungsassistenten unter „Aufbau und Texte
+        dieses Belegs". Standardtexte und Textbausteine gelten für alle Vorlagen. Entfernen nimmt
+        eine Vorlage aus der Auswahl; gebuchte Belege behalten ihre Gestaltung.
+      </>
+    ),
+  },
   'vorlagen.beleg_aufbau': {
     title: 'Aufbau und Texte dieses Belegs',
     body: (

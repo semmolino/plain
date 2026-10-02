@@ -216,3 +216,36 @@ test.describe('Seitenaufbau und Briefpapier (Stufe 4)', () => {
     expect(state.puts).toHaveLength(0)
   })
 })
+
+test.describe('Vorlagen-Varianten (Stufe 5)', () => {
+  test('Neue Vorlage als Kopie, bearbeiten, speichern, umbenennen, entfernen', async ({ page }) => {
+    const state = await setup(page)
+    await page.goto('/admin?tab=dokumentvorlagen&sub=gestaltung')
+    await expect(page.getByLabel('Vorlage', { exact: true })).toHaveValue('')
+
+    await page.getByRole('button', { name: 'Neue Vorlage' }).click()
+    const dlg = page.getByRole('dialog', { name: 'Neue Vorlage' })
+    await dlg.getByLabel('Name').fill('Öffentliche AG')
+    await dlg.getByRole('button', { name: 'Anlegen' }).click()
+    await expect(page).toHaveURL(/[?&]v=500/)
+    await expect(page.getByLabel('Vorlage', { exact: true })).toHaveValue('500')
+
+    // Bearbeitet wird die Variante — der Standard bleibt, wie er ist
+    await page.getByLabel('Anschriftfeld').selectOption('B')
+    await bar(page).getByRole('button', { name: 'Speichern' }).click()
+    await expect.poll(() => state.variantCalls.filter(c => c.method === 'PUT').length).toBe(1)
+    expect(state.variantCalls.find(c => c.method === 'PUT')!.body).toMatchObject({ theme_json: { layout: { din: 'B' } } })
+    expect(state.puts).toHaveLength(0)
+
+    await page.getByRole('button', { name: 'Umbenennen' }).click()
+    const ren = page.getByRole('dialog', { name: 'Vorlage umbenennen' })
+    await ren.getByLabel('Name').fill('Öffentliche Auftraggeber')
+    await ren.getByRole('button', { name: 'Umbenennen' }).click()
+    await expect(page.getByLabel('Vorlage', { exact: true }).locator('option:checked')).toHaveText('Öffentliche Auftraggeber')
+
+    await page.getByRole('button', { name: 'Entfernen', exact: true }).first().click()
+    await page.getByRole('dialog', { name: 'Vorlage entfernen?' }).getByRole('button', { name: 'Entfernen' }).click()
+    await expect(page.getByLabel('Vorlage', { exact: true })).toHaveValue('')
+    await expect(page).not.toHaveURL(/[?&]v=/)
+  })
+})

@@ -34,7 +34,10 @@ function documentLayoutHandlers(table) {
       const booked = String(doc.STATUS_ID) === "2";
       const snap = booked && doc.DOCUMENT_THEME_SNAPSHOT_JSON && typeof doc.DOCUMENT_THEME_SNAPSHOT_JSON === "object"
         ? doc.DOCUMENT_THEME_SNAPSHOT_JSON : null;
-      const tpl = snap ? null : await loadTemplate({ supabase, companyId: doc.COMPANY_ID, docType: table, templateId: null });
+      // ?template_id=: Vorschau einer anderen Variante, bevor sie gespeichert ist
+      const asked = req.query.template_id !== undefined ? (Number(req.query.template_id) || null) : undefined;
+      const templateId = asked !== undefined ? asked : (doc.DOCUMENT_TEMPLATE_ID || null);
+      const tpl = snap ? null : await loadTemplate({ supabase, companyId: doc.COMPANY_ID, docType: table, templateId, tenantId: req.tenantId });
       const theme = sanitizeTheme(snap || tpl.THEME_JSON);
       const levels = layoutLevels({ category, bodyByCategory: theme.bodyByCategory, projectLayout });
       // Was ohne eigene Texte dasteht: Text am Beleg (Altbestand) oder Standardtext
@@ -42,6 +45,8 @@ function documentLayoutHandlers(table) {
       await injectStandardTexts(supabase, texts, req.tenantId, category);
       res.json({ data: {
         category, booked,
+        // Variante dieses Belegs (null = Standard) — bei gebuchten der Stand vom Buchen
+        templateId: booked ? null : (doc.DOCUMENT_TEMPLATE_ID ?? null),
         projectId: doc.PROJECT_ID ?? null,
         canEditProject: canEditProject(req),
         template: levels.template,
@@ -70,10 +75,13 @@ function documentLayoutHandlers(table) {
       const layoutPreview = {};
       if (Object.prototype.hasOwnProperty.call(b, "document")) layoutPreview.document = b.document;
       if (Object.prototype.hasOwnProperty.call(b, "project")) layoutPreview.project = b.project;
+      // Vorlage aus der Auswahl im Assistenten; null = ausdruecklich Standard
+      const templateChoice = Object.prototype.hasOwnProperty.call(b, "templateId") ? (Number(b.templateId) || null) : undefined;
       const releasePpIds = Array.isArray(b.release_pp_ids)
         ? b.release_pp_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
       const { html } = await buildDocumentHtml({
         supabase, tenantId: req.tenantId, docType: table, docId: id, layoutPreview, previewReleasePpIds: releasePpIds,
+        templateChoice,
       });
       res.json({ html });
     } catch (e) { fail(res, e); }
