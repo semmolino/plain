@@ -66,3 +66,15 @@ describe("Variante je Beleg", () => {
       .rejects.toMatchObject({ status: 409 });
   });
 });
+
+describe("Standard speichern", () => {
+  it("neu angelegte Standardvorlagen tragen den Mandanten — ohne ihn sieht sie unter RLS niemand (0187)", async () => {
+    const sb = db();
+    await svc.saveBrandingTheme(sb, { tenantId: 1, theme_json: { brand: { accentColor: "#123456" } } });
+    const own = sb._tables.DOCUMENT_TEMPLATE.filter((r) => r.COMPANY_ID === 10 && r.IS_DEFAULT);
+    // INVOICE war da und wird aktualisiert, ADVANCE_INVOICE und OFFER entstehen neu
+    expect(own.map((r) => r.DOC_TYPE).sort()).toEqual(["ADVANCE_INVOICE", "INVOICE", "OFFER"]);
+    expect(own.every((r) => r.TENANT_ID === 1)).toBe(true);
+    expect(own.find((r) => r.ID === 1).THEME_JSON.brand.accentColor).toBe("#123456");
+  });
+});

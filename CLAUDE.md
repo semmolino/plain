@@ -176,6 +176,17 @@ zusätzlich `DEFAULT public.current_tenant_id()` auf jede `TENANT_ID`-Spalte als
 Netz darunter. Reine `.update()`-Aufrufe sind nicht betroffen (die Zeile behält
 ihren Mandanten).
 
+**Eine Zeile mit `TENANT_ID = NULL` sieht niemand — auch ihr eigener Mandant
+nicht.** Das Netz aus `0131` greift nur mit Mandanten-Claim; unter dem
+`sys`-Claim (Migration, Hintergrunddienst) ist der Standard `NULL`. Wer dort in
+eine Mandantentabelle schreibt, setzt `TENANT_ID` selbst, aus dem Elternsatz.
+Aus der Zeit vor RLS lagen solche Zeilen noch in `DOCUMENT_TEMPLATE` (behoben
+mit `0187`) sowie in `FEE_CALCULATION_PHASE`, `PROJECT_PROGRESS` und
+`document_number_range` (Stand 2026-10-02). Der Schaden zeigt sich nie als
+„Zeile fehlt": die Vorlage wurde beim Speichern neu angelegt und scheiterte am
+eindeutigen Index — der kennt keine Policy —, ein verborgener Nummernkreis
+scheitert beim `ON CONFLICT`.
+
 **Migrationen laufen ohne Mandanten-Claim — RLS blockiert sie fail-closed.**
 Ein `psql`-Lauf trägt kein JWT. Jede Migration, die eine Tabelle mit
 `TENANT_ID` **liest** oder **schreibt**, sieht deshalb null Zeilen und meldet

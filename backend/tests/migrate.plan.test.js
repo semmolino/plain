@@ -165,6 +165,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0184 fuehrt Textbausteine fuer Belege ein (DOCUMENT_TEXT_SNIPPET).
     // 0185 fuehrt den Aufbau je Projekt und je Beleg ein (DOCUMENT_LAYOUT_JSON).
     // 0186 fuehrt Verzugszinsen und -pauschale in Mahnungen ein.
+    // 0187 ordnet Standardvorlagen ohne Mandant ihrem Mandanten zu.
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -218,6 +219,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0184_dokument_textbausteine.sql",
       "0185_beleg_aufbau.sql",
       "0186_verzugszinsen.sql",
+      "0187_dokumentvorlage_mandant.sql",
     ]);
   });
 

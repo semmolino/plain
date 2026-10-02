@@ -387,8 +387,12 @@ async function saveBrandingTheme(supabase, { tenantId, theme_json, blocks_by_cat
           .eq("ID", existing.ID);
         if (error) throw error;
       } else {
+        // TENANT_ID ausdruecklich: eine Vorlage ohne Mandant sieht unter RLS
+        // niemand — beim naechsten Speichern legte die Schleife sie erneut an
+        // und scheiterte am Index document_template_one_default_published
+        // (Migration 0187).
         const insertRow = {
-          COMPANY_ID: companyId, NAME: "Standard", DOC_TYPE: docType,
+          TENANT_ID: tenantId, COMPANY_ID: companyId, NAME: "Standard", DOC_TYPE: docType,
           STATUS: "PUBLISHED", VERSION: 1, FAMILY_ID: null,
           LAYOUT_KEY: "modern_a", THEME_JSON: theme, LOGO_ASSET_ID: null,
           IS_DEFAULT: true, IS_ACTIVE: true, PUBLISHED_AT: nowIso, UPDATED_AT: nowIso,
