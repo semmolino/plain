@@ -31,8 +31,8 @@ test.describe('Aufbau', () => {
     const state = await setup(page)
     await page.goto('/admin?tab=dokumentvorlagen&sub=aufbau')
     await expect(page.getByLabel('Belegart', { exact: true })).toHaveValue('invoice_rechnung')
-    // Die Vorschau zeigt, was der Server rendert (hier: der Mock)
-    await expect(page.frameLocator('iframe[title="Vorschau"]').getByText('Vorschau')).toBeVisible()
+    // Die Vorschau zeigt das PDF, das der Server rendert (hier: der Mock), als Blatt
+    await expect(page.getByRole('img', { name: 'Vorschau' })).toBeVisible()
 
     // Pflichtangaben lassen sich nicht ausblenden
     await expect(row(page, /^Titel/).getByRole('button', { name: /ausblenden/ })).toHaveCount(0)
@@ -209,10 +209,14 @@ test.describe('Seitenaufbau und Briefpapier (Stufe 4)', () => {
     const state = await setup(page)
     await page.goto('/admin?tab=dokumentvorlagen&sub=gestaltung')
     await page.getByLabel('Belegart, Nummer und Empfänger oben auf Folgeseiten').check()
+    // erst die Seitenansicht abwarten — sie geht an dieselbe Adresse
+    await expect.poll(() => state.previews.some(p => (p.theme_json.layout as { followHeader?: boolean } | undefined)?.followHeader)).toBe(true)
+    const before = state.previews.length
     const popup = page.waitForEvent('popup')
     await page.getByRole('button', { name: 'Als PDF ansehen' }).click()
     await popup
-    expect(state.pdfPreviews[0]).toMatchObject({ category: 'invoice_rechnung', theme_json: { layout: { followHeader: true } } })
+    expect(state.previews).toHaveLength(before + 1)
+    expect(state.previews.at(-1)).toMatchObject({ category: 'invoice_rechnung', theme_json: { layout: { followHeader: true } } })
     expect(state.puts).toHaveLength(0)
   })
 })

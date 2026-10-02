@@ -98,8 +98,8 @@ export function useBelegAufbau(kind: LayoutDocKind, id: number | null) {
     save, removeProjectLayout,
     /** Vorschau des Belegs mit dem ungespeicherten Stand */
     preview: (releasePpIds?: number[]) => (id
-      ? previewDocumentLayout(kind, id, { ...payload(), templateId, ...(releasePpIds?.length ? { release_pp_ids: releasePpIds } : {}) }).then(r => r.html)
-      : Promise.resolve('')),
+      ? previewDocumentLayout(kind, id, { ...payload(), templateId, ...(releasePpIds?.length ? { release_pp_ids: releasePpIds } : {}) })
+      : Promise.reject(new Error('Kein Beleg'))),
     previewKey: JSON.stringify([id, state && toOverride(state), remember, templateId]),
   }
 }

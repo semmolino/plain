@@ -19,13 +19,13 @@ module.exports = (supabase) => {
 
   router.use(requirePermission("settings.document_templates.edit"));
 
-  router.post("/preview",           (req, res) => ctrl.previewDocumentTemplate(req, res, supabase));
   router.post("/variants",          (req, res) => ctrl.createVariant(req, res, supabase));
   router.get("/variants/:id",       (req, res) => ctrl.getVariant(req, res, supabase));
   router.put("/variants/:id",       (req, res) => ctrl.saveVariant(req, res, supabase));
   router.delete("/variants/:id",    (req, res) => ctrl.archiveVariant(req, res, supabase));
-  // Dieselbe Vorschau als PDF — mit Briefpapier, Falzmarken und Folgeseitenkopf,
-  // die es nur im PDF gibt („/pdf" zaehlt im Limiter als teuer).
+  // Vorschau mit Beispielbeleg als PDF — Seitenansicht und „Als PDF ansehen".
+  // Bis 10/2026 gab es daneben POST /preview mit dem HTML; das ist randlos,
+  // die Seitenraender setzt erst der PDF-Druck („/pdf" zaehlt im Limiter als teuer).
   router.post("/preview/pdf",       (req, res) => ctrl.previewDocumentTemplatePdf(req, res, supabase));
   router.get("/branding",           (req, res) => ctrl.getBranding(req, res, supabase));
   router.put("/branding",           (req, res) => ctrl.saveBranding(req, res, supabase));

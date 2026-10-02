@@ -138,8 +138,8 @@ function DesignArea({ sub, active, catalog, category, onCategory, variantId }: {
             </select>
           </div>
         )}
-        <DocPreview requestKey={previewKey} load={() => previewBranding(theme, category).then(r => r.html)} />
-        {/* Briefpapier, Falzmarken und Folgeseitenkopf gibt es nur im PDF */}
+        <DocPreview requestKey={previewKey} load={() => previewBranding(theme, category)} />
+        {/* Dasselbe PDF in voller Größe — zum Vergrößern und Drucken */}
         <button type="button" className="btn-small dv-pdf-btn" onClick={() => void openBrandingPdf(theme, category).catch((e: Error) => toast.error(e.message))}>
           <FileText size={13} strokeWidth={2} /> Als PDF ansehen
         </button>

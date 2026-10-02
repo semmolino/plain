@@ -517,7 +517,8 @@ export const HELP = {
         <br /><br />
         <strong>Falz- und Lochmarken</strong> am linken Rand helfen beim Falten und Lochen.
         <strong> Folgeseiten</strong> tragen oben Belegart, Nummer und Empfänger, damit eine
-        einzelne Seite zuordenbar bleibt. Beides siehst du mit „Als PDF ansehen".
+        einzelne Seite zuordenbar bleibt. Beides zeigt die Vorschau rechts — sie ist das PDF,
+        Seite für Seite.
       </>
     ),
   },

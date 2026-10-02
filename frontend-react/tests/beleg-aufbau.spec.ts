@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test'
 import { mockPilot } from './fixtures/pilotData'
 import { CATALOG } from './fixtures/dokumentvorlagenData'
+import { pdfResponse } from './fixtures/samplePdf'
 
 /**
  * Aufbau und Texte dieses Belegs im Rechnungsassistenten (Vorlagen-Plan
@@ -33,7 +34,7 @@ async function setup(page: Page, { canEditProject = true, project = null as Reco
       template: [], projectParents: [], project, document: null,
       standardTexts: { intro: 'Standard-Kopftext', closing: null },
     } })))
-  await page.route(/\/api\/v1\/invoices\/601\/pdf\/preview(\?|$)/, r => r.fulfill(json({ html: '<p>Beleg-Vorschau</p>' })))
+  await page.route(/\/api\/v1\/invoices\/601\/pdf\/preview(\?|$)/, r => r.fulfill(pdfResponse(['Beleg-Vorschau'])))
   return calls
 }
 
@@ -104,7 +105,7 @@ test('Vorschau zeigt den ungespeicherten Stand', async ({ page }) => {
   await row(page, /^Anrede/).getByRole('button', { name: 'Anrede ausblenden' }).click()
   await page.locator('.ba-panel').getByRole('button', { name: 'Vorschau' }).click()
   const dlg = page.getByRole('dialog', { name: 'Vorschau dieses Belegs' })
-  await expect(dlg.frameLocator('iframe').getByText('Beleg-Vorschau')).toBeVisible()
+  await expect(dlg.getByRole('img', { name: 'Vorschau dieses Belegs' })).toBeVisible()
   const prev = calls.find(c => /pdf\/preview/.test(c.url))!
   // templateId: die gewählte Vorlage, null = ausdrücklich Standard
   expect(prev.body).toEqual({ document: { hidden: ['salutation'] }, templateId: null })

@@ -45,6 +45,6 @@ export const fetchDocumentLayout = (kind: LayoutDocKind, id: number, templateId?
 export const saveDocumentLayout = (kind: LayoutDocKind, id: number, body: DocumentLayoutSave) =>
   apiClient.put<{ data: { ok: boolean } }>(`${base(kind, id)}/layout`, body)
 
-/** HTML des Belegs mit ungespeicherten Abweichungen — für die Vorschau im Assistenten. */
+/** PDF des Belegs mit ungespeicherten Abweichungen — für die Seitenansicht im Assistenten. */
 export const previewDocumentLayout = (kind: LayoutDocKind, id: number, body: DocumentLayoutSave & { release_pp_ids?: number[] }) =>
-  apiClient.post<{ html: string }>(`${base(kind, id)}/pdf/preview`, body)
+  apiClient.postForBytes(`${base(kind, id)}/pdf/preview`, body)

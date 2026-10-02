@@ -200,10 +200,11 @@ export const fetchBranding = () =>
 export const saveBranding = (theme_json: DocTheme) =>
   apiClient.put<{ data: { ok: boolean } }>('/document-templates/branding', { theme_json, blocks_by_category: theme_json.blocksByCategory ?? {} })
 
+/** PDF des Beispielbelegs mit der (ungespeicherten) Gestaltung — für die Seitenansicht. */
 export const previewBranding = (theme_json: DocTheme, category: string) =>
-  apiClient.post<{ html: string }>('/document-templates/preview', { theme_json, category })
+  apiClient.postForBytes('/document-templates/preview/pdf', { theme_json, category })
 
-/** Dieselbe Vorschau als PDF in neuem Tab — mit Briefpapier, Falzmarken und Folgeseitenkopf. */
+/** Dieselbe Vorschau als PDF in neuem Tab — zum Vergrößern und Drucken. */
 export const openBrandingPdf = (theme_json: DocTheme, category: string) =>
   openPdfWithAuth('/document-templates/preview/pdf', { theme_json, category })
 

@@ -7,13 +7,14 @@
 //   GET  /:id/layout         Ebenen und Standardtexte (invoices.view)
 //   PUT  /:id/layout         { document?, project? } (Entwurfsrecht; project
 //                            zusaetzlich projects.edit)
-//   POST /:id/pdf/preview    HTML mit ungespeicherten Abweichungen
+//   POST /:id/pdf/preview    PDF mit ungespeicherten Abweichungen, fuer die
+//                            Seitenansicht im Assistenten
 //                            (invoices.download_pdf; „/pdf/" zaehlt im
 //                            Limiter als teuer)
 
 const { layoutLevels } = require("../services/documentLayout");
 const store = require("../services/documentLayoutStore");
-const { loadTemplate, injectStandardTexts, buildDocumentHtml } = require("../services_pdf_render");
+const { loadTemplate, injectStandardTexts, renderDocumentPdf } = require("../services_pdf_render");
 const { sanitizeTheme } = require("../services_theme_schema");
 
 const canEditProject = (req) => !!(req._permissionsUnrestricted || (req.permissions && req.permissions.has("projects.edit")));
@@ -68,7 +69,7 @@ function documentLayoutHandlers(table) {
     } catch (e) { fail(res, e); }
   }
 
-  async function previewHtml(req, res, supabase) {
+  async function preview(req, res, supabase) {
     try {
       const id = parseId(req);
       const b = req.body && typeof req.body === "object" ? req.body : {};
@@ -79,15 +80,20 @@ function documentLayoutHandlers(table) {
       const templateChoice = Object.prototype.hasOwnProperty.call(b, "templateId") ? (Number(b.templateId) || null) : undefined;
       const releasePpIds = Array.isArray(b.release_pp_ids)
         ? b.release_pp_ids.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
-      const { html } = await buildDocumentHtml({
+      // Das PDF, nicht das HTML: Seitenraender, Fusszeile, Briefpapier und
+      // Falzmarken setzt erst der PDF-Druck — das HTML allein ist randlos.
+      const { pdf } = await renderDocumentPdf({
         supabase, tenantId: req.tenantId, docType: table, docId: id, layoutPreview, previewReleasePpIds: releasePpIds,
         templateChoice,
       });
-      res.json({ html });
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'inline; filename="Vorschau.pdf"');
+      res.setHeader("Cache-Control", "no-store");
+      res.send(Buffer.from(pdf));
     } catch (e) { fail(res, e); }
   }
 
-  return { getLayout, putLayout, previewHtml };
+  return { getLayout, putLayout, preview };
 }
 
 module.exports = { documentLayoutHandlers };

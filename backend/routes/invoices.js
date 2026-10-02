@@ -44,7 +44,7 @@ module.exports = (supabase) => {
   const layout = documentLayoutHandlers("INVOICE");
   router.get("/:id/layout",                    (req, res) => layout.getLayout(req, res, supabase));
   router.put("/:id/layout",                    draftEdit, (req, res) => layout.putLayout(req, res, supabase));
-  router.post("/:id/pdf/preview",              requirePermission("invoices.download_pdf"), (req, res) => layout.previewHtml(req, res, supabase));
+  router.post("/:id/pdf/preview",              requirePermission("invoices.download_pdf"), (req, res) => layout.preview(req, res, supabase));
   router.get("/:id/validate",                  (req, res) => ctrl.validateInvoice(req, res, supabase));
 
   // Anlagen (Branch 9) -- bearbeiten = invoices.edit

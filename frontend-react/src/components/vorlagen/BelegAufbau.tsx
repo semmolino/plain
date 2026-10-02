@@ -148,7 +148,7 @@ export function BelegAufbau({ ctl, disabled, canPreview = true, beforePreview, r
         {previewOpen && (
           <DocPreview
             label="Vorschau dieses Belegs"
-            note="Maßstabsgetreu, auf die Breite verkleinert. Mit dem Stand dieses Entwurfs — die Nummer bekommt er erst beim Buchen."
+            note="Seitenansicht wie im PDF, mit dem Stand dieses Entwurfs — die Nummer bekommt er erst beim Buchen."
             requestKey={ctl.previewKey}
             load={async () => { await beforePreview?.(); return ctl.preview(releasePpIds) }}
           />

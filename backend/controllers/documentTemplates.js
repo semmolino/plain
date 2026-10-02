@@ -96,20 +96,8 @@ async function setDefaultDocumentTemplate(req, res, supabase) {
   }
 }
 
-// Live-Vorschau fuer den Branding-Tab: rendert einen synthetischen Beispiel-Beleg
-// mit dem uebergebenen Theme und liefert das HTML als JSON (fuer <iframe srcdoc>).
-async function previewDocumentTemplate(req, res, supabase) {
-  try {
-    const theme = req.body?.theme_json && typeof req.body.theme_json === "object" ? req.body.theme_json : {};
-    const category = String(req.body?.category || "invoice_rechnung");
-    const { html } = await pdfRender.renderPreviewDoc({ supabase, tenantId: req.tenantId, theme, category });
-    res.json({ html });
-  } catch (err) {
-    const status = err.status || 500;
-    res.status(status).json({ error: err.message || String(err) });
-  }
-}
-
+// Seitenansicht in Einstellungen → Dokumentvorlagen: rendert einen Beispielbeleg
+// mit der (ungespeicherten) Gestaltung als PDF.
 async function previewDocumentTemplatePdf(req, res, supabase) {
   try {
     const theme = req.body?.theme_json && typeof req.body.theme_json === "object" ? req.body.theme_json : {};
@@ -193,7 +181,6 @@ module.exports = {
   publishDocumentTemplate,
   archiveDocumentTemplate,
   setDefaultDocumentTemplate,
-  previewDocumentTemplate,
   getBranding,
   saveBranding,
   getCatalog,

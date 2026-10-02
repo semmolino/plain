@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { hideDevtools } from './fixtures/demoData'
 import { GROUP, mockGroups } from './fixtures/gesamtprojektData'
 import { CATALOG } from './fixtures/dokumentvorlagenData'
+import { pdfResponse } from './fixtures/samplePdf'
 
 /**
  * Gesamtprojekte (Migration 0181, docs/GESAMTPROJEKT_CONCEPT.md): Liste,
@@ -291,9 +292,9 @@ test.describe('Gesamtprojekte — Stufe 3: Bauvorhaben auf Belegen', () => {
       if (r.request().method() === 'PUT') { puts.push(r.request().postDataJSON()); return r.fulfill(json({ data: { ok: true } })) }
       return r.fulfill(json({ data: { theme: saved, blocksByCategory: {}, companyId: 1 } }))
     })
-    await page.route(/\/api\/v1\/document-templates\/preview(\?|$)/, r => {
+    await page.route(/\/api\/v1\/document-templates\/preview\/pdf(\?|$)/, r => {
       previews.push(r.request().postDataJSON())
-      return r.fulfill(json({ html: '<p>Vorschau</p>' }))
+      return r.fulfill(pdfResponse())
     })
     await page.route(/\/api\/v1\/mahnungen\/text-templates(\?|$)/, r => r.fulfill(json({ data: [] })))
 
