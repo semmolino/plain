@@ -131,6 +131,9 @@ body {
 </head>
 <body>
 
+{# Bausteine des Hauptteils — Reihenfolge aus layout.body (services/documentLayout.js). #}
+{% import "modern_a/_layout.njk" as L %}
+{% set blk_letterhead %}
   {# Logo #}
   <div class="logo-area">
     {% if theme.header.showLogo and logoDataUri %}
@@ -175,17 +178,20 @@ body {
       </table>
     </div>
   </div>
-
+{% endset %}
+{% set blk_title %}
   {# Document title #}
   <div class="doc-title">{{ mahnstufeLabel }}</div>
 
   {# Subject line #}
   <div class="subject-line">Betreff: {{ mahnstufeLabel }} zu Rechnung {{ invoiceNumber }}
     {%- if bauvorhaben and theme.header.showBauvorhaben != false %}<br><span class="subject-ref">Bauvorhaben: {{ bauvorhaben }}</span>{% endif %}</div>
-
+{% endset %}
+{% set blk_intro %}
   {# Header text (from settings) #}
   {% if headerText %}<div class="text-block">{{ headerText }}</div>{% endif %}
-
+{% endset %}
+{% set blk_invoiceRef %}
   {# Invoice reference table #}
   <table class="inv-table">
     <thead>
@@ -207,7 +213,8 @@ body {
       </tr>
     </tbody>
   </table>
-
+{% endset %}
+{% set blk_amounts %}
   {# Totals #}
   <table class="totals-table">
     <tbody>
@@ -253,10 +260,12 @@ body {
       </tr>
     </tbody>
   </table>
-
+{% endset %}
+{% set blk_closing %}
   {# Footer text (from settings) #}
   {% if footerText %}<div class="text-block">{{ footerText }}</div>{% endif %}
-
+{% endset %}
+{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, intro: blk_intro, invoiceRef: blk_invoiceRef, amounts: blk_amounts, closing: blk_closing }) }}
 
 </body>
 </html>

@@ -250,6 +250,9 @@ body {
 {# ═══════════════════════════════════════ PAGE 1 – ANGEBOT ════════════════════════════════ #}
 <div class="page">
 
+{# Bausteine des Hauptteils — Reihenfolge aus layout.body (services/documentLayout.js). #}
+{% import "modern_a/_layout.njk" as L %}
+{% set blk_letterhead %}
   {# Logo #}
   <div class="logo-area">
     {% if theme.header.showLogo and logoDataUri %}
@@ -306,13 +309,16 @@ body {
       </table>
     </div>
   </div>
-
+{% endset %}
+{% set blk_title %}
   {# Document title #}
   <div class="doc-title">Angebot: {{ offer.NAME }}</div>
-
+{% endset %}
+{% set blk_intro %}
   {# Kopftext #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
-
+{% endset %}
+{% set blk_positions %}
   {# ── Positions table ── #}
   {% if structureRows and structureRows.length > 0 %}
   <table class="pos-table">
@@ -404,7 +410,8 @@ body {
   {% endif %}
 
   {% endif %}
-
+{% endset %}
+{% set blk_amounts %}
   {# ── Calculation table ── #}
   {# Totals are from root-level OFFER_STRUCTURE nodes (includes parent surcharges).
      HOAI-Leistungen are shown in full detail on the appendix pages below. #}
@@ -433,19 +440,24 @@ body {
       <td class="amount">{{ (grossTotal if vatPercent > 0 else totals.total) | money }}</td>
     </tr>
   </table>
-
+{% endset %}
+{% set blk_closing %}
   {# Fußtext #}
   {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
-
+{% endset %}
+{% set blk_signature %}
   {# Signature image #}
   {% if signatureDataUri %}
   <div class="signature-image">
     <img src="{{ signatureDataUri }}" alt="Unterschrift">
   </div>
   {% endif %}
+{% endset %}
+{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, intro: blk_intro, positions: blk_positions, amounts: blk_amounts, closing: blk_closing, signature: blk_signature }) }}
 
 </div>
 
+{% set ap_honorar %}
 {# ═══════════════════════════════════════ HOAI-HONORARÜBERSICHT (matches honorar.njk) ═══ #}
 {% if theme.blocks.showHonorar != false and honorarCalcs and honorarCalcs.length > 0 %}
 {% for hc in honorarCalcs %}
@@ -620,7 +632,9 @@ body {
 </div>
 {% endfor %}
 {% endif %}
-
+{% endset %}
+{% set ap_orderSheet %}
+{% if theme.blocks.showOrderSheet != false %}
 {# ═══════════════════════════════════════ PAGE 2 – BESTELLBLATT ══════════════════════════ #}
 <div class="page page-break">
 
@@ -693,6 +707,11 @@ body {
   </div>
 
 </div>
+{% endif %}
+{% endset %}
+
+{# Anhaenge in der Reihenfolge der Gestaltung (Einstellungen → Dokumentvorlagen) #}
+{{ L.appendices(theme, ['showHonorar', 'showOrderSheet'], { showHonorar: ap_honorar, showOrderSheet: ap_orderSheet }) }}
 
 </body>
 </html>

@@ -296,8 +296,11 @@ table.data-table thead { display: table-header-group; }
 {# ──────────────────────────────────────────────────────── #}
 {# PAGE 1 – Main invoice                                   #}
 {# ──────────────────────────────────────────────────────── #}
-<div class="page">
-
+{# Bausteine des Hauptteils — ausgegeben in der Reihenfolge aus layout.body
+   (services/documentLayout.js). Der Zahlungshinweis steht standardmäßig nur
+   ohne Fußtext (payment: 'auto', die bisherige Regel). #}
+{% import "modern_a/_layout.njk" as L %}
+{% set blk_letterhead %}
   {# Logo #}
   <div class="logo-area">
     {% if theme.header.showLogo and logoDataUri %}
@@ -360,7 +363,8 @@ table.data-table thead { display: table-header-group; }
       </table>
     </div>
   </div>
-
+{% endset %}
+{% set blk_reference %}
   {# Reference / project info bar #}
   <div class="ref-block">
     {% if inv.buyerReference %}
@@ -380,7 +384,8 @@ table.data-table thead { display: table-header-group; }
     <div class="rf"><span class="rl">Leistungszeitraum:</span><span>{{ inv.billingPeriodStart | date_range_de(inv.billingPeriodEnd) }}</span></div>
     {% endif %}
   </div>
-
+{% endset %}
+{% set blk_title %}
   {# Document title #}
   <div class="doc-title">{{ docTitle }}</div>
   {# Rechnungskorrektur: spezifischer, eindeutiger Bezug auf das Original
@@ -394,17 +399,21 @@ Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
   {% if inv.replacesLabel and inv.canceledDocNumber %}
   <div class="text-block">Diese Rechnung ersetzt die stornierte {{ inv.replacesLabel }} Nr. {{ inv.canceledDocNumber }}{% if inv.canceledDocDate %} vom {{ inv.canceledDocDate | date_de }}{% endif %}.</div>
   {% endif %}
-
+{% endset %}
+{% set blk_salutation %}
   {# Anrede — geschlechtsgerechte Briefanrede direkt über dem Kopftext #}
   {% if salutationLine %}<div class="salutation">{{ salutationLine }}</div>{% endif %}
-
+{% endset %}
+{% set blk_intro %}
   {# Optional intro text #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
-
+{% endset %}
+{% set blk_comment %}
   {# Kommentar aus dem Assistenten („erscheint auf der Rechnung") — steht
      zugleich als Hinweis (BT-22) in der E-Rechnung. Bis 10/2026 nur dort. #}
   {% if inv.comment %}<div class="text-block">{{ inv.comment }}</div>{% endif %}
-
+{% endset %}
+{% set blk_amounts %}
   {# ── Calculation table ── #}
   <table class="calc-table">
 
@@ -657,11 +666,13 @@ Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
     {% endif %}
 
   </table>
-
-  {# Payment instruction / closing text #}
-  {% if text2 %}
-  <div class="text-block">{{ text2 }}</div>
-  {% else %}
+{% endset %}
+{% set blk_closing %}
+  {# Fußtext (Textvorlage oder eigener Text des Belegs) #}
+  {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
+{% endset %}
+{% set blk_payment %}
+  {# Zahlungsaufforderung + GiroCode #}
   <div class="payment-note-row">
     <div class="payment-note-text">
       <div class="payment-note">
@@ -685,8 +696,9 @@ Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
     </div>
     {% endif %}
   </div>
-  {% endif %}
-
+{% endset %}
+<div class="page">
+{{ L.body(layout, { letterhead: blk_letterhead, reference: blk_reference, title: blk_title, salutation: blk_salutation, intro: blk_intro, comment: blk_comment, amounts: blk_amounts, closing: blk_closing, payment: blk_payment }) }}
 </div>{# end page 1 #}
 
 
@@ -1089,10 +1101,7 @@ Die genannten Beträge mindern die ursprüngliche Rechnung.</div>
    Jeder ap_*-Block traegt sein eigenes {% if enabled and data %}-Gate; der
    zweite Loop haengt evtl. nicht in order gelistete Bausteine hinten an, damit
    nie ein aktivierter Anhang verloren geht. #}
-{% set apOrder = theme.blocks.order or ['showPayments','showProjectStructure','showTec','showHonorar'] %}
-{% set apMap = { 'showPayments': ap_payments, 'showProjectStructure': ap_structure, 'showTec': ap_tec, 'showHonorar': ap_honorar } %}
-{% for k in apOrder %}{{ apMap[k] | safe }}{% endfor %}
-{% for k in ['showPayments','showProjectStructure','showTec','showHonorar'] %}{% if k not in apOrder %}{{ apMap[k] | safe }}{% endif %}{% endfor %}
+{{ L.appendices(theme, ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'], { showPayments: ap_payments, showProjectStructure: ap_structure, showTec: ap_tec, showHonorar: ap_honorar }) }}
 
 </body>
 </html>

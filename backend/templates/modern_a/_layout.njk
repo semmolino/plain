@@ -1,0 +1,34 @@
+{#
+  Hauptteil eines Belegs in der Reihenfolge aus `layout.body`
+  (services/documentLayout.js — Registry, Vorlage der Firma, Projekt, Beleg).
+
+  `blocks` bildet jeden Baustein-Schluessel auf seinen vorher erfassten Inhalt
+  ab ({% set blk_… %}…{% endset %} in der Vorlage). Was die Registry fuer eine
+  Kategorie nicht kennt, steht nie in `layout.body` — ein Schluessel aus der
+  Datenbank adressiert hier also nur Bausteine, die die Vorlage selbst fuellt.
+
+  Eigene Textbloecke (kind 'text') kommen aus der Gestaltung bzw. dem Beleg
+  und werden wie jeder andere Text escaped.
+#}
+{% macro body(layout, blocks) %}
+{% if not (layout and layout.body) %}
+{# Ohne Aufbau (Vorlage direkt gerendert): alle Bausteine in Standardreihenfolge. #}
+{% for k, v in blocks %}{{ v | safe }}{% endfor %}
+{% endif %}
+{% for b in (layout.body if layout and layout.body else []) %}{% if b.visible %}
+{% if b.pageBreakBefore %}<div class="layout-page-break" style="break-before:page;page-break-before:always;height:0"></div>{% endif %}
+{% if b.kind == 'text' %}<div class="text-block custom-text">{{ b.text }}</div>{% else %}{{ blocks[b.key] | safe }}{% endif %}
+{% endif %}{% endfor %}
+{% endmacro %}
+
+{#
+  Anhaenge (eigene Seiten) in der Reihenfolge aus theme.blocks.order.
+  `keys` = Anhaenge dieser Kategorie; was in der Reihenfolge fehlt, haengt
+  hinten an — ein eingeschalteter Anhang geht nie verloren. Jeder Anhang
+  traegt sein eigenes Schalter- und Daten-Gate.
+#}
+{% macro appendices(theme, keys, map) %}
+{% set order = theme.blocks.order or [] %}
+{% for k in order %}{% if k in keys %}{{ map[k] | safe }}{% endif %}{% endfor %}
+{% for k in keys %}{% if k not in order %}{{ map[k] | safe }}{% endif %}{% endfor %}
+{% endmacro %}

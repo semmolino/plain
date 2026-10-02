@@ -140,6 +140,9 @@ body { padding-bottom: 4mm; }
 
 <div class="page">
 
+{# Bausteine des Hauptteils — Reihenfolge aus layout.body (services/documentLayout.js). #}
+{% import "modern_a/_layout.njk" as L %}
+{% set blk_letterhead %}
   {# Logo #}
   <div class="logo-area">
     {% if theme.header.showLogo and logoDataUri %}
@@ -195,7 +198,8 @@ body { padding-bottom: 4mm; }
       </table>
     </div>
   </div>
-
+{% endset %}
+{% set blk_reference %}
   {# Ref block #}
   <div class="ref-block">
     {% if inv.buyerReference %}
@@ -211,7 +215,8 @@ body { padding-bottom: 4mm; }
     <div class="rf"><span class="rl">Auftrag:</span><span>{{ contractName }}</span></div>
     {% endif %}
   </div>
-
+{% endset %}
+{% set blk_title %}
   {# Document title #}
   <div class="doc-title">{{ stornoTitle | default("Stornorechnung") }}</div>
 
@@ -225,13 +230,16 @@ body { padding-bottom: 4mm; }
     vollständig.
   </div>
   {% endif %}
-
+{% endset %}
+{% set blk_salutation %}
   {# Anrede — geschlechtsgerechte Briefanrede direkt über dem Kopftext #}
   {% if salutationLine %}<div class="salutation">{{ salutationLine }}</div>{% endif %}
-
+{% endset %}
+{% set blk_intro %}
   {# Optional intro text #}
   {% if text1 %}<div class="text-block">{{ text1 }}</div>{% endif %}
-
+{% endset %}
+{% set blk_amounts %}
   {# ── Calculation table ── #}
   <table class="calc-table">
     <tr>
@@ -258,10 +266,12 @@ body { padding-bottom: 4mm; }
       <td class="amount">{{ inv.totals.grandTotal | money }}</td>
     </tr>
   </table>
-
+{% endset %}
+{% set blk_closing %}
   {# Optional closing text #}
   {% if text2 %}<div class="text-block">{{ text2 }}</div>{% endif %}
-
+{% endset %}
+{{ L.body(layout, { letterhead: blk_letterhead, reference: blk_reference, title: blk_title, salutation: blk_salutation, intro: blk_intro, amounts: blk_amounts, closing: blk_closing }) }}
 
 </div>
 

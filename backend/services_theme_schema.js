@@ -20,8 +20,10 @@
 const { defaultTheme } = require('./services_theme_defaults');
 const { resolveFont } = require('./services_theme_fonts');
 
-const APPENDIX_KEYS = ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'];
-const CATEGORIES = ['invoice_rechnung', 'invoice_schluss', 'invoice_abschlags', 'offer_angebot'];
+const { CATEGORIES: LAYOUT_CATEGORIES, APPENDICES, sanitizeLayoutOverride } = require('./services/documentLayout');
+
+const APPENDIX_KEYS = Object.keys(APPENDICES);
+const CATEGORIES = Object.keys(LAYOUT_CATEGORIES);
 
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -86,6 +88,14 @@ function sanitizeTheme(raw) {
     out.blocksByCategory = {};
     for (const cat of CATEGORIES) {
       if (isObj(t.blocksByCategory[cat])) out.blocksByCategory[cat] = sanitizeBlocks(t.blocksByCategory[cat], def.blocks);
+    }
+  }
+  // Aufbau des Hauptteils je Kategorie (Reihenfolge, ausgeblendete Bausteine,
+  // Zahlungshinweis, eigene Textbloecke) — services/documentLayout.js.
+  if (isObj(t.bodyByCategory)) {
+    out.bodyByCategory = {};
+    for (const cat of CATEGORIES) {
+      if (isObj(t.bodyByCategory[cat])) out.bodyByCategory[cat] = sanitizeLayoutOverride(t.bodyByCategory[cat], cat);
     }
   }
   return out;

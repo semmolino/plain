@@ -25,6 +25,8 @@ function isTableMissingErr(err, tableName) {
 // gespeicherte Themes sind Eingaben eines Mandanten, keine vertrauten Daten.
 const { defaultTheme } = require('./services_theme_defaults');
 const { sanitizeTheme } = require('./services_theme_schema');
+const { CATEGORIES, resolveLayout, categoryChain, invoiceCategory } = require('./services/documentLayout');
+const { sampleViewModel } = require('./services/documentSamples');
 const { resolveFont, fontFaceCss } = require('./services_theme_fonts');
 
 // CSS-Farbe absichern (verhindert CSS-Injection ueber gespeicherte Themes).
@@ -982,11 +984,6 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
   ]);
 
   const vm = await buildPdfViewModel({ supabase, docType, docId, tenantId, previewReleasePpIds });
-  applyCategoryBlocks(theme, invoiceTypeToCategory(vm.inv && vm.inv.invoiceType, docType));
-  vm.theme             = theme;
-  vm.themeHead         = buildThemeHead(theme);
-  vm.logoDataUri       = logoDataUri;
-  vm.signatureDataUri  = signatureDataUri;
 
   // Inject text template (header/footer) if invoice has no manual texts
   await injectTextTemplate(supabase, vm, tenantId);
@@ -1058,9 +1055,9 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
   }
 
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
-  const isStorno  = vm.inv.invoiceType === 'stornorechnung';
-  const template  = isStorno ? 'storno.njk' : 'invoice.njk';
-  const html = env().render(path.join(layoutKey, template), vm);
+  const category  = invoiceCategory(vm.inv.invoiceType, docType);
+  const ctx = documentContext({ category, vm, theme, logoDataUri, signatureDataUri });
+  const html = env().render(path.join(layoutKey, CATEGORIES[category].template), ctx);
 
   const footerCols = buildSellerFooterCols(vm.inv.seller);
   const pdf = await renderPdf({ html, footerCols });
@@ -1108,8 +1105,7 @@ async function renderOfferPdf({ supabase, offerId, tenantId }) {
   }
 
   const honorarTotalSum = honorarCalcs.reduce((sum, hc) => sum + (hc.gesamthonorar || 0), 0);
-  applyCategoryBlocks(theme, 'offer_angebot');
-  const context = { ...vm, theme, themeHead: buildThemeHead(theme), logoDataUri, signatureDataUri, honorarCalcs, honorarTotalSum };
+  const context = documentContext({ category: 'offer_angebot', vm: { ...vm, honorarCalcs, honorarTotalSum }, theme, logoDataUri, signatureDataUri });
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'offer.njk'), context);
 
@@ -1126,7 +1122,7 @@ async function renderNachtragPdf({ supabase, nachtragId, tenantId }) {
     resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
-  const context = { ...vm, theme, themeHead: buildThemeHead(theme), logoDataUri, signatureDataUri };
+  const context = documentContext({ category: 'nachtrag', vm, theme, logoDataUri, signatureDataUri });
   const html = env().render(path.join('modern_a', 'nachtrag.njk'), context);
   const pdf = await renderPdf({ html });
   return { pdf, nachtrag: vm.nachtrag };
@@ -1152,14 +1148,7 @@ async function renderAuftragsbestaetigungPdf({ supabase, offerId, tenantId }) {
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
   ]);
 
-  const context = {
-    ...vm,
-    theme,
-    themeHead: buildThemeHead(theme),
-    logoDataUri,
-    signatureDataUri,
-    today: localDateStr(),
-  };
+  const context = documentContext({ category: 'offer_ab', vm: { ...vm, today: localDateStr() }, theme, logoDataUri, signatureDataUri });
 
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
   const html = env().render(path.join(layoutKey, 'auftragsbestaetigung.njk'), context);
@@ -1343,12 +1332,10 @@ async function renderMahnungPdf(supabase, { invoiceId, ppId, mahnstufe, tenantId
     headerText,
     footerText,
     docDate: today,
-    theme,
-    themeHead: buildThemeHead(theme),
-    logoDataUri,
   };
 
-  const html = env().render(path.join('modern_a', 'mahnung.njk'), context);
+  const html = env().render(path.join('modern_a', 'mahnung.njk'),
+    documentContext({ category: 'mahnung', vm: context, theme, logoDataUri }));
   return renderPdf({ html, footerCols: buildSellerFooterCols(context.seller) });
 }
 
@@ -1725,94 +1712,67 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
 }
 
 // ── Vorlagen-Vorschau (Branding-Tab) ──────────────────────────────────────────
-// Rendert einen synthetischen Beispiel-Beleg gegen das uebergebene Theme. Keine
-// DB-Belegdaten noetig — so funktioniert die Live-Vorschau ueberall (auch in den
-// Einstellungen ohne offenen Beleg) und zeigt alle Branding-Elemente.
+// ── Kontext einer Belegvorlage ───────────────────────────────────────────────
+//
+// EINE Stelle, die aus View-Model und Gestaltung den Render-Kontext baut —
+// fuer echte Belege, die Vorschau in den Einstellungen und die Vorlagentests.
+// Liefert die Anhang-Schalter der Kategorie (theme.blocks), den Branding-Kopf
+// und den Aufbau des Hauptteils (layout, services/documentLayout.js).
+//
+// Teilschluss erbt von Schluss, Korrektur und Storno von Rechnung
+// (categoryChain): wer dort nichts eigens eingestellt hat, sieht wie bisher die
+// Einstellung der Elternkategorie.
 
-const PREVIEW_SAMPLE = {
-  docTitle: 'Rechnung',
-  number:   'RE-2026-0042',
-  date:     '2026-06-24',
-  seller:   { name: 'Musterplanung GmbH', street: 'Beispielstraße 1', postCode: '10115', city: 'Berlin',
-              contactName: 'Dipl.-Ing. A. Muster', contactEmail: 'info@musterplanung.de', contactPhone: '030 1234567' },
-  buyer:    { name: 'Bauherr Beispiel AG', street: 'Musterallee 7', postCode: '80331', city: 'München' },
-  project:  'P-2026-014 – Neubau Verwaltungsgebäude',
-  bauvorhaben: 'Verwaltungszentrum Nord, Gesamtvorhaben',
-  lines: [
-    { pos: '1', desc: 'Leistungsphase 2 – Vorplanung',  qty: '1', price: '8.500,00', total: '8.500,00' },
-    { pos: '2', desc: 'Leistungsphase 3 – Entwurfsplanung', qty: '1', price: '12.750,00', total: '12.750,00' },
-    { pos: '3', desc: 'Nebenkosten (pauschal)',          qty: '1', price: '950,00',    total: '950,00' },
-  ],
-  net: '22.200,00', vatPct: '19', vat: '4.218,00', gross: '26.418,00',
-};
-
-// Welche Anhänge gibt es je Belegtyp (steuert Vorschau-Chips + UI-Toggles).
-const APPENDIX_LABELS = {
-  showProjectStructure: 'Projektübersicht',
-  showTec:              'Stundennachweis',
-  showHonorar:          'HOAI-/Kalkulationsübersicht',
-  showPayments:         'Zahlungsübersicht',
-};
-// Anhänge werden je BELEG-KATEGORIE konfiguriert (nicht je DOC_TYPE), weil der
-// DOC_TYPE INVOICE sowohl Rechnung als auch Schluss-/Teilschlussrechnung umfasst,
-// die bewusst getrennte Inhalte haben (analog zu den Textvorlagen).
-const APPENDIX_BY_CATEGORY = {
-  invoice_rechnung:  ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
-  invoice_schluss:   ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
-  invoice_abschlags: ['showPayments', 'showProjectStructure', 'showTec', 'showHonorar'],
-  offer_angebot:     ['showHonorar'],
-};
-const CATEGORY_TITLE = {
-  invoice_rechnung: 'Rechnung', invoice_schluss: 'Schlussrechnung',
-  invoice_abschlags: 'Abschlagsrechnung', offer_angebot: 'Angebot',
-};
-
-// Beleg-Kategorie aus invoiceType/docType ableiten (steuert die Anhang-Auswahl).
-function invoiceTypeToCategory(invoiceType, docType) {
-  if (docType === 'ADVANCE_INVOICE' || invoiceType === 'partial_payment') return 'invoice_abschlags';
-  if (invoiceType === 'schlussrechnung' || invoiceType === 'teilschlussrechnung') return 'invoice_schluss';
-  return 'invoice_rechnung'; // rechnung + stornorechnung (Storno hat ohnehin keine Anhänge)
+function documentContext({ category, vm, theme, logoDataUri = null, signatureDataUri = null, overrides = [] }) {
+  const t = { ...theme };
+  const chain = categoryChain(category);
+  const appxCat = chain.find((c) => t.blocksByCategory && t.blocksByCategory[c]);
+  t.blocks = { ...defaultTheme().blocks, ...(appxCat ? t.blocksByCategory[appxCat] : (t.blocks || {})) };
+  const bodyLevels = chain.slice().reverse()
+    .map((c) => t.bodyByCategory && t.bodyByCategory[c])
+    .filter(Boolean);
+  const layout = resolveLayout(category, [...bodyLevels, ...overrides], { hasClosingText: !!(vm && vm.text2) });
+  return { ...vm, theme: t, themeHead: buildThemeHead(t), logoDataUri, signatureDataUri, layout };
 }
 
-// Kategorie-spezifische Anhang-Flags ins theme.blocks ziehen (Template liest theme.blocks.*).
-function applyCategoryBlocks(theme, category) {
-  const def = defaultTheme().blocks;
-  const cat = theme.blocksByCategory && theme.blocksByCategory[category];
-  theme.blocks = { ...def, ...(cat || theme.blocks || {}) };
-  return theme;
-}
+// ── Vorschau in Einstellungen → Dokumentvorlagen ─────────────────────────────
+//
+// Rendert die ECHTE Vorlage der Kategorie mit einem Beispielbeleg
+// (services/documentSamples.js). Bis 10/2026 rendert die Vorschau eine eigene
+// Attrappe (preview.njk) — Vorschau und PDF konnten auseinanderlaufen.
 
 async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice_rechnung', asPdf = false }) {
+  const cat = CATEGORIES[category] ? category : 'invoice_rechnung';
   const mergedTheme = sanitizeTheme(theme);
-  const cat = APPENDIX_BY_CATEGORY[category] ? category : 'invoice_rechnung';
-  const blocks = mergedTheme.blocks || {};
-  const order = Array.isArray(blocks.order) ? blocks.order : [];
-  const orderedKeys = APPENDIX_BY_CATEGORY[cat].slice().sort((a, b) => {
-    const ia = order.indexOf(a), ib = order.indexOf(b);
-    return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
-  });
-  const appendicesOn = orderedKeys.filter(k => blocks[k] !== false).map(k => APPENDIX_LABELS[k]);
+  const vm = sampleViewModel(cat);
 
-  let logoDataUri = null;
+  let logoDataUri = null, signatureDataUri = null;
   try {
     const { data: co } = await supabase
       .from('COMPANY').select('ID').eq('TENANT_ID', tenantId).limit(1).maybeSingle();
-    logoDataUri = await resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId: co?.ID ?? null });
+    [logoDataUri, signatureDataUri] = await Promise.all([
+      resolveLogoDataUri({ supabase, tplLogoAssetId: null, tenantId, companyId: co?.ID ?? null }),
+      resolveSignatureDataUri({ supabase, tenantId, companyId: co?.ID ?? null }),
+    ]);
   } catch (_) { /* Logo optional — Vorschau funktioniert auch ohne */ }
 
-  const context = {
-    theme: mergedTheme, themeHead: buildThemeHead(mergedTheme), logoDataUri,
-    sample: PREVIEW_SAMPLE, appendicesOn, docTitle: CATEGORY_TITLE[cat],
-  };
-  const html = env().render(path.join('modern_a', 'preview.njk'), context);
+  if (vm.inv && vm.payAmount > 0) {
+    vm.epcQrDataUri = await buildEpcQrDataUri({
+      bic: vm.inv.seller.bic, iban: vm.inv.seller.iban, name: vm.inv.seller.name,
+      amount: vm.payAmount, reference: vm.inv.number,
+    });
+  }
+
+  const ctx = documentContext({ category: cat, vm, theme: mergedTheme, logoDataUri, signatureDataUri });
+  const html = env().render(path.join('modern_a', CATEGORIES[cat].template), ctx);
   if (!asPdf) return { html };
-  const pdf = await renderPdf({ html });
+  const pdf = await renderPdf({ html, footerCols: buildSellerFooterCols(vm.inv ? vm.inv.seller : vm.seller) });
   return { pdf, html };
 }
 
 module.exports = {
   renderDocumentPdf, renderOfferPdf, renderNachtragPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf,
-  renderWipPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc,
+  renderWipPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc, documentContext,
   // Fuer Vorlagen-Tests: dieselbe Nunjucks-Umgebung samt Filtern, ohne Browser.
   templateEnv: env,
   // Fuer den Abschottungstest (tests/pdfRenderSandbox.test.js).

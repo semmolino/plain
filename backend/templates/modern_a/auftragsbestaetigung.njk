@@ -195,6 +195,9 @@ body {
 
 <div class="page">
 
+{# Bausteine des Hauptteils — Reihenfolge aus layout.body (services/documentLayout.js). #}
+{% import "modern_a/_layout.njk" as L %}
+{% set blk_letterhead %}
   {# Logo #}
   <div class="logo-area">
     {% if theme.header.showLogo and logoDataUri %}
@@ -245,13 +248,15 @@ body {
       </table>
     </div>
   </div>
-
+{% endset %}
+{% set blk_title %}
   {# Document title #}
   <div class="doc-title">Auftragsbestätigung</div>
 
   {# Subject reference #}
   <div class="subject-line">Betreff: {{ offer.NAME }}</div>
-
+{% endset %}
+{% set blk_intro %}
   {# Optional custom header text #}
   {% if text1 %}
   <div class="text-block">{{ text1 }}</div>
@@ -264,7 +269,8 @@ body {
     gerne annehmen und die vereinbarten Leistungen für Sie erbringen werden.
   </div>
   {% endif %}
-
+{% endset %}
+{% set blk_scope %}
   {# Leistungsumfang #}
   {% if structureRows and structureRows.length > 0 %}
   <div class="scope-heading">Vereinbarter Leistungsumfang</div>
@@ -300,7 +306,8 @@ body {
     </tbody>
   </table>
   {% endif %}
-
+{% endset %}
+{% set blk_amounts %}
   {# Vergütung / calc table #}
   <div class="scope-heading">Vereinbarte Vergütung</div>
   <table class="calc-table">
@@ -326,7 +333,8 @@ body {
       <td class="amount">{{ (grossTotal if vatPercent > 0 else totals.total) | money }}</td>
     </tr>
   </table>
-
+{% endset %}
+{% set blk_referenceBox %}
   {# Reference info box #}
   <div class="ref-box">
     <table>
@@ -350,7 +358,8 @@ body {
       </tr>
     </table>
   </div>
-
+{% endset %}
+{% set blk_closing %}
   {# Closing text (custom or default) #}
   {% if text2 %}
   <div class="text-block">{{ text2 }}</div>
@@ -362,7 +371,8 @@ body {
     Mit freundlichen Grüßen
   </div>
   {% endif %}
-
+{% endset %}
+{% set blk_signature %}
   {# Signature image #}
   {% if signatureDataUri %}
   <div style="margin-top: 6mm; margin-bottom: 2mm;">
@@ -379,6 +389,8 @@ body {
       <div class="signature-line">{{ seller.name }}</div>
     </div>
   </div>
+{% endset %}
+{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, intro: blk_intro, scope: blk_scope, amounts: blk_amounts, referenceBox: blk_referenceBox, closing: blk_closing, signature: blk_signature }) }}
 
 </div>
 

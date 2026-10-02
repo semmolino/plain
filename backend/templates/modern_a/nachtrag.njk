@@ -57,6 +57,9 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1
 {% include "modern_a/_theme_head.njk" %}
 </head>
 <body>
+{# Bausteine des Hauptteils — Reihenfolge aus layout.body (services/documentLayout.js). #}
+{% import "modern_a/_layout.njk" as L %}
+{% set blk_letterhead %}
   <div class="logo-area">{% if logoDataUri and theme.header.showLogo != false %}<img src="{{ logoDataUri }}" alt="">{% endif %}</div>
 
   <div class="sender-line">{{ seller.name }}{% if seller.street %} · {{ seller.street }}{% endif %}{% if seller.postCode %} · {{ seller.postCode }} {{ seller.city }}{% endif %}</div>
@@ -82,12 +85,16 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1
       </table>
     </div>
   </div>
-
+{% endset %}
+{% set blk_title %}
   <div class="doc-title">Nachtrag: {{ nachtrag.NAME }}</div>
 
   {% if nachtrag.CLAIM_BASIS %}<div class="info-line"><span class="info-label">Anspruchsgrundlage:</span> {{ nachtrag.CLAIM_BASIS }}</div>{% endif %}
+{% endset %}
+{% set blk_reason %}
   {% if nachtrag.REASON %}<div class="text-block">{{ nachtrag.REASON }}</div>{% endif %}
-
+{% endset %}
+{% set blk_positions %}
   <table class="pos-table">
     <thead>
       <tr>
@@ -109,7 +116,8 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1
       {% endfor %}
     </tbody>
   </table>
-
+{% endset %}
+{% set blk_amounts %}
   <table class="calc-table">
     <tr><td class="label">Nettobetrag Nachtrag</td><td class="amount">{{ totals.revenue | money }}</td></tr>
     {% if totals.extras > 0 %}<tr><td class="label">Nebenkosten</td><td class="amount">{{ totals.extras | money }}</td></tr>{% endif %}
@@ -118,11 +126,15 @@ body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #1a1a1
     {% if vatPercent > 0 %}<tr><td class="label">zzgl. {{ vatPercent }} % USt.</td><td class="amount">{{ vatAmount | money }}</td></tr>{% endif %}
     <tr class="total-row"><td class="label">Nachtragssumme{% if vatPercent > 0 %} (brutto){% endif %}</td><td class="amount">{{ grossTotal | money }}</td></tr>
   </table>
-
+{% endset %}
+{% set blk_closing %}
   <div class="closing">
     <p>Wir bitten um Prüfung und Beauftragung dieses Nachtrags.</p>
     {% if signatureDataUri %}<img class="signature" src="{{ signatureDataUri }}" alt="">{% endif %}
     <div class="sign-name">{{ seller.name }}</div>
   </div>
+{% endset %}
+{{ L.body(layout, { letterhead: blk_letterhead, title: blk_title, reason: blk_reason, positions: blk_positions, amounts: blk_amounts, closing: blk_closing }) }}
+
 </body>
 </html>
