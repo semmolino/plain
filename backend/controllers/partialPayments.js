@@ -1,6 +1,6 @@
 "use strict";
 
-const { renderDocumentPdf } = require("../services_pdf_render");
+const { renderDocumentPdf, documentPdfBuffer } = require("../services_pdf_render");
 const svc = require("../services/partialPayments");
 const reissueSvc = require("../services/reissue");
 const selection = require("../services/bookingSelection");
@@ -1056,8 +1056,9 @@ async function getPdfHybrid(req, res, supabase) {
     const download = String(req.query.download || "") === "1";
     const templateId = req.query.template_id ? parseInt(String(req.query.template_id), 10) : null;
 
-    const [{ pdf }, data] = await Promise.all([
-      renderDocumentPdf({
+    // Gebucht: das archivierte PDF (documentPdfBuffer), siehe controllers/invoices.js
+    const [pdf, data] = await Promise.all([
+      documentPdfBuffer({
         supabase,
         tenantId: req.tenantId,
         docType: "ADVANCE_INVOICE",

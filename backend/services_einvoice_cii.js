@@ -51,6 +51,10 @@ function buildNotes(data) {
   if (data.comment) {
     notes.push(`    <ram:IncludedNote><ram:Content>${x(data.comment)}</ram:Content></ram:IncludedNote>`);
   }
+  // Eigene Textbloecke des Belegs (BT-22, wie im PDF)
+  for (const n of data.layoutNotes || []) {
+    notes.push(`    <ram:IncludedNote><ram:Content>${x(n)}</ram:Content></ram:IncludedNote>`);
+  }
   // Sicherheitseinbehalt (Phase 4) — human-readable note. VAT is unaffected.
   const se = data.securityRetention;
   if (se && (se.hasHeld || se.hasRelease)) {

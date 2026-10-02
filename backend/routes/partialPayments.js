@@ -3,11 +3,12 @@
 const express = require("express");
 const ctrl    = require("../controllers/partialPayments");
 const att     = require("../controllers/attachments");
-const { renderDocumentPdf } = require("../services_pdf_render");
+const { documentPdfBuffer } = require("../services_pdf_render");
 const { sendMail, plainTextHtml }    = require("../services/emailService");
 const emailTemplates  = require("../services/emailTemplates");
 const { requirePermission, requireAnyPermission } = require("../middleware/permissions");
 const { requireDraftEdit } = require("../middleware/draftEdit");
+const { documentLayoutHandlers } = require("../controllers/documentLayouts");
 
 module.exports = (supabase) => {
   const router = express.Router();
@@ -44,6 +45,11 @@ module.exports = (supabase) => {
   router.delete("/:id",                        requirePermission("invoices.delete"), (req, res) => ctrl.deletePartialPayment(req, res, supabase));
   router.get("/:id/pdf",                       requirePermission("invoices.download_pdf"), (req, res) => ctrl.getPdf(req, res, supabase));
   router.get("/:id/pdf-hybrid",                requirePermission("invoices.download_pdf"), (req, res) => ctrl.getPdfHybrid(req, res, supabase));
+  // Aufbau dieses Belegs (Vorlagen-Plan Stufe 3, controllers/documentLayouts.js)
+  const layout = documentLayoutHandlers("ADVANCE_INVOICE");
+  router.get("/:id/layout",                    (req, res) => layout.getLayout(req, res, supabase));
+  router.put("/:id/layout",                    draftEdit, (req, res) => layout.putLayout(req, res, supabase));
+  router.post("/:id/pdf/preview",              requirePermission("invoices.download_pdf"), (req, res) => layout.previewHtml(req, res, supabase));
   router.get("/:id/einvoice/peppol",           requirePermission("invoices.download_xml"), (req, res) => ctrl.getEinvoicePeppol(req, res, supabase));
   router.get("/:id/validate",                  (req, res) => ctrl.validatePp(req, res, supabase));
 
@@ -92,7 +98,8 @@ module.exports = (supabase) => {
       const to = emailTo || composed.to;
       if (!to) return res.status(400).json({ error: "Keine E-Mail-Adresse hinterlegt" });
 
-      const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType: "ADVANCE_INVOICE", docId: ppId });
+      // gebucht: die archivierte Fassung, nicht neu gerendert
+      const pdf = await documentPdfBuffer({ supabase, tenantId, docType: "ADVANCE_INVOICE", docId: ppId });
       const pdfBuffer = Buffer.from(pdf);
       const safeName  = (pp.ADVANCE_INVOICE_NUMBER || `Anzahlung_${ppId}`).replace(/[/\\?%*:|"<>\s]/g, '-');
       await sendMail({

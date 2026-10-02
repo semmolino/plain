@@ -96,6 +96,19 @@ async function readXmlAssetString({ supabase, assetId, tenantId }) {
   }
 }
 
+// Eingefrorenes PDF als Buffer — fuer Versand und Hybrid-PDF eines gebuchten
+// Belegs. null, wenn Zeile oder Datei fehlen (der Aufrufer rendert dann).
+async function readPdfAssetBuffer({ supabase, assetId, tenantId }) {
+  if (!assetId) return null;
+  try {
+    const asset = await loadAssetRow({ supabase, assetId, tenantId });
+    if (!asset?.STORAGE_KEY) return null;
+    return (await storage.getBuffer(asset.STORAGE_KEY)) || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Gemeinsamer Kern fuer PDF und XML. Die beiden oeffentlichen Funktionen
 // darunter unterscheiden sich nur in Endung, MIME-Typ und Vorgabewert.
 async function storeGeneratedAsset({ supabase, companyId, fileName, buffer, ext, mimeType, assetType, fallbackName }) {
@@ -160,6 +173,7 @@ module.exports = {
   streamPdfAsset,
   streamXmlAsset,
   readXmlAssetString,
+  readPdfAssetBuffer,
   storeGeneratedPdfAsAsset,
   storeGeneratedXmlAsAsset,
   bestEffortDeleteAsset,

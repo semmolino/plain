@@ -251,6 +251,7 @@ function generateUblXml(data, opts = {}) {
   ${data.dueDate ? `<cbc:DueDate>${x(data.dueDate)}</cbc:DueDate>` : ''}
   <cbc:InvoiceTypeCode>${x(typeCode)}</cbc:InvoiceTypeCode>
   ${data.comment ? `<cbc:Note>${x(data.comment)}</cbc:Note>` : ''}
+  ${(data.layoutNotes || []).map((n) => `<cbc:Note>${x(n)}</cbc:Note>`).join('\n  ')}
   ${buildSecurityRetentionNote(data)}
   <cbc:DocumentCurrencyCode>${x(cur)}</cbc:DocumentCurrencyCode>
   ${data.buyerAccountingRef ? `<cbc:AccountingCost>${x(data.buyerAccountingRef)}</cbc:AccountingCost>` : ''}

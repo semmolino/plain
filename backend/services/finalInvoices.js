@@ -2,6 +2,7 @@
 
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
+const { freezeLayoutSnapshot } = require("./documentLayoutStore");
 const { insertProgressSnapshot } = require("./projectProgress");
 const { rebillableByStructure } = require("./receivableAdjustments");
 const { AR_COLS, deductionsFor } = require("./arDeduction");
@@ -783,7 +784,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
 
   const prefix = inv.INVOICE_TYPE === "schlussrechnung" ? "Schlussrechnung" : "Teilschlussrechnung";
 
-  let pdfAsset = null, tpl = null, theme = null;
+  let pdfAsset = null, tpl = null, theme = null, projectLayout = null;
   try {
     const r = await renderDocumentPdf({
       supabase,
@@ -794,6 +795,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
     });
     tpl = r.template;
     theme = r.theme;
+    projectLayout = r.projectLayout;
     pdfAsset = await storeGeneratedPdfAsAsset({
       supabase,
       companyId: inv.COMPANY_ID,
@@ -842,6 +844,7 @@ async function bookFinalInvoice(supabase, { id, tenantId, releasePpIds = [], for
     await bestEffortDeleteAsset({ supabase, asset: xmlAsset });
     throw new Error(upErr.message);
   }
+  await freezeLayoutSnapshot(supabase, { table: "INVOICE", id: parseInt(id, 10), tenantId: inv.TENANT_ID ?? tenantId, projectLayout });
 
   // Abgesetzte Abschlagsrechnungen sind in dieser Rechnung aufgegangen
   // (Migration 0178): ihr offener Rest steht jetzt hier in Rechnung und wird

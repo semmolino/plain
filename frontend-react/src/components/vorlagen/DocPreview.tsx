@@ -8,10 +8,11 @@ const A4_WIDTH = 794 // A4-Breite bei 96 dpi — gerendert wird darauf, angezeig
  * verkleinert. `requestKey` bestimmt, wann neu geladen wird — er sollte alles
  * enthalten, was die Vorschau verändert.
  */
-export function DocPreview({ requestKey, load, label = 'Vorschau' }: {
+export function DocPreview({ requestKey, load, label = 'Vorschau', note = 'Maßstabsgetreu, auf die Breite verkleinert. Mit Beispieldaten.' }: {
   requestKey: string
   load:       () => Promise<string>
   label?:     string
+  note?:      string
 }) {
   const [html, setHtml] = useState('')
   // geladen ist, was zum aktuellen Schlüssel gehört — sonst „aktualisiert …“
@@ -72,7 +73,7 @@ export function DocPreview({ requestKey, load, label = 'Vorschau' }: {
           style={{ width: A4_WIDTH, height: contentH, transform: `scale(${scale})` }}
         />
       </div>
-      <p className="dv-preview-note">Maßstabsgetreu, auf die Breite verkleinert. Mit Beispieldaten.</p>
+      <p className="dv-preview-note">{note}</p>
     </div>
   )
 }

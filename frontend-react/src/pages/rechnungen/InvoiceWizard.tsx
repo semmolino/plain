@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { BelegAufbau } from '@/components/vorlagen/BelegAufbau'
+import { useBelegAufbau } from '@/components/vorlagen/useBelegAufbau'
 import { ChevronLeft, ChevronRight, Check, FileText, ChevronDown } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -366,6 +368,7 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
   const bookMut = useMutation({
     mutationFn: async (id: number) => {
       await api.patch(id, step3Body())
+      await aufbau.save()
       return api.book(id)
     },
     onSuccess: (res) => {
@@ -456,8 +459,11 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
     if (draftIdRef.current) setTouched(true)
   }
 
+  // Aufbau und Texte dieses Belegs — gespeichert mit dem Schritt
+  const aufbau = useBelegAufbau(api.listKey === 'partial-payments' ? 'advance' : 'invoice', draftId)
+
   useRegisterDirty(`invoice-wizard-${kind}`, {
-    dirty: !!draftId && step >= 1 && touched,
+    dirty: !!draftId && step >= 1 && (touched || aufbau.dirty),
     label: `${noun} (Entwurf)`,
     save:  persistStep,
   })
@@ -512,7 +518,7 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
     if (!draftId) return
     if (step === 1) await api.patch(draftId, step1Body())
     if (step === 2) await saveStep2()
-    if (step === 3) await api.patch(draftId, step3Body())
+    if (step === 3) { await api.patch(draftId, step3Body()); await aufbau.save() }
     setTouched(false)
     setSavedExplicitly(true)
     void qc.invalidateQueries({ queryKey: [api.listKey] })
@@ -540,6 +546,7 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
     setMsg(null)
     try {
       await api.patch(draftId, step3Body())
+      await aufbau.save()
       await run(draftId)
     } catch (e) {
       setMsg({ text: (e as Error).message, type: 'error' })
@@ -924,6 +931,11 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
                   </>
                 )}
               </div>
+            )}
+
+            {draftId && (
+              <BelegAufbau ctl={aufbau} disabled={busy} canPreview={canPdf}
+                beforePreview={() => api.patch(draftId, step3Body())} />
             )}
 
             {draftId && (canPdf || canXml) && (

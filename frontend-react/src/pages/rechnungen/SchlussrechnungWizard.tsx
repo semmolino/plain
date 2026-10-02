@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { BelegAufbau } from '@/components/vorlagen/BelegAufbau'
+import { useBelegAufbau } from '@/components/vorlagen/useBelegAufbau'
 import { ChevronLeft, ChevronRight, Check, FileText, ChevronDown, AlertTriangle } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -429,6 +431,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   const bookMut = useMutation({
     mutationFn: async (id: number) => {
       await patchInvoice(id, step4Body())
+      await aufbau.save()
       return bookFinalInvoice(id, { release_partial_payment_ids: Array.from(seReleaseSel) })
     },
     onSuccess: (res) => {
@@ -511,8 +514,11 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     }
   }
 
+  // Aufbau und Texte dieses Belegs — gespeichert mit dem Schritt
+  const aufbau = useBelegAufbau('invoice', draftId)
+
   useRegisterDirty('invoice-wizard-schluss', {
-    dirty: !!draftId && step >= 1 && touched,
+    dirty: !!draftId && step >= 1 && (touched || aufbau.dirty),
     label: 'Schlussrechnung (Entwurf)',
     save:  persistStep,
   })
@@ -595,7 +601,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     if (step === 1) await patchInvoice(draftId, step1Body())
     if (step === 2) await phasesMut.mutateAsync(phasesPayload(draftId))
     if (step === 3) await dedMut.mutateAsync({ id: draftId, items: deductionItems() })
-    if (step === 4) await patchInvoice(draftId, step4Body())
+    if (step === 4) { await patchInvoice(draftId, step4Body()); await aufbau.save() }
     setTouched(false)
     setSavedExplicitly(true)
     void qc.invalidateQueries({ queryKey: ['invoices'] })
@@ -622,6 +628,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     setMsg(null)
     try {
       await patchInvoice(draftId, step4Body())
+      await aufbau.save()
       await run(draftId)
     } catch (e) {
       setMsg({ text: (e as Error).message, type: 'error' })
@@ -1302,6 +1309,11 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
                   </div>
                 )}
               </Disclosure>
+            )}
+
+            {draftId && (
+              <BelegAufbau ctl={aufbau} disabled={busy} canPreview={canPdf} releasePpIds={Array.from(seReleaseSel)}
+                beforePreview={() => patchInvoice(draftId, step4Body())} />
             )}
 
             {draftId && (canPdf || canXml) && (

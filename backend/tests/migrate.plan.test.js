@@ -163,6 +163,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0182 merkt sich, in welches Projekt eine Nachtrags-Freigabe ging.
     // 0183 haelt versandte Mahnungen als PDF fest (MAHNUNG_HISTORY.PDF_ASSET_ID).
     // 0184 fuehrt Textbausteine fuer Belege ein (DOCUMENT_TEXT_SNIPPET).
+    // 0185 fuehrt den Aufbau je Projekt und je Beleg ein (DOCUMENT_LAYOUT_JSON).
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -214,6 +215,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0182_nachtrag_eigenes_projekt.sql",
       "0183_mahnung_archiv.sql",
       "0184_dokument_textbausteine.sql",
+      "0185_beleg_aufbau.sql",
     ]);
   });
 

@@ -1,6 +1,6 @@
 "use strict";
 
-const { renderDocumentPdf } = require("../services_pdf_render");
+const { renderDocumentPdf, documentPdfBuffer } = require("../services_pdf_render");
 const svc = require("../services/invoices");
 const correction = require("../services/invoiceCorrection");
 const reissueSvc = require("../services/reissue");
@@ -728,8 +728,10 @@ async function getPdfHybrid(req, res, supabase) {
       .split(",").map(s => parseInt(s.trim(), 10))
       .filter(n => Number.isFinite(n) && n > 0);
 
-    const [{ pdf }, data] = await Promise.all([
-      renderDocumentPdf({
+    // Gebucht: das archivierte PDF (documentPdfBuffer) — das Hybrid-PDF zeigte
+    // vorher die heutige Gestaltung um das eingefrorene XML herum.
+    const [pdf, data] = await Promise.all([
+      documentPdfBuffer({
         supabase,
         tenantId: req.tenantId,
         docType: "INVOICE",

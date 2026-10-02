@@ -25,7 +25,9 @@ function isTableMissingErr(err, tableName) {
 // gespeicherte Themes sind Eingaben eines Mandanten, keine vertrauten Daten.
 const { defaultTheme } = require('./services_theme_defaults');
 const { sanitizeTheme } = require('./services_theme_schema');
-const { CATEGORIES, resolveLayout, categoryChain, invoiceCategory, textTypeChain } = require('./services/documentLayout');
+const { CATEGORIES, resolveLayout, categoryChain, invoiceCategory, textTypeChain, layoutLevels } = require('./services/documentLayout');
+const { loadDocumentLayouts, cleanOverride } = require('./services/documentLayoutStore');
+const { readPdfAssetBuffer } = require('./services/generatedAssets');
 const { resolvePlaceholders } = require('./services/documentPlaceholders');
 const { sampleViewModel } = require('./services/documentSamples');
 const { resolveFont, fontFaceCss } = require('./services_theme_fonts');
@@ -960,14 +962,25 @@ async function buildPdfViewModel({ supabase, docType, docId, tenantId, previewRe
  * Der Parameter wird bewusst hart geprueft: ein vergessener Aufrufer soll einen
  * Fehler ausloesen, kein stilles Leck.
  */
-async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateId, previewReleasePpIds = [] }) {
+// Rechnung / Abschlag als HTML — der gemeinsame Teil von PDF, Vorschau im
+// Assistenten und den Hinweisen der E-Rechnung (layoutTextNotes).
+//
+// Ein GEBUCHTER Beleg rendert mit dem Stand vom Buchen: Gestaltung aus
+// DOCUMENT_THEME_SNAPSHOT_JSON, Projekt-Aufbau aus DOCUMENT_LAYOUT_SNAPSHOT_JSON
+// (documentLayoutStore). Vorher nahm jeder erneute Render die heutige Vorlage —
+// das Hybrid-PDF eines gebuchten Belegs aenderte sich mit jeder neuen
+// Gestaltung.
+//
+// `layoutPreview` ({ document?, project? }): ungespeicherte Abweichungen aus
+// dem Assistenten, nur fuer die Vorschau.
+async function buildDocumentHtml({ supabase, docType, docId, tenantId, templateId, previewReleasePpIds = [], layoutPreview = null }) {
   if (tenantId === undefined || tenantId === null || tenantId === '') {
     throw new Error('renderDocumentPdf: tenantId ist erforderlich');
   }
   const table = docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE';
   const { data: docMeta } = await supabase
     .from(table)
-    .select('COMPANY_ID, TENANT_ID')
+    .select('*')
     .eq('ID', docId)
     .eq('TENANT_ID', tenantId)
     .maybeSingle();
@@ -977,8 +990,12 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
   const companyId = docMeta.COMPANY_ID;
   if (!companyId) throw new Error('Company for document not found');
 
+  const booked = String(docMeta.STATUS_ID) === '2';
   const tpl = await loadTemplate({ supabase, companyId, docType, templateId });
-  const theme = sanitizeTheme(tpl.THEME_JSON);
+  const snapTheme = booked && docMeta.DOCUMENT_THEME_SNAPSHOT_JSON && typeof docMeta.DOCUMENT_THEME_SNAPSHOT_JSON === 'object'
+    ? docMeta.DOCUMENT_THEME_SNAPSHOT_JSON : null;
+  const theme = sanitizeTheme(snapTheme || tpl.THEME_JSON);
+  let { projectLayout, documentLayout } = await loadDocumentLayouts({ supabase, tenantId, table, doc: docMeta });
   const [logoDataUri, signatureDataUri] = await Promise.all([
     resolveLogoDataUri({ supabase, tplLogoAssetId: tpl.LOGO_ASSET_ID, tenantId, companyId }),
     resolveSignatureDataUri({ supabase, tenantId, companyId }),
@@ -1048,13 +1065,69 @@ async function renderDocumentPdf({ supabase, docType, docId, tenantId, templateI
     }
   }
 
+  if (layoutPreview && !booked) {
+    if (Object.prototype.hasOwnProperty.call(layoutPreview, 'document')) documentLayout = cleanOverride(layoutPreview.document, category);
+    if (Object.prototype.hasOwnProperty.call(layoutPreview, 'project')) {
+      projectLayout = { ...projectLayout };
+      const own = cleanOverride(layoutPreview.project, category);
+      if (own) projectLayout[category] = own; else delete projectLayout[category];
+    }
+  }
+
   const layoutKey = tpl.LAYOUT_KEY || 'modern_a';
-  const ctx = documentContext({ category, vm, theme, logoDataUri, signatureDataUri, placeholders: invoicePlaceholders(vm) });
+  const ctx = documentContext({
+    category, vm, theme, logoDataUri, signatureDataUri, projectLayout, documentLayout,
+    placeholders: invoicePlaceholders(vm),
+  });
   const html = env().render(path.join(layoutKey, CATEGORIES[category].template), ctx);
 
-  const footerCols = buildSellerFooterCols(vm.inv.seller);
+  return { html, footerCols: buildSellerFooterCols(vm.inv.seller), template: tpl, theme, projectLayout, ctx };
+}
+
+async function renderDocumentPdf(args) {
+  const { html, footerCols, template, theme, projectLayout } = await buildDocumentHtml(args);
   const pdf = await renderPdf({ html, footerCols });
-  return { pdf, template: tpl, theme };
+  // projectLayout: der Stand, mit dem gerendert wurde — die Buchung friert ihn ein.
+  return { pdf, template, theme, projectLayout };
+}
+
+/**
+ * Das PDF eines Belegs, wie es hinausgeht: gebucht die archivierte Fassung
+ * (DOCUMENT_PDF_ASSET_ID), sonst frisch gerendert. Vorher renderten Mailversand
+ * und Hybrid-PDF auch gebuchte Belege neu — mit der heutigen Vorlage. Der
+ * Empfaenger bekam damit einen anderen Beleg als den archivierten.
+ */
+async function documentPdfBuffer({ supabase, tenantId, docType, docId, templateId = null, previewReleasePpIds = [] }) {
+  const table = docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE';
+  const { data: doc } = await supabase.from(table).select('*').eq('ID', docId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (doc && String(doc.STATUS_ID) === '2' && doc.DOCUMENT_PDF_ASSET_ID) {
+    const buf = await readPdfAssetBuffer({ supabase, assetId: doc.DOCUMENT_PDF_ASSET_ID, tenantId });
+    if (buf) return buf;
+    console.warn('[PDF] archiviertes PDF nicht lesbar, wird neu gerendert', { table, id: docId });
+  }
+  const { pdf } = await renderDocumentPdf({ supabase, tenantId, docType, docId, templateId, previewReleasePpIds });
+  return Buffer.from(pdf);
+}
+
+/**
+ * Eigene Textbloecke eines Belegs als Hinweise fuer die E-Rechnung (BT-22),
+ * mit aufgeloesten Platzhaltern — genau die Texte, die auch im PDF stehen.
+ * Ohne Textbloecke kein Render (der haeufige Fall bleibt billig).
+ */
+async function layoutTextNotes({ supabase, tenantId, docType, docId }) {
+  const table = docType === 'INVOICE' ? 'INVOICE' : 'ADVANCE_INVOICE';
+  const { data: doc } = await supabase.from(table).select('*').eq('ID', docId).eq('TENANT_ID', tenantId).maybeSingle();
+  if (!doc) return [];
+  const { projectLayout, documentLayout, category } = await loadDocumentLayouts({ supabase, tenantId, table, doc });
+  const tpl = await loadTemplate({ supabase, companyId: doc.COMPANY_ID, docType, templateId: null });
+  const snap = String(doc.STATUS_ID) === '2' && doc.DOCUMENT_THEME_SNAPSHOT_JSON && typeof doc.DOCUMENT_THEME_SNAPSHOT_JSON === 'object'
+    ? doc.DOCUMENT_THEME_SNAPSHOT_JSON : null;
+  const theme = sanitizeTheme(snap || tpl.THEME_JSON);
+  const levels = layoutLevels({ category, bodyByCategory: theme.bodyByCategory, projectLayout });
+  const plain = resolveLayout(category, [...levels.template, ...levels.projectParents, levels.projectOwn, documentLayout].filter(Boolean));
+  if (!plain.body.some((b) => b.kind === 'text' && b.visible)) return [];
+  const { ctx } = await buildDocumentHtml({ supabase, docType, docId, tenantId });
+  return ctx.layout.body.filter((b) => b.kind === 'text' && b.visible && b.text && b.text.trim()).map((b) => b.text.trim());
 }
 
 // ── Offer PDF ─────────────────────────────────────────────────────────────────
@@ -1703,24 +1776,16 @@ async function renderHonorarPdf(supabase, { calcMasterId, tenantId }) {
 // (categoryChain): wer dort nichts eigens eingestellt hat, sieht wie bisher die
 // Einstellung der Elternkategorie.
 
-function documentContext({ category, vm, theme, logoDataUri = null, signatureDataUri = null, overrides = [], placeholders = null }) {
+function documentContext({ category, vm, theme, logoDataUri = null, signatureDataUri = null, projectLayout = null, documentLayout = null, overrides = [], placeholders = null }) {
   const t = { ...theme };
   const chain = categoryChain(category);
   const appxCat = chain.find((c) => t.blocksByCategory && t.blocksByCategory[c]);
   t.blocks = { ...defaultTheme().blocks, ...(appxCat ? t.blocksByCategory[appxCat] : (t.blocks || {})) };
-  // Eine Kategorie mit eigenem Zahlungs-Standard (Korrektur: nie, Mahnung:
-  // immer) erbt den Schalter nicht — sonst bekaeme die Korrektur mit jeder
-  // Anpassung der Rechnung wieder „Bitte überweisen Sie −1.190 €".
-  const ownPayment = CATEGORIES[chain[0]].defaults && CATEGORIES[chain[0]].defaults.payment;
-  const bodyLevels = chain.slice().reverse()
-    .map((c) => {
-      const o = t.bodyByCategory && t.bodyByCategory[c];
-      if (!o || c === chain[0] || !ownPayment) return o;
-      const { payment: _inherited, ...rest } = o;
-      return rest;
-    })
-    .filter(Boolean);
-  const layout = resolveLayout(category, [...bodyLevels, ...overrides], { hasClosingText: !!(vm && vm.text2) });
+  // Firmenvorlage → Projekt → Beleg (layoutLevels: samt der Regel, dass eine
+  // Kategorie mit eigenem Zahlungs-Standard den Schalter nicht erbt).
+  const levels = layoutLevels({ category, bodyByCategory: t.bodyByCategory, projectLayout });
+  const all = [...levels.template, ...levels.projectParents, levels.projectOwn, documentLayout, ...overrides].filter(Boolean);
+  const layout = resolveLayout(category, all, { hasClosingText: !!(vm && vm.text2) });
   const out = { ...vm, theme: t, themeHead: buildThemeHead(t), logoDataUri, signatureDataUri, layout };
   // Eigener Kopf-/Fusstext aus Projekt oder Beleg (Stufe 3) ersetzt den Standard.
   if (layout.introText !== null) out.text1 = layout.introText;
@@ -1777,6 +1842,8 @@ async function renderPreviewDoc({ supabase, tenantId, theme, category = 'invoice
 module.exports = {
   renderDocumentPdf, renderOfferPdf, renderNachtragPdf, renderAuftragsbestaetigungPdf, renderMonatsabschlussPdf,
   renderWipPdf, renderMahnungPdf, renderHonorarPdf, renderPreviewDoc, documentContext,
+  // Aufbau je Beleg (Stufe 3): Vorschau im Assistenten, Hinweise fuer die E-Rechnung
+  buildDocumentHtml, layoutTextNotes, loadTemplate, injectStandardTexts, documentPdfBuffer,
   // Fuer Vorlagen-Tests: dieselbe Nunjucks-Umgebung samt Filtern, ohne Browser.
   templateEnv: env,
   // Fuer den Abschottungstest (tests/pdfRenderSandbox.test.js).

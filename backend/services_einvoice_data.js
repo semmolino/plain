@@ -88,6 +88,16 @@ async function loadInvoiceData(supabase, docId, docType, tenantId) {
   const doc   = await one(supabase, table, docId, tenantId);
   if (!doc) throw new InvoiceDataError(`${table} ${docId} not found.`);
 
+  // Eigene Textbloecke aus dem Aufbau des Belegs (Vorlagen-Plan Stufe 3) gehen
+  // als Hinweise (BT-22) mit — dieselben Texte, die auch im PDF stehen. Soft-
+  // fail: ohne sie bleibt die E-Rechnung gueltig, nur ohne diese Hinweise.
+  let layoutNotes = [];
+  try {
+    layoutNotes = await require('./services_pdf_render').layoutTextNotes({ supabase, tenantId, docType, docId });
+  } catch (e) {
+    console.warn('[EINVOICE][LAYOUT_NOTES]', { docType, docId, error: e?.message || String(e) });
+  }
+
   // Branch 9: Anlagen laden (soft-fail wenn Tabelle/Datei fehlt)
   let attachments = [];
   try {
@@ -726,6 +736,7 @@ ${basis}`;
     dueDate:  asIsoDate(doc.DUE_DATE),
     currency,
     comment:  String(doc.COMMENT ?? '').trim(),
+    layoutNotes,
     billingPeriodStart: asIsoDate(doc.BILLING_PERIOD_START),
     billingPeriodEnd:   asIsoDate(doc.BILLING_PERIOD_FINISH),
     buyerReference: String(doc.BUYER_REFERENCE ?? doc.ADDRESS_REFERENCE_NUMBER ?? '').trim(),

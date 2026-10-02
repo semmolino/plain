@@ -2,6 +2,7 @@
 
 const { generateUblInvoiceXml } = require("../services_einvoice_ubl");
 const { renderDocumentPdf } = require("../services_pdf_render");
+const { freezeLayoutSnapshot } = require("./documentLayoutStore");
 const { insertProgressSnapshot } = require("./projectProgress");
 const { loadInvoiceData } = require("../services_einvoice_data");
 const { validateEInvoiceData } = require("../services_einvoice_validator");
@@ -1011,7 +1012,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
     inv.INVOICE_NUMBER = num;
   }
 
-  let pdfAsset = null, tpl = null, theme = null;
+  let pdfAsset = null, tpl = null, theme = null, projectLayout = null;
   if (!skipDocuments) try {
     const r = await renderDocumentPdf({
       supabase,
@@ -1022,6 +1023,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
     });
     tpl = r.template;
     theme = r.theme;
+    projectLayout = r.projectLayout;
     const fileName = `Rechnung_${inv.INVOICE_NUMBER || inv.ID}.pdf`;
     pdfAsset = await storeGeneratedPdfAsAsset({ supabase, companyId: inv.COMPANY_ID, fileName, pdfBuffer: r.pdf, assetType: "PDF_INVOICE" });
   } catch (e) {
@@ -1064,6 +1066,7 @@ async function bookInvoice(supabase, { id, inv, releasePpIds = [], tenantId = nu
     await bestEffortDeleteAsset({ supabase, asset: xmlAsset });
     throw { status: 500, message: upErr.message };
   }
+  if (!skipDocuments) await freezeLayoutSnapshot(supabase, { table: "INVOICE", id: parseInt(id, 10), tenantId: inv.TENANT_ID ?? tenantId, projectLayout });
 
   // R6: die CII-Fassung genauso einfrieren wie die UBL-Fassung. Ohne das
   // wurde sie bei jedem Abruf neu erzeugt und aenderte sich rueckwirkend,
@@ -1234,6 +1237,8 @@ async function cancelInvoice(supabase, { id, tenantId, deletePayments = false })
     DOCUMENT_XML_PROFILE: _xp, DOCUMENT_XML_RENDERED_AT: _xr,
     DOCUMENT_RENDERED_AT: _dr, DOCUMENT_TEMPLATE_ID: _tpl,
     DOCUMENT_LAYOUT_KEY_SNAPSHOT: _lk, DOCUMENT_THEME_SNAPSHOT_JSON: _th,
+    // Der Storno hat seinen eigenen Aufbau — Textbloecke der Rechnung gehoeren nicht darauf
+    DOCUMENT_LAYOUT_JSON: _lj, DOCUMENT_LAYOUT_SNAPSHOT_JSON: _ls,
     DOCUMENT_LOGO_ASSET_ID_SNAPSHOT: _lo,
     CANCELLATION_DATE: _cd,
     ...rest

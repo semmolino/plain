@@ -221,6 +221,36 @@ function textTypeChain(category) {
 }
 
 /**
+ * Die Ebenen des Aufbaus fuer eine Kategorie, in Anwendungsreihenfolge:
+ *   template        Firmenvorlage (theme.bodyByCategory) entlang der Kette
+ *   projectParents  Projekt-Aufbau der Elternkategorien (Teilschluss → Schluss)
+ *   projectOwn      Projekt-Aufbau genau dieser Kategorie
+ * Der Beleg selbst kommt danach. Eine Kategorie mit eigenem Zahlungs-Standard
+ * (Korrektur: nie, Mahnung: immer) erbt den Zahlungshinweis von keiner
+ * Elternebene — sonst stuende „Bitte überweisen Sie −1.190 €" wieder auf jeder
+ * Korrektur, sobald jemand die Rechnung anpasst. Dieselbe Regel steht im
+ * Frontend (components/vorlagen/layoutModel.ts, templateLevels).
+ */
+function layoutLevels({ category, bodyByCategory, projectLayout }) {
+  const chain = categoryChain(category);
+  const own = chain[0];
+  const ownPayment = CATEGORIES[own].defaults && CATEGORIES[own].defaults.payment;
+  const pick = (src, c) => {
+    const o = isObj(src) && isObj(src[c]) ? src[c] : null;
+    if (!o || c === own || !ownPayment) return o;
+    const rest = { ...o };
+    delete rest.payment;
+    return rest;
+  };
+  const parents = chain.slice(1).reverse();
+  return {
+    template: [...parents, own].map((c) => pick(bodyByCategory, c)).filter(Boolean),
+    projectParents: parents.map((c) => pick(projectLayout, c)).filter(Boolean),
+    projectOwn: pick(projectLayout, own),
+  };
+}
+
+/**
  * Alles, was die Oberflaeche ueber den Aufbau wissen muss — GET
  * /document-templates/catalog. Die Playwright-Tests nehmen dieselbe Funktion
  * als Antwort, damit ihr Mock nicht von der Registry wegdriftet.
@@ -239,4 +269,5 @@ function documentCatalog() {
 module.exports = {
   BLOCKS, APPENDICES, CATEGORIES, TEXT_TYPES, textTypeChain,
   resolveLayout, sanitizeLayoutOverride, invoiceCategory, categoryChain, describeCategory, documentCatalog,
+  layoutLevels,
 };

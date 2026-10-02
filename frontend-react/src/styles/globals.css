@@ -4717,7 +4717,7 @@ fieldset:disabled .ws-check { cursor: default; }
 .dv-seg { display: flex; gap: var(--space-2); flex-wrap: wrap; }
 .dv-seg .btn-small { display: inline-flex; align-items: center; gap: 5px; }
 .dv-select {
-  height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  min-height: 36px; height: auto; padding: 6px 10px; line-height: 1.3; border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--text); font-size: 13px; max-width: 100%;
 }
 .dv-dot { display: inline-block; width: 6px; height: 6px; margin-left: 6px; border-radius: var(--radius-pill); background: var(--warning); vertical-align: middle; }
@@ -4818,6 +4818,19 @@ fieldset:disabled .ws-check { cursor: default; }
 @media (min-width: 600px) { .dv-sn-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .dv-sn-grid select { width: 100%; }
 @media (max-width: 1023px) { .text-template-type-btn { min-height: 44px; } }
+
+/* Aufbau dieses Belegs (Rechnungsassistenten, Stufe 3) */
+.ba-panel { margin-top: var(--space-4); }
+.ba-texts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 var(--space-4); }
+@media (min-width: 900px) { .ba-texts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ba-text-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: 6px; }
+.ba-text-head label { margin: 0; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.ba-text-head .btn-small { display: inline-flex; align-items: center; gap: 4px; }
+.ba-text textarea { white-space: pre-line; }
+.ba-sub { margin: var(--space-3) 0 var(--space-2); font-size: 13px; font-weight: 600; color: var(--text-2); }
+.ba-actions { display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; margin-top: var(--space-3); }
+.ba-actions .btn-small { display: inline-flex; align-items: center; gap: 4px; }
+.ba-preview-btn { margin-left: auto; }
 /* Einzeilige Liste (Abteilungen, Projekttypen) */
 .st-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border-4); max-width: 560px; }
 .st-list-row { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid var(--border-4); }

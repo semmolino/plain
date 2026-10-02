@@ -507,6 +507,22 @@ export const HELP = {
       </>
     ),
   },
+  'vorlagen.beleg_aufbau': {
+    title: 'Aufbau und Texte dieses Belegs',
+    body: (
+      <>
+        Weicht nur dieser Beleg ab — ein anderer Kopftext, ein zusätzlicher Hinweis, die Anrede
+        weg —, stellst du das hier ein, ohne die Dokumentvorlage zu ändern. Gespeichert wird mit
+        „Entwurf speichern" bzw. beim Buchen; danach ist der Aufbau eingefroren und ändert sich auch
+        nicht mehr, wenn jemand die Vorlage anpasst.
+        <br /><br />
+        <strong>Für dieses Projekt merken</strong> legt den Aufbau für jeden künftigen Beleg dieser Art im
+        Projekt fest — etwa, weil ein öffentlicher Auftraggeber eine feste Form verlangt (braucht das
+        Recht, Projekte zu bearbeiten). Eigene Textblöcke gehen zusätzlich als Hinweis in die
+        E-Rechnung, damit PDF und XML dasselbe sagen.
+      </>
+    ),
+  },
   'vorlagen.zahlungshinweis': {
     title: 'Zahlungshinweis',
     body: (
