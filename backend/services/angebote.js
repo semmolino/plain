@@ -1016,10 +1016,11 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       created = created2;
     }
     if (created && created.length) {
-      await supabase.from('PROJECT_PROGRESS').insert(created.map(r => ({
+      const { error: progressErr } = await supabase.from('PROJECT_PROGRESS').insert(created.map(r => ({
         STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
         REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-      }))).catch(() => {});
+      })));
+      if (progressErr) console.warn('[attachFeeCalc] PROJECT_PROGRESS fehlgeschlagen:', progressErr.message);
     }
   }
 
@@ -1053,10 +1054,11 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
       blCreated = blData;
     }
     if (blCreated && blCreated.length) {
-      await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
+      const { error: progressErr } = await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
         STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: extrasPercent,
         REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-      }))).catch(() => {});
+      })));
+      if (progressErr) console.warn('[attachFeeCalc] BL PROJECT_PROGRESS fehlgeschlagen:', progressErr.message);
     }
   }
 
@@ -1066,10 +1068,11 @@ async function attachFeeCalcToProjectStructure(supabase, { calcMasterId, fatherI
     const blTotal  = blItems.reduce((acc, b) => acc + fmt2((Number(b.AMOUNT) || 0) + (blAlloc[b.ID] || 0)), 0);
     const parentRev = fmt2(lphTotal + blTotal);
     if (parentRev > 0) {
-      await supabase.from('PROJECT_STRUCTURE').update({
+      const { error: parentErr } = await supabase.from('PROJECT_STRUCTURE').update({
         REVENUE: parentRev,
         EXTRAS:  fmt2(parentRev * extrasPercent / 100),
-      }).eq('ID', fatherId).catch(() => {});
+      }).eq('ID', fatherId).eq('TENANT_ID', tenantId);
+      if (parentErr) console.warn('[attachFeeCalc] Vater-Honorar fehlgeschlagen:', parentErr.message);
     }
   }
 }
@@ -1641,10 +1644,11 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
           }]).select('ID').single();
           if (rootNode) {
             fatherId = rootNode.ID;
-            await supabase.from('PROJECT_PROGRESS').insert([{
+            const { error: progressErr } = await supabase.from('PROJECT_PROGRESS').insert([{
               STRUCTURE_ID: rootNode.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: 0,
               REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-            }]).catch(() => {});
+            }]);
+            if (progressErr) console.warn('[convertOffer] PROJECT_PROGRESS (Wurzel) fehlgeschlagen:', progressErr.message);
           }
         }
 
@@ -1697,10 +1701,11 @@ async function convertOfferToProject(supabase, { tenantId, offerId, body }) {
                 else blCreated = blCreated2;
               }
               if (blCreated?.length) {
-                await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
+                const { error: progressErr } = await supabase.from('PROJECT_PROGRESS').insert(blCreated.map(r => ({
                   STRUCTURE_ID: r.ID, TENANT_ID: tenantId, REVENUE: 0, EXTRAS: 0, EXTRAS_PERCENT: 0,
                   REVENUE_COMPLETION_PERCENT: 0, EXTRAS_COMPLETION_PERCENT: 0, REVENUE_COMPLETION: 0, EXTRAS_COMPLETION: 0,
-                }))).catch(() => {});
+                })));
+                if (progressErr) console.warn('[convertOffer] BL PROJECT_PROGRESS fehlgeschlagen:', progressErr.message);
               }
             }
           }

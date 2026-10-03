@@ -645,8 +645,8 @@ module.exports = (supabase) => {
         // dies der erste Schritt, der kippen kann. Ohne Aufraeumen bliebe ein
         // Mandant ohne einen einzigen Benutzer zurueck — unerreichbar, aber in
         // der Owner-Konsole und in jeder Mandantenliste sichtbar.
-        await supabase.from("COMPANY").delete().eq("TENANT_ID", tenantId).catch(() => {});
-        await supabase.from("TENANTS").delete().eq("ID", tenantId).catch(() => {});
+        await supabase.from("COMPANY").delete().eq("TENANT_ID", tenantId);
+        await supabase.from("TENANTS").delete().eq("ID", tenantId);
         return res.status(500).json({ error: "Mitarbeiter konnte nicht angelegt werden: " + empErr.message });
       }
 
@@ -669,9 +669,9 @@ module.exports = (supabase) => {
         await signup.sendeBestaetigungsmail({ req, tenantId, email, firma: companyName });
       } catch (mailErr) {
         console.error("[SIGNUP][MAIL]", mailErr?.message || mailErr);
-        await supabase.from("EMPLOYEE").delete().eq("TENANT_ID", tenantId).catch(() => {});
-        await supabase.from("COMPANY").delete().eq("TENANT_ID", tenantId).catch(() => {});
-        await supabase.from("TENANTS").delete().eq("ID", tenantId).catch(() => {});
+        await supabase.from("EMPLOYEE").delete().eq("TENANT_ID", tenantId);
+        await supabase.from("COMPANY").delete().eq("TENANT_ID", tenantId);
+        await supabase.from("TENANTS").delete().eq("ID", tenantId);
         return res.status(500).json({
           error: "Die Bestätigungs-E-Mail konnte nicht versendet werden. Bitte später erneut versuchen.",
           userFacing: true,

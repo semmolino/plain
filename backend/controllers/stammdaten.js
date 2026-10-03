@@ -538,16 +538,18 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
       { data: father, error: fatherErr },
       { data: calcPhases, error: calcPhasesErr },
     ] = await Promise.all([
-      supabase.from("PROJECT").select("ID, TENANT_ID").eq("ID", calcMaster.PROJECT_ID).single(),
-      supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, ABBR, NAME, EXTRAS_PERCENT").eq("ID", fatherId).single(),
-      supabase.from("FEE_CALCULATION_PHASE").select("ID, FEE_PHASE_ID, FEE_PERCENT, PHASE_REVENUE").eq("FEE_MASTER_ID", id).order("FEE_PHASE_ID", { ascending: true }),
+      supabase.from("PROJECT").select("ID, TENANT_ID").eq("ID", calcMaster.PROJECT_ID).eq("TENANT_ID", req.tenantId).maybeSingle(),
+      supabase.from("PROJECT_STRUCTURE").select("ID, PROJECT_ID, ABBR, NAME, EXTRAS_PERCENT").eq("ID", fatherId).eq("TENANT_ID", req.tenantId).maybeSingle(),
+      supabase.from("FEE_CALCULATION_PHASE").select("ID, FEE_PHASE_ID, FEE_PERCENT, PHASE_REVENUE").eq("FEE_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("FEE_PHASE_ID", { ascending: true }),
     ]);
     if (fatherErr) return res.status(500).json({ error: fatherErr.message });
     if (!father) return res.status(404).json({ error: "Übergeordnetes Projektelement nicht gefunden" });
     if (String(father.PROJECT_ID) !== String(calcMaster.PROJECT_ID)) return res.status(400).json({ error: "Das übergeordnete Projektelement gehört nicht zum ausgewählten Projekt." });
 
-    // Check parent for billing/payment data (Option 2 = block; Option 1 = needs confirmation)
-    const parentCheck = await require('../services/projekte').checkParentForChild(supabase, { parentId: fatherId });
+    // Check parent for billing/payment data (Option 2 = block; Option 1 = needs confirmation).
+    // Ohne tenantId wirft die Prüfung (assertInTenant) — so konnte der
+    // HOAI-Assistent vom 08.08. bis 10/2026 keine Elemente anlegen.
+    const parentCheck = await require('../services/projekte').checkParentForChild(supabase, { parentId: fatherId, tenantId: req.tenantId });
     if (parentCheck.status === 'blocked') {
       return res.status(409).json({ error: parentCheck.reason });
     }
@@ -584,7 +586,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     try {
       const [blItemsRes, surchargeRowsRes, existingBlStructRes] = await Promise.all([
         supabase.from("FEE_CALCULATION_BL").select("ID, ABBR, NAME, AMOUNT")
-          .eq("FEE_CALC_MASTER_ID", id).order("SORT_ORDER", { ascending: true }),
+          .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
         supabase.from("FEE_CALCULATION_SURCHARGES").select("AMOUNT, LPH_FILTER, BL_FILTER")
           .eq("FEE_CALC_MASTER_ID", id).eq("TENANT_ID", req.tenantId).order("SORT_ORDER", { ascending: true }),
         supabase.from("PROJECT_STRUCTURE").select("ID, FEE_CALC_BL_ID")
@@ -657,7 +659,10 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
             console.warn('[BL structure] Insert failed (migration 0043 may not be run):', blCreateErr.message);
           } else {
             const blProgressRows = (createdBlRows || []).map(svc.buildProjectProgressRow);
-            if (blProgressRows.length) await supabase.from("PROJECT_PROGRESS").insert(blProgressRows).catch(() => {});
+            if (blProgressRows.length) {
+              const { error: blProgressErr } = await supabase.from("PROJECT_PROGRESS").insert(blProgressRows);
+              if (blProgressErr) console.warn('[BL structure] PROJECT_PROGRESS fehlgeschlagen:', blProgressErr.message);
+            }
           }
         }
       }
@@ -678,7 +683,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
     let movedTecCount = 0, movedToName = "";
     const firstCreated = Array.isArray(createdRows) && createdRows.length ? createdRows[0] : null;
     if (firstCreated) {
-      const { data: movedTecRows, error: moveErr } = await supabase.from("BOOKING").update({ STRUCTURE_ID: firstCreated.ID }).eq("STRUCTURE_ID", fatherId).select("ID");
+      const { data: movedTecRows, error: moveErr } = await supabase.from("BOOKING").update({ STRUCTURE_ID: firstCreated.ID }).eq("STRUCTURE_ID", fatherId).eq("TENANT_ID", req.tenantId).select("ID");
       if (moveErr) return res.status(500).json({ error: moveErr.message });
       movedTecCount = Array.isArray(movedTecRows) ? movedTecRows.length : 0;
       if (movedTecCount > 0) {
@@ -703,7 +708,7 @@ async function postFeeCalcAddToStructure(req, res, supabase) {
 
     return res.json({ success: true, data: createdRows || [], moved_tec_count: movedTecCount, message });
   } catch (err) {
-    return res.status(500).json({ error: err?.message || String(err) });
+    return res.status(err?.status || 500).json({ error: err?.message || String(err) });
   }
 }
 
@@ -1957,7 +1962,10 @@ async function syncFeeCalcToStructure(req, res, supabase) {
         if (!blErr && createdBlRows?.length) {
           synced += createdBlRows.length;
           const progressRows = createdBlRows.map(svc.buildProjectProgressRow);
-          if (progressRows.length) await supabase.from("PROJECT_PROGRESS").insert(progressRows).catch(() => {});
+          if (progressRows.length) {
+            const { error: progressErr } = await supabase.from("PROJECT_PROGRESS").insert(progressRows);
+            if (progressErr) console.warn('[sync BL create] PROJECT_PROGRESS fehlgeschlagen:', progressErr.message);
+          }
         } else if (blErr) {
           console.warn('[sync BL create] Failed:', blErr.message);
         }

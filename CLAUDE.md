@@ -88,6 +88,14 @@ fiel auf (`new row violates row-level security policy for table "IMPORT_BATCH"`)
 Ergebnis** — deshalb warnt `db.js` beim claimlosen Zugriff jetzt je
 Aufrufstelle und je Minute samt Stapel, statt einmal je Prozessleben.
 
+**Kein `.catch()` an einem PostgREST-Aufruf.** `supabase.from(…).insert(…)`
+ist ein Builder mit `then`, kein Promise — `.catch(() => {})` dahinter wirft
+einen TypeError, bevor die Anfrage rausgeht. In einem Soft-Fail-`try` fehlt der
+Schritt dann still (Leistungsstände der Besonderen Leistungen im
+HOAI-Assistenten entstanden so nie), sonst kippt der ganze Vorgang. Fehler
+ignorieren heißt `const { error } = await …`. Geprüft von
+`tests/postgrestCatch.test.js`.
+
 **Dateiablage — nie `fs.*`**: Dateien laufen ausschließlich über
 `services/objectStorage.js` (`put` / `getBuffer` / `getStream` / `exists` /
 `remove`), geschlüsselt über `STORAGE_KEY`. Auf Scalingo gibt es kein
