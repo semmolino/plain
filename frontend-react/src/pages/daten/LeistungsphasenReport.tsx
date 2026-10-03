@@ -13,8 +13,11 @@ import {
 import { Bar } from 'react-chartjs-2'
 import { fetchProjectPhases, type PhaseReportRow } from '@/api/reports'
 import { HelpHint } from '@/components/ui/HelpHint'
+import { KpiValue } from '@/components/ui/KpiValue'
+import { useTenantDefaults } from '@/hooks/useTenantDefaults'
+import { costRatioLevel, readCpiThresholds, type CpiThresholds } from '@/utils/kpiLevel'
 import { fmtEur, fmtEur0, money, negativeStyle } from '@/utils/money'
-import { useChartTheme } from '@/theme/chartTheme'
+import { useChartTheme, useSeriesColors } from '@/theme/chartTheme'
 
 const FMT_H    = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const FMT_PCT  = new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -23,27 +26,17 @@ const fmtPct   = (v: number | null | undefined) => v == null ? '—' : FMT_PCT.f
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
 
-type Ampel = PhaseReportRow['ampel']
-
-const AMPEL_COLOR: Record<Ampel, string> = {
-  rot:    'var(--danger)',
-  orange: 'var(--warning)',
-  gruen:  'var(--success)',
-}
-const AMPEL_LABEL: Record<Ampel, string> = {
-  rot:    'Kritisch — Kostenquote hoch oder Deckungsbeitrag negativ',
-  orange: 'Beobachten — Kostenquote erhöht',
-  gruen:  'Im Plan',
-}
-
-function AmpelDot({ ampel }: { ampel: Ampel }) {
-  return (
-    <span
-      title={AMPEL_LABEL[ampel]}
-      aria-label={AMPEL_LABEL[ampel]}
-      style={{ display: 'inline-block', width: 12, height: 12, borderRadius: '50%', background: AMPEL_COLOR[ampel] }}
-    />
-  )
+/**
+ * Kostenquote mit Controlling-Ampel — Schwellen des Büros wie in Projektliste
+ * und LPH-Matrix. Vorher stand hier eine eigene Ampel (75 % / 90 %) in
+ * Statusfarben, die jede gesunde Phase grün färbte und für dieselbe Phase
+ * etwas anderes sagte als die Matrix.
+ */
+function KostenquoteCell({ kq, t, bold }: { kq: number | null; t: CpiThresholds; bold?: boolean }) {
+  const text = kq != null ? fmtPct(kq * 100) : '—'
+  const level = costRatioLevel(kq, t)
+  if (level === 'watch' || level === 'critical') return <KpiValue level={level} bold={bold}>{text}</KpiValue>
+  return bold ? <strong>{text}</strong> : <>{text}</>
 }
 
 // ── Aggregation zu Blöcken (clientseitig aus den Phasen-Zeilen) ────────────────
@@ -61,18 +54,9 @@ interface BlockGroup {
   LEISTUNGSSTAND_PERCENT: number | null
   KOSTENQUOTE: number | null
   DB:          number
-  ampel:       Ampel
 }
 
 const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100
-
-function ampelFor(earned: number, cost: number): Ampel {
-  const kq = earned > 0 ? cost / earned : null
-  const db = earned - cost
-  if ((kq != null && kq >= 0.9) || (db < 0 && (cost > 500 || earned > 500))) return 'rot'
-  if (kq != null && kq >= 0.75) return 'orange'
-  return 'gruen'
-}
 
 function buildBlocks(phases: PhaseReportRow[]): BlockGroup[] {
   const map = new Map<string, BlockGroup>()
@@ -86,7 +70,7 @@ function buildBlocks(phases: PhaseReportRow[]): BlockGroup[] {
         isCatchAll: p.BLOCK_ID == null,
         phases: [],
         HONORAR_NET: 0, EARNED_VALUE_NET: 0, HOURS_TOTAL: 0, COST_TOTAL: 0,
-        LEISTUNGSSTAND_PERCENT: null, KOSTENQUOTE: null, DB: 0, ampel: 'gruen',
+        LEISTUNGSSTAND_PERCENT: null, KOSTENQUOTE: null, DB: 0,
       })
     }
     const g = map.get(key)!
@@ -105,7 +89,6 @@ function buildBlocks(phases: PhaseReportRow[]): BlockGroup[] {
     g.LEISTUNGSSTAND_PERCENT = g.HONORAR_NET > 0 ? round2((g.EARNED_VALUE_NET / g.HONORAR_NET) * 100) : null
     g.KOSTENQUOTE = g.EARNED_VALUE_NET > 0 ? g.COST_TOTAL / g.EARNED_VALUE_NET : null
     g.DB = round2(g.EARNED_VALUE_NET - g.COST_TOTAL)
-    g.ampel = ampelFor(g.EARNED_VALUE_NET, g.COST_TOTAL)
   }
   return groups.sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name))
 }
@@ -116,14 +99,15 @@ function PhaseBarChart({ labels, honorar, leistung, kosten, title }: {
   labels: string[]; honorar: number[]; leistung: number[]; kosten: number[]; title: string
 }) {
   const t = useChartTheme()
+  const c = useSeriesColors()
   const data = useMemo(() => ({
     labels,
     datasets: [
-      { label: 'Honorar',  data: honorar,  backgroundColor: t.series[0], borderRadius: 3, maxBarThickness: 34 },
-      { label: 'Leistung', data: leistung, backgroundColor: t.series[1], borderRadius: 3, maxBarThickness: 34 },
-      { label: 'Kosten',   data: kosten,   backgroundColor: t.series[5], borderRadius: 3, maxBarThickness: 34 },
+      { label: 'Honorar',  data: honorar,  backgroundColor: c.honorar,  borderRadius: 3, maxBarThickness: 34 },
+      { label: 'Leistung', data: leistung, backgroundColor: c.leistung, borderRadius: 3, maxBarThickness: 34 },
+      { label: 'Kosten',   data: kosten,   backgroundColor: c.kosten,   borderRadius: 3, maxBarThickness: 34 },
     ],
-  }), [labels, honorar, leistung, kosten, t])
+  }), [labels, honorar, leistung, kosten, c])
 
   const options: ChartOptions<'bar'> = {
     responsive: true,
@@ -152,7 +136,7 @@ function PhaseBarChart({ labels, honorar, leistung, kosten, title }: {
 
 // ── Zeilen ────────────────────────────────────────────────────────────────────
 
-function PhaseCells({ p, indent }: { p: PhaseReportRow; indent?: boolean }) {
+function PhaseCells({ p, indent, t }: { p: PhaseReportRow; indent?: boolean; t: CpiThresholds }) {
   return (
     <>
       <td style={indent ? { paddingLeft: 28 } : undefined}>
@@ -164,14 +148,14 @@ function PhaseCells({ p, indent }: { p: PhaseReportRow; indent?: boolean }) {
       <td className="num">{money(p.EARNED_VALUE_NET)}</td>
       <td className="num">{fmtH(p.HOURS_TOTAL)}</td>
       <td className="num">{money(p.COST_TOTAL)}</td>
-      <td className="num">{p.KOSTENQUOTE != null ? fmtPct(p.KOSTENQUOTE * 100) : '—'}</td>
+      <td className="num"><KostenquoteCell kq={p.KOSTENQUOTE} t={t} /></td>
       <td className="num" style={negativeStyle(p.DB)}>{money(p.DB)}</td>
-      <td style={{ textAlign: 'center' }}>{!p.IS_UNASSIGNED && <AmpelDot ampel={p.ampel} />}</td>
     </>
   )
 }
 
 export function LeistungsphasenReport({ projectId }: { projectId: number }) {
+  const cpiT = readCpiThresholds(useTenantDefaults())
   const { data, isLoading, isError } = useQuery({
     queryKey: ['project-phases', projectId],
     queryFn:  () => fetchProjectPhases(projectId),
@@ -216,7 +200,7 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
         )}
       </div>
 
-      <div className="list-section table-scroll">
+      <div className="list-section table-scroll lph-table">
         <table className="master-table">
           <thead>
             <tr>
@@ -228,7 +212,6 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
               <th scope="col" className="num">Kosten&nbsp;€</th>
               <th scope="col" className="num">Kostenquote</th>
               <th scope="col" className="num">Deckungsbeitrag</th>
-              <th scope="col" style={{ textAlign: 'center' }}>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -255,13 +238,12 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
                         <td className="num"><strong>{money(b.EARNED_VALUE_NET)}</strong></td>
                         <td className="num"><strong>{fmtH(b.HOURS_TOTAL)}</strong></td>
                         <td className="num"><strong>{money(b.COST_TOTAL)}</strong></td>
-                        <td className="num"><strong>{b.KOSTENQUOTE != null ? fmtPct(b.KOSTENQUOTE * 100) : '—'}</strong></td>
+                        <td className="num"><KostenquoteCell kq={b.KOSTENQUOTE} t={cpiT} bold /></td>
                         <td className="num" style={negativeStyle(b.DB)}><strong>{money(b.DB)}</strong></td>
-                        <td style={{ textAlign: 'center' }}>{!b.isCatchAll && <AmpelDot ampel={b.ampel} />}</td>
                       </tr>
                       {!isCollapsed && b.phases.map(p => (
                         <tr key={p.PHASE_STRUCTURE_ID ?? `none-${p.ABBR}`}>
-                          <PhaseCells p={p} indent />
+                          <PhaseCells p={p} indent t={cpiT} />
                         </tr>
                       ))}
                     </FragmentRows>
@@ -269,7 +251,7 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
                 })
               : phases.map(p => (
                   <tr key={p.PHASE_STRUCTURE_ID ?? 'none'} className={p.IS_UNASSIGNED ? 'is-muted-row' : undefined}>
-                    <PhaseCells p={p} />
+                    <PhaseCells p={p} t={cpiT} />
                   </tr>
                 ))}
           </tbody>
@@ -282,9 +264,8 @@ export function LeistungsphasenReport({ projectId }: { projectId: number }) {
                 <td className="num"><strong>{money(totals.EARNED_VALUE_NET)}</strong></td>
                 <td className="num"><strong>{fmtH(totals.HOURS_TOTAL)}</strong></td>
                 <td className="num"><strong>{money(totals.COST_TOTAL)}</strong></td>
-                <td className="num"><strong>{totals.KOSTENQUOTE != null ? fmtPct(totals.KOSTENQUOTE * 100) : '—'}</strong></td>
+                <td className="num"><KostenquoteCell kq={totals.KOSTENQUOTE} t={cpiT} bold /></td>
                 <td className="num" style={negativeStyle(totals.DB)}><strong>{money(totals.DB)}</strong></td>
-                <td />
               </tr>
             </tfoot>
           )}

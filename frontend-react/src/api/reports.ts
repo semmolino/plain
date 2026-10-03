@@ -252,8 +252,6 @@ export interface PhaseReportRow {
   COST_TOTAL:             number
   KOSTENQUOTE:            number | null
   DB:                     number
-  ampel:                  'rot' | 'orange' | 'gruen'
-  flags:                  string[]
   BLOCK_ID:               number | null
   BLOCK_NAME:             string | null
   BLOCK_SORT:             number | null
@@ -279,39 +277,57 @@ export interface PhaseReport {
 export const fetchProjectPhases = (projectId: number) =>
   apiClient.get<{ data: PhaseReport }>(`/reports/project/${projectId}/phases`)
 
-// ── Portfolio: Leistungsphasen-Matrix (alle Projekte) ──────────────────────────
+// ── LPH-Controlling: Leistungsphasen über alle Projekte ───────────────────────
+// Der Server liefert Rohsummen; gefiltert und verdichtet wird in
+// `pages/daten/lphMatrixCalc.ts`.
 
-export interface PhaseCell {
-  HONORAR_NET:            number
-  EARNED_VALUE_NET:       number
-  HOURS_TOTAL:            number
-  COST_TOTAL:             number
-  LEISTUNGSSTAND_PERCENT: number | null
-  KOSTENQUOTE:            number | null
-  DB:                     number
-  ampel:                  'rot' | 'orange' | 'gruen'
+/** Eine Phase eines Leistungsbilds aus dem HOAI-/AHO-Katalog. */
+export interface LphPhaseInfo {
+  /** Spaltenschlüssel, z. B. „LPH 3" oder „TL a" */
+  key:         string
+  /** Katalogname, z. B. „Entwurfsplanung" — null ohne Katalogbezug */
+  name:        string | null
+  /** Gewichtung laut Honorarordnung in % */
+  hoaiPercent: number | null
+  sort:        number
 }
 
-export interface PhaseMatrixProject {
+export interface LphLeistungsbild {
+  /** Name des Leistungsbilds; '' = ohne Leistungsbild (verwaiste Kalkulation) */
+  key:    string
+  label:  string
+  phases: LphPhaseInfo[]
+}
+
+/** Merkmale eines Projekts — dieselben Bezeichnungen wie in der Projektliste. */
+export interface LphProject {
   PROJECT_ID: number
-  ABBR: string
-  NAME:  string | null
-  cells:      Record<number, PhaseCell>
-  total:      PhaseCell
+  ABBR:       string
+  NAME:       string | null
+  STATUS:     string | null
+  TYPE:       string | null
+  DEPARTMENT: string | null
+  MANAGER:    string | null
+  CLIENT:     string | null
+  GROUP_NAME: string | null
 }
 
-export interface PhaseMatrixByPhase extends PhaseCell {
-  num:           number
-  label:         string
-  HOURS_SHARE:   number | null
-  HONORAR_SHARE: number | null
+/** Rohsummen je Projekt × Leistungsbild × Honorarzone × Phase. */
+export interface LphFact {
+  PROJECT_ID:       number
+  LB:               string
+  ZONE:             string
+  PHASE:            string
+  HONORAR_NET:      number
+  EARNED_VALUE_NET: number
+  HOURS_TOTAL:      number
+  COST_TOTAL:       number
 }
 
 export interface PhaseMatrix {
-  phases:   { num: number; label: string }[]
-  projects: PhaseMatrixProject[]
-  byPhase:  PhaseMatrixByPhase[]
-  totals:   PhaseCell | null
+  leistungsbilder: LphLeistungsbild[]
+  projects:        LphProject[]
+  facts:           LphFact[]
 }
 
 /** `groupId`: nur die Projekte dieses Gesamtprojekts (im Reporting-Scope); `meta` sagt dann „n von m". */

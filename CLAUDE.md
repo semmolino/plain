@@ -427,6 +427,18 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   vorgegebene (abgeleitete) Nummer auf Dubletten, **bevor** der Nummernkreis
   gezogen wird; `PROJECT_GROUP_ID` nur in die Zeile, wenn gewählt.
   Leistungsphasen je Gesamtprojekt: `/reports/phases/matrix?group_id=`.
+- **LPH-Controlling** (`GET /reports/phases/matrix`, `services/lphControlling.js`,
+  Rechnung `pages/daten/lphMatrixCalc.ts`): der Server liefert Rohsummen je
+  Projekt × Leistungsbild × Honorarzone × Phase plus die Projektmerkmale aus
+  `VW_REPORT_PROJECT_DETAIL` (gleiche Bezeichnungen wie die Projektliste);
+  gefiltert (Chips) und verdichtet wird im Browser, Quoten aus den Summen der
+  Auswahl. Leistungsbild und Phase kommen über die Kalkulation
+  (`FEE_CALC_PHASE_ID` → `FEE_CALCULATION_PHASE` → `_MASTER` → `FEE_MASTERS`/
+  `FEE_PHASE`), nie aus dem Kürzel des Knotens — „LPH 3" ist je Leistungsbild
+  etwas anderes, und Teilleistungen („TL a") tragen keine Zahl. Leistungsbilder
+  gleichen Namens (HOAI 2013/2021) gelten als eines. Die Ampel in Matrix und
+  Einzelprojekt-Report kommt **nur** aus `costRatioLevel` mit den Schwellen des
+  Büros — vorher hatten beide eine eigene 75/90-%-Ampel in Statusfarben.
   Auf Belegen (Rechnung, Storno, Mahnung, Nachtrag) steht der Name als
   „Bauvorhaben: …" und als Platzhalter `{{bauvorhaben}}` — beides **nur**
   über `bauvorhabenForProject`; abschaltbar mit `theme.header.showBauvorhaben`

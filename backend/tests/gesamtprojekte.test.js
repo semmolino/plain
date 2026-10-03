@@ -432,12 +432,24 @@ describe("Report: Leistungsphasen über das Gesamtprojekt", () => {
       { TENANT_ID: T, PROJECT_ID: 11, STRUCTURE_ID: 111, IS_LEAF: true, HONORAR_NET: 80000, EARNED_VALUE_NET: 8000, HOURS_TOTAL: 40, COST_TOTAL: 3000 },
       { TENANT_ID: T, PROJECT_ID: 12, STRUCTURE_ID: 121, IS_LEAF: true, HONORAR_NET: 5000, EARNED_VALUE_NET: 0, HOURS_TOTAL: 0, COST_TOTAL: 0 },
     ];
+    // Eine Gebäude-Kalkulation (Zone III); die Katalogtabellen sind global.
+    db._tables.FEE_CALCULATION_MASTER = [{ ID: 1, TENANT_ID: T, FEE_MASTER_ID: 1, ZONE_ID: 3 }];
+    db._tables.FEE_CALCULATION_PHASE = [1, 2, 5].map((n) => ({ ID: n, TENANT_ID: T, FEE_MASTER_ID: 1, FEE_PHASE_ID: n }));
+    db._tables.FEE_MASTERS = [{ ID: 1, NAME: "Gebäude" }];
+    db._tables.FEE_PHASE = [
+      { ID: 1, FEE_MASTER_ID: 1, ABBR: "LPH 1", NAME: "Grundlagenermittlung", FEE_PERCENT: 2 },
+      { ID: 2, FEE_MASTER_ID: 1, ABBR: "LPH 2", NAME: "Vorplanung", FEE_PERCENT: 7 },
+      { ID: 5, FEE_MASTER_ID: 1, ABBR: "LPH 5", NAME: "Ausführungsplanung", FEE_PERCENT: 25 },
+    ];
+    db._tables.FEE_ZONES = [{ ID: 3, FEE_MASTER_ID: 1, ABBR: "III" }];
     return db;
   }
 
-  test("ohne group_id: alle Projekte", async () => {
+  test("ohne group_id: alle Projekte, Rohsummen je Leistungsbild und Phase", async () => {
     const r = await report(lphWelt(), "/reports/phases/matrix");
-    expect(r.body.data.phases.map((p) => p.num)).toEqual([1, 2, 5]);
+    expect(r.body.data.facts.map((f) => f.PHASE).sort()).toEqual(["LPH 1", "LPH 2", "LPH 5"]);
+    expect(r.body.data.facts.every((f) => f.LB === "Gebäude" && f.ZONE === "III")).toBe(true);
+    expect(r.body.data.leistungsbilder.map((l) => l.key)).toEqual(["Gebäude"]);
     expect(r.body.meta).toBeNull();
   });
 
@@ -445,7 +457,8 @@ describe("Report: Leistungsphasen über das Gesamtprojekt", () => {
     const r = await report(lphWelt(), "/reports/phases/matrix?group_id=1");
     expect(r.status).toBe(200);
     expect(r.body.data.projects.map((p) => p.PROJECT_ID)).toEqual([10, 11]);
-    expect(r.body.data.byPhase.map((p) => [p.num, p.HONORAR_NET])).toEqual([[1, 20000], [5, 80000]]);
+    expect(r.body.data.projects[0]).toMatchObject({ ABBR: "2026-014", GROUP_NAME: "Schule Nord" });
+    expect(r.body.data.facts.map((f) => [f.PROJECT_ID, f.PHASE, f.HONORAR_NET])).toEqual([[10, "LPH 1", 20000], [11, "LPH 5", 80000]]);
     expect(r.body.meta).toEqual({ members_total: 2, members_visible: 2 });
   });
 

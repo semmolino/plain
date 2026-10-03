@@ -7,6 +7,7 @@ const wipSvc = require("../services/wipReport");
 const { openAmountsFor, withClaimCols } = require("../services/openAmount");
 const { loadParentSurchargesByProject: loadSurcharges } = require("../services/reportSurcharges");
 const gesamtprojekte = require("../services/gesamtprojekte");
+const lphControlling = require("../services/lphControlling");
 
 /**
  * Reporting endpoints
@@ -442,7 +443,9 @@ module.exports = (supabase) => {
         bucket.COST_TOTAL       += Number(r.COST_TOTAL       || 0);
       }
 
-      // 4) Kennzahlen je Phase ableiten (Kostenquote, DB, Leistungsstand %, Ampel).
+      // 4) Kennzahlen je Phase ableiten (Kostenquote, DB, Leistungsstand %).
+      //    Die Ampel bewertet die Oberfläche mit den Schwellen des Büros
+      //    (`utils/kpiLevel.ts`) — eine eigene Schwelle hier liefe auseinander.
       const decorate = (b) => {
         const honorar = round2(b.HONORAR_NET);
         const earned  = round2(b.EARNED_VALUE_NET);
@@ -452,13 +455,6 @@ module.exports = (supabase) => {
         // Kostenquote gegen erbrachte Leistung (wie in der Struktur-View).
         const kq      = earned > 0 ? cost / earned : null;
         const db      = round2(earned - cost);
-        const flags   = [];
-        if (kq != null && kq >= 0.9)                       flags.push("kostenquote_kritisch");
-        else if (kq != null && kq >= 0.75)                 flags.push("kostenquote_warn");
-        if (db < 0 && (cost > 500 || earned > 500))        flags.push("db_negativ");
-        let ampel = "gruen";
-        if (flags.includes("kostenquote_kritisch") || flags.includes("db_negativ")) ampel = "rot";
-        else if (flags.includes("kostenquote_warn"))                                ampel = "orange";
         return {
           PHASE_STRUCTURE_ID: b.PHASE_STRUCTURE_ID,
           CALC_PHASE_ID: b.CALC_PHASE_ID ?? null,
@@ -473,7 +469,6 @@ module.exports = (supabase) => {
           COST_TOTAL: cost,
           KOSTENQUOTE: kq,
           DB: db,
-          ampel, flags,
         };
       };
 
@@ -555,41 +550,31 @@ module.exports = (supabase) => {
     }
   });
 
-  // ── Portfolio: Leistungsphasen-Matrix über alle (in-scope) Projekte ───────
-  // Universelle Dimension über Projekte hinweg ist die LPH-Nummer (aus dem
-  // Kürzel "LPH n"), da Blocknamen je Leistungsbild variieren. Liefert:
-  //   - phases:   vorhandene LPH-Nummern (Spalten) mit Beispiel-Label
-  //   - projects: je Projekt eine Zeile mit Zellen je LPH + Projektsumme
-  //   - byPhase:  Portfolio-Aggregat je LPH inkl. Stunden-/Honoraranteil
-  //   - totals:   Gesamtsumme
+  // ── LPH-Controlling: Leistungsphasen über alle (in-scope) Projekte ────────
+  // Liefert Rohsummen je Projekt × Leistungsbild × Honorarzone × Phase
+  // (`services/lphControlling.js`) und je Projekt die Merkmale, nach denen
+  // die Oberfläche filtert — mit denselben Bezeichnungen wie die Projektliste,
+  // weil sie aus derselben View kommen. Verdichtet wird im Browser
+  // (`lphMatrixCalc.ts`): Filter sind Chips, Quoten entstehen aus den Summen
+  // der Auswahl. Antwort: { data: { leistungsbilder, projects, facts }, meta }.
   router.get("/phases/matrix", async (req, res) => {
     const tenantId = requireTenantId(req, res);
     if (!tenantId) return;
 
-    const phaseNum = (nameShort) => {
-      const m = String(nameShort || "").match(/\d+/);
-      return m ? parseInt(m[0], 10) : null;
-    };
-    const ampelFor = (earned, cost) => {
-      const kq = earned > 0 ? cost / earned : null;
-      const db = earned - cost;
-      if ((kq != null && kq >= 0.9) || (db < 0 && (cost > 500 || earned > 500))) return "rot";
-      if (kq != null && kq >= 0.75) return "orange";
-      return "gruen";
-    };
-
     try {
-      // Projekte des Mandanten (ggf. auf Reporting-Scope eingeschränkt).
-      let projQ = supabase
-        .from("PROJECT")
-        .select("ID, ABBR, NAME")
+      const { data: allProjects, error: pErr } = await supabase
+        .from("VW_REPORT_PROJECT_DETAIL")
+        .select([
+          "PROJECT_ID", "ABBR", "NAME",
+          "PROJECT_STATUS_NAME_SHORT", "PROJECT_TYPE_NAME_SHORT", "DEPARTMENT_NAME",
+          "PROJECT_MANAGER_DISPLAY", "ADDRESS_NAME", "COMPANY_NAME",
+        ].join(", "))
         .eq("TENANT_ID", tenantId);
-      const { data: allProjects, error: pErr } = await projQ;
       if (pErr) return res.status(500).json({ error: pErr.message });
 
       let projects = allProjects || [];
       if (req.reportScopeProjectIds !== null) {
-        projects = projects.filter((p) => req.reportScopeProjectIds.has(p.ID));
+        projects = projects.filter((p) => req.reportScopeProjectIds.has(p.PROJECT_ID));
       }
       // ?group_id= — Leistungsphasen ueber ein Gesamtprojekt: beim Stufen-
       // vertrag liegen LPH 1–4 und 5–8 in zwei Projekten, hier stehen sie als
@@ -598,141 +583,33 @@ module.exports = (supabase) => {
       if (req.query.group_id !== undefined) {
         const group = await gesamtprojekte.getGroup(supabase, { tenantId, id: req.query.group_id });
         const members = new Set(group.PROJECT_IDS.map(String));
-        const visible = projects.filter((p) => members.has(String(p.ID)));
+        const visible = projects.filter((p) => members.has(String(p.PROJECT_ID)));
         groupMeta = { members_total: group.PROJECT_COUNT, members_visible: visible.length };
         projects = visible;
       }
-      if (projects.length === 0) {
-        return res.json({ data: { phases: [], projects: [], byPhase: [], totals: null }, meta: groupMeta });
-      }
-      const projectIds = projects.map((p) => p.ID);
 
-      // Strukturknoten + Blatt-Kennzahlen in einem Rutsch für alle Projekte.
-      const [{ data: nodes, error: nErr }, { data: viewRows, error: vErr }] = await Promise.all([
-        supabase.from("PROJECT_STRUCTURE")
-          .select("ID, PROJECT_ID, FATHER_ID, ABBR, FEE_CALC_PHASE_ID")
-          .eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds),
-        supabase.from("VW_REPORT_PROJECT_DETAIL_STRUCTURE")
-          .select("STRUCTURE_ID, PROJECT_ID, IS_LEAF, HOURS_TOTAL, COST_TOTAL, EARNED_VALUE_NET, HONORAR_NET")
-          .eq("TENANT_ID", tenantId).in("PROJECT_ID", projectIds),
-      ]);
-      if (nErr) return res.status(500).json({ error: nErr.message });
-      if (vErr) return res.status(500).json({ error: vErr.message });
-
-      // Knoten je Projekt indexieren.
-      const byIdPerProject = new Map(); // projectId → Map(nodeId → node)
-      for (const n of (nodes || [])) {
-        if (!byIdPerProject.has(n.PROJECT_ID)) byIdPerProject.set(n.PROJECT_ID, new Map());
-        byIdPerProject.get(n.PROJECT_ID).set(n.ID, n);
-      }
-      const phaseAncestor = (projectId, startId) => {
-        const byId = byIdPerProject.get(projectId);
-        if (!byId) return null;
-        let cur = byId.get(startId);
-        const seen = new Set();
-        while (cur && !seen.has(cur.ID)) {
-          if (cur.FEE_CALC_PHASE_ID != null) return cur;
-          seen.add(cur.ID);
-          cur = cur.FATHER_ID != null ? byId.get(cur.FATHER_ID) : null;
-        }
-        return null;
-      };
-
-      // Aggregation: matrix[projectId][phaseNum] und portfolioByPhase[phaseNum].
-      const emptyAgg = () => ({ HONORAR_NET: 0, EARNED_VALUE_NET: 0, HOURS_TOTAL: 0, COST_TOTAL: 0 });
-      const matrix       = new Map(); // projectId → Map(num → agg)
-      const phaseLabels  = new Map(); // num → label (erstes gesehenes)
-      const byPhase      = new Map(); // num → agg
-      const projectsWithPhases = new Set();
-
-      for (const r of (viewRows || [])) {
-        if (!r.IS_LEAF) continue;
-        const anc = phaseAncestor(r.PROJECT_ID, r.STRUCTURE_ID);
-        if (!anc) continue; // nur phasenzugeordnete Blätter zählen
-        const num = phaseNum(anc.ABBR);
-        if (num == null) continue;
-        projectsWithPhases.add(r.PROJECT_ID);
-        if (!phaseLabels.has(num)) phaseLabels.set(num, anc.ABBR);
-
-        if (!matrix.has(r.PROJECT_ID)) matrix.set(r.PROJECT_ID, new Map());
-        const pm = matrix.get(r.PROJECT_ID);
-        if (!pm.has(num)) pm.set(num, emptyAgg());
-        if (!byPhase.has(num)) byPhase.set(num, emptyAgg());
-        for (const agg of [pm.get(num), byPhase.get(num)]) {
-          agg.HONORAR_NET      += Number(r.HONORAR_NET      || 0);
-          agg.EARNED_VALUE_NET += Number(r.EARNED_VALUE_NET || 0);
-          agg.HOURS_TOTAL      += Number(r.HOURS_TOTAL      || 0);
-          agg.COST_TOTAL       += Number(r.COST_TOTAL       || 0);
-        }
-      }
-
-      const phaseNumsSorted = [...phaseLabels.keys()].sort((a, b) => a - b);
-      const phasesOut = phaseNumsSorted.map((num) => ({ num, label: phaseLabels.get(num) }));
-
-      const decorateCell = (agg) => {
-        const honorar = round2(agg.HONORAR_NET);
-        const earned  = round2(agg.EARNED_VALUE_NET);
-        const cost    = round2(agg.COST_TOTAL);
-        return {
-          HONORAR_NET: honorar,
-          EARNED_VALUE_NET: earned,
-          HOURS_TOTAL: round2(agg.HOURS_TOTAL),
-          COST_TOTAL: cost,
-          LEISTUNGSSTAND_PERCENT: honorar > 0 ? round2((earned / honorar) * 100) : null,
-          KOSTENQUOTE: earned > 0 ? cost / earned : null,
-          DB: round2(earned - cost),
-          ampel: ampelFor(earned, cost),
-        };
-      };
-
-      // Projektzeilen (nur Projekte mit Phasenstruktur).
-      const projectRows = projects
-        .filter((p) => projectsWithPhases.has(p.ID))
-        .map((p) => {
-          const pm = matrix.get(p.ID) || new Map();
-          const cells = {};
-          const tot = emptyAgg();
-          for (const num of phaseNumsSorted) {
-            const agg = pm.get(num);
-            if (!agg) continue;
-            cells[num] = decorateCell(agg);
-            tot.HONORAR_NET += agg.HONORAR_NET; tot.EARNED_VALUE_NET += agg.EARNED_VALUE_NET;
-            tot.HOURS_TOTAL += agg.HOURS_TOTAL; tot.COST_TOTAL += agg.COST_TOTAL;
-          }
-          return {
-            PROJECT_ID: p.ID, ABBR: p.ABBR, NAME: p.NAME,
-            cells, total: decorateCell(tot),
-          };
-        })
-        .sort((a, b) => String(a.ABBR).localeCompare(String(b.ABBR)));
-
-      // Portfolio-Gesamtsummen für Anteile.
-      let totHonorar = 0, totHours = 0;
-      for (const agg of byPhase.values()) { totHonorar += agg.HONORAR_NET; totHours += agg.HOURS_TOTAL; }
-
-      const byPhaseOut = phaseNumsSorted.map((num) => {
-        const agg = byPhase.get(num) || emptyAgg();
-        const cell = decorateCell(agg);
-        return {
-          num, label: phaseLabels.get(num), ...cell,
-          // Anteil an Stunden vs. Anteil am Honorar — Ist-Stundenlast vs.
-          // HOAI-Gewichtung. Weichen sie stark ab, wird die Phase über-/unterkalkuliert.
-          HOURS_SHARE:   totHours   > 0 ? round2((agg.HOURS_TOTAL / totHours)   * 100) : null,
-          HONORAR_SHARE: totHonorar > 0 ? round2((agg.HONORAR_NET / totHonorar) * 100) : null,
-        };
+      const { leistungsbilder, facts, projectIds } = await lphControlling.loadPhaseFacts(supabase, {
+        tenantId, projectIds: projects.map((p) => p.PROJECT_ID),
+      });
+      const withPhases = projects.filter((p) => projectIds.has(p.PROJECT_ID));
+      const groupMap = await gesamtprojekte.groupsByProjectIfMigrated(supabase, {
+        tenantId, projectIds: withPhases.map((p) => p.PROJECT_ID),
       });
 
-      const grandTot = emptyAgg();
-      for (const agg of byPhase.values()) {
-        grandTot.HONORAR_NET += agg.HONORAR_NET; grandTot.EARNED_VALUE_NET += agg.EARNED_VALUE_NET;
-        grandTot.HOURS_TOTAL += agg.HOURS_TOTAL; grandTot.COST_TOTAL += agg.COST_TOTAL;
-      }
-
       res.json({ data: {
-        phases: phasesOut,
-        projects: projectRows,
-        byPhase: byPhaseOut,
-        totals: projectRows.length ? decorateCell(grandTot) : null,
+        leistungsbilder,
+        projects: withPhases
+          .map((p) => ({
+            PROJECT_ID: p.PROJECT_ID, ABBR: p.ABBR, NAME: p.NAME,
+            STATUS:     p.PROJECT_STATUS_NAME_SHORT ?? null,
+            TYPE:       p.PROJECT_TYPE_NAME_SHORT ?? null,
+            DEPARTMENT: p.DEPARTMENT_NAME ?? null,
+            MANAGER:    p.PROJECT_MANAGER_DISPLAY ?? null,
+            CLIENT:     p.ADDRESS_NAME ?? p.COMPANY_NAME ?? null,
+            GROUP_NAME: groupMap.get(String(p.PROJECT_ID))?.NAME ?? null,
+          }))
+          .sort((a, b) => String(a.ABBR).localeCompare(String(b.ABBR))),
+        facts,
       }, meta: groupMeta });
     } catch (e) {
       res.status(e?.status || 500).json({ error: e?.message || String(e) });

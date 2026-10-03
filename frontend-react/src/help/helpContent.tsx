@@ -1340,14 +1340,30 @@ export const HELP = {
     ),
   },
   'report.lph_matrix': {
-    title: 'Leistungsphasen-Matrix',
+    title: 'Leistungsphasen über alle Projekte',
     body: (
       <>
-        Alle Projekte mit Leistungsphasen-Struktur auf einen Blick: Zeilen sind Projekte, Spalten die
-        Leistungsphasen (LPH 1–9). Die Zellenfarbe zeigt die Ampel (grün = im Plan, gelb = Kostenquote
-        erhöht, rot = kritisch oder Deckungsbeitrag negativ). Über die Umschalter oben wählst du, welche
-        Kennzahl in den Zellen steht. So erkennst du sofort, in welcher Phase welches Projekt brennt.
-        Klick auf einen Projektnamen öffnet den Einzelprojekt-Report.
+        Zeilen sind Projekte, Spalten die Leistungsphasen ihrer HOAI-Kalkulationen. Über
+        „Kennzahl" wählst du, was in den Zellen steht. Die Filter grenzen nach Leistungsbild,
+        Honorarzone, Status, Typ, Abteilung, Projektleitung und Auftraggeber ein — alle Summen und
+        Quoten rechnen dann nur über die Auswahl. Eine Kante mit Symbol markiert Zellen, deren
+        Kostenquote auffällt („beobachten" bzw. „Handlungsbedarf", Schwellen wie in der Projektliste,
+        einstellbar unter Einstellungen → Vorbelegungen) — gleich, welche Kennzahl gerade darin
+        steht. Für eine Nachkalkulation am besten nur abgeschlossene Projekte eines Leistungsbilds
+        wählen. Klick auf ein Projekt öffnet den Einzelprojekt-Report.
+      </>
+    ),
+  },
+  'report.lph_leistungsbild': {
+    title: 'Warum nach Leistungsbild filtern?',
+    body: (
+      <>
+        Die Leistungsphasen sind je Leistungsbild anders geschnitten und gewichtet: LPH 3 ist beim
+        Gebäude die Entwurfsplanung (15 %), beim Bebauungsplan der Plan zur Beschlussfassung (10 %).
+        Ohne Filter stehen sie in einer Spalte — die Summe stimmt, ein Vergleich von Stunden oder
+        Kostenquoten über die Projekte aber nicht. Mit einem Leistungsbild zeigt die Tabelle je Phase
+        auch ihren Namen und die HOAI-Gewichtung. HOAI 2013 und 2021 gelten dabei als ein
+        Leistungsbild; ihre Phasen sind gleich.
       </>
     ),
   },
@@ -1355,11 +1371,45 @@ export const HELP = {
     title: 'Stundenanteil vs. Honoraranteil',
     body: (
       <>
-        Aggregiert über alle Projekte: Wie verteilen sich die tatsächlich gebuchten Stunden auf die
-        Leistungsphasen (Stundenanteil) — verglichen mit der Verteilung des Honorars (Honoraranteil, was
-        grob der HOAI-Gewichtung entspricht). Liegt der Stundenanteil einer Phase deutlich über ihrem
-        Honoraranteil, verbraucht diese Phase systematisch mehr Aufwand als sie einbringt — ein Hinweis
-        auf Unterkalkulation oder nötige Besondere Leistungen. Solche Phasen sind rot hervorgehoben.
+        Über die gewählten Projekte: Wie verteilen sich die gebuchten Stunden auf die Leistungsphasen
+        (Stundenanteil) — verglichen mit der Verteilung des Honorars (Honoraranteil) und, bei einem
+        einzelnen Leistungsbild, der Gewichtung laut HOAI. Liegt der Stundenanteil einer Phase
+        mindestens 5 Prozentpunkte über ihrem Honoraranteil, verbraucht sie mehr Aufwand, als sie
+        einbringt — ein Hinweis auf Unterkalkulation oder nötige Besondere Leistungen; sie ist dann
+        markiert. „Projekte" sagt, auf wie vielen Projekten der Wert beruht.
+      </>
+    ),
+  },
+  'report.lph_db_prognose': {
+    title: 'DB-Prognose bei Fertigstellung',
+    body: (
+      <>
+        Deckungsbeitrag, mit dem die Phase abschließt, wenn sie so weiterläuft wie bisher: Honorar
+        minus hochgerechnete Kosten (Kosten ÷ Leistung × Honorar). Bei fertigen Phasen ist das der
+        tatsächliche Deckungsbeitrag. Leer bleibt sie bei sehr kleinen Werten (unter 500 € Honorar
+        oder 100 € Kosten), weil die Hochrechnung dort keine Aussage hat.
+      </>
+    ),
+  },
+  'report.lph_leistung_je_stunde': {
+    title: 'Leistung je Stunde',
+    body: (
+      <>
+        Erbrachte Leistung geteilt durch die gebuchten Stunden — der Stundensatz, den die Phase
+        tatsächlich erwirtschaftet. Liegt er unter den Kosten je Stunde (Tooltip), deckt die Phase
+        ihre Kosten nicht. Über abgeschlossene Projekte eines Leistungsbilds ist er die Grundlage, um
+        künftige Angebote je Phase realistisch zu kalkulieren.
+      </>
+    ),
+  },
+  'report.lph_reststunden': {
+    title: 'Reststunden (Prognose)',
+    body: (
+      <>
+        Stunden, die bis zum Abschluss der Phase noch anfallen, wenn der Aufwand je erbrachter
+        Leistung gleich bleibt: gebuchte Stunden ÷ Leistungsstand − gebuchte Stunden. Erst ab 10 %
+        Leistungsstand berechnet — davor wäre es geraten. Über laufende Projekte summiert zeigt es,
+        wie viel Kapazität die Phasen noch binden.
       </>
     ),
   },
@@ -1373,8 +1423,10 @@ export const HELP = {
         Budget ist, nicht erst am Projektende. Grundlage sind die Buchungen und
         der Leistungsstand, den Phasen-Knoten zugeordnet, die aus der
         Honorarberechnung stammen. Buchungen ohne Phasenbezug erscheinen unter
-        „Ohne Phasenzuordnung". Der Report wird nur angezeigt, wenn das Projekt
-        eine Leistungsphasen-Struktur besitzt.
+        „Ohne Phasenzuordnung". Eine auffällige Kostenquote ist mit Symbol
+        markiert — mit denselben Schwellen wie in der Projektliste
+        (Einstellungen → Vorbelegungen). Der Report wird nur angezeigt, wenn
+        das Projekt eine Leistungsphasen-Struktur besitzt.
       </>
     ),
   },

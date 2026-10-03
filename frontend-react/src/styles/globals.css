@@ -5393,6 +5393,24 @@ fieldset:disabled .ws-check { cursor: default; }
   .pg-matrix-pick { width: 100%; }
   .pg-matrix-pick select { flex: 1; max-width: none; height: 44px; }
 }
+/* LPH-Controlling (Leistungsphasen über alle Projekte) */
+.lph-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-3); }
+.lph-metric { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: auto; font-size: 13px; color: var(--text-2); }
+.lph-metric select { height: 38px; width: auto; }
+.lph-mixed { margin: 0 0 var(--space-3); }
+.lph-mixed .link-btn { margin-left: var(--space-1); }
+/* Ampel in der Matrix: Kante statt Flaeche — eine getoente Zelle druecke den
+   Kontrast der Ampelschrift auf den Branchen-Hintergruenden unter AA. */
+.lph-cell--watch    { box-shadow: inset 3px 0 0 var(--kpi-watch); }
+.lph-cell--critical { box-shadow: inset 3px 0 0 var(--kpi-critical); }
+/* Scrollrahmen als Bezug fuer den .sr-only-Klartext der Ampel — in einer
+   Spalte rechts ausserhalb des Bildes machte er die Seite sonst breiter
+   (gleiches Muster wie .list-section.ad-list). */
+.list-section.lph-table { position: relative; }
+@media (max-width: 640px) {
+  .lph-metric { width: 100%; margin-left: 0; }
+  .lph-metric select { flex: 1; height: 44px; }
+}
 /* Anlegen/Beauftragen: Gesamtprojekt + Art der Projektnummer */
 .pg-wahl { display: grid; gap: var(--space-2); }
 .pg-wahl .form-group { margin: 0; }

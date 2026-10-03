@@ -69,22 +69,27 @@ export interface Calls {
 }
 
 /** Leistungsphasen der Gruppe: LPH 1–4 im ersten, LPH 5 im zweiten Vertrag. */
-const cell = (h: number, e: number, c: number) => ({
-  HONORAR_NET: h, EARNED_VALUE_NET: e, HOURS_TOTAL: c / 60, COST_TOTAL: c,
-  LEISTUNGSSTAND_PERCENT: h ? (e / h) * 100 : null, KOSTENQUOTE: e ? c / e : null, DB: e - c, ampel: 'gruen',
+const fact = (PROJECT_ID: number, PHASE: string, h: number, e: number, c: number) => ({
+  PROJECT_ID, LB: 'Gebäude', ZONE: 'III', PHASE, HONORAR_NET: h, EARNED_VALUE_NET: e, HOURS_TOTAL: c / 60, COST_TOTAL: c,
+})
+const lphProject = (PROJECT_ID: number, ABBR: string, NAME: string) => ({
+  PROJECT_ID, ABBR, NAME, STATUS: 'laufend', TYPE: null, DEPARTMENT: null, MANAGER: 'AB', CLIENT: 'Stadt Musterstadt', GROUP_NAME: 'Neubau Kita',
 })
 const MATRIX = {
-  phases: [{ num: 1, label: 'LPH 1' }, { num: 4, label: 'LPH 4' }, { num: 5, label: 'LPH 5' }],
+  leistungsbilder: [{ key: 'Gebäude', label: 'Gebäude', phases: [
+    { key: 'LPH 1', name: 'Grundlagenermittlung', hoaiPercent: 2, sort: 1 },
+    { key: 'LPH 4', name: 'Genehmigungsplanung', hoaiPercent: 3, sort: 4 },
+    { key: 'LPH 5', name: 'Ausführungsplanung', hoaiPercent: 25, sort: 5 },
+  ] }],
   projects: [
-    { PROJECT_ID: 1, ABBR: 'P-2024-001', NAME: 'Neubau Kita, LPH 1–4', cells: { 1: cell(20_000, 20_000, 9_000), 4: cell(30_000, 30_000, 12_000) }, total: cell(50_000, 50_000, 21_000) },
-    { PROJECT_ID: 2, ABBR: 'P-2024-002', NAME: 'Neubau Kita, LPH 5–8', cells: { 5: cell(80_000, 8_000, 3_000) }, total: cell(80_000, 8_000, 3_000) },
+    lphProject(1, 'P-2024-001', 'Neubau Kita, LPH 1–4'),
+    lphProject(2, 'P-2024-002', 'Neubau Kita, LPH 5–8'),
   ],
-  byPhase: [
-    { num: 1, label: 'LPH 1', ...cell(20_000, 20_000, 9_000), HOURS_SHARE: 40, HONORAR_SHARE: 15 },
-    { num: 4, label: 'LPH 4', ...cell(30_000, 30_000, 12_000), HOURS_SHARE: 50, HONORAR_SHARE: 23 },
-    { num: 5, label: 'LPH 5', ...cell(80_000, 8_000, 3_000), HOURS_SHARE: 10, HONORAR_SHARE: 62 },
+  facts: [
+    fact(1, 'LPH 1', 20_000, 20_000, 9_000),
+    fact(1, 'LPH 4', 30_000, 30_000, 12_000),
+    fact(2, 'LPH 5', 80_000, 8_000, 3_000),
   ],
-  totals: cell(130_000, 58_000, 24_000),
 }
 
 export async function mockGroups(page: Page, { partial = false, empty = false, permissions }: { partial?: boolean; empty?: boolean; permissions?: string[] } = {}): Promise<Calls> {
