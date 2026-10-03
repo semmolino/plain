@@ -166,6 +166,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
     // 0185 fuehrt den Aufbau je Projekt und je Beleg ein (DOCUMENT_LAYOUT_JSON).
     // 0186 fuehrt Verzugszinsen und -pauschale in Mahnungen ein.
     // 0187 ordnet Standardvorlagen ohne Mandant ihrem Mandanten zu.
+    // 0188 dasselbe fuer Kalkulationsphasen, Leistungsstaende und Nummernkreise.
     expect(offen).toEqual([
       "0070b_license_capabilities_seed.sql",
       "0076_tenant_email_domain.sql",
@@ -220,6 +221,7 @@ describe("APPLIED_BASELINE.txt im Repo", () => {
       "0185_beleg_aufbau.sql",
       "0186_verzugszinsen.sql",
       "0187_dokumentvorlage_mandant.sql",
+      "0188_mandant_nachtragen.sql",
     ]);
   });
 

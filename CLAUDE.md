@@ -182,7 +182,8 @@ nicht.** Das Netz aus `0131` greift nur mit Mandanten-Claim; unter dem
 eine Mandantentabelle schreibt, setzt `TENANT_ID` selbst, aus dem Elternsatz.
 Aus der Zeit vor RLS lagen solche Zeilen noch in `DOCUMENT_TEMPLATE` (behoben
 mit `0187`) sowie in `FEE_CALCULATION_PHASE`, `PROJECT_PROGRESS` und
-`document_number_range` (Stand 2026-10-02). Der Schaden zeigt sich nie als
+`document_number_range` (behoben mit `0188`, 10/2026). `ASSET` hat sie auch,
+ist aber nicht betroffen — seine Policy prüft über `COMPANY`. Der Schaden zeigt sich nie als
 „Zeile fehlt": die Vorlage wurde beim Speichern neu angelegt und scheiterte am
 eindeutigen Index — der kennt keine Policy —, ein verborgener Nummernkreis
 scheitert beim `ON CONFLICT`.
