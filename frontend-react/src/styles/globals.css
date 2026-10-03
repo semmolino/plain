@@ -6436,8 +6436,25 @@ fieldset:disabled .ws-check { cursor: default; }
 .iw-line .iw-grow { flex: 1 1 180px; min-width: 0; }
 .iw-amount { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .iw-radio { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; }
-.iw-docs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-3); }
-.iw-docs .btn-secondary { display: inline-flex; align-items: center; gap: 6px; height: 36px; }
+/* Beleg ansehen (Vorschau, E-Rechnung): Umriss in der Farbe von „Jetzt
+   buchen" — vorher graue 36-px-Knöpfe, die zwischen Summen und Hinweis
+   untergingen. Gefüllt bleibt nur „Jetzt buchen": drei gefüllte Knöpfe
+   zeichneten den einen unumkehrbaren Schritt nicht mehr aus. Die Schrift
+   nimmt im Dark-Theme --accent, weil --btn dort als Text nur 4,39:1 hat. */
+.iw-docs {
+  --iw-doc-ink: var(--btn);
+  display: flex; gap: var(--space-3); flex-wrap: wrap; margin: var(--space-1) 0 var(--space-3);
+}
+[data-theme="dark"] .iw-docs,
+[data-theme="trust-dark"] .iw-docs { --iw-doc-ink: var(--accent); }
+.iw-docs .btn-secondary {
+  height: 44px; padding: 0 18px;
+  font-size: 14px; font-weight: 700;
+  border: 1.5px solid var(--btn); color: var(--iw-doc-ink);
+}
+.iw-docs .btn-secondary:hover:not(:disabled),
+.iw-docs .btn-secondary[aria-expanded="true"] { background: var(--btn); color: var(--btn-fg); }
+@media (max-width: 640px) { .iw-docs .btn-secondary { flex: 1 1 0; } }
 .iw-note { font-size: 13px; color: var(--text-3); margin: 0 0 var(--space-2); }
 .iw-danger-text, .btn-danger-text { color: var(--danger-strong); }
 .iw-more { min-width: 44px; }

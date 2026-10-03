@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { BelegAufbau, type BelegPreview } from '@/components/vorlagen/BelegAufbau'
 import { useBelegAufbau } from '@/components/vorlagen/useBelegAufbau'
-import { ChevronLeft, ChevronRight, Check, Eye, ChevronDown } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Eye, ChevronDown, FileCode } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
@@ -950,12 +950,12 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
               <div className="iw-docs">
                 {canPdf && (
                   <button type="button" className="btn-secondary" onClick={openPreview}>
-                    <Eye size={14} strokeWidth={2} aria-hidden="true" /> Vorschau
+                    <Eye size={16} strokeWidth={2} aria-hidden="true" /> Vorschau
                   </button>
                 )}
                 {canXml && (
                   <RowMenu label="E-Rechnung herunterladen" triggerClassName="btn-secondary"
-                    triggerContent={<>E-Rechnung <ChevronDown size={14} strokeWidth={2} aria-hidden="true" /></>}>
+                    triggerContent={<><FileCode size={16} strokeWidth={2} aria-hidden="true" /> E-Rechnung <ChevronDown size={14} strokeWidth={2} aria-hidden="true" /></>}>
                     <button type="button" role="menuitem" className="row-menu-item" onClick={() => void downloadXml('ubl')}>XRechnung (UBL)</button>
                     <button type="button" role="menuitem" className="row-menu-item" onClick={() => void downloadXml('cii')}>ZUGFeRD (CII)</button>
                   </RowMenu>
