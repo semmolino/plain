@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
 import { ApiRequestError } from '@/api/client'
 
 /**
@@ -10,6 +11,11 @@ import { ApiRequestError } from '@/api/client'
  * Seitenränder setzt erst der PDF-Druck (`renderPdf`), Fußzeile, Briefpapier
  * und Folgeseitenkopf kommen erst danach dazu — die Vorschau lief bis an den
  * Rand und zeigte weniger als das PDF.
+ *
+ * Gezeichnet wird nur, was zu sehen ist: jede Seite erst, wenn sie in den
+ * sichtbaren Bereich kommt, direkt in ein Canvas. Die erste Fassung malte alle
+ * Seiten und wandelte jede in ein PNG — bei einem Beleg mit Anhängen knapp drei
+ * Sekunden, bevor überhaupt etwas zu sehen war.
  *
  * `requestKey` bestimmt, wann neu geladen wird — er sollte alles enthalten,
  * was die Vorschau verändert.
@@ -31,40 +37,79 @@ function loadPdfJs(): Promise<PdfJs> {
   return pdfJs
 }
 
-interface PageImage { url: string; width: number; height: number }
+interface Loaded {
+  task:  PDFDocumentLoadingTask
+  doc:   PDFDocumentProxy
+  /** Seitenzahl und Maße der ersten Seite in Punkt — das Seitenverhältnis aller
+   *  Blätter, bis sie gezeichnet sind (Belege sind A4; jede Seite einzeln
+   *  abzufragen kostete je einen Umweg über den Worker) */
+  count: number
+  size:  { w: number; h: number }
+}
 
-const MAX_PIXEL_WIDTH = 1800 // schärfer bringt am Bildschirm nichts, kostet aber Speicher
-
-/** Rendert alle Seiten zu Bildern; Breite in Pixeln passend zur Anzeige. */
-async function renderPages(data: ArrayBuffer, targetWidth: number, isCancelled: () => boolean): Promise<PageImage[]> {
+async function openPdf(data: ArrayBuffer): Promise<Loaded> {
   const lib = await loadPdfJs()
   const task = lib.getDocument({ data: new Uint8Array(data) })
   try {
     const doc = await task.promise
-    const out: PageImage[] = []
-    for (let n = 1; n <= doc.numPages; n++) {
-      if (isCancelled()) break
-      const page = await doc.getPage(n)
-      const base = page.getViewport({ scale: 1 })
-      const viewport = page.getViewport({ scale: Math.min(MAX_PIXEL_WIDTH, targetWidth) / base.width })
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.ceil(viewport.width)
-      canvas.height = Math.ceil(viewport.height)
-      await page.render({ canvas, viewport }).promise
-      const blob = await new Promise<Blob | null>(res => canvas.toBlob(res, 'image/png'))
-      page.cleanup()
-      if (!blob) throw new Error('Seite ließ sich nicht darstellen.')
-      // Seitenverhältnis aus dem PDF selbst (Punkte), nicht aus den Pixeln
-      out.push({ url: URL.createObjectURL(blob), width: base.width, height: base.height })
-    }
-    return out
-  } finally {
+    const vp = (await doc.getPage(1)).getViewport({ scale: 1 })
+    return { task, doc, count: doc.numPages, size: { w: vp.width, h: vp.height } }
+  } catch (e) {
     void task.destroy()
+    throw e
   }
 }
 
-function revoke(pages: PageImage[]) {
-  for (const p of pages) URL.revokeObjectURL(p.url)
+const MIN_PIXEL_WIDTH = 600
+const MAX_PIXEL_WIDTH = 1600 // schärfer bringt am Bildschirm nichts, kostet aber Zeit
+
+/** Eine Seite: zeichnet, sobald sie sichtbar ist, und bei jedem neuen PDF. */
+function PdfPage({ doc, n, size, alt }: { doc: PDFDocumentProxy; n: number; size: { w: number; h: number }; alt: string }) {
+  const sheetRef = useRef<HTMLDivElement>(null)
+  // Seite 1 sofort; die übrigen, wenn sie in die Nähe des Bildschirms kommen
+  // (ohne IntersectionObserver alle sofort)
+  const [seen, setSeen] = useState(n === 1 || typeof IntersectionObserver === 'undefined')
+
+  useEffect(() => {
+    const el = sheetRef.current
+    if (seen || !el) return
+    const io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting)) { setSeen(true); io.disconnect() }
+    }, { rootMargin: '300px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [seen])
+
+  useEffect(() => {
+    const el = sheetRef.current
+    if (!seen || !el) return
+    let cancelled = false
+    let task: RenderTask | null = null
+    void (async () => {
+      try {
+        const page = await doc.getPage(n)
+        if (cancelled) return
+        const width = Math.min(MAX_PIXEL_WIDTH, Math.max(MIN_PIXEL_WIDTH, el.clientWidth * (window.devicePixelRatio || 1)))
+        const viewport = page.getViewport({ scale: width / page.getViewport({ scale: 1 }).width })
+        // In ein neues Canvas zeichnen und erst dann tauschen — bis dahin
+        // bleibt die bisherige Fassung stehen, nichts flackert.
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.ceil(viewport.width)
+        canvas.height = Math.ceil(viewport.height)
+        task = page.render({ canvas, viewport })
+        await task.promise
+        if (!cancelled) el.replaceChildren(canvas)
+      } catch {
+        // abgebrochen (neues PDF) oder PDF schon geschlossen — die nächste Fassung zeichnet neu
+      }
+    })()
+    return () => { cancelled = true; task?.cancel() }
+  }, [doc, n, seen])
+
+  return (
+    <div ref={sheetRef} className="dv-preview-sheet" role="img" aria-label={alt}
+      style={{ aspectRatio: `${size.w} / ${size.h}` }} />
+  )
 }
 
 export function DocPreview({ requestKey, load, label = 'Vorschau', note = 'Seitenansicht wie im PDF. Mit Beispieldaten.' }: {
@@ -74,30 +119,24 @@ export function DocPreview({ requestKey, load, label = 'Vorschau', note = 'Seite
   label?:     string
   note?:      string
 }) {
-  const [pages, setPages] = useState<PageImage[]>([])
+  const [loaded, setLoaded] = useState<Loaded | null>(null)
   // geladen ist, was zum aktuellen Schlüssel gehört — sonst „aktualisiert …“
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
   const loading = loadedKey !== requestKey
   const [error, setError] = useState<string | null>(null)
-  const wrapRef = useRef<HTMLDivElement>(null)
   const loadRef = useRef(load)
   useLayoutEffect(() => { loadRef.current = load })
-  const pagesRef = useRef<PageImage[]>([])
 
   useEffect(() => {
     let cancelled = false
-    // Jede Vorschau ist ein PDF-Druck am Server — erst rendern, wenn die
-    // Eingabe zur Ruhe gekommen ist.
+    // Jede Vorschau ist ein PDF-Druck am Server — erst anfragen, wenn die
+    // Eingabe kurz ruht.
     const h = setTimeout(() => {
-      const width = (wrapRef.current?.clientWidth || 600) * (window.devicePixelRatio || 1)
       loadRef.current()
-        .then(data => renderPages(data, Math.max(800, width * 1.25), () => cancelled))
+        .then(openPdf)
         .then(next => {
-          if (cancelled) { revoke(next); return }
-          // die bisherigen Seiten bleiben stehen, bis die neuen fertig sind — kein Flackern
-          revoke(pagesRef.current)
-          pagesRef.current = next
-          setPages(next)
+          if (cancelled) { void next.task.destroy(); return }
+          setLoaded(next)
           setError(null)
         })
         .catch((e: unknown) => {
@@ -107,13 +146,14 @@ export function DocPreview({ requestKey, load, label = 'Vorschau', note = 'Seite
             : 'Vorschau nicht verfügbar.')
         })
         .finally(() => { if (!cancelled) setLoadedKey(requestKey) })
-    }, 450)
+    }, 300)
     return () => { cancelled = true; clearTimeout(h) }
   }, [requestKey])
 
-  useEffect(() => () => revoke(pagesRef.current), [])
+  // Ein abgelöstes PDF schließen — die Seiten haben ihre Bilder schon
+  useEffect(() => () => { if (loaded) void loaded.task.destroy() }, [loaded])
 
-  const count = pages.length
+  const count = loaded?.count ?? 0
   return (
     <div className="dv-preview">
       <div className="dv-preview-head">
@@ -124,7 +164,6 @@ export function DocPreview({ requestKey, load, label = 'Vorschau', note = 'Seite
       </div>
       {error && <p className="dv-preview-error" role="status">{error}</p>}
       <div
-        ref={wrapRef}
         className="dv-preview-pages"
         // scrollt am Desktop in sich (s. globals.css) — dann per Tastatur erreichbar
         tabIndex={0}
@@ -132,11 +171,11 @@ export function DocPreview({ requestKey, load, label = 'Vorschau', note = 'Seite
         aria-label={label}
         aria-busy={loading}
       >
-        {count === 0
+        {!loaded
           ? <div className="dv-preview-sheet dv-preview-sheet-empty" aria-hidden="true" />
-          : pages.map((p, i) => (
-            <figure key={p.url} className="dv-preview-page">
-              <img className="dv-preview-sheet" style={{ aspectRatio: `${p.width} / ${p.height}` }} src={p.url} alt={count > 1 ? `${label}, Seite ${i + 1} von ${count}` : label} />
+          : Array.from({ length: count }, (_, i) => (
+            <figure key={i} className="dv-preview-page">
+              <PdfPage doc={loaded.doc} n={i + 1} size={loaded.size} alt={count > 1 ? `${label}, Seite ${i + 1} von ${count}` : label} />
               {/* unter dem Blatt, nicht darauf — dort stünde sie auf der Fußzeile des Belegs */}
               {count > 1 && <figcaption className="dv-preview-pageno" aria-hidden="true">Seite {i + 1} von {count}</figcaption>}
             </figure>

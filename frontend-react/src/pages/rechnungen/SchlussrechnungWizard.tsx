@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { BelegAufbau } from '@/components/vorlagen/BelegAufbau'
+import { BelegAufbau, type BelegPreview } from '@/components/vorlagen/BelegAufbau'
 import { useBelegAufbau } from '@/components/vorlagen/useBelegAufbau'
-import { ChevronLeft, ChevronRight, Check, FileText, ChevronDown, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Eye, ChevronDown, AlertTriangle } from 'lucide-react'
 import { StepIndicator } from '@/components/ui/StepIndicator'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Message }      from '@/components/ui/Message'
@@ -98,6 +98,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
   const [savedExplicitly, setSavedExplicitly] = useState(false)
   const [leaveOpen,    setLeaveOpen]    = useState(false)
   const [bookOpen,     setBookOpen]     = useState(false)
+  const [previewOpen,  setPreviewOpen]  = useState(false)
   const [loadingResume, setLoadingResume] = useState(!!resumeTarget)
   // Eingaben im aktuellen Schritt seit dem letzten Speichern (Rueckfrage beim Verlassen)
   const [touched,      setTouched]      = useState(false)
@@ -635,6 +636,14 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     }
   }
   const previewPdf  = () => withSavedDiscounts(id => openInvoicePdf(id, { releasePpIds: Array.from(seReleaseSel) }))
+  // Seitenansicht mit dem ungespeicherten Stand — Nachlässe und SE-Auswahl vorher
+  // speichern, damit sie die Beträge zeigt. Ohne geladenen Aufbau bleibt das PDF im Tab.
+  const belegPreview: BelegPreview | undefined = canPdf && draftId ? {
+    open: previewOpen, setOpen: setPreviewOpen,
+    load: async () => { await patchInvoice(draftId, step4Body()); return aufbau.preview(Array.from(seReleaseSel)) },
+    onOpenPdf: () => void previewPdf(),
+  } : undefined
+  const openPreview = () => { if (aufbau.ready) setPreviewOpen(true); else void previewPdf() }
   const downloadXml = (format: 'ubl' | 'cii') => withSavedDiscounts(id => downloadInvoiceEinvoice(id, 'schlussrechnung', null, format))
 
   function toggleDed(d: FinalDeduction) {
@@ -807,7 +816,7 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
         step >= 1 ? (
           <RowMenu label="Weitere Aktionen" triggerClassName="btn-secondary iw-more">
             {showDraftSave && <button type="button" role="menuitem" className="row-menu-item" onClick={() => void saveDraft()}>Entwurf speichern</button>}
-            {step === 4 && canPdf && <button type="button" role="menuitem" className="row-menu-item" onClick={() => void previewPdf()}>PDF-Vorschau</button>}
+            {step === 4 && canPdf && draftId && <button type="button" role="menuitem" className="row-menu-item" onClick={openPreview}>Vorschau</button>}
             <button type="button" role="menuitem" className="row-menu-item" onClick={handleCancel}>Abbrechen</button>
           </RowMenu>
         ) : <button type="button" className="btn-secondary" onClick={handleCancel}>Abbrechen</button>
@@ -1312,15 +1321,14 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
             )}
 
             {draftId && (
-              <BelegAufbau ctl={aufbau} disabled={busy} canPreview={canPdf} releasePpIds={Array.from(seReleaseSel)}
-                beforePreview={() => patchInvoice(draftId, step4Body())} />
+              <BelegAufbau ctl={aufbau} disabled={busy} preview={belegPreview} />
             )}
 
             {draftId && (canPdf || canXml) && (
               <div className="iw-docs">
                 {canPdf && (
-                  <button type="button" className="btn-secondary" onClick={() => void previewPdf()}>
-                    <FileText size={14} strokeWidth={2} aria-hidden="true" /> PDF-Vorschau
+                  <button type="button" className="btn-secondary" onClick={openPreview}>
+                    <Eye size={14} strokeWidth={2} aria-hidden="true" /> Vorschau
                   </button>
                 )}
                 {canXml && (

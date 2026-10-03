@@ -113,6 +113,42 @@ test('Vorschau zeigt den ungespeicherten Stand', async ({ page }) => {
   expect(calls.filter(c => c.method === 'PUT')).toHaveLength(0)
 })
 
+test('„Vorschau" im Schritt: Felder daneben, jede Änderung geht in die Seitenansicht', async ({ page }, info) => {
+  const calls = await setup(page)
+  await page.goto('/rechnungen?tab=rechnung&draftId=601')
+  for (let i = 0; i < 2; i++) {
+    await bar(page).getByRole('button', { name: 'Weiter', exact: true }).click()
+    await page.waitForTimeout(150)
+  }
+  // ohne „Aufbau und Texte" aufzuklappen — vorher stand die Vorschau nur dort
+  if (info.project.name === 'mobile') {
+    await bar(page).getByRole('button', { name: 'Weitere Aktionen' }).click()
+    await page.getByRole('menuitem', { name: 'Vorschau' }).click()
+  } else {
+    await page.getByRole('button', { name: 'Vorschau', exact: true }).click()
+  }
+  const dlg = page.getByRole('dialog', { name: 'Vorschau dieses Belegs' })
+  await expect(dlg.getByRole('img', { name: 'Vorschau dieses Belegs' })).toBeVisible()
+  await expect(dlg.getByRole('button', { name: 'Als PDF öffnen' })).toBeVisible()
+  const previews = () => calls.filter(c => /pdf\/preview/.test(c.url))
+
+  if (info.project.name === 'mobile') {
+    // schmal nur die Seitenansicht — die Felder stehen im Schritt
+    await expect(dlg.getByLabel('Kopftext', { exact: true })).toHaveCount(0)
+    return
+  }
+  const before = previews().length
+  await dlg.getByRole('listitem').filter({ hasText: /^Anrede/ }).getByRole('button', { name: 'Anrede ausblenden' }).click()
+  await expect.poll(() => previews().length).toBe(before + 1)
+  expect(previews().at(-1)!.body).toMatchObject({ document: { hidden: ['salutation'] } })
+
+  // derselbe Stand im Schritt — gespeichert wird weiter mit dem Schritt
+  await dlg.locator('.modal-actions').getByRole('button', { name: 'Schließen' }).click()
+  await page.getByRole('button', { name: /Aufbau und Texte dieses Belegs/ }).click()
+  await expect(row(page, /^Anrede/)).toContainText('ausgeblendet')
+  expect(calls.filter(c => c.method === 'PUT')).toHaveLength(0)
+})
+
 test('Vorlagen-Variante je Beleg: Ebenen der Variante laden, mit dem Schritt speichern', async ({ page }) => {
   const calls = await setup(page)
   const layoutGets: string[] = []

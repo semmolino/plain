@@ -587,6 +587,9 @@ export const HELP = {
         „Entwurf speichern" bzw. beim Buchen; danach ist der Aufbau eingefroren und ändert sich auch
         nicht mehr, wenn jemand die Vorlage anpasst.
         <br /><br />
+        <strong>Vorschau</strong> zeigt den Beleg Seite für Seite, wie er gedruckt wird — am großen
+        Bildschirm mit denselben Einstellungen daneben, jede Änderung erscheint gleich auf der Seite.
+        <br /><br />
         <strong>Für dieses Projekt merken</strong> legt den Aufbau für jeden künftigen Beleg dieser Art im
         Projekt fest — etwa, weil ein öffentlicher Auftraggeber eine feste Form verlangt (braucht das
         Recht, Projekte zu bearbeiten). Eigene Textblöcke gehen zusätzlich als Hinweis in die

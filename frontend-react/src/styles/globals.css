@@ -4817,6 +4817,7 @@ fieldset:disabled .ws-check { cursor: default; }
 }
 .dv-preview-page { margin: 0; display: flex; flex-direction: column; gap: var(--space-1); }
 .dv-preview-sheet { display: block; width: 100%; height: auto; background: white; box-shadow: var(--shadow-md); outline: 1px solid var(--border); }
+.dv-preview-sheet canvas { display: block; width: 100%; height: 100%; }
 .dv-preview-sheet-empty { aspect-ratio: 210 / 297; }
 .dv-preview-pageno { font-size: 11px; color: var(--text-3); text-align: center; }
 .dv-preview-note { margin: 0; font-size: 11px; color: var(--text-3); text-align: center; }
@@ -4867,6 +4868,16 @@ fieldset:disabled .ws-check { cursor: default; }
 .ba-actions { display: flex; align-items: center; gap: var(--space-2) var(--space-3); flex-wrap: wrap; margin-top: var(--space-3); }
 .ba-actions .btn-small { display: inline-flex; align-items: center; gap: 4px; }
 .ba-preview-btn { margin-left: auto; }
+/* Vorschau des Belegs: links dieselben Felder, rechts die Seitenansicht. Die
+   Felder scrollen mit dem Dialog, die Vorschau bleibt oben stehen und
+   scrollt in sich — sonst wanderte der Beleg beim Bearbeiten aus dem Bild. */
+@media (min-width: 1100px) { .modal-card.ba-workspace-modal { max-width: min(1320px, 96vw); } }
+.ba-workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: var(--space-5); align-items: start; }
+.ba-workspace-fields { min-width: 0; }
+.ba-workspace-hint { margin: 0 0 var(--space-3); font-size: 13px; color: var(--text-2); }
+.ba-workspace-preview { min-width: 0; }
+.ba-workspace .ba-workspace-preview { position: sticky; top: 0; }
+.ba-workspace .dv-preview-pages { max-height: calc(100dvh - 260px); overflow-y: auto; overscroll-behavior: contain; }
 /* Einzeilige Liste (Abteilungen, Projekttypen) */
 .st-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border-4); max-width: 560px; }
 .st-list-row { display: flex; align-items: center; gap: var(--space-2); min-height: 44px; padding: 2px 0; border-bottom: 1px solid var(--border-4); }

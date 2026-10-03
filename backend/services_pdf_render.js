@@ -242,9 +242,30 @@ async function renderLetterPdf({ supabase, tenantId, html, footerCols, theme, fo
   // Folgeseitenkopf als eigene Chromium-Seite in der Schrift des Belegs —
   // erst gerendert, wenn es eine Folgeseite gibt (finishPdf ruft die Funktion).
   const followHeaderPdf = finish.followHeader
-    ? () => renderPdf({ html: followHeaderHtml(finish.followHeader, theme), bare: true })
+    ? () => followHeaderPage(finish.followHeader, theme)
     : null;
   return finishPdf(pdf, { ...finish, followHeaderPdf });
+}
+
+// Dieselbe Zeile in derselben Schrift ergibt dieselbe Seite. Die Vorschau
+// druckte sie bei jeder Änderung neu — ein zweiter Chromium-Druck, gut eine
+// halbe Sekunde. Gemerkt werden die zuletzt gebrauchten Seiten; der Kopf trägt
+// nur, was im Beleg ohnehin steht (Belegart, Nummer, Empfänger).
+const FOLLOW_CACHE_MAX = 64;
+const followCache = new Map();
+
+async function followHeaderPage(text, theme) {
+  const key = JSON.stringify([(theme && theme.brand && theme.brand.fontFamily) || '', text]);
+  const hit = followCache.get(key);
+  if (hit) {
+    followCache.delete(key); // zuletzt gebraucht → ans Ende
+    followCache.set(key, hit);
+    return hit;
+  }
+  const pdf = await renderPdf({ html: followHeaderHtml(text, theme), bare: true });
+  followCache.set(key, pdf);
+  if (followCache.size > FOLLOW_CACHE_MAX) followCache.delete(followCache.keys().next().value);
+  return pdf;
 }
 
 /** Eine transparente A4-Seite mit nur dem Folgeseitenkopf. */

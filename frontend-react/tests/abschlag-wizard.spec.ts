@@ -136,7 +136,7 @@ test.describe('Abschlagsrechnung', () => {
     }
     await expect(page.getByText('Nachlässe, Skonto und Sicherheitseinbehalt')).toBeVisible()
     await expect(page.getByRole('button', { name: /Jetzt buchen/ })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /PDF-Vorschau/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Vorschau', exact: true })).toHaveCount(0)
     await expect(bar(page).getByRole('button', { name: 'Entwurf speichern' })).toBeVisible()
   })
 

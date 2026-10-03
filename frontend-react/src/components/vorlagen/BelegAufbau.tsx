@@ -1,10 +1,11 @@
-import { useRef, useState } from 'react'
-import { Eye, RotateCcw } from 'lucide-react'
+import { useRef, useState, type ReactNode } from 'react'
+import { Eye, FileText, RotateCcw } from 'lucide-react'
 import { Disclosure } from '@/components/ui/Disclosure'
 import { DialogFooter } from '@/components/ui/DialogFooter'
 import { HelpHint } from '@/components/ui/HelpHint'
 import { Modal } from '@/components/ui/Modal'
 import { useConfirm } from '@/hooks/useConfirm'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { PlaceholderInfo } from '@/api/documentTemplates'
 import type { DocumentText } from '@/api/documentTexts'
 import { DocPreview } from './DocPreview'
@@ -57,31 +58,33 @@ function BelegText({ id, label, value, fallback, isOwn, onChange, onReset, snipp
   )
 }
 
-/**
- * „Aufbau und Texte dieses Belegs" im Schritt „Prüfen & buchen" der
- * Rechnungsassistenten (Vorlagen-Plan Stufe 3). Zustand und Speichern stehen
- * in `useBelegAufbau` — gespeichert wird mit dem Schritt, nicht beim Tippen.
- */
-export function BelegAufbau({ ctl, disabled, canPreview = true, beforePreview, releasePpIds }: {
-  ctl:            Ctl
-  disabled?:      boolean
-  /** Vorschau braucht invoices.download_pdf */
-  canPreview?:    boolean
-  /** z. B. Nachlässe speichern, damit die Vorschau die Beträge zeigt */
-  beforePreview?: () => Promise<unknown>
-  releasePpIds?:  number[]
-}) {
-  const [previewOpen, setPreviewOpen] = useState(false)
-  const [confirm, confirmDialog] = useConfirm()
-  if (!ctl.ready || !ctl.cat || !ctl.info || !ctl.layers || !ctl.state) return null
-  const { cat, info, layers, state } = ctl
+/** Was die Vorschau braucht — fehlt es, gibt es keine (Recht invoices.download_pdf). */
+export interface BelegPreview {
+  open:       boolean
+  setOpen:    (open: boolean) => void
+  /** PDF mit dem ungespeicherten Stand — vorher z. B. Nachlässe speichern */
+  load:       () => Promise<ArrayBuffer>
+  /** Dasselbe PDF in neuem Tab, zum Drucken */
+  onOpenPdf?: () => void
+}
 
+/**
+ * Felder von „Aufbau und Texte dieses Belegs": Vorlage, Kopf- und Fußtext,
+ * Bausteine, Projekt-Ebene. Sie stehen im Schritt „Prüfen & buchen" und neben
+ * der Vorschau — beide arbeiten auf demselben Zustand (`useBelegAufbau`),
+ * daher der Präfix für eindeutige IDs.
+ */
+function BelegAufbauFields({ ctl, disabled, idPrefix, extraActions }: {
+  ctl:           Ctl
+  disabled?:     boolean
+  idPrefix:      string
+  extraActions?: ReactNode
+}) {
+  const [confirm, confirmDialog] = useConfirm()
+  if (!ctl.cat || !ctl.info || !ctl.layers || !ctl.state) return null
+  const { cat, info, layers, state } = ctl
   const ownDiff = differs(state, layers.project)
   const variant = ctl.variants.find(v => v.id === ctl.templateId)
-  const hint = [
-    ctl.templateId ? `Vorlage „${variant?.name ?? 'entfernt'}“` : null,
-    ctl.remember ? 'für das Projekt gemerkt' : ownDiff ? 'eigener Aufbau' : info.project ? 'wie im Projekt' : 'wie die Vorlage',
-  ].filter(Boolean).join(' · ')
   const forPos = (pos: DocumentText['position']) => ctl.snippets.filter(s => s.position === pos && (!s.category || s.category === cat.key))
 
   async function removeProject() {
@@ -95,69 +98,121 @@ export function BelegAufbau({ ctl, disabled, canPreview = true, beforePreview, r
 
   return (
     <>
-      <Disclosure className="ba-panel" title="Aufbau und Texte dieses Belegs" hint={hint} help={<HelpHint id="vorlagen.beleg_aufbau" />}>
-        {(ctl.variants.length > 0 || ctl.templateId) && (
-          <div className="form-group ba-variant">
-            <label htmlFor="ba-variant" className="ws-label-help">Vorlage <HelpHint id="vorlagen.varianten" size={13} /></label>
-            <select id="ba-variant" value={ctl.templateId ?? ''} disabled={disabled} onChange={e => ctl.setTemplate(Number(e.target.value) || null)}>
-              <option value="">Standard</option>
-              {ctl.variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              {ctl.templateId && !variant && <option value={ctl.templateId}>(entfernte Vorlage)</option>}
-            </select>
-          </div>
+      {(ctl.variants.length > 0 || ctl.templateId) && (
+        <div className="form-group ba-variant">
+          <label htmlFor={`${idPrefix}-variant`} className="ws-label-help">Vorlage <HelpHint id="vorlagen.varianten" size={13} /></label>
+          <select id={`${idPrefix}-variant`} value={ctl.templateId ?? ''} disabled={disabled} onChange={e => ctl.setTemplate(Number(e.target.value) || null)}>
+            <option value="">Standard</option>
+            {ctl.variants.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+            {ctl.templateId && !variant && <option value={ctl.templateId}>(entfernte Vorlage)</option>}
+          </select>
+        </div>
+      )}
+      <div className="ba-texts">
+        <BelegText id={`${idPrefix}-intro`} label="Kopftext" value={state.introText} fallback={layers.project.introText ?? info.standardTexts.intro}
+          isOwn={state.introText !== layers.project.introText}
+          onChange={v => ctl.setState({ ...state, introText: v })} onReset={() => ctl.setState({ ...state, introText: layers.project.introText })}
+          snippets={forPos('intro')} placeholders={ctl.placeholders} category={cat.key} disabled={disabled} />
+        <BelegText id={`${idPrefix}-closing`} label="Fußtext" value={state.closingText} fallback={layers.project.closingText ?? info.standardTexts.closing}
+          isOwn={state.closingText !== layers.project.closingText}
+          onChange={v => ctl.setState({ ...state, closingText: v })} onReset={() => ctl.setState({ ...state, closingText: layers.project.closingText })}
+          snippets={forPos('closing')} placeholders={ctl.placeholders} category={cat.key} disabled={disabled} />
+      </div>
+
+      <p className="ba-sub">Bausteine</p>
+      <LayoutEditor category={cat} value={state} onChange={ctl.setState} placeholders={ctl.placeholders}
+        snippets={forPos('free')} disabled={disabled} />
+
+      <div className="ba-actions">
+        {info.canEditProject && info.projectId != null && (
+          <label className="dv-check">
+            <input type="checkbox" checked={ctl.remember} disabled={disabled} onChange={e => ctl.setRemember(e.target.checked)} />
+            Für dieses Projekt merken — gilt für jede {cat.label} im Projekt
+          </label>
         )}
-        <div className="ba-texts">
-          <BelegText id="ba-intro" label="Kopftext" value={state.introText} fallback={layers.project.introText ?? info.standardTexts.intro}
-            isOwn={state.introText !== layers.project.introText}
-            onChange={v => ctl.setState({ ...state, introText: v })} onReset={() => ctl.setState({ ...state, introText: layers.project.introText })}
-            snippets={forPos('intro')} placeholders={ctl.placeholders} category={cat.key} disabled={disabled} />
-          <BelegText id="ba-closing" label="Fußtext" value={state.closingText} fallback={layers.project.closingText ?? info.standardTexts.closing}
-            isOwn={state.closingText !== layers.project.closingText}
-            onChange={v => ctl.setState({ ...state, closingText: v })} onReset={() => ctl.setState({ ...state, closingText: layers.project.closingText })}
-            snippets={forPos('closing')} placeholders={ctl.placeholders} category={cat.key} disabled={disabled} />
-        </div>
+        {ownDiff && (
+          <button type="button" className="btn-small" onClick={ctl.resetDocument} disabled={disabled}>
+            <RotateCcw size={13} strokeWidth={2} /> {info.project ? 'Wie im Projekt' : 'Wie die Vorlage'}
+          </button>
+        )}
+        {info.canEditProject && info.project && (
+          <button type="button" className="btn-small" onClick={() => void removeProject()} disabled={disabled}>Projekt-Aufbau entfernen</button>
+        )}
+        {extraActions}
+      </div>
+      {confirmDialog}
+    </>
+  )
+}
 
-        <p className="ba-sub">Bausteine</p>
-        <LayoutEditor category={cat} value={state} onChange={ctl.setState} placeholders={ctl.placeholders}
-          snippets={forPos('free')} disabled={disabled} />
+/**
+ * „Aufbau und Texte dieses Belegs" im Schritt „Prüfen & buchen" der
+ * Rechnungsassistenten (Vorlagen-Plan Stufe 3). Zustand und Speichern stehen
+ * in `useBelegAufbau` — gespeichert wird mit dem Schritt, nicht beim Tippen.
+ *
+ * Mit `preview` gehört die Vorschau dazu: links dieselben Felder, rechts der
+ * Beleg als Seitenansicht, die jede Änderung zeigt. Geöffnet wird sie hier und
+ * über „Vorschau" im Schritt selbst — vorher stand sie nur im zugeklappten
+ * Bereich, und „PDF-Vorschau" öffnete einen neuen Tab.
+ */
+export function BelegAufbau({ ctl, disabled, preview }: {
+  ctl:       Ctl
+  disabled?: boolean
+  preview?:  BelegPreview
+}) {
+  // Felder neben der Vorschau nur, wo Platz für beides ist — schmal bleibt
+  // die Vorschau allein, die Felder stehen ja im Schritt darunter.
+  const wide = useMediaQuery('(min-width: 1100px)')
+  if (!ctl.ready || !ctl.cat || !ctl.info || !ctl.layers || !ctl.state) return null
+  const { info, layers, state } = ctl
 
-        <div className="ba-actions">
-          {info.canEditProject && info.projectId != null && (
-            <label className="dv-check">
-              <input type="checkbox" checked={ctl.remember} disabled={disabled} onChange={e => ctl.setRemember(e.target.checked)} />
-              Für dieses Projekt merken — gilt für jede {cat.label} im Projekt
-            </label>
-          )}
-          {ownDiff && (
-            <button type="button" className="btn-small" onClick={ctl.resetDocument} disabled={disabled}>
-              <RotateCcw size={13} strokeWidth={2} /> {info.project ? 'Wie im Projekt' : 'Wie die Vorlage'}
-            </button>
-          )}
-          {info.canEditProject && info.project && (
-            <button type="button" className="btn-small" onClick={() => void removeProject()} disabled={disabled}>Projekt-Aufbau entfernen</button>
-          )}
-          {canPreview && (
-            <button type="button" className="btn-small ba-preview-btn" onClick={() => setPreviewOpen(true)}>
-              <Eye size={13} strokeWidth={2} /> Vorschau
-            </button>
-          )}
-        </div>
+  const ownDiff = differs(state, layers.project)
+  const variant = ctl.variants.find(v => v.id === ctl.templateId)
+  const hint = [
+    ctl.templateId ? `Vorlage „${variant?.name ?? 'entfernt'}“` : null,
+    ctl.remember ? 'für das Projekt gemerkt' : ownDiff ? 'eigener Aufbau' : info.project ? 'wie im Projekt' : 'wie die Vorlage',
+  ].filter(Boolean).join(' · ')
+
+  return (
+    <>
+      <Disclosure className="ba-panel" title="Aufbau und Texte dieses Belegs" hint={hint} help={<HelpHint id="vorlagen.beleg_aufbau" />}>
+        <BelegAufbauFields ctl={ctl} disabled={disabled} idPrefix="ba" extraActions={preview && (
+          <button type="button" className="btn-small ba-preview-btn" onClick={() => preview.setOpen(true)}>
+            <Eye size={13} strokeWidth={2} /> Vorschau
+          </button>
+        )} />
       </Disclosure>
 
-      <Modal open={previewOpen} onClose={() => setPreviewOpen(false)} title="Vorschau dieses Belegs" className="modal-xl">
-        {previewOpen && (
-          <DocPreview
-            label="Vorschau dieses Belegs"
-            note="Seitenansicht wie im PDF, mit dem Stand dieses Entwurfs — die Nummer bekommt er erst beim Buchen."
-            requestKey={ctl.previewKey}
-            load={async () => { await beforePreview?.(); return ctl.preview(releasePpIds) }}
-          />
-        )}
-        <DialogFooter>
-          <button type="button" className="btn-secondary" onClick={() => setPreviewOpen(false)}>Schließen</button>
-        </DialogFooter>
-      </Modal>
-      {confirmDialog}
+      {preview && (
+        <Modal open={preview.open} onClose={() => preview.setOpen(false)} title="Vorschau dieses Belegs" className="modal-xl ba-workspace-modal">
+          {preview.open && (
+            <div className={wide ? 'ba-workspace' : undefined}>
+              {wide && (
+                <section className="ba-workspace-fields" aria-label="Aufbau und Texte dieses Belegs">
+                  <p className="ba-workspace-hint">Änderungen zeigt die Vorschau sofort — gespeichert werden sie mit dem Schritt.</p>
+                  <BelegAufbauFields ctl={ctl} disabled={disabled} idPrefix="baw" />
+                </section>
+              )}
+              <div className="ba-workspace-preview">
+                <DocPreview
+                  label="Vorschau dieses Belegs"
+                  note="Seitenansicht wie im PDF, mit dem Stand dieses Entwurfs — die Nummer bekommt er erst beim Buchen."
+                  requestKey={ctl.previewKey}
+                  load={preview.load}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <button type="button" className="btn-secondary" onClick={() => preview.setOpen(false)}>Schließen</button>
+            {preview.onOpenPdf && (
+              <button type="button" className="btn-primary" onClick={preview.onOpenPdf}>
+                <FileText size={14} strokeWidth={2} aria-hidden="true" /> Als PDF öffnen
+              </button>
+            )}
+          </DialogFooter>
+        </Modal>
+      )}
     </>
   )
 }
