@@ -452,8 +452,8 @@ export function InvoiceWizard({ kind = 'abschlag', resumeId, initialDraft, initi
     }
   }
 
-  // Die Sammelaktionen der Buchungsauswahl („Nur sichtbare", „Abwählen")
-  // sind Knöpfe — sie lösen kein change-Ereignis aus, das `onChangeCapture`
+  // „Abwählen" in der Buchungsauswahl ist ein Knopf, und Filter ändern die
+  // Auswahl mit — beides löst kein change-Ereignis aus, das `onChangeCapture`
   // unten fangen könnte.
   const changeSelection: React.Dispatch<React.SetStateAction<Set<number>>> = v => {
     setSelected(v)

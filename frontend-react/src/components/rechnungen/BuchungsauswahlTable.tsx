@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useState } from 'react'
 import { RotateCcw } from 'lucide-react'
 import { FilterChip } from '@/components/ui/FilterChip'
 import { HelpHint } from '@/components/ui/HelpHint'
@@ -8,7 +8,7 @@ import { useStickyState } from '@/hooks/useStickyState'
 import { fmtEur, money } from '@/utils/money'
 import { fmtDateDe, fmtHours } from '@/utils/zeit'
 import {
-  billable, filterBookings, idsOf, isZeroBooking, loadPrefs, outsidePeriod, savePref, sortBookings, sortKeyOr,
+  applyVisibility, filterBookings, idsOf, isZeroBooking, loadPrefs, outsidePeriod, savePref, sortBookings, sortKeyOr,
   summarize, toggleRows, triState, withZeros, PREFS_KEY,
   type BookingPrefs, type BookingSortKey, type Period, type TriState,
 } from './buchungsauswahl'
@@ -50,11 +50,10 @@ function TriCheckbox({ state, onChange, label, disabled }: {
  * BuchungsauswahlTable — Auswahl der abzurechnenden Buchungen (BILLING_TYPE_ID = 2)
  * in den Rechnungsassistenten (Abschlag, Einzelrechnung, Rechnungskorrektur).
  *
- * Oben die Filter — eine Ansicht, sie ändern nicht, was abgerechnet wird.
- * Darunter die Auswahl: „Alle Buchungen", „0-Beträge mitabrechnen" und
- * „Nur sichtbare auswählen", die einzige Brücke von der Ansicht zur Auswahl.
- * Was ausgewählt, aber ausgeblendet ist, sagt die Zählzeile — vorher wurde es
- * still mit abgerechnet.
+ * Abgerechnet wird, was sichtbar und angehakt ist: Oben die Filter, darunter
+ * „Alle" (über die sichtbaren Zeilen) und „0-Beträge mitabrechnen". Was ein
+ * Filter ausblendet, fällt aus der Auswahl und kommt angehakt zurück, sobald
+ * er es wieder zeigt; die Zählzeile sagt, wie viele das gerade sind.
  *
  * Über Rechnungen hinweg gemerkt werden nur Vorlieben (0-Beträge, „Seit letzter
  * Rechnung"); Suche, Datum, Mitarbeiter und Leistung gelten für diese Rechnung.
@@ -128,9 +127,19 @@ export function BuchungsauswahlTable({
   const filterActive = !!(search.trim() || dateFrom || dateTo || empFilter.size > 0 || structFilter.size > 0
     || prefs.hideZero || sinceActive || periodActive)
   const visibleIds   = useMemo(() => idsOf(filtered), [filtered])
-  // Auswahl und Summe über die *ganze* Liste — deckt sich mit der Zusammenfassung des Assistenten.
-  const summary      = summarize(tecList, selected, visibleIds)
-  const allState     = triState(tecList, selected, prefs.includeZero)
+
+  // Angehakt, aber ausgeblendet: nicht abgerechnet, kommt mit dem Filter zurück.
+  // Layout-Effekt, damit Summe und Zusammenfassung nie einen Frame lang die
+  // ausgeblendeten Buchungen mitzählen.
+  const [parked, setParked] = useState<Set<number>>(() => new Set())
+  useLayoutEffect(() => {
+    const next = applyVisibility(tecList, selected, parked, visibleIds)
+    if (!next) return
+    setParked(next.parked)
+    setSelected(next.selected)
+  }, [tecList, selected, parked, visibleIds, setSelected])
+
+  const summary      = summarize(tecList, selected, parked)
   const visibleState = triState(filtered, selected, prefs.includeZero)
   const outside      = outsidePeriod(tecList, selected, period)
 
@@ -149,10 +158,8 @@ export function BuchungsauswahlTable({
     })
   }
 
-  const toggleAll         = () => setSelected(allState === 'all' ? new Set() : idsOf(billable(tecList, prefs.includeZero)))
-  const toggleVisible     = () => setSelected(prev => toggleRows(prev, filtered, prefs.includeZero))
-  const selectOnlyVisible = () => setSelected(idsOf(billable(filtered, prefs.includeZero)))
-  const deselectOutside   = () => setSelected(prev => {
+  const toggleVisible   = () => setSelected(prev => toggleRows(prev, filtered, prefs.includeZero))
+  const deselectOutside = () => setSelected(prev => {
     const next = new Set(prev)
     outside.forEach(t => next.delete(t.ID))
     return next
@@ -160,6 +167,8 @@ export function BuchungsauswahlTable({
   function setIncludeZero(include: boolean) {
     setPref('includeZero', include)
     setSelected(prev => withZeros(prev, tecList, include))
+    // Ausgeblendete 0-Beträge sollen auch nicht angehakt zurückkommen.
+    if (!include) setParked(prev => withZeros(prev, tecList, false))
   }
 
   return (
@@ -170,7 +179,7 @@ export function BuchungsauswahlTable({
         <p className="ba-empty">Keine offenen Buchungen für dieses Projekt vorhanden.</p>
       ) : (
         <>
-          {/* Filter: eine Ansicht auf die Liste */}
+          {/* Filter: was sie ausblenden, wird nicht abgerechnet */}
           <div className="list-toolbar">
             <input
               type="search"
@@ -215,19 +224,14 @@ export function BuchungsauswahlTable({
           {/* Auswahl: das wird abgerechnet */}
           <div className="ba-bar" role="group" aria-label="Auswahl der Buchungen">
             <label className="ba-check">
-              <TriCheckbox state={allState} onChange={toggleAll} />
-              Alle Buchungen
+              <TriCheckbox state={visibleState} onChange={toggleVisible} />
+              {filterActive ? 'Alle angezeigten' : 'Alle Buchungen'}
             </label>
             {zeroCount > 0 && (
               <label className="ba-check">
                 <input type="checkbox" checked={prefs.includeZero} onChange={e => setIncludeZero(e.target.checked)} />
                 0-Beträge mitabrechnen <span className="ba-muted">({zeroCount})</span>
               </label>
-            )}
-            {filterActive && filtered.length > 0 && (
-              <button type="button" className="filter-chip-btn" onClick={selectOnlyVisible}>
-                Nur sichtbare auswählen
-              </button>
             )}
           </div>
           <p className="list-info ba-summary" aria-live="polite">
@@ -236,7 +240,9 @@ export function BuchungsauswahlTable({
             {summary.count > 0 && summary.hours > 0 && <span>· {fmtHours(summary.hours)} h</span>}
             {summary.count > 0 && <span>· {fmtEur(summary.amount)}</span>}
             {summary.hidden > 0 && (
-              <span className="ba-hidden">· davon {summary.hidden} ausgeblendet – werden mit abgerechnet</span>
+              <span className="ba-hidden">
+                · {summary.hidden === 1 ? '1 angehakte ist' : `${summary.hidden} angehakte sind`} ausgeblendet – nicht abgerechnet
+              </span>
             )}
           </p>
           {outside.length > 0 && period && (

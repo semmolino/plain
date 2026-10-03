@@ -3,9 +3,9 @@ import { mockPilot } from './fixtures/pilotData'
 
 /**
  * Buchungsauswahl in den Rechnungsassistenten (hier am Abschlag, Entwurf 501
- * mit Leistungszeitraum 01.–31.08.2026): 0-Beträge in einem Rutsch,
- * „Alle Buchungen", „Nur sichtbare auswählen", „Seit letzter Rechnung" und
- * der Hinweis auf Buchungen außerhalb des Leistungszeitraums.
+ * mit Leistungszeitraum 01.–31.08.2026): 0-Beträge in einem Rutsch, „Alle",
+ * Filter bestimmen mit, was abgerechnet wird („Seit letzter Rechnung", „Im
+ * Leistungszeitraum"), und der Hinweis auf Buchungen außerhalb des Zeitraums.
  */
 
 const TEC = [
@@ -64,21 +64,24 @@ test.describe('Buchungsauswahl', () => {
     await expect(page.getByLabel(/0-Beträge mitabrechnen/)).not.toBeChecked()
   })
 
-  test('„Seit letzter Rechnung" blendet aus, „Nur sichtbare" übernimmt genau das', async ({ page }) => {
+  test('„Seit letzter Rechnung": Ausgeblendetes wird nicht abgerechnet und kommt angehakt zurück', async ({ page }) => {
     await setup(page)
     await openBookings(page)
     const since = page.getByLabel(/Seit letzter Rechnung/)
     await expect(page.locator('label', { has: since })).toContainText('nach 31.07.2026')
     await since.check()
     await expect(summary(page)).toContainText('4 von 5 sichtbar')
-    // Ausgeblendet, aber angehakt — wird mit abgerechnet, und das steht da.
-    await expect(summary(page)).toContainText('davon 1 ausgeblendet')
-
-    await page.getByRole('button', { name: 'Nur sichtbare auswählen' }).click()
     await expect(summary(page)).toContainText('4 ausgewählt')
-    await expect(summary(page)).not.toContainText('ausgeblendet')
+    await expect(summary(page)).toContainText('1 angehakte ist ausgeblendet – nicht abgerechnet')
+    await expect(page.getByLabel('Alle angezeigten')).toBeChecked()
 
-    // Gespeichert wird genau diese Auswahl.
+    // Filter zurück: die Buchung ist wieder angehakt — Filtern zerstört keine Auswahl.
+    await since.uncheck()
+    await expect(summary(page)).toContainText('5 ausgewählt')
+    await since.check()
+    await expect(summary(page)).toContainText('4 ausgewählt')
+
+    // Gespeichert wird genau, was zu sehen ist.
     const posts: Request[] = []
     page.on('request', r => { if (r.method() === 'POST' && /partial-payments\/501\/tec/.test(r.url())) posts.push(r) })
     await bar(page).getByRole('button', { name: 'Weiter', exact: true }).click()
@@ -98,6 +101,26 @@ test.describe('Buchungsauswahl', () => {
     await page.getByLabel(/Im Leistungszeitraum/).check()
     await expect(summary(page)).toContainText('3 von 5 sichtbar')
     await expect(summary(page)).not.toContainText('ausgeblendet')
+  })
+
+  test('„Im Leistungszeitraum" rechnet nur Buchungen im Zeitraum ab', async ({ page }) => {
+    await setup(page)
+    await openBookings(page)
+    await expect(summary(page)).toContainText('5 ausgewählt')
+    await page.getByLabel(/Im Leistungszeitraum/).check()
+    await expect(summary(page)).toContainText('3 von 5 sichtbar')
+    await expect(summary(page)).toContainText('3 ausgewählt')
+    await expect(summary(page)).toContainText('2 angehakte sind ausgeblendet – nicht abgerechnet')
+    await expect(page.locator('.ba-warn')).toHaveCount(0)
+    // Die Summe des Assistenten zählt nur die sichtbaren (285 €; 2 und 4 sind 0-Beträge).
+    await expect(page.locator('.bp-row', { hasText: 'Buchungen nach Aufwand' })).toContainText('285,00')
+
+    // Vorher gingen hier die beiden Buchungen außerhalb des Zeitraums mit.
+    const posts: Request[] = []
+    page.on('request', r => { if (r.method() === 'POST' && /partial-payments\/501\/tec/.test(r.url())) posts.push(r) })
+    await bar(page).getByRole('button', { name: 'Weiter', exact: true }).click()
+    await expect.poll(() => posts.length).toBe(1)
+    expect((posts[0].postDataJSON() as { ids_assign: number[] }).ids_assign.sort()).toEqual([2, 3, 4])
   })
 
   test('Kopf-Häkchen zeigt „teils", Leistung als Filter, Suche wird nicht vererbt', async ({ page }) => {

@@ -727,8 +727,8 @@ export function SchlussrechnungWizard({ resumeId, initialDraft, initialProjectId
     return m
   }, [phaseTec, selected])
 
-  // Die Buchungsauswahl ändert über Knöpfe („Nur sichtbare", „Abwählen") —
-  // die lösen kein change-Ereignis für `onChangeCapture` aus.
+  // Die Buchungsauswahl ändert auch über den Knopf „Abwählen" und über Filter —
+  // beides löst kein change-Ereignis für `onChangeCapture` aus.
   const changeSelection: React.Dispatch<React.SetStateAction<Set<number>>> = v => {
     setSelected(v)
     if (draftIdRef.current) setTouched(true)

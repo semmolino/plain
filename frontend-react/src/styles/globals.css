@@ -6480,7 +6480,7 @@ fieldset:disabled .ws-check { cursor: default; }
 }
 .ba-check { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; font-size: 13px; color: var(--text-2); cursor: pointer; white-space: nowrap; user-select: none; }
 .list-info.ba-summary { display: flex; flex-wrap: wrap; gap: 0 var(--space-1); margin: 0 0 var(--space-2); white-space: normal; }
-.ba-hidden { color: var(--warning-strong); }
+.ba-hidden { color: var(--text-2); }
 .ba-warn {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-2);
   font-size: 13px; color: var(--warning-strong); margin: 0 0 var(--space-2);

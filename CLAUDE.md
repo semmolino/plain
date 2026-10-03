@@ -320,9 +320,12 @@ Drei Dinge, die dabei teuer waren und die kein Werkzeug von selbst sieht:
   sich der Entwurf in `INVOICE.SE_RELEASE_ADVANCE_IDS` (Migration `0171`);
   maßgeblich beim Buchen bleibt, was der Buchungsaufruf mitschickt.
   **Buchungsauswahl** (`components/rechnungen/BuchungsauswahlTable.tsx`, Logik in
-  `buchungsauswahl.ts`): Filter sind eine Ansicht, abgerechnet wird jede
-  angehakte Buchung — auch eine ausgeblendete (die Zählzeile sagt „davon n
-  ausgeblendet"); die einzige Brücke ist „Nur sichtbare auswählen".
+  `buchungsauswahl.ts`): abgerechnet wird, was **sichtbar und angehakt** ist.
+  Blendet ein Filter eine angehakte Buchung aus, fällt sie aus der Auswahl und
+  wird geparkt; zeigt er sie wieder, kommt sie angehakt zurück
+  (`applyVisibility`, die Zählzeile nennt die geparkten). Vorher waren Filter
+  nur eine Ansicht, und „Im Leistungszeitraum" rechnete die ausgeblendeten
+  Buchungen trotzdem ab. „Alle" wirkt auf die angezeigten Zeilen.
   „0-Beträge mitabrechnen" gilt für jede Sammelaktion und die Vorauswahl.
   Spalten Std., Stundensatz und Betrag kommen aus `bookingSelection.tecEntry` —
   eine Quelle für Abschlag, Einzelrechnung/Korrektur und Schlussrechnung;

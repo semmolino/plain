@@ -2337,13 +2337,13 @@ export const HELP = {
     title: 'Buchungen zuweisen',
     body: (
       <>
-        Abgerechnet werden die <strong>angehakten</strong> Buchungen, auch wenn ein Filter sie gerade
-        ausblendet; die Zeile darüber sagt dann „davon n ausgeblendet". Filter ändern nur die Ansicht.
-        Mit <strong>Nur sichtbare auswählen</strong> wird genau das gewählt, was die Filter zeigen, und
-        alles andere abgewählt. <strong>Alle Buchungen</strong> wählt die ganze Liste.
+        Abgerechnet werden die Buchungen, die du <strong>siehst und angehakt</strong> hast. Blendet ein
+        Filter eine angehakte Buchung aus — etwa <strong>Im Leistungszeitraum</strong> —, wird sie nicht
+        abgerechnet; die Zeile über der Tabelle sagt, wie viele das gerade sind. Nimmst du den Filter
+        zurück, ist sie wieder angehakt. <strong>Alle</strong> wählt alle angezeigten Buchungen an oder ab.
         <br /><br />
         <strong>0-Beträge mitabrechnen</strong> wählt alle Buchungen ohne Betrag auf einmal an oder ab
-        und gilt auch für „Alle" und „Nur sichtbare". Eine 0-€-Buchung erscheint im Stundennachweis der
+        und gilt auch für „Alle". Eine 0-€-Buchung erscheint im Stundennachweis der
         Rechnung; bleibt sie abgewählt, bleibt sie offen und taucht bei der nächsten Rechnung wieder auf.
         <br /><br />
         <strong>Seit letzter Rechnung</strong> zeigt nur Buchungen nach dem Ende des Leistungszeitraums

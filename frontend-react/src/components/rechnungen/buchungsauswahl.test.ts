@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import type { TecEntry } from '@/api/rechnungen'
 import {
-  filterBookings, billable, initialSelection, withZeros, triState, toggleRows, summarize,
+  filterBookings, billable, initialSelection, withZeros, triState, toggleRows, summarize, applyVisibility,
   outsidePeriod, idsOf, loadPrefs, savePref, sortBookings, sortKeyOr, PREFS_KEY, type BookingFilters,
 } from './buchungsauswahl'
 
@@ -84,9 +84,37 @@ describe('Sammelaktionen mit „0-Beträge mitabrechnen"', () => {
     expect([...toggleRows(new Set([2]), nurNull, false)]).toEqual([])
   })
 
-  it('Nur sichtbare: genau die sichtbaren Abrechenbaren', () => {
-    const sichtbar = filterBookings(list, { ...none, since: '2026-09-10' })
-    expect([...idsOf(billable(sichtbar, false))]).toEqual([3])
+})
+
+describe('applyVisibility — abgerechnet wird, was sichtbar und angehakt ist', () => {
+  const sorted = (s: Set<number>) => [...s].sort()
+
+  it('ein Filter nimmt ausgeblendete Buchungen aus der Auswahl und parkt sie', () => {
+    const sichtbar = idsOf(filterBookings(list, { ...none, period: { start: '2026-10-01', end: '2026-10-31' } }))
+    const r = applyVisibility(list, new Set([1, 2, 3, 4]), new Set(), sichtbar)!
+    expect(sorted(r.selected)).toEqual([3, 4])
+    expect(sorted(r.parked)).toEqual([1, 2])
+  })
+
+  it('ohne Filter kommen geparkte Buchungen angehakt zurück', () => {
+    const r = applyVisibility(list, new Set([3]), new Set([1, 2]), idsOf(list))!
+    expect(sorted(r.selected)).toEqual([1, 2, 3])
+    expect(r.parked.size).toBe(0)
+  })
+
+  it('nicht angehakte Buchungen werden nicht geparkt — sie kommen auch nicht angehakt zurück', () => {
+    const r = applyVisibility(list, new Set([3]), new Set(), new Set([3]))
+    expect(r).toBeNull()
+  })
+
+  it('Buchungen außerhalb der Liste bleiben unberührt (Schlussrechnung: abgewählte Position)', () => {
+    const r = applyVisibility(list, new Set([1, 99]), new Set([98]), new Set())!
+    expect(sorted(r.selected)).toEqual([99])
+    expect(sorted(r.parked)).toEqual([1, 98])
+  })
+
+  it('nichts zu tun, wenn alles Angehakte sichtbar ist', () => {
+    expect(applyVisibility(list, new Set([1, 3]), new Set(), idsOf(list))).toBeNull()
   })
 })
 
@@ -113,8 +141,8 @@ describe('sortBookings', () => {
 })
 
 describe('summarize / outsidePeriod', () => {
-  it('zählt Betrag, Stunden und was ausgeblendet ist', () => {
-    const s = summarize(list, new Set([1, 3, 4]), new Set([3, 4]))
+  it('zählt Betrag und Stunden der Auswahl, dazu die geparkten', () => {
+    const s = summarize(list, new Set([1, 3, 4]), new Set([2, 99]))
     expect(s).toEqual({ count: 3, amount: 350, hours: 3.5, hidden: 1 })
   })
   it('Buchungen außerhalb des Leistungszeitraums', () => {

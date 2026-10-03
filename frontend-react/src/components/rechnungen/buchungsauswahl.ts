@@ -5,14 +5,15 @@ import { compareRows } from '@/utils/sortRows'
  * Auswahl-Logik der Buchungstabelle in den Rechnungsassistenten
  * (`BuchungsauswahlTable.tsx`) — ohne React, damit sie prüfbar ist.
  *
- * Zwei Dinge sind bewusst getrennt:
- *  - **Filter** sind eine Ansicht. Sie ändern nicht, was abgerechnet wird.
- *  - **Auswahl** ist, was abgerechnet wird — auch ausgeblendete Buchungen.
- * Verbunden sind sie nur über „Nur sichtbare auswählen" und über den Hinweis,
- * wie viele ausgewählte Buchungen gerade ausgeblendet sind.
+ * Abgerechnet wird, was **sichtbar und angehakt** ist. Blendet ein Filter eine
+ * angehakte Buchung aus, fällt sie aus der Auswahl und wird „geparkt"; zeigt
+ * ihn der Filter wieder, kommt sie angehakt zurück (`applyVisibility`). So
+ * zerstört Suchen keine Auswahl, und trotzdem landet nichts auf der Rechnung,
+ * was man nicht sieht. Vorher waren Filter nur eine Ansicht, und „Im
+ * Leistungszeitraum" rechnete die ausgeblendeten Buchungen mit ab.
  *
  * „0-Beträge mitabrechnen" ist eine Vorliebe, keine Ansicht: sie gilt für
- * jede Sammelaktion (Alle, Nur sichtbare, Kopf-Häkchen, Vorauswahl). Einzeln
+ * jede Sammelaktion (Alle, Kopf-Häkchen, Vorauswahl). Einzeln
  * anhaken lässt sich eine 0-€-Buchung trotzdem.
  */
 
@@ -108,6 +109,29 @@ export function triState(rows: TecEntry[], selected: Set<number>, includeZero: b
   return any ? 'some' : 'none'
 }
 
+/**
+ * Filter bestimmen mit, was abgerechnet wird: eine angehakte Buchung, die
+ * nicht sichtbar ist, wandert von der Auswahl ins Parkfach; eine geparkte, die
+ * wieder sichtbar ist, zurück. Buchungen außerhalb der Liste (Schlussrechnung:
+ * Positionen, die gerade nicht gewählt sind) bleiben unberührt.
+ * `null` heißt: nichts zu ändern.
+ */
+export function applyVisibility(
+  list: TecEntry[], selected: Set<number>, parked: Set<number>, visible: Set<number>,
+): { selected: Set<number>; parked: Set<number> } | null {
+  const nextSelected = new Set(selected)
+  const nextParked   = new Set(parked)
+  let changed = false
+  for (const t of list) {
+    if (visible.has(t.ID)) {
+      if (nextParked.delete(t.ID)) { nextSelected.add(t.ID); changed = true }
+    } else if (nextSelected.delete(t.ID)) {
+      nextParked.add(t.ID); changed = true
+    }
+  }
+  return changed ? { selected: nextSelected, parked: nextParked } : null
+}
+
 /** Kopf-Häkchen: sichtbare Zeilen dazu- bzw. abwählen; Ausgeblendetes bleibt, wie es ist. */
 export function toggleRows(prev: Set<number>, rows: TecEntry[], includeZero: boolean): Set<number> {
   const next   = new Set(prev)
@@ -123,18 +147,18 @@ export interface SelectionSummary {
   count:  number
   amount: number
   hours:  number
-  /** ausgewählt, aber durch einen Filter ausgeblendet — wird trotzdem abgerechnet */
+  /** angehakt, aber durch einen Filter ausgeblendet — wird NICHT abgerechnet */
   hidden: number
 }
 
-export function summarize(list: TecEntry[], selected: Set<number>, visibleIds: Set<number>): SelectionSummary {
+export function summarize(list: TecEntry[], selected: Set<number>, parked: Set<number>): SelectionSummary {
   let count = 0, amount = 0, hours = 0, hidden = 0
   for (const t of list) {
+    if (parked.has(t.ID)) hidden++
     if (!selected.has(t.ID)) continue
     count++
     amount += t.HOURLY_RATE_TOTAL ?? 0
     hours  += t.HOURS ?? 0
-    if (!visibleIds.has(t.ID)) hidden++
   }
   const r2 = (n: number) => Math.round(n * 100) / 100
   return { count, amount: r2(amount), hours: r2(hours), hidden }
